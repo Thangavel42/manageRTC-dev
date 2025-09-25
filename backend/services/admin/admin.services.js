@@ -1120,7 +1120,7 @@ export const getProjectsData = async (
     // Get date filter for projects
     const dateFilter = getDateFilter(filter);
     const yearFilter = getYearFilter(year);
-    let projectMatchFilter = {};
+    let projectMatchFilter = { isDeleted: { $ne: true } }; // Exclude deleted projects
 
     if (dateFilter) {
       projectMatchFilter.createdAt = dateFilter;

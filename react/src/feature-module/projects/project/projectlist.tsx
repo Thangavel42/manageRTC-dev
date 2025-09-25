@@ -49,7 +49,7 @@ const ProjectList = () => {
     search: ""
   });
 
-  const searchTimeoutRef = useRef<number | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const statusOptions = [
     { value: "all", label: "All Status" },

@@ -8,10 +8,9 @@ import activityController from "../controllers/activities/activities.controllers
 import projectController from "../controllers/project/project.controller.js";
 import taskController from "../controllers/task/task.controller.js";
 import projectNotesController from "../controllers/notes/project.notes.controller.js";
-
+import hrDashboardController from "../controllers/hr/hr.controller.js";
 import { ChatController } from "../controllers/chat/chat.controller.js";
 import { ChatUsersController } from "../controllers/chat/users.controller.js";
-
 import userSocketController from "../controllers/user/user.socket.controller.js";
 import socialFeedSocketController from "../controllers/socialfeed/socialFeed.socket.controller.js";
 import employeeController from "../controllers/employee/employee.controller.js";
@@ -103,6 +102,8 @@ const router = (socket, io, role) => {
     case "employee":
       console.log("Attaching Employee controller...");
       employeeController(socket, io);
+      console.log("Attaching project controller for employee...");
+      projectController(socket, io);
 
       break;
     default:

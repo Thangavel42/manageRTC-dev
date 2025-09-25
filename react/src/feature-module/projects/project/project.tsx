@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import CommonSelect, { Option } from "../../../core/common/commonSelect";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import { useSocket } from "../../../SocketContext";
@@ -47,7 +46,7 @@ const Project = () => {
     search: ""
   });
 
-  const searchTimeoutRef = useRef<number | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   const handleSearchChange = useCallback((value: string) => {

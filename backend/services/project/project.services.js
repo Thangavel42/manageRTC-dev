@@ -55,7 +55,7 @@ export const getProjects = async (companyId, filters = {}) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    const query = { companyId, isDeleted: { $ne: true } };
+    const query = { isDeleted: { $ne: true } };
 
     if (Array.isArray(filters.status) && filters.status.length > 0) {
       query.status = { $in: filters.status };

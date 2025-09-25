@@ -1,4 +1,5 @@
 import * as taskService from '../../services/task/task.services.js';
+import { ObjectId } from 'mongodb';
 
 const taskController = (socket, io) => {
 
@@ -172,6 +173,62 @@ const taskController = (socket, io) => {
     } catch (error) {
       console.error("[Task] Error in task:getAllData", { error: error.message });
       socket.emit("task:getAllData-response", { done: false, error: error.message });
+    }
+  });
+
+  
+  socket.on("task:getKanbanData", async (data = {}) => {
+    try {
+      console.log("[Task] task:getKanbanData event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, data });
+      const companyId = validateCompanyAccess(socket);
+      const { projectId, filters = {} } = data;
+
+      const result = await taskService.getTasksForKanban(companyId, projectId, filters);
+
+      if (!result.done) {
+        console.error("[Task] Failed to get kanban data", { error: result.error });
+      }
+
+      socket.emit("task:getKanbanData-response", result);
+    } catch (error) {
+      console.error("[Task] Error in task:getKanbanData", { error: error.message });
+      socket.emit("task:getKanbanData-response", { done: false, error: error.message });
+    }
+  });
+
+  
+  socket.on("task:updateStatus", async (data) => {
+    try {
+      console.log("[Task] task:updateStatus event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, data });
+      const companyId = validateCompanyAccess(socket);
+      const { taskId, newStatus } = data;
+
+      if (!taskId || !newStatus) {
+        throw new Error("Task ID and new status are required");
+      }
+
+      
+      if (!ObjectId.isValid(taskId)) {
+        throw new Error("Invalid task ID format");
+      }
+
+      const result = await taskService.updateTaskStatus(companyId, taskId, newStatus);
+
+      if (!result.done) {
+        console.error("[Task] Failed to update task status", { error: result.error });
+      }
+
+      socket.emit("task:updateStatus-response", result);
+
+      
+      io.to(`company_${companyId}`).emit("task:status-updated", {
+        taskId,
+        newStatus,
+        updatedBy: socket.user?.sub
+      });
+    } catch (error) {
+      console.error("[Task] Error in task:updateStatus", { error: error.message });
+      socket.emit("task:updateStatus-response", { done: false, error: error.message });
     }
   });
 };

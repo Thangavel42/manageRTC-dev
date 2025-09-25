@@ -55,7 +55,6 @@ const Task = () => {
     search: ''
   });
 
-  const searchTimeoutRef = useRef<number | null>(null);
   const loadTasks = useCallback(() => {
     if (!socket) return;
 
@@ -86,23 +85,8 @@ const Task = () => {
     }
   }, []);
 
-
-  const handleFilterChange = useCallback((key: string, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  }, []);
-
   const handlePriorityFilter = useCallback((priority: string) => {
     setFilters(prev => ({ ...prev, priority }));
-  }, []);
-
-  const handleSearchChange = useCallback((value: string) => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = window.setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: value }));
-    }, 300);
   }, []);
 
   useEffect(() => {

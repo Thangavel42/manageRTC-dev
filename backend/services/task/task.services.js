@@ -1,5 +1,7 @@
 import Task from '../../models/task/task.schema.js';
 import { generateId } from '../../utils/generateId.js';
+import { getTenantCollections } from '../../config/db.js';
+import { ObjectId } from 'mongodb';
 
 export const createTask = async (companyId, taskData) => {
   try {
@@ -27,12 +29,13 @@ export const createTask = async (companyId, taskData) => {
 
 export const getTasks = async (companyId, filters = {}) => {
   try {
+    const collections = getTenantCollections(companyId);
+
     const query = {
-      companyId,
       isDeleted: { $ne: true }
     };
 
-    
+
     if (filters.projectId) {
       query.projectId = filters.projectId;
     }
@@ -50,10 +53,13 @@ export const getTasks = async (companyId, filters = {}) => {
     }
 
     if (filters.search) {
+      const searchRegex = new RegExp(filters.search, 'i');
       query.$or = [
-        { title: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } },
-        { tags: { $in: [new RegExp(filters.search, 'i')] } }
+        { title: { $regex: searchRegex } },
+        { description: { $regex: searchRegex } },
+        { tags: { $elemMatch: { $regex: searchRegex } } },
+        { assignee: { $elemMatch: { $regex: searchRegex } } },
+        { _id: { $regex: searchRegex } }
       ];
     }
 
@@ -64,12 +70,14 @@ export const getTasks = async (companyId, filters = {}) => {
       sortOptions.createdAt = -1;
     }
 
-    const tasks = await Task.find(query)
+    const tasks = await collections.tasks
+      .find(query)
       .sort(sortOptions)
       .limit(filters.limit || 50)
-      .skip(filters.skip || 0);
+      .skip(filters.skip || 0)
+      .toArray();
 
-    const totalCount = await Task.countDocuments(query);
+    const totalCount = await collections.tasks.countDocuments(query);
 
     return {
       done: true,
@@ -80,7 +88,6 @@ export const getTasks = async (companyId, filters = {}) => {
   } catch (error) {
     console.error('Error getting tasks:', error);
 
-    // If it's a timeout error due to collection not existing, return empty results
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet, returning empty results');
       return {
@@ -98,11 +105,13 @@ export const getTasks = async (companyId, filters = {}) => {
   }
 };
 
+
 export const getTaskById = async (companyId, taskId) => {
   try {
-    const task = await Task.findOne({
-      _id: taskId,
-      companyId,
+    const collections = getTenantCollections(companyId);
+
+    const task = await collections.tasks.findOne({
+      _id: new ObjectId(taskId),
       isDeleted: { $ne: true }
     });
 
@@ -121,7 +130,7 @@ export const getTaskById = async (companyId, taskId) => {
   } catch (error) {
     console.error('Error getting task by ID:', error);
 
-    // If it's a timeout error due to collection not existing, return not found
+    
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet');
       return {
@@ -137,17 +146,22 @@ export const getTaskById = async (companyId, taskId) => {
   }
 };
 
+
+
 export const updateTask = async (companyId, taskId, updateData) => {
   try {
-    const updatedTask = await Task.findOneAndUpdate(
+    const collections = getTenantCollections(companyId);
+
+    const updatedTask = await collections.tasks.findOneAndUpdate(
       {
-        _id: taskId,
-        companyId,
+        _id: new ObjectId(taskId),
         isDeleted: { $ne: true }
       },
       {
-        ...updateData,
-        updatedAt: new Date()
+        $set: {
+          ...updateData,
+          updatedAt: new Date()
+        }
       },
       { new: true }
     );
@@ -167,7 +181,7 @@ export const updateTask = async (companyId, taskId, updateData) => {
   } catch (error) {
     console.error('Error updating task:', error);
 
-    // If it's a timeout error due to collection not existing, return not found
+    
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet');
       return {
@@ -183,17 +197,22 @@ export const updateTask = async (companyId, taskId, updateData) => {
   }
 };
 
+
+
 export const deleteTask = async (companyId, taskId) => {
   try {
-    const deletedTask = await Task.findOneAndUpdate(
+    const collections = getTenantCollections(companyId);
+
+    const deletedTask = await collections.tasks.findOneAndUpdate(
       {
-        _id: taskId,
-        companyId,
+        _id: new ObjectId(taskId),
         isDeleted: { $ne: true }
       },
       {
-        isDeleted: true,
-        updatedAt: new Date()
+        $set: {
+          isDeleted: true,
+          updatedAt: new Date()
+        }
       },
       { new: true }
     );
@@ -213,7 +232,7 @@ export const deleteTask = async (companyId, taskId) => {
   } catch (error) {
     console.error('Error deleting task:', error);
 
-    // If it's a timeout error due to collection not existing, return not found
+    
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet');
       return {
@@ -229,15 +248,18 @@ export const deleteTask = async (companyId, taskId) => {
   }
 };
 
+
+
 export const getTasksByProject = async (companyId, projectId, filters = {}) => {
   try {
+    const collections = getTenantCollections(companyId);
+
     const query = {
-      companyId,
       projectId,
       isDeleted: { $ne: true }
     };
 
-    
+
     if (filters.status && filters.status !== 'all') {
       query.status = filters.status;
     }
@@ -250,7 +272,7 @@ export const getTasksByProject = async (companyId, projectId, filters = {}) => {
       query.assignee = { $in: [filters.assignee] };
     }
 
-    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    const tasks = await collections.tasks.find(query).sort({ createdAt: -1 }).toArray();
 
     return {
       done: true,
@@ -260,7 +282,7 @@ export const getTasksByProject = async (companyId, projectId, filters = {}) => {
   } catch (error) {
     console.error('Error getting project tasks:', error);
 
-    // If it's a timeout error due to collection not existing, return empty results
+    
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet, returning empty results');
       return {
@@ -277,10 +299,13 @@ export const getTasksByProject = async (companyId, projectId, filters = {}) => {
   }
 };
 
+
+
 export const getTaskStats = async (companyId, projectId = null) => {
   try {
+    const collections = getTenantCollections(companyId);
+
     const matchQuery = {
-      companyId,
       isDeleted: { $ne: true }
     };
 
@@ -288,27 +313,59 @@ export const getTaskStats = async (companyId, projectId = null) => {
       matchQuery.projectId = projectId;
     }
 
-    const stats = await Task.aggregate([
+    const stats = await collections.tasks.aggregate([
       { $match: matchQuery },
       {
         $group: {
           _id: null,
           total: { $sum: 1 },
           pending: {
-            $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ['$status', 'Pending'] }, { $eq: ['$status', 'pending'] }] },
+                1,
+                0
+              ]
+            }
           },
           inprogress: {
-            $sum: { $cond: [{ $eq: ['$status', 'Inprogress'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [
+                  { $eq: ['$status', 'Inprogress'] },
+                  { $eq: ['$status', 'inprogress'] },
+                  { $eq: ['$status', 'In Progress'] }
+                ] },
+                1,
+                0
+              ]
+            }
           },
           completed: {
-            $sum: { $cond: [{ $eq: ['$status', 'Completed'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ['$status', 'Completed'] }, { $eq: ['$status', 'completed'] }] },
+                1,
+                0
+              ]
+            }
           },
           onhold: {
-            $sum: { $cond: [{ $eq: ['$status', 'Onhold'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [
+                  { $eq: ['$status', 'Onhold'] },
+                  { $eq: ['$status', 'onhold'] },
+                  { $eq: ['$status', 'On Hold'] }
+                ] },
+                1,
+                0
+              ]
+            }
           }
         }
       }
-    ]);
+    ]).toArray();
 
     const result = stats[0] || {
       total: 0,
@@ -326,7 +383,7 @@ export const getTaskStats = async (companyId, projectId = null) => {
   } catch (error) {
     console.error('Error getting task stats:', error);
 
-    // If it's a timeout error due to collection not existing, return empty stats
+    
     if (error.message && error.message.includes('buffering timed out')) {
       console.log('Tasks collection does not exist yet, returning empty stats');
       return {
@@ -348,3 +405,129 @@ export const getTaskStats = async (companyId, projectId = null) => {
     };
   }
 };
+
+
+
+
+export const getTasksForKanban = async (companyId, projectId = null, filters = {}) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const matchQuery = {
+      isDeleted: { $ne: true }
+    };
+
+    if (projectId) {
+      matchQuery.projectId = projectId;
+    }
+
+    
+    if (filters.priority && filters.priority !== "all") {
+      matchQuery.priority = filters.priority;
+    }
+
+    if (filters.status && filters.status !== "all") {
+      matchQuery.status = filters.status;
+    }
+
+    if (filters.search) {
+      const searchRegex = new RegExp(filters.search, "i");
+      matchQuery.$or = [
+        { title: { $regex: searchRegex } },
+        { description: { $regex: searchRegex } },
+        { tags: { $elemMatch: { $regex: searchRegex } } },
+        { assignee: { $elemMatch: { $regex: searchRegex } } },
+        { _id: { $regex: searchRegex } }
+      ];
+    }
+
+    
+    if (filters.createdDate) {
+      const createdDate = new Date(filters.createdDate);
+      const nextDay = new Date(createdDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      matchQuery.createdAt = {
+        $gte: createdDate,
+        $lt: nextDay
+      };
+    }
+
+    if (filters.dueDate) {
+      const dueDate = new Date(filters.dueDate);
+      const nextDay = new Date(dueDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      matchQuery.dueDate = {
+        $gte: dueDate,
+        $lt: nextDay
+      };
+    }
+
+    const tasks = await collections.tasks
+      .find(matchQuery)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    
+    const groupedTasks = {
+      todo: tasks.filter(task => task.status === "Pending" || task.status === "pending"),
+      inprogress: tasks.filter(task => task.status === "Inprogress" || task.status === "inprogress" || task.status === "In Progress"),
+      completed: tasks.filter(task => task.status === "Completed" || task.status === "completed"),
+      onhold: tasks.filter(task => task.status === "Onhold" || task.status === "onhold" || task.status === "On Hold")
+    };
+
+    return {
+      done: true,
+      data: groupedTasks,
+      message: "Tasks retrieved successfully for kanban board"
+    };
+  } catch (error) {
+    console.error("Error getting tasks for kanban:", error);
+    return {
+      done: false,
+      error: error.message
+    };
+  }
+};
+
+
+export const updateTaskStatus = async (companyId, taskId, newStatus) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const result = await collections.tasks.findOneAndUpdate(
+      {
+        _id: new ObjectId(taskId),
+        isDeleted: { $ne: true }
+      },
+      {
+        $set: {
+          status: newStatus,
+          updatedAt: new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      return {
+        done: false,
+        error: "Task not found"
+      };
+    }
+
+    return {
+      done: true,
+      data: result,
+      message: "Task status updated successfully"
+    };
+  } catch (error) {
+    console.error("Error updating task status:", error);
+    return {
+      done: false,
+      error: error.message
+    };
+  }
+};
+
