@@ -1,7 +1,103 @@
-import React from "react";
+import React, { useState } from "react";
 import CommonSelect from "../common/commonSelect";
+import performanceIndicatorService from "../services/performance/performanceIndicator.service";
+interface PerformanceIndicatorModalProps {
+  onSuccess?: () => void;
+  editData?: any; // The item data to be edited
+  isEdit?: boolean;
+  modalId?: string; // Add this prop
+}
+const PerformanceIndicatorModal: React.FC<PerformanceIndicatorModalProps> = ({
+  onSuccess,
+  editData,
+  isEdit,
+  modalId
+}) => {
+  const [formData, setFormData] = useState({
+    designation: "",
+    department: "",
+    approvedBy: "",
+    image: "",
+    role: "",
+    createdDate: new Date().toISOString().split('T')[0],
+    status: "Active"
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-const PerformanceIndicatorModal = () => {
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.designation || formData.designation === "Select") {
+      setError("Designation is required");
+      return;
+    }
+    if (!formData.department.trim()) {
+      setError("Department is required");
+      return;
+    }
+    if (!formData.approvedBy.trim()) {
+      setError("Approved by is required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await performanceIndicatorService.createPerformanceIndicator(formData);
+      
+      console.log('Performance Indicator API Response:', response);
+      
+      if (response && (response.done || response.success)) {
+        // Reset form
+        setFormData({
+          designation: "",
+          department: "",
+          approvedBy: "",
+          image: "",
+          role: "",
+          createdDate: new Date().toISOString().split('T')[0],
+          status: "Active"
+        });
+        
+        // Close modal
+        const modal = document.getElementById('add_performance_indicator');
+        if (modal) {
+          const bootstrap = (window as any).bootstrap;
+          if (bootstrap && bootstrap.Modal) {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+              modalInstance.hide();
+            }
+          }
+        }
+        
+        // Refresh data
+        if (onSuccess) {
+          onSuccess();
+        }
+        
+        // Show success message
+        alert('Performance indicator created successfully!');
+      } else {
+        setError(response.error || 'Failed to create performance indicator');
+      }
+    } catch (err) {
+      setError('Failed to create performance indicator');
+      console.error('Error creating performance indicator:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
     const designation = [
         { value: "Select", label: "Select" },
         { value: "Web Designer", label: "Web Designer" },
@@ -66,16 +162,68 @@ const PerformanceIndicatorModal = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body pb-0">
+                {error && (
+                  <div className="alert alert-danger" role="alert">
+                    {error}
+                  </div>
+                )}
                 <div className="row">
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Designation</label>
+                      <label className="form-label">Designation *</label>
                       <CommonSelect
                         className="select"
                         options={designation}
-                        defaultValue={designation[0]}
+                        defaultValue={designation.find(d => d.value === formData.designation) || designation[0]}
+                        onChange={(option) => handleInputChange('designation', option?.value || '')}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Department *</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.department}
+                        onChange={(e) => handleInputChange('department', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Approved By *</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.approvedBy}
+                        onChange={(e) => handleInputChange('approvedBy', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Role</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.role}
+                        onChange={(e) => handleInputChange('role', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Created Date</label>
+                      <input 
+                        type="date" 
+                        className="form-control" 
+                        value={formData.createdDate}
+                        onChange={(e) => handleInputChange('createdDate', e.target.value)}
                       />
                     </div>
                   </div>
@@ -237,7 +385,8 @@ const PerformanceIndicatorModal = () => {
                       <CommonSelect
                         className="select"
                         options={status}
-                        defaultValue={status[0]}
+                        defaultValue={status.find(s => s.value === formData.status) || status[1]}
+                        onChange={(option) => handleInputChange('status', option?.value || '')}
                       />
                     </div>
                   </div>
@@ -248,11 +397,23 @@ const PerformanceIndicatorModal = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
-                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
-                  Add Indicator
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Creating...
+                    </>
+                  ) : (
+                    'Add Indicator'
+                  )}
                 </button>
               </div>
             </form>

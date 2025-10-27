@@ -80,8 +80,7 @@ const updatePaymentDetail = (index: number, field: string, value: any) => {
     0
   );
 
-  // Handle save
-  const handleSave = (status: "Draft" | "Unpaid") => {
+const handleSave = (status: "Draft" | "Unpaid") => {
   console.log("🚀 handleSave called with status:", status);
   if (!socket) {
     console.error("❌ No socket connection available");
@@ -96,29 +95,49 @@ const updatePaymentDetail = (index: number, field: string, value: any) => {
     }
   }
 
+  const firstPD = paymentDetails[0] || { customer: "", referenceNo: "", paymentType: paymenttypeChoose[0].value, bankDetails: bankChoose[0].value };
 
-    const payload = {
-      title,
-      invoiceNumber,
-      invoiceDate: invoiceDate ? dayjs(invoiceDate).format("YYYY-MM-DD") : null,
-      dueDate: dueDate ? dayjs(dueDate).format("YYYY-MM-DD") : null,
-      paymentDetails,
-      description,
-      notes,
-      items,
-      amount: totalAmount,
-      status,
-    };
-      console.log("📤 Emitting event: admin/invoices/create");
+  const clientId = firstPD.customer && /^[0-9a-fA-F]{24}$/.test(firstPD.customer) ? firstPD.customer : null;
+
+  const payload = {
+    title,
+    invoiceNumber,
+    invoiceDate: invoiceDate ? dayjs(invoiceDate).format("YYYY-MM-DD") : null,
+    dueDate: dueDate ? dayjs(dueDate).format("YYYY-MM-DD") : null,
+
+    clientId: clientId,
+    clientName: clientId ? null : (firstPD.customer || null),
+
+    referenceNo: firstPD.referenceNo || "",
+    paymentType: firstPD.paymentType || "",
+    bankDetails: firstPD.bankDetails || "",
+
+    description,
+    notes,
+    items,
+    amount: totalAmount,
+    status,
+  };
+
+  console.log("📤 Emitting event: admin/invoices/create");
   console.log("📦 Payload being sent:", payload);
 
-    socket.emit("admin/invoices/create", payload, (res: any) => {
-      if (res?.done) {
-        navigate(all_routes.invoices);
-      } else {
-      }
-    });
-  };
+  socket.emit("admin/invoices/create", payload, (res: any) => {
+    console.log("📥 Response from backend:", res);
+      setTitle("");
+      setInvoiceNumber("");
+      setInvoiceDate(null);
+      setDueDate(null);
+      setPaymentDetails([
+        { customer: "", referenceNo: "", paymentType: paymenttypeChoose[0].value, bankDetails: bankChoose[0].value }
+      ]);
+      setItems([{ description: "", qty: 1, discount: 0, rate: 0 }]);
+      setDescription("");
+      setNotes("");
+      navigate(all_routes.invoices);
+  });
+};
+
 
   // Password visibility (for Add Customer modal)
   const [passwordVisibility, setPasswordVisibility] = useState({
@@ -424,22 +443,24 @@ const updatePaymentDetail = (index: number, field: string, value: any) => {
                   {/* /Additional Details */}
 
                   <div className="d-flex justify-content-end align-items-center flex-wrap row-gap-3">
-                    <Link
-                      to="#"
+                    <button
+                      type="button"
                       onClick={() => handleSave("Draft")}
                       className="btn btn-dark d-flex justify-content-center align-items-center"
                     >
                       <i className="ti ti-printer me-2" />
                       Save as Draft
-                    </Link>
-                    <Link
-                      to="#"
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleSave("Unpaid")}
-                      className="btn btn-primary d-flex justify-content-center align-items-center  ms-2"
+                      className="btn btn-primary d-flex justify-content-center align-items-center ms-2"
                     >
                       <i className="ti ti-copy me-2" />
                       Save &amp; Send
-                    </Link>
+                    </button>
+
                   </div>
                 </div>
               </div>

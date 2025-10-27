@@ -13,8 +13,15 @@ import socialFeedRoutes from "./routes/socialfeed.routes.js";
 import dealRoutes from "./routes/deal.routes.js";
 import companiesRoutes from "./routes/companies.routes.js";
 import contactRoutes from "./routes/contacts.routes.js";
+import goalTypeRoutes from "./routes/performance/goalType.routes.js";
+import goalTrackingRoutes from "./routes/performance/goalTracking.routes.js";
 import ticketRoutes from "./routes/tickets.routes.js";
 
+
+
+import performanceIndicatorRoutes from "./routes/performance/performanceIndicator.routes.js";
+import performanceAppraisalRoutes from "./routes/performance/performanceAppraisal.routes.js";
+import performanceReviewRoutes from "./routes/performance/performanceReview.routes.js";
 config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,7 +77,15 @@ const initializeServer = async () => {
     app.use("/api/deals", dealRoutes);
     app.use("/api/companies", companiesRoutes);
     app.use("/api/contacts", contactRoutes);
+    app.use("/api/performance/goal-types", goalTypeRoutes);
+    app.use("/api/performance/goal-trackings", goalTrackingRoutes);
     app.use("/api/tickets", ticketRoutes);
+
+
+
+    app.use("/api/performance/indicators", performanceIndicatorRoutes);
+    app.use("/api/performance/appraisals", performanceAppraisalRoutes);
+    app.use("/api/performance/reviews", performanceReviewRoutes);
 
     app.get("/", (req, res) => {
       res.send("API is running");

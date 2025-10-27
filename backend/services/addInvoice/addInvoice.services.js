@@ -6,24 +6,26 @@ export const createAddInvoice = async (companyId, payload) => {
   const { addInvoices } = getTenantCollections(companyId);
 
   const doc = {
-    invoiceNumber: payload.invoiceNumber,
-    title: payload.title,
-    clientId: payload.clientId ? new ObjectId(payload.clientId) : null,
-    amount: Number(payload.amount) || 0,
-    status: payload.status || "Draft", 
-    dueDate: payload.dueDate,       // "YYYY-MM-DD"
-    invoiceDate: payload.invoiceDate || new Date(),
-    referenceNo: payload.referenceNo || "",
-    paymentType: payload.paymentType || "",
-    bankDetails: payload.bankDetails || "",
-    description: payload.description || "",
-    notes: payload.notes || "",
-    items: payload.items || [],     // array of line items
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    isDeleted: false,
-    companyId: new ObjectId(companyId)
-  };
+  invoiceNumber: payload.invoiceNumber,
+  title: payload.title,
+  clientId: payload.clientId ? new ObjectId(payload.clientId) : null,
+  clientName: payload.clientName || "",   // ✅ add this
+  amount: Number(payload.amount) || 0,
+  status: payload.status || "Draft",
+  dueDate: payload.dueDate ? new Date(payload.dueDate) : null,  // ✅ ensure Date
+  invoiceDate: payload.invoiceDate ? new Date(payload.invoiceDate) : new Date(),
+  referenceNo: payload.referenceNo || "",
+  paymentType: payload.paymentType || "",
+  bankDetails: payload.bankDetails || "",
+  description: payload.description || "",
+  notes: payload.notes || "",
+  items: payload.items || [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  isDeleted: false,
+  companyId: new ObjectId(companyId)
+};
+
 
   const res = await addInvoices.insertOne(doc);
   return { ...doc, _id: res.insertedId.toString() };

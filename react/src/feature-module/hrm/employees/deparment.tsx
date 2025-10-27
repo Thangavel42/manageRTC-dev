@@ -79,7 +79,7 @@ const Department = () => {
         setError(null);
         setLoading(false);
       } else {
-        setError(response.error || "Failed to fetch policies");
+        setError(response.error || "Failed to fetch department");
         setLoading(false);
       }
     }
@@ -347,7 +347,36 @@ const Department = () => {
       setLoading(false);
     }
   };
+  if (loading) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <>
       {/* Page Wrapper */}

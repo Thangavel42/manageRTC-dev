@@ -160,7 +160,12 @@ export const displayDesignations = async (companyId, hrId, filters) => {
                   $and: [
                     { $eq: ["$designationId", "$$designationId"] },
                     { $eq: ["$departmentId", "$$departmentId"] },
-                    { $eq: ["$isActive", true] },
+                    {
+                      $or: [
+                        { $eq: ["$status", "active"] },
+                        { $eq: ["$status", "Active"] }
+                      ]
+                    }
                   ],
                 },
               },

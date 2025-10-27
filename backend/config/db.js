@@ -83,6 +83,8 @@ export const getTenantCollections = (tenantDbName) => {
     policy: db.collection("policy"),
     designations: db.collection("designations"),
     assets: db.collection("assets"),
+    holidays: db.collection("holidays"),
+
     // invoice section
     addInvoices: db.collection("invoices"),
 
@@ -91,7 +93,17 @@ export const getTenantCollections = (tenantDbName) => {
 
     // notes - application
     notes: db.collection("notes"),
-    // tickets collection
+    candidates: db.collection("candidates"),
+
+
+    performanceIndicators: db.collection("performanceIndicators"),
+    performanceAppraisals: db.collection("performanceAppraisals"),
+    performanceReviews: db.collection("performanceReviews")
+    // Performance Management Collections
+    goalTypes: db.collection("goalTypes"),
+    goalTrackings: db.collection("goalTrackings"),
+    //profile collection
+    profile: db.collection("profile")
     tickets: db.collection("tickets"),
     candidates: db.collection("candidates")
   };

@@ -1741,6 +1741,12 @@ export const publicRoutes = [
     roles: ["public"],
   },
   {
+    path: routes.employeeDetailPage,
+    element: <EmployeeDetails />,
+    route: Route,
+    roles: ["public"],
+  },
+  {
     path: routes.employeeGrid,
     element: <EmployeesGrid />,
     route: Route,
