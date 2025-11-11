@@ -261,9 +261,9 @@ const adminController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
       const filter = data?.filter || "all";
-      
+
       const result = await adminService.getTodos(companyId, userId, filter);
-      
+
       socket.emit("admin/dashboard/get-todos-response", result);
     } catch (error) {
       console.error(`[GET TODOS] Error:`, error);
@@ -279,9 +279,9 @@ const adminController = (socket, io) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const filter = data?.filter || "all";
-      
+
       const result = await adminService.getTodoStatistics(companyId, filter);
-      
+
       socket.emit("admin/dashboard/get-todo-statistics-response", result);
     } catch (error) {
       console.error(`[GET TODO STATISTICS] Error:`, error);
@@ -346,94 +346,99 @@ const adminController = (socket, io) => {
     }
   });
   // Get all users (employees and clients combined)
-socket.on("admin/users/get", async (filters) => { // Accept filters here
-  try {
-    const companyId = validateCompanyAccess(socket);
-    const result = await adminService.getAllUsers(companyId, filters); // Pass filters to the service
-    socket.emit("admin/users/get-response", result);
-  } catch (error) {
-    socket.emit("admin/users/get-response", {
-      done: false,
-      error: error.message,
-    });
-  }
-});
-
-// Create a new user
-socket.on("admin/users/create", async (userData) => {
-  try {
-    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
-    const companyId = validateCompanyAccess(socket);
-    const result = await adminService.createUser(companyId, userData);
-
-    // Respond directly to the sender for immediate feedback
-    socket.emit("admin/users/create-response", result);
-
-    // If successful, fetch the updated list and broadcast it to all admins
-    if (result.done) {
-      const updatedUserList = await adminService.getAllUsers(companyId);
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/users/list-update",
-        updatedUserList
-      );
+  socket.on("admin/users/get", async (filters) => {
+    // Accept filters here
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getAllUsers(companyId, filters); // Pass filters to the service
+      socket.emit("admin/users/get-response", result);
+    } catch (error) {
+      socket.emit("admin/users/get-response", {
+        done: false,
+        error: error.message,
+      });
     }
-  } catch (error) {
-    socket.emit("admin/users/create-response", {
-      done: false,
-      error: error.message,
-    });
-  }
-});
+  });
 
-// Update an existing user
-socket.on("admin/users/update", async (data) => {
-  try {
-    const { userId, updatedData } = data;
-    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
-    const companyId = validateCompanyAccess(socket);
-    const result = await adminService.updateUser(companyId, userId, updatedData);
+  // Create a new user
+  socket.on("admin/users/create", async (userData) => {
+    try {
+      // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.createUser(companyId, userData);
 
-    socket.emit("admin/users/update-response", result);
+      // Respond directly to the sender for immediate feedback
+      socket.emit("admin/users/create-response", result);
 
-    if (result.done) {
-      const updatedUserList = await adminService.getAllUsers(companyId);
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/users/list-update",
-        updatedUserList
-      );
+      // If successful, fetch the updated list and broadcast it to all admins
+      if (result.done) {
+        const updatedUserList = await adminService.getAllUsers(companyId);
+        io.to(`admin_room_${companyId}`).emit(
+          "admin/users/list-update",
+          updatedUserList
+        );
+      }
+    } catch (error) {
+      socket.emit("admin/users/create-response", {
+        done: false,
+        error: error.message,
+      });
     }
-  } catch (error) {
-    socket.emit("admin/users/update-response", {
-      done: false,
-      error: error.message,
-    });
-  }
-});
+  });
 
-// Delete a user
-socket.on("admin/users/delete", async (data) => {
-  try {
-    const { userId } = data;
-    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
-    const companyId = validateCompanyAccess(socket);
-    const result = await adminService.deleteUser(companyId, userId);
-
-    socket.emit("admin/users/delete-response", result);
-
-    if (result.done) {
-      const updatedUserList = await adminService.getAllUsers(companyId);
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/users/list-update",
-        updatedUserList
+  // Update an existing user
+  socket.on("admin/users/update", async (data) => {
+    try {
+      const { userId, updatedData } = data;
+      // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.updateUser(
+        companyId,
+        userId,
+        updatedData
       );
+
+      socket.emit("admin/users/update-response", result);
+
+      if (result.done) {
+        const updatedUserList = await adminService.getAllUsers(companyId);
+        io.to(`admin_room_${companyId}`).emit(
+          "admin/users/list-update",
+          updatedUserList
+        );
+      }
+    } catch (error) {
+      socket.emit("admin/users/update-response", {
+        done: false,
+        error: error.message,
+      });
     }
-  } catch (error) {
-    socket.emit("admin/users/delete-response", {
-      done: false,
-      error: error.message,
-    });
-  }
-});
+  });
+
+  // Delete a user
+  socket.on("admin/users/delete", async (data) => {
+    try {
+      const { userId } = data;
+      // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.deleteUser(companyId, userId);
+
+      socket.emit("admin/users/delete-response", result);
+
+      if (result.done) {
+        const updatedUserList = await adminService.getAllUsers(companyId);
+        io.to(`admin_room_${companyId}`).emit(
+          "admin/users/list-update",
+          updatedUserList
+        );
+      }
+    } catch (error) {
+      socket.emit("admin/users/delete-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
   // Get all dashboard data at once
   socket.on("admin/dashboard/get-all-data", async (data = {}) => {
     try {
@@ -517,7 +522,10 @@ socket.on("admin/users/delete", async (data) => {
     "admin/dashboard/add-todo",
     withRateLimit(async (todoData) => {
       try {
-        console.log("Add todo request received:", { todoData, socketId: socket.id });
+        console.log("Add todo request received:", {
+          todoData,
+          socketId: socket.id,
+        });
         const companyId = validateCompanyAccess(socket);
         const userId = socket.user.sub;
 
@@ -541,10 +549,14 @@ socket.on("admin/users/delete", async (data) => {
           tag: todoData.tag ? todoData.tag.trim().substring(0, 50) : "",
           priority: (() => {
             const priority = todoData.priority?.toLowerCase();
-            console.log("Priority validation:", { original: todoData.priority, lowercase: priority });
+            console.log("Priority validation:", {
+              original: todoData.priority,
+              lowercase: priority,
+            });
             const isValid = ["low", "medium", "high"].includes(priority);
-            const result = isValid 
-              ? todoData.priority.charAt(0).toUpperCase() + todoData.priority.slice(1).toLowerCase()
+            const result = isValid
+              ? todoData.priority.charAt(0).toUpperCase() +
+                todoData.priority.slice(1).toLowerCase()
               : "Medium";
             console.log("Priority result:", result);
             return result;
@@ -558,8 +570,16 @@ socket.on("admin/users/delete", async (data) => {
             : null,
         };
 
-        console.log("Calling adminService.addTodo with:", { companyId, userId, sanitizedTodoData });
-        const result = await adminService.addTodo(companyId, userId, sanitizedTodoData);
+        console.log("Calling adminService.addTodo with:", {
+          companyId,
+          userId,
+          sanitizedTodoData,
+        });
+        const result = await adminService.addTodo(
+          companyId,
+          userId,
+          sanitizedTodoData
+        );
         console.log("Add todo service result:", result);
 
         socket.emit("admin/dashboard/add-todo-response", result);
@@ -634,7 +654,9 @@ socket.on("admin/users/delete", async (data) => {
               key === "priority" &&
               ["low", "medium", "high"].includes(todoData[key]?.toLowerCase())
             ) {
-              sanitizedUpdates[key] = todoData[key].charAt(0).toUpperCase() + todoData[key].slice(1).toLowerCase();
+              sanitizedUpdates[key] =
+                todoData[key].charAt(0).toUpperCase() +
+                todoData[key].slice(1).toLowerCase();
             } else if (key === "dueDate" && !isNaN(new Date(todoData[key]))) {
               sanitizedUpdates[key] = new Date(todoData[key]);
             } else if (
@@ -646,7 +668,11 @@ socket.on("admin/users/delete", async (data) => {
           }
         });
 
-        const result = await adminService.updateTodo(companyId, todoData.id, sanitizedUpdates);
+        const result = await adminService.updateTodo(
+          companyId,
+          todoData.id,
+          sanitizedUpdates
+        );
 
         socket.emit("admin/dashboard/update-todo-response", result);
 
@@ -729,7 +755,10 @@ socket.on("admin/users/delete", async (data) => {
           throw new Error("Invalid todo ID format");
         }
 
-        const result = await adminService.deleteTodoPermanently(companyId, todoId);
+        const result = await adminService.deleteTodoPermanently(
+          companyId,
+          todoId
+        );
 
         socket.emit("admin/dashboard/delete-todo-permanently-response", result);
 
@@ -997,35 +1026,33 @@ socket.on("admin/users/delete", async (data) => {
       });
     }
   });
-  
+
   socket.on("admin/invoices/create", async (payload, callback) => {
-  try {
-    // 1. Create new invoice from payload
-    const newInvoice = new Invoice({
-      invoiceNumber: payload.invoiceNumber,
-      title: payload.title,
-      clientId: payload.clientId,
-      amount: payload.amount,
-      status: payload.status,
-      dueDate: payload.dueDate,
-      createdAt: new Date(),
-    });
+    try {
+      // 1. Create new invoice from payload
+      const newInvoice = new Invoice({
+        invoiceNumber: payload.invoiceNumber,
+        title: payload.title,
+        clientId: payload.clientId,
+        amount: payload.amount,
+        status: payload.status,
+        dueDate: payload.dueDate,
+        createdAt: new Date(),
+      });
 
-    await newInvoice.save();
+      await newInvoice.save();
 
-    // 2. Send back success response
-    callback({ done: true, data: newInvoice });
+      // 2. Send back success response
+      callback({ done: true, data: newInvoice });
 
-    // 3. Broadcast updated list to all admins
-    const invoices = await Invoice.find({});
-    io.emit("admin/invoices/list-update", { done: true, data: invoices });
-
-  } catch (err) {
-    console.error("Error creating invoice:", err);
-    callback({ done: false, error: "Failed to create invoice" });
-  }
-});
-
+      // 3. Broadcast updated list to all admins
+      const invoices = await Invoice.find({});
+      io.emit("admin/invoices/list-update", { done: true, data: invoices });
+    } catch (err) {
+      console.error("Error creating invoice:", err);
+      callback({ done: false, error: "Failed to create invoice" });
+    }
+  });
 
   // Get leave request modal data (all data in one call)
   socket.on("admin/leave/get-modal-data", async () => {

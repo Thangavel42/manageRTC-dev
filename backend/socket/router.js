@@ -21,12 +21,9 @@ import goalTrackingController from "../controllers/performance/goalTracking.cont
 import jobController from "../controllers/jobs/jobs.controllers.js";
 import profileController from "../controllers/pages/profilepage.controllers.js";
 
-
-
 import performanceIndicatorController from "../controllers/performance/performanceIndicator.controller.js";
 import performanceAppraisalController from "../controllers/performance/performanceAppraisal.controller.js";
 import performanceReviewController from "../controllers/performance/performanceReview.controller.js";
-
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -72,7 +69,6 @@ const router = (socket, io, role) => {
       console.log("Attaching social feed controller for admin...");
       socialFeedSocketController(socket, io);
 
-      
       // Pipelines JS
       pipelineController(socket, io);
       console.log("Attaching pipeline controller for admin...");
@@ -82,8 +78,8 @@ const router = (socket, io, role) => {
       jobController(socket, io);
 
       // Initialize profile controller for all authenticated users
-  console.log("Attaching profile controller...");
-  profileController(socket, io);
+      console.log("Attaching profile controller...");
+      profileController(socket, io);
       console.log("Attaching admin notes controller...");
       notesController(socket, io);
       console.log("Attaching tickets controller for admin...");
@@ -93,8 +89,6 @@ const router = (socket, io, role) => {
       console.log("Attaching jobsController for admin...");
       jobsController(socket, io);
 
-
-
       performanceIndicatorController(socket, io);
       performanceAppraisalController(socket, io);
       performanceReviewController(socket, io);
@@ -103,7 +97,6 @@ const router = (socket, io, role) => {
       goalTypeController(socket, io);
       goalTrackingController(socket, io);
       break;
-
 
     case "hr":
       console.log("Attaching HR controller...");
@@ -128,8 +121,6 @@ const router = (socket, io, role) => {
       console.log("Attaching candidate controller for hr...");
       candidateController(socket, io);
 
-
-
       performanceIndicatorController(socket, io);
       performanceAppraisalController(socket, io);
       performanceReviewController(socket, io);
@@ -141,8 +132,8 @@ const router = (socket, io, role) => {
       jobController(socket, io);
 
       // Initialize profile controller for all authenticated users
-  console.log("Attaching profile controller...");
-  profileController(socket, io);
+      console.log("Attaching profile controller...");
+      profileController(socket, io);
       break;
 
     case "leads":
