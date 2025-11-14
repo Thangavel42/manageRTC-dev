@@ -1,7 +1,7 @@
 import React from "react";
 import { useState, useEffect, useRef } from "react";
 import { all_routes } from "../../router/all_routes";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Table from "../../../core/common/dataTable/index";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import PredefinedDateRanges from "../../../core/common/datePicker";
@@ -51,10 +51,10 @@ interface Employee {
   firstName: string;
   lastName: string;
   avatarUrl: string;
-  account: {
+  account?: {
     userName: string;
   };
-  contact: {
+  contact?: {
     email: string;
     phone: string;
   };
@@ -68,6 +68,9 @@ interface Employee {
   role: string;
   enabledModules: Record<PermissionModule, boolean>;
   permissions: Record<PermissionModule, PermissionSet>;
+  totalProjects?: number;
+  completedProjects?: number;
+  productivity?: number;
 }
 
 interface EmployeeStats {
@@ -222,6 +225,7 @@ const initialState = {
 
 const EmployeeList = () => {
   // const {  isLoaded } = useUser();
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("basic-info");
@@ -243,12 +247,16 @@ const EmployeeList = () => {
     null
   );
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [newlyAddedEmployee, setNewlyAddedEmployee] = useState<Employee | null>(null);
   const [filters, setFilters] = useState({
     startDate: "",
     endDate: "",
     status: "",
     departmentId: "",
   });
+  const addEmployeeModalRef = useRef<HTMLButtonElement>(null);
+  const editEmployeeModalRef = useRef<HTMLButtonElement>(null);
+  const successModalRef = useRef<HTMLButtonElement>(null);
   const [sortedEmployee, setSortedEmployee] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stats, setStats] = useState<EmployeeStats>({
@@ -257,6 +265,9 @@ const EmployeeList = () => {
     inactiveCount: 0,
     newJoinersCount: 0,
   });
+
+  // View state - 'list' or 'grid'
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   const [formData, setFormData] = useState({
     employeeId: generateId("EMP"),
@@ -287,6 +298,7 @@ const EmployeeList = () => {
     designationId: "",
     departmentId: "",
     about: "",
+    status: "Active" as "Active" | "Inactive",
   });
   const [permissions, setPermissions] = useState(initialState);
 
@@ -307,6 +319,7 @@ const EmployeeList = () => {
       }
     }, 30000);
 
+    // Fetch employee data (works for both list and grid views)
     socket.emit("hrm/employees/get-employee-stats");
     socket.emit("hr/departments/get");
 
@@ -317,12 +330,38 @@ const EmployeeList = () => {
         setResponseData(response.data);
         setError(null);
         setLoading(false);
+        
+        // Close the add employee modal
+        if (addEmployeeModalRef.current) {
+          addEmployeeModalRef.current.click();
+        }
+        
+        // Store the newly added employee data
+        if (response.data && response.data.employee) {
+          setNewlyAddedEmployee(response.data.employee);
+        } else if (response.data) {
+          // If the response structure is different, try to use the whole data
+          setNewlyAddedEmployee(response.data);
+        }
+        
+        // Show success modal with navigation options
+        setTimeout(() => {
+          if (successModalRef.current) {
+            successModalRef.current.click();
+          }
+        }, 300);
+        
+        // Refresh employee list
         if (socket) {
           socket.emit("hrm/employees/get-employee-stats");
         }
       } else {
-        setError(response.error || "Failed to add policy");
+        setError(response.error || "Failed to add employee");
         setLoading(false);
+        toast.error(response.error || "Failed to add employee", {
+          position: "top-right",
+          autoClose: 3000,
+        });
       }
     };
 
@@ -404,19 +443,39 @@ const EmployeeList = () => {
         setResponseData(response.data);
         setError(null);
         setLoading(false);
+        
+        toast.success("Employee deleted successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        
         if (socket) {
           socket.emit("hrm/employees/get-employee-stats");
         }
       } else {
-        setError(response.error || "Failed to add policy");
+        setError(response.error || "Failed to delete employee");
         setLoading(false);
+        
+        toast.error(response.error || "Failed to delete employee", {
+          position: "top-right",
+          autoClose: 3000,
+        });
       }
     };
 
     const handleUpdateEmployeeResponse = (response: any) => {
       if (response.done) {
-        // toast.success("Employee updated successfully!");
-        // Optionally refresh employee list
+        // Close the modal
+        if (editEmployeeModalRef.current) {
+          editEmployeeModalRef.current.click();
+        }
+        
+        toast.success("Employee updated successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        
+        // Refresh employee list
         if (socket) {
           socket.emit("hrm/employees/get-employee-stats");
         }
@@ -424,7 +483,10 @@ const EmployeeList = () => {
         setError(null);
         setLoading(false);
       } else {
-        // toast.error(response.error || "Failed to update employee.");
+        toast.error(response.error || "Failed to update employee.", {
+          position: "top-right",
+          autoClose: 3000,
+        });
         setError(response.error || "Failed to update employee.");
         setLoading(false);
       }
@@ -432,15 +494,22 @@ const EmployeeList = () => {
 
     const handleUpdatePermissionResponse = (response: any) => {
       if (response.done) {
-        // toast.success("Employee permissions updated successfully!");
-        // Optionally refresh employee list or permissions
+        toast.success("Employee permissions updated successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        
+        // Refresh employee list or permissions
         if (socket) {
           socket.emit("hrm/employees/get-employee-stats");
         }
         setError(null);
         setLoading(false);
       } else {
-        // toast.error(response.error || "Failed to update permissions.");
+        toast.error(response.error || "Failed to update permissions.", {
+          position: "top-right",
+          autoClose: 3000,
+        });
         setError(response.error || "Failed to update permissions.");
         setLoading(false);
       }
@@ -451,6 +520,10 @@ const EmployeeList = () => {
     socket.on("hr/departments/get-response", handleDepartmentResponse);
     socket.on(
       "hrm/employees/get-employee-stats-response",
+      handleEmployeeResponse
+    );
+    socket.on(
+      "hrm/employees/get-employee-grid-stats-response",
       handleEmployeeResponse
     );
     socket.on("hrm/employees/delete-response", handleEmployeeDelete);
@@ -468,6 +541,10 @@ const EmployeeList = () => {
       socket.off("hr/departments/get-response", handleDepartmentResponse);
       socket.off(
         "hrm/employees/get-employee-stats-response",
+        handleEmployeeResponse
+      );
+      socket.off(
+        "hrm/employees/get-employee-grid-stats-response",
         handleEmployeeResponse
       );
       socket.off("hrm/employees/delete-response", handleEmployeeDelete);
@@ -609,7 +686,34 @@ const EmployeeList = () => {
             data-inert={true}
             data-bs-target="#edit_employee"
             onClick={() => {
-              setEditingEmployee(employee);
+              const preparedEmployee = prepareEmployeeForEdit(employee);
+              setEditingEmployee(preparedEmployee);
+              // Load permissions for editing
+              if (employee.permissions && employee.enabledModules) {
+                setPermissions({
+                  permissions: employee.permissions,
+                  enabledModules: employee.enabledModules,
+                  selectAll: Object.keys(employee.enabledModules).reduce(
+                    (acc, key) => {
+                      acc[key as PermissionModule] = false;
+                      return acc;
+                    },
+                    {} as Record<PermissionModule, boolean>
+                  ),
+                });
+              }
+              // Load department and designation
+              if (employee.departmentId) {
+                setSelectedDepartment(employee.departmentId);
+                if (socket) {
+                  socket.emit("hrm/designations/get", {
+                    departmentId: employee.departmentId,
+                  });
+                }
+              }
+              if (employee.designationId) {
+                setSelectedDesignation(employee.designationId);
+              }
             }}
           >
             <i className="ti ti-edit" />
@@ -719,9 +823,38 @@ const EmployeeList = () => {
     }
   };
 
+  // Clear all filters
+  const clearAllFilters = () => {
+    try {
+      setFilters({
+        startDate: "",
+        endDate: "",
+        status: "",
+        departmentId: "",
+      });
+      setSelectedDepartment("");
+      setSelectedStatus("");
+      setSortOrder("");
+      
+      if (socket) {
+        socket.emit("hrm/employees/get-employee-stats", {
+          startDate: "",
+          endDate: "",
+          status: "",
+          departmentId: "",
+        });
+      }
+      toast.success("All filters cleared", {
+        position: "top-right",
+        autoClose: 2000,
+      });
+    } catch (error) {
+      console.error("Error clearing filters:", error);
+    }
+  };
+
   // Handle file upload
   const uploadImage = async (file: File) => {
-    alert("Hi");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", "amasqis");
@@ -1024,37 +1157,61 @@ const EmployeeList = () => {
   const validateForm = (): boolean => {
     // Check required fields
     if (!formData.firstName) {
-      alert("Please fill in first name");
+      toast.error("Please fill in first name", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.contact.email) {
-      alert("Please fill in email");
+      toast.error("Please fill in email", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.account.userName) {
-      alert("Please fill in username");
+      toast.error("Please fill in username", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.account.password) {
-      alert("Please fill in password");
+      toast.error("Please fill in password", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.contact.phone) {
-      alert("Please fill in phone");
+      toast.error("Please fill in phone", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.personal?.gender) {
-      alert("Please select gender");
+      toast.error("Please select gender", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
     if (!formData.personal?.birthday) {
-      alert("Please select birthday");
+      toast.error("Please select birthday", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
 
     // Check password match
     if (formData.account.password !== confirmPassword) {
-      alert("Passwords don't match!");
+      toast.error("Passwords don't match!", {
+        position: "top-right",
+        autoClose: 3000,
+      });
       return false;
     }
 
@@ -1081,6 +1238,10 @@ const EmployeeList = () => {
         setError(
           "Please enable at least one module before saving permissions."
         );
+        toast.error("Please enable at least one module before saving permissions.", {
+          position: "top-right",
+          autoClose: 3000,
+        });
         return;
       }
       console.log("Helllo1");
@@ -1099,6 +1260,7 @@ const EmployeeList = () => {
         departmentId,
         designationId,
         about,
+        status,
       } = formData;
 
       const basicInfo = {
@@ -1130,6 +1292,7 @@ const EmployeeList = () => {
         departmentId,
         designationId,
         about,
+        status,
       };
 
       // Prepare full submission data
@@ -1167,36 +1330,45 @@ const EmployeeList = () => {
       return;
     }
     const payload = {
-      employeeId: editingEmployee.employeeId,
-      firstName: editingEmployee.firstName,
-      lastName: editingEmployee.lastName,
+      employeeId: editingEmployee.employeeId || "",
+      firstName: editingEmployee.firstName || "",
+      lastName: editingEmployee.lastName || "",
       account: {
-        userName: editingEmployee.account.userName,
+        userName: editingEmployee.account?.userName || "",
       },
       contact: {
-        email: editingEmployee.contact.email,
-        phone: editingEmployee.contact.phone,
+        email: editingEmployee.contact?.email || "",
+        phone: editingEmployee.contact?.phone || "",
       },
       personal: {
-        gender: editingEmployee.personal?.gender,
-        birthday: editingEmployee.personal?.birthday,
-        address: editingEmployee.personal?.address,
+        gender: editingEmployee.personal?.gender || "",
+        birthday: editingEmployee.personal?.birthday || null,
+        address: editingEmployee.personal?.address || {
+          street: "",
+          city: "",
+          state: "",
+          postalCode: "",
+          country: "",
+        },
       },
-      companyName: editingEmployee.companyName || editingEmployee.companyName,
-      departmentId: editingEmployee.departmentId,
-      designationId: editingEmployee.designationId,
-      dateOfJoining: editingEmployee.dateOfJoining,
-      about: editingEmployee.about,
-      avatarUrl: editingEmployee.avatarUrl,
-      status: editingEmployee.status,
+      companyName: editingEmployee.companyName || "",
+      departmentId: editingEmployee.departmentId || "",
+      designationId: editingEmployee.designationId || "",
+      dateOfJoining: editingEmployee.dateOfJoining || null,
+      about: editingEmployee.about || "",
+      avatarUrl: editingEmployee.avatarUrl || "",
+      status: editingEmployee.status || "Active",
     };
     console.log("update payload", payload);
 
     if (socket) {
       socket.emit("hrm/employees/update", payload);
-      toast.success("Employee update request sent.");
+      // Success toast will be shown in handleUpdateEmployeeResponse when backend confirms update
     } else {
-      toast.error("Socket connection is not available.");
+      toast.error("Socket connection is not available.", {
+        position: "top-right",
+        autoClose: 3000,
+      });
     }
   };
 
@@ -1257,10 +1429,40 @@ const EmployeeList = () => {
       departmentId: "",
       designationId: "",
       about: "",
+      status: "Active" as "Active" | "Inactive",
     });
 
     setPermissions(initialState);
     setError("");
+  };
+
+  // Helper function to safely prepare employee for editing
+  const prepareEmployeeForEdit = (emp: Employee): Employee => {
+    return {
+      ...emp,
+      account: emp.account || { userName: "" },
+      contact: emp.contact || { email: "", phone: "" },
+      personal: emp.personal || {
+        gender: "",
+        birthday: null,
+        address: {
+          street: "",
+          city: "",
+          state: "",
+          postalCode: "",
+          country: "",
+        },
+      },
+      firstName: emp.firstName || "",
+      lastName: emp.lastName || "",
+      companyName: emp.companyName || "",
+      departmentId: emp.departmentId || "",
+      designationId: emp.designationId || "",
+      about: emp.about || "",
+      avatarUrl: emp.avatarUrl || "",
+      status: emp.status || "Active",
+      dateOfJoining: emp.dateOfJoining || null,
+    };
   };
 
   // Modal container helper (for DatePicker positioning)
@@ -1335,27 +1537,28 @@ const EmployeeList = () => {
                     </Link>
                   </li>
                   <li className="breadcrumb-item">Employee</li>
-                  <li className="breadcrumb-item active" aria-current="page">
-                    Employee List
-                  </li>
                 </ol>
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={all_routes.employeeList}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "list" ? "active bg-primary text-white" : ""
+                    } me-1`}
                   >
                     <i className="ti ti-list-tree" />
-                  </Link>
-                  <Link
-                    to={all_routes.employeeGrid}
-                    className="btn btn-icon btn-sm"
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "grid" ? "active bg-primary text-white" : ""
+                    }`}
                   >
                     <i className="ti ti-layout-grid" />
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="me-2 mb-2">
@@ -1513,9 +1716,11 @@ const EmployeeList = () => {
             </div>
             {/* /No of Plans */}
           </div>
+
+          {/* Unified Filter Bar for Both Views */}
           <div className="card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-              <h5>Employee List</h5>
+              <h5>Employee</h5>
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
@@ -1550,7 +1755,7 @@ const EmployeeList = () => {
                           <Link
                             to="#"
                             className={`dropdown-item rounded-1${
-                              selectedDepartment === dep.value ? " active" : ""
+                              selectedDepartment === dep.value ? " bg-primary text-white" : ""
                             }`}
                             onClick={(e) => {
                               e.preventDefault();
@@ -1608,7 +1813,7 @@ const EmployeeList = () => {
                     </li>
                   </ul>
                 </div>
-                <div className="dropdown">
+                <div className="dropdown me-3">
                   <Link
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
@@ -1651,15 +1856,207 @@ const EmployeeList = () => {
                     </li>
                   </ul>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-light d-inline-flex align-items-center"
+                  onClick={clearAllFilters}
+                  title="Clear all filters"
+                >
+                  <i className="ti ti-filter-off me-1" />
+                  Clear Filters
+                </button>
               </div>
             </div>
-            <div className="card-body p-0">
-              <Table
-                dataSource={employees}
-                columns={columns}
-                Selection={true}
-              />
-            </div>
+
+            {/* Conditional Rendering Based on View Mode */}
+            {viewMode === "list" ? (
+              // LIST VIEW
+              <div className="card-body p-0">
+                <Table
+                  dataSource={employees}
+                  columns={columns}
+                  Selection={true}
+                />
+              </div>
+            ) : (
+              // GRID VIEW
+              <div className="card-body p-0">
+              {/* Clients Grid */}
+              <div className="row">
+                {employees.length === 0 ? (
+                  <p className="text-center">No employees found</p>
+                ) : (
+                  employees.map((emp) => {
+                    const {
+                      _id,
+                      firstName,
+                      lastName,
+                      role,
+                      totalProjects = 0,
+                      completedProjects = 0,
+                      productivity = 0,
+                      status,
+                      avatarUrl,
+                    } = emp;
+
+                    const fullName =
+                      `${firstName || ""} ${lastName || ""}`.trim() ||
+                      "Unknown Name";
+                    const progressPercent = Math.round(productivity);
+                    const progressBarColor = "bg-primary";
+
+                    return (
+                      <div key={_id} className="col-xl-3 col-lg-4 col-md-6 mb-4">
+                        <div className="card">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <div className="form-check form-check-md">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                />
+                              </div>
+                              <div>
+                                <Link
+                                  to={`${all_routes.employeedetails}/${_id}`}
+                                  className={`avatar avatar-xl avatar-rounded border p-1 border-primary rounded-circle ${
+                                    emp.status === "Active"
+                                      ? "online"
+                                      : "offline" // or "inactive"
+                                  }`}
+                                >
+                                  <img
+                                    src={
+                                      avatarUrl || "assets/img/users/user-32.jpg"
+                                    }
+                                    className="img-fluid"
+                                    alt={fullName}
+                                  />
+                                </Link>
+                              </div>
+                              <div className="dropdown">
+                                <button
+                                  className="btn btn-icon btn-sm rounded-circle bg-primary text-white"
+                                  type="button"
+                                  data-bs-toggle="dropdown"
+                                  aria-expanded="false"
+                                >
+                                  <i className="ti ti-dots-vertical" />
+                                </button>
+                                <ul className="dropdown-menu dropdown-menu-end p-3">
+                                  <li>
+                                    <Link
+                                      className="dropdown-item rounded-1"
+                                      to="#"
+                                      data-bs-toggle="modal"
+                                      data-inert={true}
+                                      data-bs-target="#edit_employee"
+                                      onClick={() => {
+                                        const preparedEmployee = prepareEmployeeForEdit(emp);
+                                        setEditingEmployee(preparedEmployee);
+                                        // Load permissions for editing
+                                        if (emp.permissions && emp.enabledModules) {
+                                          setPermissions({
+                                            permissions: emp.permissions,
+                                            enabledModules: emp.enabledModules,
+                                            selectAll: Object.keys(emp.enabledModules).reduce(
+                                              (acc, key) => {
+                                                acc[key as PermissionModule] = false;
+                                                return acc;
+                                              },
+                                              {} as Record<PermissionModule, boolean>
+                                            ),
+                                          });
+                                        }
+                                        // Load department and designation
+                                        if (emp.departmentId) {
+                                          setSelectedDepartment(emp.departmentId);
+                                          if (socket) {
+                                            socket.emit("hrm/designations/get", {
+                                              departmentId: emp.departmentId,
+                                            });
+                                          }
+                                        }
+                                        if (emp.designationId) {
+                                          setSelectedDesignation(emp.designationId);
+                                        }
+                                      }}
+                                    >
+                                      <i className="ti ti-edit me-1" /> Edit
+                                    </Link>
+                                  </li>
+                                  <li>
+                                    <Link
+                                      className="dropdown-item rounded-1"
+                                      to="#"
+                                      data-bs-toggle="modal"
+                                      data-inert={true}
+                                      data-bs-target="#delete_modal"
+                                      onClick={() => setEmployeeToDelete(emp)}
+                                    >
+                                      <i className="ti ti-trash me-1" /> Delete
+                                    </Link>
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+                            <div className="text-center mb-3">
+                              <h6 className="mb-1">
+                                <Link to={`/employees/${emp._id}`}>
+                                  {fullName}
+                                </Link>
+                              </h6>
+                              <span className="badge bg-pink-transparent fs-10 fw-medium">
+                                {role || "employee"}
+                              </span>
+                            </div>
+                            <div className="row text-center">
+                              <div className="col-4">
+                                <div className="mb-3">
+                                  <span className="fs-12">Projects</span>
+                                  <h6 className="fw-medium">{totalProjects}</h6>
+                                </div>
+                              </div>
+                              <div className="col-4">
+                                <div className="mb-3">
+                                  <span className="fs-12">Done</span>
+                                  <h6 className="fw-medium">
+                                    {completedProjects}
+                                  </h6>
+                                </div>
+                              </div>
+                              <div className="col-4">
+                                <div className="mb-3">
+                                  <span className="fs-12">Progress</span>
+                                  <h6 className="fw-medium">
+                                    {totalProjects - completedProjects}
+                                  </h6>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="mb-2 text-center">
+                              Productivity :{" "}
+                              <span className="text-primary">
+                                {progressPercent}%
+                              </span>
+                            </p>
+                            <div className="progress progress-xs mb-2">
+                              <div
+                                className={`progress-bar ${progressBarColor}`}
+                                role="progressbar"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {/* /Employee Grid */}
+              </div>
+            )}
           </div>
         </div>
         <Footer />
@@ -1680,10 +2077,21 @@ const EmployeeList = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={() => {
+                  handleResetFormData();
+                  setActiveTab("basic-info");
+                }}
               >
                 <i className="ti ti-x" />
               </button>
             </div>
+            {/* Hidden button for programmatic modal close */}
+            <button
+              type="button"
+              ref={addEmployeeModalRef}
+              data-bs-dismiss="modal"
+              style={{ display: "none" }}
+            />
             <form action={all_routes.employeeList} onSubmit={handleSubmit}>
               <div className="contact-grids-tab">
                 <ul className="nav nav-underline" id="myTab" role="tablist">
@@ -2196,6 +2604,42 @@ const EmployeeList = () => {
                           />
                         </div>
                       </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            Status <span className="text-danger"> *</span>
+                          </label>
+                          <div className="d-flex align-items-center">
+                            <div className="form-check form-switch">
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                role="switch"
+                                id="statusSwitch"
+                                checked={formData.status === "Active"}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    status: e.target.checked ? "Active" : "Inactive",
+                                  }))
+                                }
+                              />
+                              <label className="form-check-label" htmlFor="statusSwitch">
+                                <span
+                                  className={`badge ${
+                                    formData.status === "Active"
+                                      ? "badge-success"
+                                      : "badge-danger"
+                                  } d-inline-flex align-items-center`}
+                                >
+                                  <i className="ti ti-point-filled me-1" />
+                                  {formData.status}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className="col-md-12">
                         <div className="mb-3">
                           <label className="form-label">
@@ -2204,7 +2648,6 @@ const EmployeeList = () => {
                           <textarea
                             className="form-control"
                             rows={3}
-                            defaultValue={""}
                             name="about"
                             value={formData.about}
                             onChange={handleChange}
@@ -2341,15 +2784,16 @@ const EmployeeList = () => {
                       type="button"
                       className="btn btn-outline-light border me-2"
                       data-bs-dismiss="modal"
+                      onClick={() => {
+                        handleResetFormData();
+                        setActiveTab("basic-info");
+                      }}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       className="btn btn-primary"
-                      data-bs-toggle="modal"
-                      data-inert={true}
-                      data-bs-target="#success_modal"
                     >
                       Save
                     </button>
@@ -2375,10 +2819,18 @@ const EmployeeList = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={() => setEditingEmployee(null)}
               >
                 <i className="ti ti-x" />
               </button>
             </div>
+            {/* Hidden button for programmatic modal close */}
+            <button
+              type="button"
+              ref={editEmployeeModalRef}
+              data-bs-dismiss="modal"
+              style={{ display: "none" }}
+            />
             <form action={all_routes.employeeList}>
               <div className="contact-grids-tab">
                 <ul className="nav nav-underline" id="myTab2" role="tablist">
@@ -2573,7 +3025,7 @@ const EmployeeList = () => {
                           <input
                             type="text"
                             className="form-control"
-                            value={editingEmployee?.employeeId}
+                            value={editingEmployee?.employeeId || ""}
                             readOnly
                           />
                         </div>
@@ -2622,7 +3074,7 @@ const EmployeeList = () => {
                           <input
                             type="text"
                             className="form-control"
-                            value={editingEmployee?.account.userName}
+                            value={editingEmployee?.account?.userName || ""}
                             onChange={(e) =>
                               setEditingEmployee((prev) =>
                                 prev
@@ -2647,7 +3099,7 @@ const EmployeeList = () => {
                           <input
                             type="email"
                             className="form-control"
-                            value={editingEmployee?.contact.email}
+                            value={editingEmployee?.contact?.email || ""}
                             onChange={(e) =>
                               setEditingEmployee((prev) =>
                                 prev
@@ -2879,7 +3331,7 @@ const EmployeeList = () => {
                           <input
                             type="text"
                             className="form-control"
-                            value={editingEmployee?.contact.phone}
+                            value={editingEmployee?.contact?.phone || ""}
                             onChange={(e) =>
                               setEditingEmployee((prev) =>
                                 prev
@@ -2904,7 +3356,7 @@ const EmployeeList = () => {
                           <input
                             type="text"
                             className="form-control"
-                            value={editingEmployee?.companyName}
+                            value={editingEmployee?.companyName || ""}
                             onChange={(e) =>
                               setEditingEmployee((prev) =>
                                 prev
@@ -2919,6 +3371,7 @@ const EmployeeList = () => {
                         <div className="mb-3">
                           <label className="form-label">Department</label>
                           <CommonSelect
+                            key={`dept-${editingEmployee?._id}-${editingEmployee?.departmentId}`}
                             className="select"
                             options={department}
                             defaultValue={
@@ -2962,6 +3415,7 @@ const EmployeeList = () => {
                         <div className="mb-3">
                           <label className="form-label">Designation</label>
                           <CommonSelect
+                            key={`desig-${editingEmployee?._id}-${editingEmployee?.designationId}`}
                             className="select"
                             options={designation}
                             defaultValue={
@@ -2983,6 +3437,46 @@ const EmployeeList = () => {
                           />
                         </div>
                       </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            Status <span className="text-danger"> *</span>
+                          </label>
+                          <div className="d-flex align-items-center">
+                            <div className="form-check form-switch">
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                role="switch"
+                                id="editStatusSwitch"
+                                checked={editingEmployee?.status === "Active"}
+                                onChange={(e) =>
+                                  setEditingEmployee((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          status: e.target.checked ? "Active" : "Inactive",
+                                        }
+                                      : prev
+                                  )
+                                }
+                              />
+                              <label className="form-check-label" htmlFor="editStatusSwitch">
+                                <span
+                                  className={`badge ${
+                                    editingEmployee?.status === "Active"
+                                      ? "badge-success"
+                                      : "badge-danger"
+                                  } d-inline-flex align-items-center`}
+                                >
+                                  <i className="ti ti-point-filled me-1" />
+                                  {editingEmployee?.status || "Active"}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className="col-md-12">
                         <div className="mb-3">
                           <label className="form-label">
@@ -2991,7 +3485,7 @@ const EmployeeList = () => {
                           <textarea
                             className="form-control"
                             rows={3}
-                            value={editingEmployee?.about}
+                            value={editingEmployee?.about || ""}
                             onChange={(e) =>
                               setEditingEmployee((prev) =>
                                 prev ? { ...prev, about: e.target.value } : prev
@@ -3203,6 +3697,58 @@ const EmployeeList = () => {
         </div>
       </div>
       {/* /Add Client Success */}
+      
+      {/* Employee Added Success Modal */}
+      <div className="modal fade" id="employee_success_modal">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-body text-center">
+              <span className="avatar avatar-xl bg-success text-white mb-3">
+                <i className="ti ti-circle-check fs-36" />
+              </span>
+              <h4 className="mb-1">Employee Added Successfully!</h4>
+              <p className="mb-3">
+                {newlyAddedEmployee
+                  ? `${newlyAddedEmployee.firstName || ''} ${newlyAddedEmployee.lastName || ''} has been added to the system.`
+                  : "The employee has been added successfully."}
+              </p>
+              <div className="d-flex justify-content-center gap-2">
+                <button
+                  className="btn btn-light"
+                  data-bs-dismiss="modal"
+                  onClick={() => {
+                    setNewlyAddedEmployee(null);
+                  }}
+                >
+                  <i className="ti ti-list me-1" />
+                  Back to List
+                </button>
+                <button
+                  className="btn btn-primary"
+                  data-bs-dismiss="modal"
+                  onClick={() => {
+                    if (newlyAddedEmployee && newlyAddedEmployee._id) {
+                      navigate(`${all_routes.employeedetails}/${newlyAddedEmployee._id}`);
+                    }
+                    setNewlyAddedEmployee(null);
+                  }}
+                >
+                  <i className="ti ti-eye me-1" />
+                  View Details
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Hidden button to trigger success modal */}
+      <button
+        ref={successModalRef}
+        data-bs-toggle="modal"
+        data-bs-target="#employee_success_modal"
+        style={{ display: "none" }}
+      />
+      
       <div className="modal fade" id="delete_modal">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
