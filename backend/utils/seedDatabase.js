@@ -184,6 +184,45 @@ const processLeaves = (leaves, employeeMapping) => {
   }));
 };
 
+// Function to process jobs data
+const processJobs = (jobs, companyId) => {
+  return jobs.map((job) => ({
+    _id: new ObjectId(),
+    jobId: `JOB-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 3).toUpperCase()}`,
+    title: job.title,
+    description: job.description,
+    category: job.category,
+    jobType: job.jobType,
+    jobLevel: job.jobLevel,
+    experience: job.experience,
+    qualification: job.qualification,
+    gender: job.gender,
+    minSalary: job.minSalary,
+    maxSalary: job.maxSalary,
+    currency: job.currency,
+    salaryPeriod: job.salaryPeriod,
+    requiredSkills: job.requiredSkills,
+    location: job.location,
+    status: job.status,
+    postedDate: new Date(job.createdAt),
+    expiredDate: new Date(job.expiredDate),
+    image: job.image,
+    applicantsCount: job.applicantsCount,
+    viewsCount: job.viewsCount,
+    department: job.department,
+    isRemote: job.isRemote,
+    isUrgent: job.isUrgent,
+    benefits: job.benefits,
+    responsibilities: job.responsibilities,
+    requirements: job.requirements,
+    tags: job.tags,
+    isActive: true,
+    companyId: companyId,
+    createdAt: new Date(job.createdAt),
+    updatedAt: new Date(job.createdAt),
+  }));
+};
+
 // Function to create default leave types
 const createLeaveTypes = () => {
   return [
@@ -259,6 +298,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
       collections.schedules.deleteMany({}),
       collections.earnings.deleteMany({}),
       collections.jobApplications.deleteMany({}),
+      collections.jobs.deleteMany({}),
       collections.leaves.deleteMany({}),
       collections.leaveTypes.deleteMany({}),
       collections.approvals?.deleteMany({}) || Promise.resolve(),
@@ -297,6 +337,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
     const processedJobApplications = processJobApplications(
       mockData.jobApplications
     );
+    const processedJobs = processJobs(mockData.jobs || [], companyId);
     const processedLeaves = processLeaves(mockData.leaves, employeeMapping);
     const processedApprovals = processApprovals(
       mockData.approvals || [],
@@ -340,6 +381,9 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
     await collections.jobApplications.insertMany(processedJobApplications);
     console.log(`Inserted ${processedJobApplications.length} job applications`);
 
+    await collections.jobs.insertMany(processedJobs);
+    console.log(`Inserted ${processedJobs.length} jobs`);
+
     await collections.leaves.insertMany(processedLeaves);
     console.log(`Inserted ${processedLeaves.length} leave requests`);
 
@@ -365,6 +409,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
       - Schedules: ${processedSchedules.length}
       - Earnings: ${processedEarnings.length}
       - Job Applications: ${processedJobApplications.length}
+      - Jobs: ${processedJobs.length}
       - Leave Requests: ${processedLeaves.length}
       - Leave Types: ${leaveTypes.length}
       - Approvals: ${processedApprovals.length}
@@ -389,6 +434,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
           schedules: processedSchedules.length,
           earnings: processedEarnings.length,
           jobApplications: processedJobApplications.length,
+          jobs: processedJobs.length,
           leaves: processedLeaves.length,
           leaveTypes: leaveTypes.length,
           approvals: processedApprovals.length,

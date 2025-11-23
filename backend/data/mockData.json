@@ -2417,5 +2417,232 @@
       "year": 2025,
       "createdAt": "2025-01-18T08:00:00.000Z"
     }
+  ],
+  "jobs": [
+    {
+      "title": "Senior iOS Developer",
+      "description": "We are looking for an experienced iOS developer to join our mobile development team. The ideal candidate will have strong experience with Swift, UIKit, and iOS app development.",
+      "category": "Software",
+      "jobType": "Full Time",
+      "jobLevel": "Senior Level",
+      "experience": "3-5 years",
+      "qualification": "Bachelor Degree",
+      "gender": "Any",
+      "minSalary": 30000,
+      "maxSalary": 35000,
+      "currency": "USD",
+      "salaryPeriod": "monthly",
+      "requiredSkills": ["Swift", "UIKit", "iOS Development", "Xcode", "Git"],
+      "location": {
+        "address": "123 Tech Street",
+        "country": "USA",
+        "state": "New York",
+        "city": "New York",
+        "zipCode": "10001"
+      },
+      "status": "Published",
+      "expiredDate": "2024-12-12",
+      "image": "assets/img/icons/apple.svg",
+      "applicantsCount": 25,
+      "viewsCount": 150,
+      "department": "Engineering",
+      "isRemote": false,
+      "isUrgent": false,
+      "benefits": ["Health Insurance", "401k", "Flexible Hours", "Remote Work"],
+      "responsibilities": [
+        "Develop and maintain iOS applications",
+        "Collaborate with cross-functional teams",
+        "Write clean, maintainable code",
+        "Participate in code reviews"
+      ],
+      "requirements": [
+        "3+ years of iOS development experience",
+        "Proficiency in Swift and UIKit",
+        "Experience with Git version control",
+        "Strong problem-solving skills"
+      ],
+      "tags": ["iOS", "Swift", "Mobile", "Senior"],
+      "createdAt": "2024-09-12T08:00:00.000Z"
+    },
+    {
+      "title": "Junior PHP Developer",
+      "description": "We are seeking a motivated Junior PHP Developer to join our backend development team. This is a great opportunity for someone looking to grow their career in web development.",
+      "category": "Software",
+      "jobType": "Full Time",
+      "jobLevel": "Entry Level",
+      "experience": "0-1 years",
+      "qualification": "Bachelor Degree",
+      "gender": "Any",
+      "minSalary": 20000,
+      "maxSalary": 25000,
+      "currency": "USD",
+      "salaryPeriod": "monthly",
+      "requiredSkills": ["PHP", "MySQL", "HTML", "CSS", "JavaScript"],
+      "location": {
+        "address": "456 Web Avenue",
+        "country": "USA",
+        "state": "California",
+        "city": "Los Angeles",
+        "zipCode": "90210"
+      },
+      "status": "Published",
+      "expiredDate": "2025-01-24",
+      "image": "assets/img/icons/php.svg",
+      "applicantsCount": 20,
+      "viewsCount": 120,
+      "department": "Engineering",
+      "isRemote": true,
+      "isUrgent": false,
+      "benefits": ["Health Insurance", "Learning Budget", "Flexible Hours"],
+      "responsibilities": [
+        "Develop web applications using PHP",
+        "Work with MySQL databases",
+        "Collaborate with frontend developers",
+        "Write unit tests"
+      ],
+      "requirements": [
+        "Basic knowledge of PHP and MySQL",
+        "Understanding of HTML, CSS, and JavaScript",
+        "Eagerness to learn and grow",
+        "Good communication skills"
+      ],
+      "tags": ["PHP", "MySQL", "Web Development", "Junior"],
+      "createdAt": "2024-10-24T08:00:00.000Z"
+    },
+    {
+      "title": "React Developer",
+      "description": "Join our frontend team as a React Developer. We're looking for someone passionate about creating amazing user experiences with modern web technologies.",
+      "category": "Software",
+      "jobType": "Full Time",
+      "jobLevel": "Mid Level",
+      "experience": "1-3 years",
+      "qualification": "Bachelor Degree",
+      "gender": "Any",
+      "minSalary": 28000,
+      "maxSalary": 32000,
+      "currency": "USD",
+      "salaryPeriod": "monthly",
+      "requiredSkills": ["React", "JavaScript", "TypeScript", "Redux", "CSS"],
+      "location": {
+        "address": "789 Frontend Street",
+        "country": "UK",
+        "state": "England",
+        "city": "Bristol",
+        "zipCode": "BS1 5TR"
+      },
+      "status": "Published",
+      "expiredDate": "2024-05-18",
+      "image": "assets/img/icons/react.svg",
+      "applicantsCount": 35,
+      "viewsCount": 200,
+      "department": "Engineering",
+      "isRemote": true,
+      "isUrgent": false,
+      "benefits": ["Health Insurance", "401k", "Remote Work", "Learning Budget"],
+      "responsibilities": [
+        "Develop React applications",
+        "Implement responsive designs",
+        "Optimize application performance",
+        "Collaborate with UX/UI designers"
+      ],
+      "requirements": [
+        "1-3 years of React experience",
+        "Proficiency in JavaScript and TypeScript",
+        "Experience with state management",
+        "Knowledge of modern CSS"
+      ],
+      "tags": ["React", "JavaScript", "Frontend", "TypeScript"],
+      "createdAt": "2024-02-18T08:00:00.000Z"
+    },
+    {
+      "title": "DevOps Engineer",
+      "description": "We need a DevOps Engineer to help us scale our infrastructure and improve our deployment processes. Experience with cloud platforms and automation is essential.",
+      "category": "Software",
+      "jobType": "Full Time",
+      "jobLevel": "Mid Level",
+      "experience": "3-5 years",
+      "qualification": "Bachelor Degree",
+      "gender": "Any",
+      "minSalary": 25000,
+      "maxSalary": 35000,
+      "currency": "USD",
+      "salaryPeriod": "monthly",
+      "requiredSkills": ["AWS", "Docker", "Kubernetes", "Jenkins", "Linux"],
+      "location": {
+        "address": "321 Cloud Drive",
+        "country": "UK",
+        "state": "England",
+        "city": "Coventry",
+        "zipCode": "CV1 1FB"
+      },
+      "status": "Published",
+      "expiredDate": "2024-07-10",
+      "image": "assets/img/icons/devops.svg",
+      "applicantsCount": 20,
+      "viewsCount": 180,
+      "department": "Engineering",
+      "isRemote": true,
+      "isUrgent": true,
+      "benefits": ["Health Insurance", "401k", "Remote Work", "Equipment Budget"],
+      "responsibilities": [
+        "Manage cloud infrastructure",
+        "Automate deployment processes",
+        "Monitor system performance",
+        "Implement security best practices"
+      ],
+      "requirements": [
+        "3+ years of DevOps experience",
+        "Experience with AWS or similar cloud platforms",
+        "Knowledge of containerization technologies",
+        "Strong scripting skills"
+      ],
+      "tags": ["DevOps", "AWS", "Docker", "Kubernetes"],
+      "createdAt": "2024-04-10T08:00:00.000Z"
+    },
+    {
+      "title": "UI/UX Designer",
+      "description": "We're looking for a creative UI/UX Designer to join our design team. You'll be responsible for creating intuitive and beautiful user interfaces for our products.",
+      "category": "Design",
+      "jobType": "Full Time",
+      "jobLevel": "Mid Level",
+      "experience": "2-4 years",
+      "qualification": "Bachelor Degree",
+      "gender": "Any",
+      "minSalary": 22000,
+      "maxSalary": 28000,
+      "currency": "USD",
+      "salaryPeriod": "monthly",
+      "requiredSkills": ["Figma", "Adobe Creative Suite", "User Research", "Prototyping", "HTML/CSS"],
+      "location": {
+        "address": "654 Design Lane",
+        "country": "UK",
+        "state": "England",
+        "city": "Lancaster",
+        "zipCode": "LA1 1YW"
+      },
+      "status": "Published",
+      "expiredDate": "2025-02-03",
+      "image": "assets/img/icons/ui.svg",
+      "applicantsCount": 20,
+      "viewsCount": 160,
+      "department": "Design",
+      "isRemote": true,
+      "isUrgent": false,
+      "benefits": ["Health Insurance", "Creative Budget", "Flexible Hours", "Remote Work"],
+      "responsibilities": [
+        "Design user interfaces and experiences",
+        "Conduct user research and testing",
+        "Create wireframes and prototypes",
+        "Collaborate with development teams"
+      ],
+      "requirements": [
+        "2-4 years of UI/UX design experience",
+        "Proficiency in design tools like Figma",
+        "Understanding of user-centered design",
+        "Portfolio demonstrating design skills"
+      ],
+      "tags": ["UI/UX", "Design", "Figma", "User Research"],
+      "createdAt": "2024-11-03T08:00:00.000Z"
+    }
   ]
 }

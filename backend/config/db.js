@@ -91,6 +91,9 @@ export const getTenantCollections = (tenantDbName) => {
     
     // tickets collection
     tickets: db.collection("tickets"),
+    
+    // jobs collection
+    jobs: db.collection("jobs"),
   };
 };
 

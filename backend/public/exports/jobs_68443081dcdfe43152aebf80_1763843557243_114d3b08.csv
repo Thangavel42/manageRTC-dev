@@ -1,0 +1,13 @@
+Job ID,Title,Category,Job Type,Job Level,Experience,Status,Location,Min Salary,Max Salary,Currency,Posted Date,Expired Date,Applicants Count,Views Count
+JOB-515701-1WB,"nekojob",Networking,Part Time,Manager,Entry Level,Draft,"Orlando, USA",10000,50000,USD,2025-11-21,2027-09-30,0,0
+JOB-037350-5SR,"new job",Web & Application,Full Time,Team Lead,Entry Level,Draft,"Los Angeles, USA",10000,60000,USD,2025-09-25,2025-09-26,0,0
+JOB-471544-IT7,"sample job 2.0",Networking,Full Time,Manager,Entry Level,Draft,"Toronto, Canada",15000,50000,USD,2025-09-24,2025-09-26,0,0
+JOB-920585-0A8,"qwh",IOS,Full Time,Team Lead,Mid Level,Draft,"San Diego, Germany",10000,50000,USD,2025-09-24,2025-09-26,0,0
+JOB-257096-FPE,"new sample job",Networking,Part Time,Manager,Mid Level,Draft,"San Diego, France",15000,50000,USD,2025-09-24,2025-10-17,0,0
+JOB-226967-PGX,"xyz1",Web & Application,Part Time,Manager,Expert,Draft,"Fresno, Germany",10000,60000,USD,2025-09-24,2025-09-26,0,0
+JOB-744119-NDC,"sample",Web & Application,Full Time,Team Lead,Mid Level,Draft,"Los Angeles, USA",10000,50000,USD,2025-09-24,2025-09-24,0,0
+JOB-588671-O67,"UI/UX Designer",Design,Full Time,Mid Level,2-4 years,Published,"Lancaster, UK",22000,28000,USD,2024-11-03,2025-02-03,20,160
+JOB-588671-YRE,"Junior PHP Developer",Software,Full Time,Entry Level,0-1 years,Published,"Los Angeles, USA",20000,25000,USD,2024-10-24,2025-01-24,20,120
+JOB-588671-3VJ,"Senior iOS Developer",Software,Full Time,Senior Level,3-5 years,Published,"New York, USA",30000,35000,USD,2024-09-12,2024-12-12,25,150
+JOB-588671-JM4,"DevOps Engineer",Software,Full Time,Mid Level,3-5 years,Published,"Coventry, UK",25000,35000,USD,2024-04-10,2024-07-10,20,180
+JOB-588671-ZPU,"React Developer",Software,Full Time,Mid Level,1-3 years,Published,"Bristol, UK",28000,32000,USD,2024-02-18,2024-05-18,35,200

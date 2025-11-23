@@ -18,7 +18,7 @@ import ticketRoutes from "./routes/tickets.routes.js";
 config();
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
@@ -28,6 +28,12 @@ app.use(cors());
 app.use(express.json());
 
 console.log("[Deployment]: TEST TEST");
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve export files specifically
+app.use('/exports', express.static(path.join(__dirname, 'public', 'exports')));
 
 // Serve static files from the temp directory
 app.use(
@@ -104,6 +110,64 @@ const initializeServer = async () => {
       } catch (error) {
         console.error("Error updating user:", error);
         res.status(500).json({ error: "Failed to update user metadata" });
+      }
+    });
+
+    // Serve export files
+    app.get('/exports/:filename', (req, res) => {
+      try {
+        const { filename } = req.params;
+        const filePath = path.join(__dirname, 'public', 'exports', filename);
+        
+        // Check if file exists
+        if (fs.existsSync(filePath)) {
+          // Set appropriate headers for download
+          res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+          
+          if (filename.endsWith('.pdf')) {
+            res.setHeader('Content-Type', 'application/pdf');
+          } else if (filename.endsWith('.csv')) {
+            res.setHeader('Content-Type', 'text/csv');
+          }
+          
+          // Stream the file
+          const fileStream = fs.createReadStream(filePath);
+          fileStream.pipe(res);
+        } else {
+          res.status(404).json({ error: 'File not found' });
+        }
+      } catch (error) {
+        console.error('Export file download error:', error);
+        res.status(500).json({ error: 'Failed to download file' });
+      }
+    });
+
+
+    app.get('/download-export/:filename', (req, res) => {
+      try {
+        const { filename } = req.params;
+        const filePath = path.join(__dirname, 'public', 'exports', filename);
+        
+        // Check if file exists
+        if (fs.existsSync(filePath)) {
+          // Set appropriate headers
+          if (filename.endsWith('.pdf')) {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+          } else if (filename.endsWith('.csv')) {
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+          }
+          
+          // Stream the file
+          const fileStream = fs.createReadStream(filePath);
+          fileStream.pipe(res);
+        } else {
+          res.status(404).json({ error: 'File not found' });
+        }
+      } catch (error) {
+        console.error('Download error:', error);
+        res.status(500).json({ error: 'Failed to download file' });
       }
     });
 
