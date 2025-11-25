@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+const currentYear = new Date().getFullYear();
 
 const ResetPassword2 = () => {
   const routes = all_routes;
@@ -192,7 +193,7 @@ const ResetPassword2 = () => {
                     </div>
                     <div className="mt-5 pb-4 text-center">
                       <p className="mb-0 text-gray-9">
-                        Copyright © 2025 - Amasqis
+                        <p className="mb-0">{currentYear} © amasQIS.ai</p>
                       </p>
                     </div>
                   </div>

@@ -4,6 +4,8 @@ import { all_routes } from "../router/all_routes";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Chips, ChipsChangeEvent } from "primereact/chips";
+import Footer from "../../core/common/footer";
+
 const Email = () => {
   const routes = all_routes;
   const [value, setValue] = useState<any>(["Angela Thomas"]);
@@ -1628,15 +1630,7 @@ const Email = () => {
               </Scrollbars>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
       </div>
       {/* /Page Wrapper */}

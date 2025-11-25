@@ -7,6 +7,7 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import CrmsModal from "../../../core/modals/crms_modal";
 import { useCompanies } from "../../../hooks/useCompanies";
 import { useParams } from "react-router-dom";
+import Footer from "../../../core/common/footer";
 
 const CompaniesDetails = () => {
   const routes = all_routes;
@@ -14,6 +15,7 @@ const CompaniesDetails = () => {
   const { companyId } = useParams();
   const [activeCompany, setActiveCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
   useEffect(() => {
     const load = async () => {
@@ -23,7 +25,7 @@ const CompaniesDetails = () => {
           const data = await getCompany(companyId);
           setActiveCompany(data);
         } catch (error) {
-          console.error('Error loading company:', error);
+          console.error("Error loading company:", error);
         } finally {
           setLoading(false);
         }
@@ -33,22 +35,24 @@ const CompaniesDetails = () => {
   }, [companyId, getCompany]);
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getStatusBadge = (status: string) => {
-    const statusClass = status === 'Active' ? 'badge-success' : 'badge-danger';
+    const statusClass = status === "Active" ? "badge-success" : "badge-danger";
     return (
-      <span className={`badge d-inline-flex align-items-center badge-xs ${statusClass}`}>
+      <span
+        className={`badge d-inline-flex align-items-center badge-xs ${statusClass}`}
+      >
         <i className="ti ti-point-filled me-1"></i>
-        {status || 'Unknown'}
+        {status || "Unknown"}
       </span>
     );
   };
@@ -57,7 +61,10 @@ const CompaniesDetails = () => {
     return (
       <div className="page-wrapper">
         <div className="content">
-          <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
             <div className="spinner-border text-primary" role="status">
               <span className="visually-hidden">Loading...</span>
             </div>
@@ -71,10 +78,16 @@ const CompaniesDetails = () => {
     return (
       <div className="page-wrapper">
         <div className="content">
-          <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
             <div className="text-center">
               <h5>Company not found</h5>
-              <p className="text-muted">The company you're looking for doesn't exist or has been removed.</p>
+              <p className="text-muted">
+                The company you're looking for doesn't exist or has been
+                removed.
+              </p>
               <Link to={routes.companiesGrid} className="btn btn-primary">
                 Back to Companies
               </Link>
@@ -95,7 +108,9 @@ const CompaniesDetails = () => {
                   <i className="ti ti-arrow-left me-2" />
                   Companies
                 </Link>
-                <span className="text-gray d-inline-flex ms-2">/ {activeCompany?.name || "Company"}</span>
+                <span className="text-gray d-inline-flex ms-2">
+                  / {activeCompany?.name || "Company"}
+                </span>
               </h6>
             </div>
             <div className="col-sm-6">
@@ -114,7 +129,9 @@ const CompaniesDetails = () => {
                   className="btn btn-dark d-inline-flex align-items-center me-2"
                   data-bs-toggle="modal"
                   data-bs-target="#edit_company"
-                  onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                  onClick={() => {
+                    (window as any).CURRENT_COMPANY_ID = activeCompany._id;
+                  }}
                 >
                   <i className="ti ti-edit me-2" />
                   Edit Company
@@ -123,16 +140,29 @@ const CompaniesDetails = () => {
                   to="#"
                   className="btn btn-outline-danger d-inline-flex align-items-center me-2"
                   onClick={async () => {
-                    if (window.confirm('Are you sure you want to delete this company?')) {
+                    if (
+                      window.confirm(
+                        "Are you sure you want to delete this company?"
+                      )
+                    ) {
                       try {
-                        const token = await (window as any).Clerk?.session?.getToken();
-                        await fetch(`${(typeof import.meta !== "undefined" && (import.meta as any).env?.REACT_APP_BACKEND_URL) || (window as any).REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/${activeCompany._id}`, {
-                          method: 'DELETE',
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        window.dispatchEvent(new CustomEvent('companies:changed'));
+                        const token = await (
+                          window as any
+                        ).Clerk?.session?.getToken();
+                        await fetch(
+                          `${backendurl}/api/companies/${activeCompany._id}`,
+                          {
+                            method: "DELETE",
+                            headers: { Authorization: `Bearer ${token}` },
+                          }
+                        );
+                        window.dispatchEvent(
+                          new CustomEvent("companies:changed")
+                        );
                         window.location.href = routes.companiesGrid;
-                      } catch (err) { console.error('delete company', err); }
+                      } catch (err) {
+                        console.error("delete company", err);
+                      }
                     }
                   }}
                 >
@@ -151,7 +181,11 @@ const CompaniesDetails = () => {
                 <div className="card-body p-0">
                   <span className="avatar avatar-xl border bg-white rounded-circle m-auto d-flex mb-2">
                     <ImageWithBasePath
-                      src={activeCompany?.image ? `assets/img/company/${activeCompany.image}` : "assets/img/company/company-11.svg"}
+                      src={
+                        activeCompany?.image
+                          ? `assets/img/company/${activeCompany.image}`
+                          : "assets/img/company/company-11.svg"
+                      }
                       className="w-auto h-auto"
                       alt="Company Logo"
                     />
@@ -162,7 +196,10 @@ const CompaniesDetails = () => {
                       <i className="ti ti-discount-check-filled text-success ms-1" />
                     </h5>
                     <p className="text-dark">
-                      {activeCompany?.address?.fullAddress || activeCompany?.address?.street || activeCompany?.address?.city || ""}
+                      {activeCompany?.address?.fullAddress ||
+                        activeCompany?.address?.street ||
+                        activeCompany?.address?.city ||
+                        ""}
                     </p>
                     <div className="mt-2">
                       {getStatusBadge(activeCompany?.status)}
@@ -176,7 +213,10 @@ const CompaniesDetails = () => {
                         className="btn btn-icon btn-sm"
                         data-bs-toggle="modal"
                         data-bs-target="#edit_company"
-                        onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                        onClick={() => {
+                          (window as any).CURRENT_COMPANY_ID =
+                            activeCompany._id;
+                        }}
                       >
                         <i className="ti ti-edit" />
                       </Link>
@@ -217,7 +257,11 @@ const CompaniesDetails = () => {
                           Website
                         </span>
                         <Link
-                          to={activeCompany.website.startsWith('http') ? activeCompany.website : `https://${activeCompany.website}`}
+                          to={
+                            activeCompany.website.startsWith("http")
+                              ? activeCompany.website
+                              : `https://${activeCompany.website}`
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary d-inline-flex align-items-center"
@@ -232,18 +276,23 @@ const CompaniesDetails = () => {
                         <i className="ti ti-calendar me-2" />
                         Created On
                       </span>
-                      <p className="text-dark">{formatDate(activeCompany?.createdAt)}</p>
+                      <p className="text-dark">
+                        {formatDate(activeCompany?.createdAt)}
+                      </p>
                     </div>
                   </div>
                   <div className="p-3 border-bottom">
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <h6>Other Information</h6>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="btn btn-icon btn-sm"
                         data-bs-toggle="modal"
                         data-bs-target="#edit_company"
-                        onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                        onClick={() => {
+                          (window as any).CURRENT_COMPANY_ID =
+                            activeCompany._id;
+                        }}
                       >
                         <i className="ti ti-edit" />
                       </Link>
@@ -271,7 +320,9 @@ const CompaniesDetails = () => {
                         <i className="ti ti-clock me-2" />
                         Last Modified
                       </span>
-                      <p className="text-dark">{formatDate(activeCompany?.updatedAt)}</p>
+                      <p className="text-dark">
+                        {formatDate(activeCompany?.updatedAt)}
+                      </p>
                     </div>
                     {activeCompany?.source && (
                       <div className="d-flex align-items-center justify-content-between mb-2">
@@ -308,11 +359,16 @@ const CompaniesDetails = () => {
                     <div className="p-3 border-bottom">
                       <h5 className="mb-3">Tags</h5>
                       <div className="d-flex align-items-center flex-wrap">
-                        {activeCompany.tags.map((tag: string, index: number) => (
-                          <span key={index} className="badge badge-soft-success me-2 mb-1">
-                            {tag}
-                          </span>
-                        ))}
+                        {activeCompany.tags.map(
+                          (tag: string, index: number) => (
+                            <span
+                              key={index}
+                              className="badge badge-soft-success me-2 mb-1"
+                            >
+                              {tag}
+                            </span>
+                          )
+                        )}
                       </div>
                     </div>
                   )}
@@ -320,12 +376,15 @@ const CompaniesDetails = () => {
                     <div className="p-3 border-bottom">
                       <div className="d-flex align-items-center justify-content-between mb-2">
                         <h6>Address Information</h6>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="btn btn-icon btn-sm"
                           data-bs-toggle="modal"
                           data-bs-target="#edit_company"
-                          onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                          onClick={() => {
+                            (window as any).CURRENT_COMPANY_ID =
+                              activeCompany._id;
+                          }}
                         >
                           <i className="ti ti-edit" />
                         </Link>
@@ -336,7 +395,9 @@ const CompaniesDetails = () => {
                             <i className="ti ti-map-pin me-2" />
                             Street
                           </span>
-                          <p className="text-dark">{activeCompany.address.street}</p>
+                          <p className="text-dark">
+                            {activeCompany.address.street}
+                          </p>
                         </div>
                       )}
                       {activeCompany.address.city && (
@@ -345,7 +406,9 @@ const CompaniesDetails = () => {
                             <i className="ti ti-building me-2" />
                             City
                           </span>
-                          <p className="text-dark">{activeCompany.address.city}</p>
+                          <p className="text-dark">
+                            {activeCompany.address.city}
+                          </p>
                         </div>
                       )}
                       {activeCompany.address.state && (
@@ -354,7 +417,9 @@ const CompaniesDetails = () => {
                             <i className="ti ti-map me-2" />
                             State
                           </span>
-                          <p className="text-dark">{activeCompany.address.state}</p>
+                          <p className="text-dark">
+                            {activeCompany.address.state}
+                          </p>
                         </div>
                       )}
                       {activeCompany.address.country && (
@@ -363,7 +428,9 @@ const CompaniesDetails = () => {
                             <i className="ti ti-flag me-2" />
                             Country
                           </span>
-                          <p className="text-dark">{activeCompany.address.country}</p>
+                          <p className="text-dark">
+                            {activeCompany.address.country}
+                          </p>
                         </div>
                       )}
                       {activeCompany.address.zipCode && (
@@ -372,7 +439,9 @@ const CompaniesDetails = () => {
                             <i className="ti ti-mail me-2" />
                             Zip Code
                           </span>
-                          <p className="text-dark">{activeCompany.address.zipCode}</p>
+                          <p className="text-dark">
+                            {activeCompany.address.zipCode}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -381,12 +450,15 @@ const CompaniesDetails = () => {
                     <div className="p-3 border-bottom">
                       <div className="d-flex align-items-center justify-content-between mb-2">
                         <h6>About</h6>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="btn btn-icon btn-sm"
                           data-bs-toggle="modal"
                           data-bs-target="#edit_company"
-                          onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                          onClick={() => {
+                            (window as any).CURRENT_COMPANY_ID =
+                              activeCompany._id;
+                          }}
                         >
                           <i className="ti ti-edit" />
                         </Link>
@@ -398,12 +470,15 @@ const CompaniesDetails = () => {
                     <div className="p-3 border-bottom">
                       <div className="d-flex align-items-center justify-content-between mb-2">
                         <h6>Owner Information</h6>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="btn btn-icon btn-sm"
                           data-bs-toggle="modal"
                           data-bs-target="#edit_company"
-                          onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                          onClick={() => {
+                            (window as any).CURRENT_COMPANY_ID =
+                              activeCompany._id;
+                          }}
                         >
                           <i className="ti ti-edit" />
                         </Link>
@@ -413,7 +488,9 @@ const CompaniesDetails = () => {
                           <i className="ti ti-user fs-20" />
                         </span>
                         <div>
-                          <h6 className="fw-medium mb-0">{activeCompany.ownerName}</h6>
+                          <h6 className="fw-medium mb-0">
+                            {activeCompany.ownerName}
+                          </h6>
                           <span className="text-muted">Company Owner</span>
                         </div>
                       </div>
@@ -423,19 +500,27 @@ const CompaniesDetails = () => {
                     <div className="p-3">
                       <div className="d-flex align-items-center justify-content-between mb-2">
                         <h6>Social Links</h6>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="btn btn-icon btn-sm"
                           data-bs-toggle="modal"
                           data-bs-target="#edit_company"
-                          onClick={() => {(window as any).CURRENT_COMPANY_ID = activeCompany._id;}}
+                          onClick={() => {
+                            (window as any).CURRENT_COMPANY_ID =
+                              activeCompany._id;
+                          }}
                         >
                           <i className="ti ti-edit" />
                         </Link>
                       </div>
                       <div className="d-flex align-items-center mb-3 flex-wrap">
                         {activeCompany.socialLinks.facebook && (
-                          <Link to={activeCompany.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="me-2 mb-2">
+                          <Link
+                            to={activeCompany.socialLinks.facebook}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-01.svg"
                               alt="Facebook"
@@ -443,7 +528,12 @@ const CompaniesDetails = () => {
                           </Link>
                         )}
                         {activeCompany.socialLinks.twitter && (
-                          <Link to={activeCompany.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="me-2 mb-2">
+                          <Link
+                            to={activeCompany.socialLinks.twitter}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-06.svg"
                               alt="Twitter"
@@ -451,7 +541,12 @@ const CompaniesDetails = () => {
                           </Link>
                         )}
                         {activeCompany.socialLinks.linkedin && (
-                          <Link to={activeCompany.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="me-2 mb-2">
+                          <Link
+                            to={activeCompany.socialLinks.linkedin}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-02.svg"
                               alt="LinkedIn"
@@ -459,7 +554,10 @@ const CompaniesDetails = () => {
                           </Link>
                         )}
                         {activeCompany.socialLinks.skype && (
-                          <Link to={`skype:${activeCompany.socialLinks.skype}`} className="me-2 mb-2">
+                          <Link
+                            to={`skype:${activeCompany.socialLinks.skype}`}
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-03.svg"
                               alt="Skype"
@@ -467,7 +565,12 @@ const CompaniesDetails = () => {
                           </Link>
                         )}
                         {activeCompany.socialLinks.whatsapp && (
-                          <Link to={`https://wa.me/${activeCompany.socialLinks.whatsapp}`} target="_blank" rel="noopener noreferrer" className="me-2 mb-2">
+                          <Link
+                            to={`https://wa.me/${activeCompany.socialLinks.whatsapp}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-04.svg"
                               alt="WhatsApp"
@@ -475,7 +578,12 @@ const CompaniesDetails = () => {
                           </Link>
                         )}
                         {activeCompany.socialLinks.instagram && (
-                          <Link to={activeCompany.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="me-2 mb-2">
+                          <Link
+                            to={activeCompany.socialLinks.instagram}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="me-2 mb-2"
+                          >
                             <ImageWithBasePath
                               src="assets/img/social/social-05.svg"
                               alt="Instagram"
@@ -493,11 +601,13 @@ const CompaniesDetails = () => {
                                 navigator.share({
                                   title: activeCompany.name,
                                   text: `Check out ${activeCompany.name}`,
-                                  url: window.location.href
+                                  url: window.location.href,
                                 });
                               } else {
-                                navigator.clipboard.writeText(window.location.href);
-                                alert('Link copied to clipboard!');
+                                navigator.clipboard.writeText(
+                                  window.location.href
+                                );
+                                alert("Link copied to clipboard!");
                               }
                             }}
                           >
@@ -510,16 +620,31 @@ const CompaniesDetails = () => {
                             to="#"
                             className="d-flex align-items-center justify-content-center btn btn-outline-danger"
                             onClick={async () => {
-                              if (window.confirm('Are you sure you want to delete this company?')) {
+                              if (
+                                window.confirm(
+                                  "Are you sure you want to delete this company?"
+                                )
+                              ) {
                                 try {
-                                  const token = await (window as any).Clerk?.session?.getToken();
-                                  await fetch(`${(typeof import.meta !== "undefined" && (import.meta as any).env?.REACT_APP_BACKEND_URL) || (window as any).REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/${activeCompany._id}`, {
-                                    method: 'DELETE',
-                                    headers: { Authorization: `Bearer ${token}` }
-                                  });
-                                  window.dispatchEvent(new CustomEvent('companies:changed'));
+                                  const token = await (
+                                    window as any
+                                  ).Clerk?.session?.getToken();
+                                  await fetch(
+                                    `${backendurl}/api/companies/${activeCompany._id}`,
+                                    {
+                                      method: "DELETE",
+                                      headers: {
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                    }
+                                  );
+                                  window.dispatchEvent(
+                                    new CustomEvent("companies:changed")
+                                  );
                                   window.location.href = routes.companiesGrid;
-                                } catch (err) { console.error('delete company', err); }
+                                } catch (err) {
+                                  console.error("delete company", err);
+                                }
                               }
                             }}
                           >
@@ -536,15 +661,7 @@ const CompaniesDetails = () => {
             <CommonTabs />
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       <CrmsModal />
     </>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 
+  const currentYear = new Date().getFullYear();
 const EmailVerification3 = () => {
   const routes = all_routes;
   const navigation = useNavigate();
@@ -51,7 +52,7 @@ const EmailVerification3 = () => {
                   </div>
                 </div>
                 <div className="p-4 text-center">
-                  <p className="mb-0 ">Copyright © 2025 - Preskool</p>
+                  <p className="mb-0">{currentYear} © amasQIS.ai</p>
                 </div>
               </div>
             </form>

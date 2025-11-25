@@ -11,6 +11,7 @@ import { usersDetails } from '../../../core/data/json/usersDetails';
 import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { departmentSelect } from '../../../core/common/selectoption/selectoption';
+import Footer from "../../../core/common/footer";
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -94,6 +95,8 @@ const Designations = () => {
         setResponseData(response.data);
         setError(null);
         setLoading(false);
+        // Reset form fields after successful submission
+        resetAddDesignationForm();
         socket?.emit("hrm/designations/get");
       } else {
         setError(response.error || "Failed to add Designations");
@@ -109,6 +112,7 @@ const Designations = () => {
         setError(null);
         setLoading(false);
       } else {
+        console.log("error form desgn", response.error);
         setError(response.error || "Failed to fetch Designations");
         setLoading(false);
       }
@@ -231,6 +235,14 @@ const Designations = () => {
   const selectedDepartmentOption = useMemo(() => {
     return departmentOptions.find(opt => opt.value === selectedDepartmentId);
   }, [departmentOptions, selectedDepartmentId]);
+
+  // Reset Add Designation form fields to default values
+  const resetAddDesignationForm = () => {
+    setDesignationName("");
+    setSelectedDepartmentId("");
+    setStatus(statusChoose[0]?.value || "");
+    setError(null);
+  };
 
   const handleSubmit = () => {
     try {
@@ -405,6 +417,35 @@ const Designations = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       {/* Page Wrapper */}
@@ -462,6 +503,7 @@ const Designations = () => {
                   data-inert={true}
                   data-bs-target="#add_designation"
                   className="btn btn-primary d-flex align-items-center"
+                  onClick={resetAddDesignationForm}
                 >
                   <i className="ti ti-circle-plus me-2" />
                   Add Designation
@@ -602,15 +644,7 @@ const Designations = () => {
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       {/* Add Designation */}
@@ -624,6 +658,7 @@ const Designations = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={resetAddDesignationForm}
               >
                 <i className="ti ti-x" />
               </button>
@@ -690,6 +725,7 @@ const Designations = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  onClick={resetAddDesignationForm}
                 >
                   Cancel
                 </button>

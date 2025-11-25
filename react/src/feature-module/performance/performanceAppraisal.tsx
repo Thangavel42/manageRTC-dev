@@ -1,24 +1,66 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import { performanceAppraisalData } from "../../core/data/json/performanceAppraisalData";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Table from "../../core/common/dataTable/index";
 import PerformanceAppraisalModal from "../../core/modals/performanceAppraisalModal";
+import Footer from "../../core/common/footer";
+import performanceAppraisalService from "../../core/services/performance/performanceAppraisal.service";
 
 const PerformanceAppraisal = () => {
   const routes = all_routes;
-  const data = performanceAppraisalData;
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchPerformanceAppraisals();
+  }, []);
+
+  const fetchPerformanceAppraisals = async () => {
+    try {
+      setLoading(true);
+      const response = await performanceAppraisalService.getAllPerformanceAppraisals();
+      if (response.done) {
+        setData(response.data || []);
+      } else {
+        setError(response.error || 'Failed to fetch performance appraisals');
+      }
+    } catch (err) {
+      setError('Failed to fetch performance appraisals');
+      console.error('Error fetching performance appraisals:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  const handleDelete = async (item: any) => {
+    if (window.confirm('Are you sure you want to delete this performance appraisal?')) {
+      try {
+        const response = await performanceAppraisalService.deletePerformanceAppraisal(item._id);
+        if (response.done) {
+          alert('Performance appraisal deleted successfully!');
+          fetchPerformanceAppraisals(); // Refresh data
+        } else {
+          alert(response.error || 'Failed to delete performance appraisal');
+        }
+      } catch (err) {
+        alert('Failed to delete performance appraisal');
+        console.error('Error deleting performance appraisal:', err);
+      }
+    }
+  };
   const columns = [
     {
       title: "Name",
-      dataIndex: "Name",
+      dataIndex: "name",
       render: (text: string, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <Link to="#" className="avatar avatar-md avatar-rounded">
             <ImageWithBasePath
-              src={`assets/img/users/${record.Image}`}
+              src={`assets/img/users/${record.image}`}
               className="img-fluid"
               alt="img"
             />
@@ -30,57 +72,60 @@ const PerformanceAppraisal = () => {
           </div>
         </div>
       ),
-      sorter: (a: any, b: any) => a.Name.length - b.Name.length,
+      sorter: (a: any, b: any) => a.name.localeCompare(b.name),
     },
     {
       title: "Designation",
-      dataIndex: "Designation",
-      sorter: (a: any, b: any) => a.Designation.length - b.Designation.length,
+      dataIndex: "designation",
+      sorter: (a: any, b: any) => a.designation.localeCompare(b.designation),
     },
     {
       title: "Department",
-      dataIndex: "Department",
-      sorter: (a: any, b: any) => a.Department.length - b.Department.length,
+      dataIndex: "department",
+      sorter: (a: any, b: any) => a.department.localeCompare(b.department),
     },
     {
       title: "Appraisal Date",
-      dataIndex: "AppraisalDate",
-      sorter: (a: any, b: any) =>
-        a.AppraisalDate.length - b.AppraisalDate.length,
+      dataIndex: "appraisalDate",
+      sorter: (a: any, b: any) => {
+        const aDate = new Date(a.appraisalDate);
+        const bDate = new Date(b.appraisalDate);
+        if (!isNaN(aDate.getTime()) && !isNaN(bDate.getTime())) {
+          return aDate.getTime() - bDate.getTime();
+        }
+        return String(a.appraisalDate).localeCompare(String(b.appraisalDate));
+      },
     },
     {
       title: "Status",
-      dataIndex: "Status",
-      render: (text: string) => (
-        <span className="badge badge-success d-inline-flex align-items-center badge-xs">
-          <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+      dataIndex: "status",
+      render: (text: string) => {
+        let badgeClass = "badge ";
+        if (text.toLowerCase() === "active") badgeClass += "badge-success";
+        else if (text.toLowerCase() === "inactive") badgeClass += "badge-danger";
+        else if (text.toLowerCase() === "draft") badgeClass += "badge-warning";
+        else badgeClass += "badge-secondary";
+        return (
+          <span className={`${badgeClass} d-inline-flex align-items-center badge-xs`}>
+            <i className="ti ti-point-filled me-1" />
+            {text}
+          </span>
+        );
+      },
+      sorter: (a: any, b: any) => a.status.localeCompare(b.status),
     },
     {
       title: "",
       dataIndex: "actions",
-      render: () => (
+      render: (text: any, record: any) => (
         <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_performance_appraisal"
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
+          <button
+            className="btn btn-link p-0 text-danger"
+            onClick={() => handleDelete(record)}
+            title="Delete"
           >
             <i className="ti ti-trash" />
-          </Link>
+          </button>
         </div>
       ),
     },
@@ -131,64 +176,32 @@ const PerformanceAppraisal = () => {
           <div className="card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Performance Appraisal List</h5>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    Sort By : Last 7 Days
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Recently Added
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Ascending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Desending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Last Month
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Last 7 Days
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={data} columns={columns} Selection={true} />
+              {loading ? (
+                <div className="text-center p-4">
+                  <div className="spinner-border" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="text-center p-4">
+                  <div className="alert alert-danger" role="alert">
+                    {error}
+                  </div>
+                </div>
+              ) : (
+                <Table dataSource={data} columns={columns} Selection={true} />
+              )}
             </div>
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 
-      <PerformanceAppraisalModal />
+      <PerformanceAppraisalModal onSuccess={fetchPerformanceAppraisals} />
     </>
   );
 };

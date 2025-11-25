@@ -9,6 +9,7 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import { useClients } from "../../../hooks/useClients";
 import { message } from "antd";
 import EditClient from "./edit_client";
+import Footer from "../../../core/common/footer";
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -4240,15 +4241,7 @@ const ClientDetails = () => {
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       {/* Edit Client */}

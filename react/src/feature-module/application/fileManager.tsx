@@ -8,6 +8,8 @@ import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import ReactApexChart from "react-apexcharts";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import Footer from "../../core/common/footer";
+
 
 const FileManager = () => {
   const [isOpen, setOpen] = useState(false);
@@ -2881,15 +2883,7 @@ const FileManager = () => {
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 

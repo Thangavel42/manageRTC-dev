@@ -1,58 +1,96 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import { all_routes } from "../router/all_routes";
-import { goalTypeData } from "../../core/data/json/goalTypeData";
 import Table from "../../core/common/dataTable/index";
 import GoalTypeModal from "../../core/modals/goalTypeModal";
+import Footer from "../../core/common/footer";
+import goalTypeService from "../../core/services/performance/goalType.service";
 
 const GoalType = () => {
   const routes = all_routes;
-  const data = goalTypeData;
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchGoalTypes();
+  }, []);
+
+  const fetchGoalTypes = async () => {
+    try {
+      setLoading(true);
+      const response = await goalTypeService.getAllGoalTypes();
+      if (response.done) {
+        setData(response.data || []);
+      } else {
+        setError(response.error || 'Failed to fetch goal types');
+      }
+    } catch (err) {
+      setError('Failed to fetch goal types');
+      console.error('Error fetching goal types:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  const handleDelete = async (item: any) => {
+    if (window.confirm('Are you sure you want to delete this goal type?')) {
+      try {
+        const response = await goalTypeService.deleteGoalType(item._id);
+        if (response.done) {
+          alert('Goal type deleted successfully!');
+          fetchGoalTypes(); // Refresh data
+        } else {
+          alert(response.error || 'Failed to delete goal type');
+        }
+      } catch (err) {
+        alert('Failed to delete goal type');
+        console.error('Error deleting goal type:', err);
+      }
+    }
+  };
   const columns = [
     {
       title: "Type",
-      dataIndex: "Type",
-      sorter: (a: any, b: any) => a.Type.length - b.Type.length,
+      dataIndex: "type",
+      sorter: (a: any, b: any) => a.type.localeCompare(b.type),
     },
     {
       title: "Description",
-      dataIndex: "Description",
-      sorter: (a: any, b: any) => a.Description.length - b.Description.length,
+      dataIndex: "description",
+      sorter: (a: any, b: any) => a.description.localeCompare(b.description),
     },
     {
       title: "Status",
-      dataIndex: "Status",
-      render: (text: string) => (
-        <span className="badge badge-success d-inline-flex align-items-center badge-xs">
-          <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+      dataIndex: "status",
+      render: (text: string) => {
+        let badgeClass = "badge ";
+        if (text.toLowerCase() === "active") badgeClass += "badge-success";
+        else if (text.toLowerCase() === "inactive") badgeClass += "badge-danger";
+        else badgeClass += "badge-secondary";
+        return (
+          <span className={`${badgeClass} d-inline-flex align-items-center badge-xs`}>
+            <i className="ti ti-point-filled me-1" />
+            {text}
+          </span>
+        );
+      },
+      sorter: (a: any, b: any) => a.status.localeCompare(b.status),
     },
     {
       title: "",
       dataIndex: "actions",
-      render: () => (
+      render: (text: any, record: any) => (
         <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_goal_type"
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
+          <button
+            className="btn btn-link p-0 text-danger"
+            onClick={() => handleDelete(record)}
+            title="Delete"
           >
             <i className="ti ti-trash" />
-          </Link>
+          </button>
         </div>
       ),
     },
@@ -103,54 +141,33 @@ const GoalType = () => {
           <div className="card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Goal Type List</h5>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    Sort By : Last 7 Days
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Recently Added
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Ascending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Desending
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={data} columns={columns} Selection={true} />
+              {loading ? (
+                <div className="text-center p-4">
+                  <div className="spinner-border" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="text-center p-4">
+                  <div className="alert alert-danger" role="alert">
+                    {error}
+                  </div>
+                </div>
+              ) : (
+                <Table dataSource={data} columns={columns} Selection={true} />
+              )}
             </div>
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 
-      <GoalTypeModal />
+      <GoalTypeModal onSuccess={fetchGoalTypes} />
+      {/* Removed edit modal */}
     </>
   );
 };

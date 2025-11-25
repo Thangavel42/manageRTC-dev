@@ -6,11 +6,13 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import CrmsModal from "../../../core/modals/crms_modal";
 import { useContacts } from "../../../hooks/useContacts";
 import { useAuth } from "@clerk/clerk-react";
+import Footer from "../../../core/common/footer";
 
 const ContactGrid = () => {
   const routes = all_routes;
   const { getToken } = useAuth();
   const { contacts, fetchContacts, loading, error } = useContacts();
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
@@ -23,16 +25,18 @@ const ContactGrid = () => {
   useEffect(() => {
     const onChanged = () => fetchContacts({ limit: 100 });
     window.addEventListener("contacts:changed", onChanged as any);
-    return () => window.removeEventListener("contacts:changed", onChanged as any);
+    return () =>
+      window.removeEventListener("contacts:changed", onChanged as any);
   }, [fetchContacts]);
 
   const filteredContacts = useMemo(() => {
     let filtered = contacts;
     if (searchTerm) {
-      filtered = filtered.filter((c: any) =>
-        c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone?.includes(searchTerm)
+      filtered = filtered.filter(
+        (c: any) =>
+          c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.phone?.includes(searchTerm)
       );
     }
     filtered = [...filtered].sort((a: any, b: any) => {
@@ -47,23 +51,23 @@ const ContactGrid = () => {
     return filtered;
   }, [contacts, searchTerm, sortBy, sortOrder]);
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (format: "pdf" | "excel") => {
     try {
       const token = await getToken();
-      const response = await fetch(
-        `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/contacts/export?format=${format}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const backendurl = process.env.REACT_APP_BACKEND_URL;
+      const urllink = backendurl + `/api/contacts/export?format=${format}`;
+      console.log("Backend Contact GRID -> ", urllink);
+      const response = await fetch(urllink, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `contacts.${format}`;
         document.body.appendChild(a);
@@ -71,10 +75,10 @@ const ContactGrid = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        alert('Export failed. Please try again.');
+        alert("Export failed. Please try again.");
       }
     } catch (error) {
-      alert('Export failed. Please try again.');
+      alert("Export failed. Please try again.");
     }
   };
 
@@ -129,13 +133,21 @@ const ContactGrid = () => {
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("pdf")}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("excel")}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel
                       </Link>
@@ -168,20 +180,28 @@ const ContactGrid = () => {
               className="form-control"
               placeholder="Search contacts..."
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
               style={{ maxWidth: 200 }}
             />
-            <button className="btn btn-outline-secondary" onClick={() => {
-              setSortBy("name");
-              setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-            }}>
-              Sort by Name {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => {
+                setSortBy("name");
+                setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+              }}
+            >
+              Sort by Name{" "}
+              {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
             </button>
-            <button className="btn btn-outline-secondary" onClick={() => {
-              setSortBy("rating");
-              setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-            }}>
-              Sort by Rating {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => {
+                setSortBy("rating");
+                setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+              }}
+            >
+              Sort by Rating{" "}
+              {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
             </button>
           </div>
 
@@ -200,7 +220,9 @@ const ContactGrid = () => {
               <div className="text-center p-5 w-100">
                 <i className="ti ti-users fs-48 text-muted mb-3"></i>
                 <h5>No Contacts Found</h5>
-                <p className="text-muted">Try adjusting your search or add a new contact.</p>
+                <p className="text-muted">
+                  Try adjusting your search or add a new contact.
+                </p>
               </div>
             ) : (
               filteredContacts.map((c: any) => (
@@ -213,11 +235,16 @@ const ContactGrid = () => {
                         </div>
                         <div>
                           <Link
-                            to={routes.contactDetails.replace(':contactId', c._id)}
+                            to={routes.contactDetails.replace(
+                              ":contactId",
+                              c._id
+                            )}
                             className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
                           >
                             <ImageWithBasePath
-                              src={`assets/img/users/${c.image || "user-01.jpg"}`}
+                              src={`assets/img/users/${
+                                c.image || "user-01.jpg"
+                              }`}
                               className="img-fluid h-auto w-auto"
                               alt="img"
                             />
@@ -234,15 +261,37 @@ const ContactGrid = () => {
                           </button>
                           <ul className="dropdown-menu dropdown-menu-end p-3">
                             <li>
-                              <Link className="dropdown-item rounded-1" to="#" onClick={async () => {
-                                if (!window.confirm('Are you sure you want to delete this contact?')) return;
-                                try {
-                                  const token = await getToken();
-                                  await fetch(`${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/contacts/${c._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-                                  window.dispatchEvent(new CustomEvent('contacts:changed'));
-                                  alert('Contact deleted!');
-                                } catch (err) { console.error('delete contact', err); alert('Delete failed!') }
-                              }}>
+                              <Link
+                                className="dropdown-item rounded-1"
+                                to="#"
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      "Are you sure you want to delete this contact?"
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const token = await getToken();
+                                    await fetch(
+                                      `${backendurl}/api/contacts/${c._id}`,
+                                      {
+                                        method: "DELETE",
+                                        headers: {
+                                          Authorization: `Bearer ${token}`,
+                                        },
+                                      }
+                                    );
+                                    window.dispatchEvent(
+                                      new CustomEvent("contacts:changed")
+                                    );
+                                    alert("Contact deleted!");
+                                  } catch (err) {
+                                    console.error("delete contact", err);
+                                    alert("Delete failed!");
+                                  }
+                                }}
+                              >
                                 <i className="ti ti-trash me-1" />
                                 Delete
                               </Link>
@@ -252,8 +301,18 @@ const ContactGrid = () => {
                       </div>
                       <div className="text-center mb-3">
                         <h6 className="mb-1">
-                          <Link to={routes.contactDetails.replace(':contactId', c._id)}>
-                            {c.name && c.name !== "-" ? c.name : ((c.firstName || "") + (c.lastName ? " " + c.lastName : "")).trim() || "-"}
+                          <Link
+                            to={routes.contactDetails.replace(
+                              ":contactId",
+                              c._id
+                            )}
+                          >
+                            {c.name && c.name !== "-"
+                              ? c.name
+                              : (
+                                  (c.firstName || "") +
+                                  (c.lastName ? " " + c.lastName : "")
+                                ).trim() || "-"}
                           </Link>
                         </h6>
                         <span className="badge bg-pink-transparent fs-10 fw-medium">
@@ -271,24 +330,41 @@ const ContactGrid = () => {
                         </p>
                         <p className="text-dark d-inline-flex align-items-center">
                           <i className="ti ti-map-pin text-gray-5 me-2" />
-                          {c.location || "-"}
+                          {typeof c.location === 'object' && c.location !== null 
+                            ? `${c.location.city || ''}${c.location.state ? ', ' + c.location.state : ''}${c.location.country ? ', ' + c.location.country : ''}`.replace(/^,\s*/, '') || '-'
+                            : c.location || "-"}
                         </p>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
                         <div className="icons-social d-flex align-items-center">
-                          <Link to="#" className="avatar avatar-rounded avatar-sm me-1">
+                          <Link
+                            to="#"
+                            className="avatar avatar-rounded avatar-sm me-1"
+                          >
                             <i className="ti ti-mail" />
                           </Link>
-                          <Link to="#" className="avatar avatar-rounded avatar-sm me-1">
+                          <Link
+                            to="#"
+                            className="avatar avatar-rounded avatar-sm me-1"
+                          >
                             <i className="ti ti-phone-call" />
                           </Link>
-                          <Link to="#" className="avatar avatar-rounded avatar-sm me-1">
+                          <Link
+                            to="#"
+                            className="avatar avatar-rounded avatar-sm me-1"
+                          >
                             <i className="ti ti-message-2" />
                           </Link>
-                          <Link to="#" className="avatar avatar-rounded avatar-sm me-1">
+                          <Link
+                            to="#"
+                            className="avatar avatar-rounded avatar-sm me-1"
+                          >
                             <i className="ti ti-brand-skype" />
                           </Link>
-                          <Link to="#" className="avatar avatar-rounded avatar-sm">
+                          <Link
+                            to="#"
+                            className="avatar avatar-rounded avatar-sm"
+                          >
                             <i className="ti ti-brand-facebook" />
                           </Link>
                         </div>
@@ -310,15 +386,7 @@ const ContactGrid = () => {
             </Link>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       <CrmsModal />
     </>

@@ -21,10 +21,11 @@ import { DateTime } from "luxon";
 import { current } from "immer";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
+import Footer from "../../../core/common/footer";
 
 interface DashboardData {
   employeeDetails?: {
-    _id: string
+    _id: string;
     firstName: string;
     lastName: string;
     designation: string;
@@ -33,19 +34,19 @@ interface DashboardData {
     contact: {
       phone: string;
       email: string;
-    }
+    };
     reportOffice: string;
     dateOfJoining: string;
     timeZone: string;
   };
   attendanceStats?: {
-    absent: number,
-    late: number,
-    onTime: number,
-    workFromHome: number,
-    workedDays: number,
-    workingDays: number,
-  }
+    absent: number;
+    late: number;
+    onTime: number;
+    workFromHome: number;
+    workedDays: number;
+    workingDays: number;
+  };
   leaveStats?: {
     lossOfPay: number;
     requestedLeaves: number;
@@ -75,16 +76,16 @@ interface DashboardData {
     };
   };
   projects?: Array<{
-    projectId: string
-    projectTitle: string,
-    deadline: string,
-    totalTasks: number,
-    completedTasks: number,
+    projectId: string;
+    projectTitle: string;
+    deadline: string;
+    totalTasks: number;
+    completedTasks: number;
     leadDetails?: {
       avatarUrl: string | null;
       firstName: string | null;
       lastName: string | null;
-    }
+    };
     membersAvatars: string[];
   }>;
   tasks?: Array<{
@@ -103,7 +104,7 @@ interface DashboardData {
   teamMembers?: Array<{
     _id: string;
     firstName: string;
-    lastName: string
+    lastName: string;
     avatar: string;
     role: string;
   }>;
@@ -217,7 +218,11 @@ const EmployeeDashboard = () => {
       doc.setFontSize(10);
       const employee = dashboardData.employeeDetails;
       if (employee) {
-        doc.text(`Name: ${employee.firstName} ${employee.lastName}`, 20, yPosition);
+        doc.text(
+          `Name: ${employee.firstName} ${employee.lastName}`,
+          20,
+          yPosition
+        );
         yPosition += 8;
         doc.text(`Designation: ${employee.designation}`, 20, yPosition);
         yPosition += 8;
@@ -362,13 +367,21 @@ const EmployeeDashboard = () => {
             yPosition
           );
           yPosition += 8;
-          doc.text(`  Lead: ${project.leadDetails?.firstName || 'member'}`, 30, yPosition);
+          doc.text(
+            `  Lead: ${project.leadDetails?.firstName || "member"}`,
+            30,
+            yPosition
+          );
           yPosition += 12;
         });
       }
 
       // Save the PDF
-      doc.save(`employee-dashboard-${employee?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.pdf`);
+      doc.save(
+        `employee-dashboard-${
+          employee?.firstName || "report"
+        }-${currentDate.replace(/\//g, "-")}.pdf`
+      );
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert("Error generating PDF export. Please try again.");
@@ -391,7 +404,7 @@ const EmployeeDashboard = () => {
           ["Phone", dashboardData.employeeDetails.contact.phone],
           ["Report Office", dashboardData.employeeDetails.reportOffice],
           ["Joined On", dashboardData.employeeDetails.dateOfJoining],
-          ["Time Zone", dashboardData.employeeDetails.timeZone]
+          ["Time Zone", dashboardData.employeeDetails.timeZone],
         ];
         const employeeWS = XLSX.utils.aoa_to_sheet(employeeData);
         XLSX.utils.book_append_sheet(wb, employeeWS, "Employee Info");
@@ -510,7 +523,7 @@ const EmployeeDashboard = () => {
             project.deadline,
             project.completedTasks,
             project.totalTasks,
-            project.leadDetails?.firstName || 'Member'
+            project.leadDetails?.firstName || "Member",
           ]);
         });
 
@@ -547,7 +560,9 @@ const EmployeeDashboard = () => {
       }
 
       // Save the Excel file
-      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.xlsx`;
+      const fileName = `employee-dashboard-${
+        dashboardData.employeeDetails?.firstName || "report"
+      }-${currentDate.replace(/\//g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error("Error generating Excel:", error);
@@ -567,8 +582,8 @@ const EmployeeDashboard = () => {
         setLoading(true);
 
         if (!isMounted) return;
-
-        currentSocket = io("http://localhost:5000", {
+        const backendurl = process.env.REACT_APP_BACKEND_URL;
+        currentSocket = io(backendurl, {
           auth: { token },
           timeout: 20000,
         });
@@ -646,26 +661,32 @@ const EmployeeDashboard = () => {
           }
         );
 
-        currentSocket.on('employee/dashboard/get-tasks-response', (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              tasks: response.data
-            }));
-          }
-        });
-
-        currentSocket.on('employee/dashboard/update-task-response', (response: any) => {
-          if (!isMounted) return;
-          console.log(response);
-
-          if (response.done) {
-            if (currentSocket) {
-              currentSocket.emit('employee/dashboard/get-tasks');
+        currentSocket.on(
+          "employee/dashboard/get-tasks-response",
+          (response: any) => {
+            if (!isMounted) return;
+            if (response.done) {
+              setDashboardData((prev) => ({
+                ...prev,
+                tasks: response.data,
+              }));
             }
           }
-        });
+        );
+
+        currentSocket.on(
+          "employee/dashboard/update-task-response",
+          (response: any) => {
+            if (!isMounted) return;
+            console.log(response);
+
+            if (response.done) {
+              if (currentSocket) {
+                currentSocket.emit("employee/dashboard/get-tasks");
+              }
+            }
+          }
+        );
 
         currentSocket.on(
           "employee/dashboard/get-skills-response",
@@ -1185,20 +1206,20 @@ const EmployeeDashboard = () => {
     return totalLeaves - takenLeaves;
   }
   const getStatusBadgeClass = (status: string) => {
-    if (!status) return 'bg-light';
+    if (!status) return "bg-light";
 
     switch (status.trim().toLowerCase()) {
-      case 'completed':
-        return 'badge-soft-success';       // matches .badge-soft-success in SCSS
-      case 'pending':
-        return 'badge-secondary-transparent'; // matches .badge-secondary-transparent
-      case 'ongoing':                // in case of space variation
-        return 'bg-transparent-purple';    // matches .bg-transparent-purple
-      case 'onhold':
-      case 'on hold':                      // in case of space variation
-        return 'bg-soft-pink';             // matches .bg-soft-pink
+      case "completed":
+        return "badge-soft-success"; // matches .badge-soft-success in SCSS
+      case "pending":
+        return "badge-secondary-transparent"; // matches .badge-secondary-transparent
+      case "ongoing": // in case of space variation
+        return "bg-transparent-purple"; // matches .bg-transparent-purple
+      case "onhold":
+      case "on hold": // in case of space variation
+        return "bg-soft-pink"; // matches .bg-soft-pink
       default:
-        return 'bg-light';                 // default light background class
+        return "bg-light"; // default light background class
     }
   };
 
@@ -1261,10 +1282,16 @@ const EmployeeDashboard = () => {
       overtimePercent: (overtime / total) * 100,
       breakPercent: (brk / total) * 100,
     };
-  };
+  }
 
   const handleTaskUpdate = (
-    { taskId, updateData }: { taskId: string; updateData: { checked?: boolean; starred?: boolean; status?: string } },
+    {
+      taskId,
+      updateData,
+    }: {
+      taskId: string;
+      updateData: { checked?: boolean; starred?: boolean; status?: string };
+    },
     socket: any
   ) => {
     if (!taskId) {
@@ -1278,7 +1305,7 @@ const EmployeeDashboard = () => {
 
     const payload = {
       taskId,
-      updateData
+      updateData,
     };
 
     socket.emit("employee/dashboard/update-task", payload);
@@ -1525,13 +1552,19 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center">
                     <span className="avatar avatar-lg avatar-rounded border border-white border-2 flex-shrink-0 me-2">
                       <ImageWithBasePath
-                        src={dashboardData?.employeeDetails?.avatar || "/assets/img/users/user-01.jpg"}
+                        src={
+                          dashboardData?.employeeDetails?.avatar ||
+                          "/assets/img/users/user-01.jpg"
+                        }
                         alt="Img"
                         isLink={Boolean(dashboardData?.employeeDetails?.avatar)}
                       />
                     </span>
                     <div>
-                      <h5 className="text-white mb-1">{dashboardData?.employeeDetails?.firstName} {dashboardData?.employeeDetails?.lastName}</h5>
+                      <h5 className="text-white mb-1">
+                        {dashboardData?.employeeDetails?.firstName}{" "}
+                        {dashboardData?.employeeDetails?.lastName}
+                      </h5>
                       <div className="d-flex align-items-center">
                         <p className="text-white fs-12 mb-0">
                           {dashboardData?.employeeDetails?.designation}
@@ -1549,11 +1582,15 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Phone Number</span>
-                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.phone}</p>
+                    <p className="text-gray-9">
+                      {dashboardData?.employeeDetails?.contact.phone}
+                    </p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Email Address</span>
-                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.email}</p>
+                    <p className="text-gray-9">
+                      {dashboardData?.employeeDetails?.contact.email}
+                    </p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Report Office</span>
@@ -1563,7 +1600,11 @@ const EmployeeDashboard = () => {
                   </div>
                   <div>
                     <span className="d-block mb-1 fs-13">Joined on</span>
-                    <p className="text-gray-9">{formatDateProject(dashboardData?.employeeDetails?.dateOfJoining || "")}</p>
+                    <p className="text-gray-9">
+                      {formatDateProject(
+                        dashboardData?.employeeDetails?.dateOfJoining || ""
+                      )}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1626,7 +1667,8 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-primary me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.attendanceStats?.workFromHome || "0"}
+                              {dashboardData?.attendanceStats?.workFromHome ||
+                                "0"}
                             </span>
                             Work From Home
                           </p>
@@ -1709,7 +1751,9 @@ const EmployeeDashboard = () => {
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Total Leaves</span>
-                        <h4>{dashboardData?.leaveStats?.totalLeavesAllowed || "0"}</h4>
+                        <h4>
+                          {dashboardData?.leaveStats?.totalLeavesAllowed || "0"}
+                        </h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
@@ -1727,13 +1771,17 @@ const EmployeeDashboard = () => {
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Request</span>
-                        <h4>{dashboardData?.leaveStats?.requestedLeaves || "0"}</h4>
+                        <h4>
+                          {dashboardData?.leaveStats?.requestedLeaves || "0"}
+                        </h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Worked Days</span>
-                        <h4>{dashboardData?.attendanceStats?.workedDays || "0"}</h4>
+                        <h4>
+                          {dashboardData?.attendanceStats?.workedDays || "0"}
+                        </h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
@@ -1777,12 +1825,15 @@ const EmployeeDashboard = () => {
                     {isPunchIn && checkInTime && (
                       <h6 className="fw-medium d-flex align-items-center justify-content-center mb-4">
                         <i className="ti ti-fingerprint text-primary me-1" />
-                        {leftover.isTimerExpired ? (
-                          "Auto-Punched Out"
-                        ) : (
-                          `Punch In at ${convertUtcToTimeZone(checkInTime, dashboardData?.employeeDetails?.timeZone || "")}`
+                        {
+                          leftover.isTimerExpired
+                            ? "Auto-Punched Out"
+                            : `Punch In at ${convertUtcToTimeZone(
+                                checkInTime,
+                                dashboardData?.employeeDetails?.timeZone || ""
+                              )}`
                           // `Punch In at ${checkInTime}`
-                        )}
+                        }
                       </h6>
                     )}
 
@@ -1805,8 +1856,9 @@ const EmployeeDashboard = () => {
                     ) : (
                       <>
                         <button
-                          className={`btn btn-danger w-100 mb-2 ${isPunchingOut ? "disabled" : ""
-                            }`}
+                          className={`btn btn-danger w-100 mb-2 ${
+                            isPunchingOut ? "disabled" : ""
+                          }`}
                           disabled={
                             !(
                               leftover.hrs === 0 &&
@@ -2152,7 +2204,10 @@ const EmployeeDashboard = () => {
                               <div className="d-flex align-items-center mb-3">
                                 <Link to="#" className="avatar">
                                   <img
-                                    src={project.leadDetails?.avatarUrl || 'assets/img/users/user-placeholder.jpg'}
+                                    src={
+                                      project.leadDetails?.avatarUrl ||
+                                      "assets/img/users/user-placeholder.jpg"
+                                    }
                                     className="img-fluid rounded-circle"
                                     alt="lead"
                                   />
@@ -2160,7 +2215,8 @@ const EmployeeDashboard = () => {
                                 <div className="ms-2">
                                   <h6 className="fw-normal">
                                     <Link to="#">
-                                      {(project.leadDetails?.firstName && project.leadDetails?.lastName)
+                                      {project.leadDetails?.firstName &&
+                                      project.leadDetails?.lastName
                                         ? `${project.leadDetails.firstName} ${project.leadDetails.lastName}`
                                         : "lead"}
                                     </Link>
@@ -2180,8 +2236,12 @@ const EmployeeDashboard = () => {
                                   <i className="ti ti-calendar text-primary fs-16" />
                                 </Link>
                                 <div className="ms-2">
-                                  <h6 className="fw-normal">{formatDateProject(project.deadline) || "-"}</h6>
-                                  <span className="fs-13 d-block">Deadline</span>
+                                  <h6 className="fw-normal">
+                                    {formatDateProject(project.deadline) || "-"}
+                                  </h6>
+                                  <span className="fs-13 d-block">
+                                    Deadline
+                                  </span>
                                 </div>
                               </div>
 
@@ -2275,44 +2335,96 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="list-group list-group-flush">
                     {dashboardData?.tasks?.length === 0 ? (
-                      <p className="text-center text-gray-500 text-lg">No available projects</p>
+                      <p className="text-center text-gray-500 text-lg">
+                        No available projects
+                      </p>
                     ) : (
                       dashboardData?.tasks?.map((task) => (
-                        <div key={task._id} className="list-group-item border rounded mb-3 p-2">
+                        <div
+                          key={task._id}
+                          className="list-group-item border rounded mb-3 p-2"
+                        >
                           <div className="row align-items-center row-gap-3">
                             <div className="col-md-8">
                               <div className="todo-inbox-check d-flex align-items-center">
-                                <span><i className="ti ti-grid-dots me-2" /></span>
+                                <span>
+                                  <i className="ti ti-grid-dots me-2" />
+                                </span>
                                 <div className="form-check">
                                   <input
                                     className="form-check-input"
                                     type="checkbox"
                                     checked={task.checked}
-                                    onChange={e => handleTaskUpdate({ taskId: task._id, updateData: { checked: e.target.checked } }, socket)}
+                                    onChange={(e) =>
+                                      handleTaskUpdate(
+                                        {
+                                          taskId: task._id,
+                                          updateData: {
+                                            checked: e.target.checked,
+                                          },
+                                        },
+                                        socket
+                                      )
+                                    }
                                   />
                                 </div>
                                 <span
                                   className="me-3 d-flex align-items-center rating-select"
                                   role="button"
                                   tabIndex={0}
-                                  onClick={() => handleTaskUpdate({ taskId: task._id, updateData: { starred: !task.starred } }, socket)}
-                                  onKeyPress={e => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      handleTaskUpdate({ taskId: task._id, updateData: { starred: !task.starred } }, socket);
+                                  onClick={() =>
+                                    handleTaskUpdate(
+                                      {
+                                        taskId: task._id,
+                                        updateData: { starred: !task.starred },
+                                      },
+                                      socket
+                                    )
+                                  }
+                                  onKeyPress={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      handleTaskUpdate(
+                                        {
+                                          taskId: task._id,
+                                          updateData: {
+                                            starred: !task.starred,
+                                          },
+                                        },
+                                        socket
+                                      );
                                     }
                                   }}
                                 >
-                                  <i className={`ti ${task.starred ? 'ti-star-filled filled' : 'ti-star'}`} aria-label={task.starred ? "Unstar task" : "Star task"} />
+                                  <i
+                                    className={`ti ${
+                                      task.starred
+                                        ? "ti-star-filled filled"
+                                        : "ti-star"
+                                    }`}
+                                    aria-label={
+                                      task.starred ? "Unstar task" : "Star task"
+                                    }
+                                  />
                                 </span>
                                 <div className="strike-info">
-                                  <h4 className="fs-14 text-truncate">{task.title}</h4>
+                                  <h4 className="fs-14 text-truncate">
+                                    {task.title}
+                                  </h4>
                                 </div>
                               </div>
                             </div>
                             <div className="col-md-4">
                               <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                                <span className={`badge d-inline-flex align-items-center me-2 ${getStatusBadgeClass(task.status)}`}>
-                                  <i className={`fas fa-circle fs-6 me-1 ${getStatusBadgeClass(task.status)}`} />
+                                <span
+                                  className={`badge d-inline-flex align-items-center me-2 ${getStatusBadgeClass(
+                                    task.status
+                                  )}`}
+                                >
+                                  <i
+                                    className={`fas fa-circle fs-6 me-1 ${getStatusBadgeClass(
+                                      task.status
+                                    )}`}
+                                  />
                                   {task.status}
                                 </span>
                                 <div className="d-flex align-items-center">
@@ -2349,10 +2461,10 @@ const EmployeeDashboard = () => {
                             </div>
                           </div>
                         </div>
-                      )))}
+                      ))
+                    )}
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
@@ -2398,7 +2510,8 @@ const EmployeeDashboard = () => {
                       </span>
                       <span>vs last years</span>
                     </div> */}
-                    {performance_chart2_series.length === months.length && performance_chart2_series.length > 0 ? (
+                    {performance_chart2_series.length === months.length &&
+                    performance_chart2_series.length > 0 ? (
                       <ReactApexChart
                         options={{
                           ...performance_chart2_options,
@@ -2507,7 +2620,7 @@ const EmployeeDashboard = () => {
                     <div className="text-center">
                       <h5 className="text-white mb-4">Team Birthday</h5>
                       {dashboardData?.birthdays &&
-                        dashboardData?.birthdays.length > 0 ? (
+                      dashboardData?.birthdays.length > 0 ? (
                         dashboardData?.birthdays.map((birthday) => (
                           <div key={birthday._id} className="mb-4">
                             <span className="avatar avatar-xl avatar-rounded mb-2">
@@ -2604,7 +2717,9 @@ const EmployeeDashboard = () => {
                         </Link>
                         <div className="ms-2">
                           <h6 className="fs-14 fw-medium text-truncate mb-1">
-                            <Link to="#">{member.firstName} {member.lastName}</Link>
+                            <Link to="#">
+                              {member.firstName} {member.lastName}
+                            </Link>
                           </h6>
                           <p className="fs-13">{member.role}</p>
                         </div>
@@ -2708,8 +2823,8 @@ const EmployeeDashboard = () => {
                           {filters.meetings === "today"
                             ? "Today"
                             : filters.meetings === "month"
-                              ? "This Month"
-                              : "This Year"}
+                            ? "This Month"
+                            : "This Year"}
                         </span>
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
@@ -2802,20 +2917,14 @@ const EmployeeDashboard = () => {
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
-      </div >
+        <Footer />
+      </div>
       <RequestModals
         onLeaveRequestCreated={() => {
           if (socket) {
-            socket?.emit("employee/dashboard/get-all-data", { year: currentYear });
+            socket?.emit("employee/dashboard/get-all-data", {
+              year: currentYear,
+            });
           }
         }}
         mode="employee"

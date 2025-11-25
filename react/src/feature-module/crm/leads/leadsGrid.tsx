@@ -9,6 +9,7 @@ import "dragula/dist/dragula.css";
 import CrmsModal from "../../../core/modals/crms_modal";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
+import Footer from "../../../core/common/footer";
 
 interface DateRange {
   start: string;
@@ -49,7 +50,7 @@ interface StageTotals {
 const LeadsGrid = () => {
   const routes = all_routes;
   const socket = useSocket();
-  
+
   // State management
   const [stages, setStages] = useState<StageData>({
     'Contacted': [],
@@ -111,7 +112,7 @@ const LeadsGrid = () => {
 
     try {
       console.log("[LeadsGrid] Fetching leads grid data with filters:", filters);
-      
+
       const requestData = {
         filters: {
           ...filters,
@@ -128,30 +129,30 @@ const LeadsGrid = () => {
         if (response.done) {
           const data = response.data || {};
           console.log("[LeadsGrid] Received data from backend:", data);
-          
+
           const stagesData = data.stages || {
             'Contacted': [],
             'Not Contacted': [],
             'Closed': [],
             'Lost': []
           };
-          
+
           const stageTotalsData = data.stageTotals || {
             'Contacted': { count: 0, value: 0 },
             'Not Contacted': { count: 0, value: 0 },
             'Closed': { count: 0, value: 0 },
             'Lost': { count: 0, value: 0 }
           };
-          
+
           console.log("[LeadsGrid] Setting stages:", {
             'Contacted': stagesData['Contacted'].length,
             'Not Contacted': stagesData['Not Contacted'].length,
             'Closed': stagesData['Closed'].length,
             'Lost': stagesData['Lost'].length
           });
-          
+
           console.log("[LeadsGrid] Setting stage totals:", stageTotalsData);
-          
+
           setStages(stagesData);
           setStageTotals(stageTotalsData);
           setError(null);
@@ -479,57 +480,136 @@ const LeadsGrid = () => {
 
       // Add company logo with multiple fallback options
       const addCompanyLogo = async () => {
-        const logoOptions = [
-          '/assets/img/logo.svg',
-          '/assets/img/logo-small.svg', 
-          '/assets/img/logo-2.svg',
-          '/favicon.png',
-          '/assets/img/apple-touch-icon.png'
+        console.log('🎯 Starting logo loading process...');
+        
+        // Try to load the new manage RTC logo first
+        const logoPaths = [
+          '/assets/img/logo.svg',           // New manage RTC logo (priority)
+          '/assets/img/logo-white.svg',     // White version of manage RTC logo
+          '/assets/img/logo-small.svg',     // Small version of manage RTC logo
         ];
 
-        for (const logoPath of logoOptions) {
+        for (const logoPath of logoPaths) {
           try {
-            const response = await fetch(logoPath);
-            if (response.ok) {
-              const logoBlob = await response.blob();
-              const logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.readAsDataURL(logoBlob);
-              });
-              
-              // Try to add logo image to PDF with proper format detection and square aspect ratio
-              const format = logoPath.endsWith('.svg') ? 'SVG' : 'PNG';
-              doc.addImage(logoDataUrl as string, format, 20, 15, 20, 20);
-              console.log(`Successfully loaded logo from: ${logoPath}`);
-              return true;
+            console.log(`🔄 Loading NEW logo: ${logoPath}`);
+            
+            // Try multiple approaches to load the logo
+            const approaches = [
+              // Approach 1: Direct fetch with cache busting
+              `${logoPath}?v=${Date.now()}&bust=${Math.random()}`,
+              // Approach 2: Simple cache busting
+              `${logoPath}?t=${Date.now()}`,
+              // Approach 3: No cache busting
+              logoPath
+            ];
+            
+            for (const url of approaches) {
+              try {
+                console.log(`🔄 Trying URL: ${url}`);
+                const response = await fetch(url, {
+                  method: 'GET',
+                  cache: 'no-store',
+                  headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                  }
+                });
+                
+                if (response.ok) {
+                  console.log(`✅ Logo response OK: ${response.status}`);
+                  
+                  // Get the SVG content as text
+                  const svgText = await response.text();
+                  console.log(`📄 SVG content length: ${svgText.length} characters`);
+                  
+                  // Check if this is a valid SVG
+                  if (svgText.includes('<svg') && svgText.length > 100) {
+                    console.log('🎉 Found valid SVG logo!');
+                  } else {
+                    console.log('⚠️ Invalid SVG content, trying next approach...');
+                    continue;
+                  }
+                  
+                  // Try to convert SVG to canvas for better PDF compatibility
+                  try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+                    
+                    // Set canvas size to maintain aspect ratio (logo.svg is 115x40)
+                    canvas.width = 115;
+                    canvas.height = 40;
+                    
+                    // Create a promise to handle image loading
+                    const imagePromise = new Promise((resolve, reject) => {
+                      img.onload = () => {
+                        try {
+                          // Draw the SVG image to canvas maintaining aspect ratio
+                          ctx?.drawImage(img, 0, 0, 115, 40);
+                          
+                          // Convert canvas to PNG data URL
+                          const pngDataUrl = canvas.toDataURL('image/png');
+                          console.log(`✅ Successfully converted SVG to PNG: ${logoPath}`);
+                          resolve(pngDataUrl);
+                        } catch (error) {
+                          reject(error);
+                        }
+                      };
+                      img.onerror = reject;
+                      
+                      // Set the SVG as image source
+                      const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
+                      img.src = svgDataUrl;
+                    });
+                    
+                    // Wait for image conversion
+                    const pngDataUrl = await imagePromise;
+                    
+                    // Add PNG to PDF with proper dimensions (maintain aspect ratio)
+                    doc.addImage(pngDataUrl as string, 'PNG', 20, 15, 30, 10.4);
+                    console.log(`✅ Successfully added logo to PDF: ${logoPath}`);
+                    return true;
+                    
+                  } catch (canvasError) {
+                    console.log(`❌ Canvas conversion failed:`, canvasError);
+                    
+                    // Fallback: Try direct SVG
+                    try {
+                      const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
+                      doc.addImage(svgDataUrl, 'SVG', 20, 15, 30, 10.4);
+                      console.log(`✅ Successfully added logo as SVG: ${logoPath}`);
+                      return true;
+                    } catch (svgError) {
+                      console.log(`❌ SVG format also failed:`, svgError);
+                    }
+                  }
+                } else {
+                  console.log(`❌ Logo fetch failed: ${response.status} ${response.statusText}`);
+                }
+              } catch (fetchError) {
+                console.log(`❌ Fetch error for ${url}:`, fetchError);
+              }
             }
           } catch (error) {
-            console.log(`Failed to load logo from ${logoPath}:`, error);
-            continue;
+            console.log(`❌ Error loading ${logoPath}:`, error);
           }
         }
+        
+        console.log('❌ All logo loading attempts failed');
         return false;
       };
 
-      // Try to add logo, fallback to styled text if all fail
+      // Try to add logo - NO FALLBACK TEXT, ONLY USE YOUR NEW LOGOS
       const logoAdded = await addCompanyLogo();
       if (!logoAdded) {
-        // Enhanced fallback with better styling
-        console.log("All logo options failed, using enhanced text fallback");
-        
-        // Create a more professional text logo with square aspect ratio
-        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.roundedRect(20, 15, 20, 20, 2, 2, 'F');
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(8);
-        doc.setFont(undefined, 'bold');
-        doc.text("AMASQIS", 22, 23);
-        
-        doc.setFontSize(5);
-        doc.setFont(undefined, 'normal');
-        doc.text("HRMS", 22, 28);
+        console.log("❌ CRITICAL: New logo loading failed!");
+        console.log("🔍 Check if logo files exist: /assets/img/logo.svg, /assets/img/logo-white.svg, /assets/img/logo-small.svg");
+        console.log("📁 Make sure React dev server is running and files are accessible");
+        // NO FALLBACK TEXT - just leave space for logo
+        console.log("⚠️ No logo added to PDF - using empty space instead of fallback text");
+      } else {
+        console.log("✅ Logo successfully added to PDF!");
       }
 
       // Company name and report title
@@ -537,7 +617,7 @@ const LeadsGrid = () => {
       doc.setFontSize(16);
       doc.setFont(undefined, 'bold');
       doc.text("Amasqis HRMS", 60, 20);
-      
+
       doc.setFontSize(14);
       doc.setFont(undefined, 'normal');
       doc.text("Leads Grid Report", 60, 28);
@@ -554,7 +634,7 @@ const LeadsGrid = () => {
       // Summary section with two columns
       if (allLeads.length > 0) {
         const totalValue = allLeads.reduce((sum: number, lead: any) => sum + (lead.value || 0), 0);
-        
+
         // Left column - Financial Summary
         doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
         doc.rect(20, yPosition, 85, 40, 'F');
@@ -605,7 +685,7 @@ const LeadsGrid = () => {
       // Table header with styling (wider table for full stage names)
       doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
       doc.rect(20, yPosition, 180, 12, 'F');
-      
+
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
@@ -620,7 +700,7 @@ const LeadsGrid = () => {
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFont(undefined, 'normal');
       doc.setFontSize(8);
-      
+
       allLeads.forEach((lead: any, index: number) => {
         if (yPosition > 280) {
           doc.addPage();
@@ -702,7 +782,7 @@ const LeadsGrid = () => {
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(leadsDataForExcel);
-      
+
       // Set column widths
       const colWidths = [
         { wch: 20 }, // Lead Name
@@ -759,9 +839,9 @@ const LeadsGrid = () => {
         // For now, we'll just log the move
       });
 
-    return () => {
-      drake.destroy();
-    };
+      return () => {
+        drake.destroy();
+      };
     }
   }, [stages]); // Re-initialize dragula when stages change
 
@@ -806,7 +886,14 @@ const LeadsGrid = () => {
             </p>
             <p className="text-default d-inline-flex align-items-center">
               <i className="ti ti-map-pin-pin text-dark me-1" />
-              {lead.address}
+              {(() => {
+                if (typeof lead.address === 'object' && lead.address !== null) {
+                  const addr = lead.address as any;
+                  const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
+                  return parts.length > 0 ? parts.join(', ') : '-';
+                }
+                return lead.address || '-';
+              })()}
             </p>
           </div>
           <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
@@ -916,8 +1003,8 @@ const LeadsGrid = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -930,8 +1017,8 @@ const LeadsGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -977,8 +1064,8 @@ const LeadsGrid = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -989,8 +1076,8 @@ const LeadsGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1001,8 +1088,8 @@ const LeadsGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1013,8 +1100,8 @@ const LeadsGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1025,8 +1112,8 @@ const LeadsGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1087,25 +1174,25 @@ const LeadsGrid = () => {
                     <div className="text-center">
                       <div className="spinner-border text-primary" role="status">
                         <span className="visually-hidden">Loading...</span>
-                        </div>
+                      </div>
                       <p className="mt-2 text-muted">Loading leads...</p>
-                      </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : error ? (
                   <div className="d-flex align-items-center justify-content-center py-4">
                     <div className="text-center">
                       <div className="text-danger mb-2">
                         <i className="ti ti-alert-circle fs-24"></i>
-                        </div>
+                      </div>
                       <p className="text-muted">{error}</p>
-                      <button 
-                        className="btn btn-primary btn-sm" 
+                      <button
+                        className="btn btn-primary btn-sm"
                         onClick={fetchLeadsGridData}
                       >
                         Retry
                       </button>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : stages['Contacted'].length === 0 ? (
                   <div className="d-flex align-items-center justify-content-center py-4">
                     <div className="text-center">
@@ -1113,8 +1200,8 @@ const LeadsGrid = () => {
                         <i className="ti ti-inbox fs-24"></i>
                       </div>
                       <p className="text-muted">No contacted leads</p>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : (
                   stages['Contacted'].map((lead) => renderLeadCard(lead))
                 )}
@@ -1164,10 +1251,10 @@ const LeadsGrid = () => {
                     <div className="text-center">
                       <div className="text-muted mb-2">
                         <i className="ti ti-inbox fs-24"></i>
-                        </div>
+                      </div>
                       <p className="text-muted">No uncontacted leads</p>
-                      </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : (
                   stages['Not Contacted'].map((lead) => renderLeadCard(lead))
                 )}
@@ -1217,10 +1304,10 @@ const LeadsGrid = () => {
                     <div className="text-center">
                       <div className="text-muted mb-2">
                         <i className="ti ti-inbox fs-24"></i>
-                        </div>
+                      </div>
                       <p className="text-muted">No closed leads</p>
-                      </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : (
                   stages['Closed'].map((lead) => renderLeadCard(lead))
                 )}
@@ -1270,30 +1357,22 @@ const LeadsGrid = () => {
                     <div className="text-center">
                       <div className="text-muted mb-2">
                         <i className="ti ti-inbox fs-24"></i>
-                        </div>
+                      </div>
                       <p className="text-muted">No lost leads</p>
-                      </div>
-                      </div>
+                    </div>
+                  </div>
                 ) : (
                   stages['Lost'].map((lead) => renderLeadCard(lead))
                 )}
-                        </div>
-                      </div>
-                    </div>
+              </div>
+            </div>
+          </div>
           {/* /Leads Kanban */}
-                  </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-                          </Link>
-                        </p>
-                      </div>
-                      </div>
+        </div>
+        <Footer />
+      </div>
       {/* /Page Wrapper */}
-      
+
       {/* Add Lead Modal */}
       {addModalVisible && (
         <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -1301,12 +1380,12 @@ const LeadsGrid = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Add New Lead</h5>
-                <button 
-                  type="button" 
-                  className="btn-close" 
+                <button
+                  type="button"
+                  className="btn-close"
                   onClick={handleCancelAdd}
                 ></button>
-                      </div>
+              </div>
               <div className="modal-body">
                 <div className="row">
                   <div className="col-md-6 mb-3">
@@ -1318,7 +1397,7 @@ const LeadsGrid = () => {
                       onChange={(e) => handleFormChange('name', e.target.value)}
                       required
                     />
-                        </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Company Name *</label>
                     <input
@@ -1328,7 +1407,7 @@ const LeadsGrid = () => {
                       onChange={(e) => handleFormChange('company', e.target.value)}
                       required
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Email</label>
                     <input
@@ -1337,7 +1416,7 @@ const LeadsGrid = () => {
                       value={formData.email}
                       onChange={(e) => handleFormChange('email', e.target.value)}
                     />
-                    </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Phone</label>
                     <input
@@ -1355,7 +1434,7 @@ const LeadsGrid = () => {
                       value={formData.value}
                       onChange={(e) => handleFormChange('value', parseInt(e.target.value) || 0)}
                     />
-                </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Stage</label>
                     <select
@@ -1369,7 +1448,7 @@ const LeadsGrid = () => {
                       <option value="Closed">Closed</option>
                       <option value="Lost">Lost</option>
                     </select>
-                        </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Source</label>
                     <input
@@ -1378,7 +1457,7 @@ const LeadsGrid = () => {
                       value={formData.source}
                       onChange={(e) => handleFormChange('source', e.target.value)}
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Country</label>
                     <input
@@ -1387,7 +1466,7 @@ const LeadsGrid = () => {
                       value={formData.country}
                       onChange={(e) => handleFormChange('country', e.target.value)}
                     />
-                      </div>
+                  </div>
                   <div className="col-md-12 mb-3">
                     <label className="form-label">Address</label>
                     <textarea
@@ -1396,7 +1475,7 @@ const LeadsGrid = () => {
                       value={formData.address}
                       onChange={(e) => handleFormChange('address', e.target.value)}
                     />
-                        </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Owner</label>
                     <input
@@ -1405,7 +1484,7 @@ const LeadsGrid = () => {
                       value={formData.owner}
                       onChange={(e) => handleFormChange('owner', e.target.value)}
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Priority</label>
                     <select
@@ -1417,20 +1496,20 @@ const LeadsGrid = () => {
                       <option value="Medium">Medium</option>
                       <option value="High">High</option>
                     </select>
-                    </div>
                   </div>
                 </div>
+              </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={handleCancelAdd}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={handleAddLead}
                   disabled={submitLoading || !formData.name || !formData.company}
                 >
@@ -1443,10 +1522,10 @@ const LeadsGrid = () => {
                     'Create Lead'
                   )}
                 </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Edit Lead Modal */}
@@ -1456,12 +1535,12 @@ const LeadsGrid = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Edit Lead</h5>
-                <button 
-                  type="button" 
-                  className="btn-close" 
+                <button
+                  type="button"
+                  className="btn-close"
                   onClick={handleCancelEdit}
                 ></button>
-                </div>
+              </div>
               <div className="modal-body">
                 <div className="row">
                   <div className="col-md-6 mb-3">
@@ -1473,7 +1552,7 @@ const LeadsGrid = () => {
                       onChange={(e) => handleFormChange('name', e.target.value)}
                       required
                     />
-                        </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Company Name *</label>
                     <input
@@ -1483,7 +1562,7 @@ const LeadsGrid = () => {
                       onChange={(e) => handleFormChange('company', e.target.value)}
                       required
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Email</label>
                     <input
@@ -1492,7 +1571,7 @@ const LeadsGrid = () => {
                       value={formData.email}
                       onChange={(e) => handleFormChange('email', e.target.value)}
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Phone</label>
                     <input
@@ -1524,7 +1603,7 @@ const LeadsGrid = () => {
                       <option value="Closed">Closed</option>
                       <option value="Lost">Lost</option>
                     </select>
-                        </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Source</label>
                     <input
@@ -1533,7 +1612,7 @@ const LeadsGrid = () => {
                       value={formData.source}
                       onChange={(e) => handleFormChange('source', e.target.value)}
                     />
-                      </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Country</label>
                     <input
@@ -1542,7 +1621,7 @@ const LeadsGrid = () => {
                       value={formData.country}
                       onChange={(e) => handleFormChange('country', e.target.value)}
                     />
-                    </div>
+                  </div>
                   <div className="col-md-12 mb-3">
                     <label className="form-label">Address</label>
                     <textarea
@@ -1560,7 +1639,7 @@ const LeadsGrid = () => {
                       value={formData.owner}
                       onChange={(e) => handleFormChange('owner', e.target.value)}
                     />
-                </div>
+                  </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Priority</label>
                     <select
@@ -1572,20 +1651,20 @@ const LeadsGrid = () => {
                       <option value="Medium">Medium</option>
                       <option value="High">High</option>
                     </select>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={handleCancelEdit}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={handleUpdateLead}
                   disabled={submitLoading || !formData.name || !formData.company}
                 >
@@ -1598,12 +1677,12 @@ const LeadsGrid = () => {
                     'Update Lead'
                   )}
                 </button>
-        </div>
-        </div>
-      </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-      
+
       <CrmsModal />
     </>
   );

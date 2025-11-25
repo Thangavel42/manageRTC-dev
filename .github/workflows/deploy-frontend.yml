@@ -1,0 +1,65 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "react/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: react
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Write .env.production
+        run: |
+          cat > .env.production << 'EOF'
+          CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY_PUBLIC }}
+          REACT_APP_BACKEND_URL=https://api.devmanagertc.amasqis.ai
+          EOF
+
+      - name: Install & build
+        env:
+          CI: false
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload build to VPS (temp)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "react/build/**"
+          target: "/home/${{ secrets.VPS_USER }}/frontend_release/"
+          strip_components: 1
+
+      - name: Activate on VPS (/srv/devmanagertc/frontend)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            mkdir -p /srv/devmanagertc/frontend
+            rm -rf /srv/devmanagertc/frontend/*
+            cp -r ~/frontend_release/build/* /srv/devmanagertc/frontend/
+            find /srv/devmanagertc/frontend -type f -name "*.map" -delete
+            sudo systemctl reload nginx
+

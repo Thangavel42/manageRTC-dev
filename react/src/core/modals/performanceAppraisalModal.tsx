@@ -1,8 +1,115 @@
-import React from "react";
+import React, { useState } from "react";
 import CommonSelect from "../common/commonSelect";
 import { DatePicker } from "antd";
+import performanceAppraisalService from "../services/performance/performanceAppraisal.service";
 
-const PerformanceAppraisalModal = () => {
+interface PerformanceAppraisalModalProps {
+  onSuccess?: () => void;
+  editData?: any; // The item data to be edited
+  isEdit?: boolean;
+  modalId?: string; // Add this prop
+}
+
+const PerformanceAppraisalModal: React.FC<PerformanceAppraisalModalProps> = ({
+  onSuccess,
+  editData,
+  isEdit,
+  modalId
+}) => {
+  const [formData, setFormData] = useState({
+    employeeId: "",
+    name: "",
+    image: "",
+    designation: "",
+    department: "",
+    appraisalDate: null as any,
+    status: "Active"
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || formData.name === "Select") {
+      setError("Employee is required");
+      return;
+    }
+    if (!formData.designation.trim()) {
+      setError("Designation is required");
+      return;
+    }
+    if (!formData.department.trim()) {
+      setError("Department is required");
+      return;
+    }
+    if (!formData.appraisalDate) {
+      setError("Appraisal date is required");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const submitData = {
+        ...formData,
+        appraisalDate: formData.appraisalDate?.format('YYYY-MM-DD')
+      };
+      
+      const response = await performanceAppraisalService.createPerformanceAppraisal(submitData);
+      
+      console.log('Performance Appraisal API Response:', response);
+      
+      if (response && (response.done || response.success)) {
+        // Reset form
+        setFormData({
+          employeeId: "",
+          name: "",
+          image: "",
+          designation: "",
+          department: "",
+          appraisalDate: null,
+          status: "Active"
+        });
+        
+        // Close modal
+        const modal = document.getElementById('add_performance_appraisal');
+        if (modal) {
+          const bootstrap = (window as any).bootstrap;
+          if (bootstrap && bootstrap.Modal) {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+              modalInstance.hide();
+            }
+          }
+        }
+        
+        // Refresh data
+        if (onSuccess) {
+          onSuccess();
+        }
+        
+        // Show success message
+        alert('Performance appraisal created successfully!');
+      } else {
+        setError(response.error || 'Failed to create performance appraisal');
+      }
+    } catch (err) {
+      setError('Failed to create performance appraisal');
+      console.error('Error creating performance appraisal:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
   const employee = [
     { value: "Select", label: "Select" },
     { value: "Anthony Lewis", label: "Anthony Lewis" },
@@ -43,22 +150,31 @@ const PerformanceAppraisalModal = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body pb-0">
+                {error && (
+                  <div className="alert alert-danger" role="alert">
+                    {error}
+                  </div>
+                )}
                 <div className="row">
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Employee</label>
+                      <label className="form-label">Employee *</label>
                       <CommonSelect
                         className="select"
                         options={employee}
-                        defaultValue={employee[0]}
+                        defaultValue={employee.find(emp => emp.value === formData.name) || employee[0]}
+                        onChange={(option) => {
+                          handleInputChange('name', option?.value || '');
+                          handleInputChange('employeeId', option?.value || ''); // Using name as employeeId for now
+                        }}
                       />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Appraisal Date</label>
+                      <label className="form-label">Appraisal Date *</label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
                           className="form-control datetimepicker"
@@ -68,11 +184,37 @@ const PerformanceAppraisalModal = () => {
                           }}
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
+                          value={formData.appraisalDate}
+                          onChange={(date) => handleInputChange('appraisalDate', date)}
                         />
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-7" />
                         </span>
                       </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Designation *</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.designation}
+                        onChange={(e) => handleInputChange('designation', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Department *</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.department}
+                        onChange={(e) => handleInputChange('department', e.target.value)}
+                        required
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
@@ -332,7 +474,8 @@ const PerformanceAppraisalModal = () => {
                       <CommonSelect
                         className="select"
                         options={status}
-                        defaultValue={setValue[0]}
+                        defaultValue={status.find(s => s.value === formData.status) || status[1]}
+                        onChange={(option) => handleInputChange('status', option?.value || '')}
                       />
                     </div>
                   </div>
@@ -343,15 +486,23 @@ const PerformanceAppraisalModal = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  data-bs-dismiss="modal"
+                  type="submit"
                   className="btn btn-primary"
+                  disabled={loading}
                 >
-                  Add Appraisal
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Creating...
+                    </>
+                  ) : (
+                    'Add Appraisal'
+                  )}
                 </button>
               </div>
             </form>

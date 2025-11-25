@@ -4,21 +4,22 @@ const initialState = {
   dataLayout: localStorage.getItem("dataLayout") || "default",
   dataWidth: localStorage.getItem("dataWidth") || "fluid",
   dataCard: localStorage.getItem("dataCard") || "bordered",
-  dataSidebar: localStorage.getItem("dataSidebar") || "light",
-  dataSidebarAll: localStorage.getItem("dataSidebarAll") || "",
-  dataTopbarAll: localStorage.getItem("dataTopbarAll") || "",
+  dataSidebar: localStorage.getItem("dataSidebar") || "all",
+  dataSidebarAll: localStorage.getItem("dataSidebarAll") || "57, 22, 148",
+  dataTopBar: localStorage.getItem("dataTopBar") || "all",
+  dataTopbarAll: localStorage.getItem("dataTopbarAll") || "123, 47, 247",
+  dataTopBarColor: localStorage.getItem("dataTopBarColor") || "white", 
   dataTopBarColorAll: localStorage.getItem("dataTopBarColorAll") || "",
-  dataColorAll: localStorage.getItem("dataColorAll") || "",
+  dataColor: localStorage.getItem("dataColor") || "all",
+  dataColorAll: localStorage.getItem("dataColorAll") || "242, 7, 231",
   dataTheme: localStorage.getItem("dataTheme") || "light",
-  dataTopBar: localStorage.getItem("dataTopBar") || "white",
-  dataTopBarColor: localStorage.getItem("dataTopBarolor") || "white",
   dataSidebarBg: localStorage.getItem("dataSidebarBg") || "",
   dataTopbarBg: localStorage.getItem("dataTopbarBg") || "",
-  dataColor: localStorage.getItem("dataColor") || "primary",
   dataLoader: localStorage.getItem("dataLoader") || "enable",
   isRtl: localStorage.getItem("rtl") || false,
   headerCollapse: false,
 };
+
 
 const themeSettingSlice = createSlice({
   name: "themeSetting",
@@ -105,31 +106,42 @@ const themeSettingSlice = createSlice({
       document.body.setAttribute("class", action.payload);
     },
     resetAllMode: (state: any) => {
-      state.dataLayout = "default";
-      state.dataWidth = "fluid";
-      state.dataCard = "bordered";
-      state.dataSidebar = "light";
-      state.dataTheme = "light";
-      state.dataTopBar = "white";
-      state.dataTopBarColor = "white";
-      state.dataSidebarBg = "";
-      state.dataTopbarBg = "";
-      state.dataColor = "primary";
-      state.dataLoader = "enable";
-      state.isRtl=""
-      localStorage.setItem("dataLayout", "default");
-      localStorage.setItem("dataWidth", "fluid");
-      localStorage.setItem("dataCard", "bordered");
-      localStorage.setItem("dataSidebar", "light");
-      localStorage.setItem("dataTheme", "light");
-      localStorage.setItem("dataTopBar", "white");
-      localStorage.setItem("dataTopBarColor", "white");
-      localStorage.setItem("dataSidebarBg", "");
-      localStorage.setItem("dataTopbarBg", "");
-      localStorage.setItem("dataColor", "primary");
-      localStorage.setItem("dataLoader", "enable");
-      localStorage.setItem("rtl", "");
-    },
+  state.dataLayout = "default";
+  state.dataWidth = "fluid";
+  state.dataCard = "bordered";
+  state.dataSidebar = "all";
+  state.dataSidebarAll = "57, 22, 148";
+  state.dataTopBar = "all";
+  state.dataTopbarAll = "123, 47, 247";
+  state.dataTopBarColor = "white";
+  state.dataTopBarColorAll = "";
+  state.dataColor = "all";
+  state.dataColorAll = "242, 7, 231";
+  state.dataTheme = "light";
+  state.dataSidebarBg = "";
+  state.dataTopbarBg = "";
+  state.dataLoader = "enable";
+  state.isRtl = "";
+  state.headerCollapse = false;
+
+  localStorage.setItem("dataLayout", "default");
+  localStorage.setItem("dataWidth", "fluid");
+  localStorage.setItem("dataCard", "bordered");
+  localStorage.setItem("dataSidebar", "all");
+  localStorage.setItem("dataSidebarAll", "57, 22, 148");
+  localStorage.setItem("dataTopBar", "all");
+  localStorage.setItem("dataTopbarAll", "123, 47, 247");
+  localStorage.setItem("dataTopBarColor", "white");
+  localStorage.setItem("dataTopBarColorAll", "");
+  localStorage.setItem("dataColor", "all");
+  localStorage.setItem("dataColorAll", "242, 7, 231");
+  localStorage.setItem("dataTheme", "light");
+  localStorage.setItem("dataSidebarBg", "");
+  localStorage.setItem("dataTopbarBg", "");
+  localStorage.setItem("dataLoader", "enable");
+  localStorage.setItem("rtl", "");
+},
+
   },
 });
 

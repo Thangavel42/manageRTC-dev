@@ -3,8 +3,12 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import CommonSelect from '../common/commonSelect';
 import CommonTagsInput from '../common/Taginput';
+import { useDeals } from '../../hooks/useDeals';
+import { message } from 'antd';
 
 const AddDeals = () => {
+  const { createDeal } = useDeals();
+  const [loading, setLoading] = useState(false);
 
   const getModalContainer = () => {
     const modalElement = document.getElementById('modal-datepicker');
@@ -58,10 +62,122 @@ const AddDeals = () => {
     { value: "Low", label: "Low" },
     { value: "Medium", label: "Medium" },
   ]
-  const [tags, setTags] = useState<string[]>(["Vaughan Lewis"]);
-  const [tags2, setTags2] = useState<string[]>(["Office Management App", "Clinic Management", "Educational Platform"]);
-  const [tags3, setTags3] = useState<string[]>(["Vaughan Lewis"]);
-  const [tags4, setTags4] = useState<string[]>(["Collab"]);
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    initials: '',
+    stage: 'New',
+    status: 'Open',
+    dealValue: '',
+    probability: '',
+    expectedClosedDate: null as any,
+    owner: { name: '', avatar: '' },
+    contact: { email: '', phone: '' },
+    address: '',
+    tags: [],
+    pipeline: '',
+    currency: 'USD',
+    dueDate: null as any,
+    followupDate: null as any,
+    source: '',
+    priority: 'Medium',
+    description: ''
+  });
+
+  const [tags, setTags] = useState<string[]>([]);
+  const [contacts, setContacts] = useState<string[]>([]);
+  const [assignees, setAssignees] = useState<string[]>([]);
+  const [projects, setProjects] = useState<string[]>([]);
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // Prepare deal data according to new schema
+      const dealData = {
+        name: formData.name,
+        initials: formData.initials,
+        stage: formData.stage as "New" | "Prospect" | "Proposal" | "Won" | "Lost",
+        status: formData.status as "Won" | "Lost" | "Open",
+        dealValue: parseFloat(formData.dealValue) || 0,
+        probability: parseInt(formData.probability) || 0,
+        expectedClosedDate: formData.expectedClosedDate ? formData.expectedClosedDate.format('YYYY-MM-DD') : undefined,
+        owner: {
+          name: formData.owner.name,
+          avatar: formData.owner.avatar
+        },
+        contact: {
+          email: formData.contact.email,
+          phone: formData.contact.phone
+        },
+        address: formData.address,
+        tags: tags,
+        // Legacy fields for backward compatibility
+        pipeline: formData.pipeline,
+        currency: formData.currency,
+        dueDate: formData.dueDate ? formData.dueDate.format('YYYY-MM-DD') : undefined,
+        followupDate: formData.followupDate ? formData.followupDate.format('YYYY-MM-DD') : undefined,
+        source: formData.source,
+        priority: formData.priority as "High" | "Medium" | "Low",
+        description: formData.description,
+        contacts: contacts,
+        assignees: assignees,
+        projects: projects
+      };
+
+      const success = await createDeal(dealData);
+      if (success) {
+        // Reset form
+        setFormData({
+          name: '',
+          initials: '',
+          stage: 'New',
+          status: 'Open',
+          dealValue: '',
+          probability: '',
+          expectedClosedDate: null as any,
+          owner: { name: '', avatar: '' },
+          contact: { email: '', phone: '' },
+          address: '',
+          tags: [],
+          pipeline: '',
+          currency: 'USD',
+          dueDate: null as any,
+          followupDate: null as any,
+          source: '',
+          priority: 'Medium',
+          description: ''
+        });
+        setTags([]);
+        setContacts([]);
+        setAssignees([]);
+        setProjects([]);
+        
+        // Close modal
+        const modal = document.getElementById('add_deals');
+        if (modal) {
+          const bootstrap = (window as any).bootstrap;
+          const modalInstance = bootstrap.Modal.getInstance(modal);
+          if (modalInstance) {
+            modalInstance.hide();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error creating deal:', error);
+      message.error('Failed to create deal');
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <>
       {/* Add Deals */}
@@ -79,41 +195,54 @@ const AddDeals = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body pb-0">
                 <div className="row">
-                  <div className="col-md-12">
+                  <div className="col-md-8">
                     <div className="mb-3">
                       <label className="form-label">
                         Deal Name <span className="text-danger"> *</span>
                       </label>
-                      <CommonSelect
-                        className='select'
-                        options={dealsName}
-                        defaultValue={dealsName[0]}
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Initials
+                      </label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.initials}
+                        onChange={(e) => handleInputChange('initials', e.target.value)}
+                        placeholder="e.g., WR, CB"
+                        maxLength={10}
                       />
                     </div>
                   </div>
                   <div className="col-md-6">
-                    <div className="input-block mb-3">
-                      <div className="d-flex justify-content-between align-items-center">
+                    <div className="mb-3">
                         <label className="form-label">
-                          Pipeline <span className="text-danger"> *</span>
+                        Stage <span className="text-danger"> *</span>
                         </label>
-                        <Link
-                          to="#"
-                          className="add-new text-primary"
-                          data-bs-toggle="modal"
-                          data-bs-target="#add_pipeline"
-                        >
-                          <i className="ti ti-plus text-primary me-1" />
-                          Add New
-                        </Link>
-                      </div>
                       <CommonSelect
                         className='select'
-                        options={pipelineChoose}
-                        defaultValue={pipelineChoose[0]}
+                        options={[
+                          { value: "New", label: "New" },
+                          { value: "Prospect", label: "Prospect" },
+                          { value: "Proposal", label: "Proposal" },
+                          { value: "Won", label: "Won" },
+                          { value: "Lost", label: "Lost" }
+                        ]}
+                        defaultValue={{ value: formData.stage, label: formData.stage }}
+                        onChange={(option: any) => handleInputChange('stage', option.value)}
                       />
                     </div>
                   </div>
@@ -125,7 +254,8 @@ const AddDeals = () => {
                       <CommonSelect
                         className='select'
                         options={statusChoose}
-                        defaultValue={statusChoose[0]}
+                        defaultValue={{ value: formData.status, label: formData.status }}
+                        onChange={(option: any) => handleInputChange('status', option.value)}
                       />
                     </div>
                   </div>
@@ -134,51 +264,101 @@ const AddDeals = () => {
                       <label className="form-label">
                         Deal Value <span className="text-danger"> *</span>
                       </label>
-                      <input type="text" className="form-control" />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Currency<span className="text-danger"> *</span>
-                      </label>
-                      <CommonSelect
-                        className='select'
-                        options={currency}
-                        defaultValue={currency[0]}
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={formData.dealValue}
+                        onChange={(e) => handleInputChange('dealValue', e.target.value)}
+                        required
+                        min="0"
+                        step="0.01"
                       />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">
-                        Period <span className="text-danger"> *</span>
+                        Probability <span className="text-danger"> *</span>
                       </label>
-                      <CommonSelect
-                        className='select'
-                        options={period}
-                        defaultValue={period[0]}
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={formData.probability}
+                        onChange={(e) => handleInputChange('probability', e.target.value)}
+                        required
+                        min="0"
+                        max="100"
+                        placeholder="0-100"
                       />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">
-                        Period Value <span className="text-danger"> *</span>
+                        Owner Name <span className="text-danger"> *</span>
                       </label>
-                      <input type="text" className="form-control" />
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.owner.name}
+                        onChange={(e) => handleInputChange('owner', { ...formData.owner, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Owner Avatar URL
+                      </label>
+                      <input 
+                        type="url" 
+                        className="form-control" 
+                        value={formData.owner.avatar}
+                        onChange={(e) => handleInputChange('owner', { ...formData.owner, avatar: e.target.value })}
+                        placeholder="https://example.com/avatar.jpg"
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Contact Email
+                      </label>
+                      <input 
+                        type="email" 
+                        className="form-control" 
+                        value={formData.contact.email}
+                        onChange={(e) => handleInputChange('contact', { ...formData.contact, email: e.target.value })}
+                        placeholder="contact@example.com"
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Contact Phone
+                      </label>
+                      <input 
+                        type="tel" 
+                        className="form-control" 
+                        value={formData.contact.phone}
+                        onChange={(e) => handleInputChange('contact', { ...formData.contact, phone: e.target.value })}
+                        placeholder="+1-555-0123"
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
                       <label className="form-label">
-                        Contact <span className="text-danger"> *</span>
+                        Address
                       </label>
-                      <CommonTagsInput
-                        value={tags}
-                        onChange={setTags}
-                        placeholder="Add new"
-                        className="custom-input-class" // Optional custom class
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={formData.address}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        placeholder="e.g., New York, United States"
                       />
                     </div>
                   </div>
@@ -188,8 +368,8 @@ const AddDeals = () => {
                         Project<span className="text-danger"> *</span>
                       </label>
                       <CommonTagsInput
-                        value={tags2}
-                        onChange={setTags2}
+                        value={projects}
+                        onChange={setProjects}
                         placeholder="Add new"
                         className="custom-input-class" // Optional custom class
                       />
@@ -215,7 +395,7 @@ const AddDeals = () => {
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">
-                        Expected Closing Date{" "}
+                        Expected Closed Date{" "}
                         <span className="text-danger"> *</span>{" "}
                       </label>
                       <div className="input-icon-end position-relative">
@@ -227,6 +407,8 @@ const AddDeals = () => {
                           }}
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
+                          value={formData.expectedClosedDate}
+                          onChange={(date) => handleInputChange('expectedClosedDate', date)}
                         />
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-7" />
@@ -240,8 +422,8 @@ const AddDeals = () => {
                         Assignee <span className="text-danger"> *</span>
                       </label>
                       <CommonTagsInput
-                        value={tags3}
-                        onChange={setTags3}
+                        value={assignees}
+                        onChange={setAssignees}
                         placeholder="Add New"
                         className="custom-input-class" // Optional custom class
                       />
@@ -250,11 +432,11 @@ const AddDeals = () => {
                   <div className="col-md-6">
                     <div className="mb-3 ">
                       <label className="form-label">
-                        Tags <span className="text-danger"> *</span>
+                        Tags
                       </label>
                       <CommonTagsInput
-                        value={tags4}
-                        onChange={setTags4}
+                        value={tags}
+                        onChange={setTags}
                         placeholder="Add New"
                         className="custom-input-class" // Optional custom class
                       />
@@ -323,8 +505,12 @@ const AddDeals = () => {
                 >
                   Cancel
                 </button>
-                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
-                  Add Deal
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Adding...' : 'Add Deal'}
                 </button>
               </div>
             </form>

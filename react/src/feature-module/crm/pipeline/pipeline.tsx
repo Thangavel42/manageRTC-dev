@@ -12,6 +12,7 @@ import EditPipeline from "../../../core/modals/edit_pipeline";
 import DeletePipeline from "../../../core/modals/delete_pipeline";
 import { message } from "antd";
 import AddPipeline from "../../../core/modals/add_pipeline";
+import Footer from "../../../core/common/footer";
 
 const DEAL_VALUE_RANGES = [
   { label: "$0 - $1,000", value: [0, 1000] },
@@ -728,15 +729,7 @@ const Pipeline = () => {
           </div>
           {/* /Leads List */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       <CrmsModal />

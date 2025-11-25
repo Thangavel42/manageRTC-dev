@@ -7,6 +7,8 @@ import { countries_data } from "../../../core/data/json/countries_data";
 import { TableData } from "../../../core/data/interface";
 import { all_routes } from "../../router/all_routes";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../core/common/footer";
+
 
 const Countries = () => {
   const data = countries_data;
@@ -155,15 +157,7 @@ const Countries = () => {
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 

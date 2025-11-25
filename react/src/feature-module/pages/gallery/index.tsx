@@ -5,6 +5,7 @@ import { all_routes } from "../../router/all_routes";
 import "yet-another-react-lightbox/styles.css";
 import Lightbox from "yet-another-react-lightbox";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../core/common/footer";
 
 const Gallery = () => {
   const [open1, setOpen1] = React.useState(false);
@@ -306,15 +307,7 @@ const Gallery = () => {
           </div>
           {/* /Gallery */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
     </>

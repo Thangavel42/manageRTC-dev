@@ -6,6 +6,7 @@ import { all_routes } from "../../router/all_routes";
 import { SignIn, useUser } from "@clerk/clerk-react";
 import "./login.css";
 type PasswordField = "password";
+const currentYear = new Date().getFullYear();
 
 const Login = () => {
   const routes = all_routes;
@@ -81,7 +82,7 @@ const Login = () => {
                     </div>
                     <div className="mt-5 pb-4 text-center">
                       <p className="mb-0 text-gray-9">
-                        Copyright © 2025 - Amasqis
+                        {currentYear} © <a href="https://amasqis.ai/" target="_blank">amasQIS.ai</a>
                       </p>
                     </div>
                   </div>

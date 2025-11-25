@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import Footer from "../../../core/common/footer";
 
 const PaySlip = () => {
   return (
@@ -216,15 +217,7 @@ const PaySlip = () => {
           {/* /Invoices */}
         </div>
         {/* Footer */}
-        <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
         {/* /Footer */}
       </div>
       {/* /Page Wrapper */}

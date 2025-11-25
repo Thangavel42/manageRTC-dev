@@ -10,9 +10,18 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 import socialFeedRoutes from "./routes/socialfeed.routes.js";
+import dealRoutes from "./routes/deal.routes.js";
 import companiesRoutes from "./routes/companies.routes.js";
 import contactRoutes from "./routes/contacts.routes.js";
+import goalTypeRoutes from "./routes/performance/goalType.routes.js";
+import goalTrackingRoutes from "./routes/performance/goalTracking.routes.js";
+import ticketRoutes from "./routes/tickets.routes.js";
 
+
+
+import performanceIndicatorRoutes from "./routes/performance/performanceIndicator.routes.js";
+import performanceAppraisalRoutes from "./routes/performance/performanceAppraisal.routes.js";
+import performanceReviewRoutes from "./routes/performance/performanceReview.routes.js";
 config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,17 +34,22 @@ const httpServer = createServer(app);
 app.use(cors());
 app.use(express.json());
 
+console.log("[Deployment]: TEST TEST");
+
 // Serve static files from the temp directory
 app.use(
   "/temp",
   express.static(path.join(__dirname, "temp"), {
     setHeaders: (res, path) => {
       // Set appropriate headers based on file type
-      if (path.endsWith('.pdf')) {
+      if (path.endsWith(".pdf")) {
         res.set("Content-Type", "application/pdf");
         res.set("Content-Disposition", "attachment");
-      } else if (path.endsWith('.xlsx')) {
-        res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      } else if (path.endsWith(".xlsx")) {
+        res.set(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
         res.set("Content-Disposition", "attachment");
       }
       // Security headers
@@ -60,9 +74,18 @@ const initializeServer = async () => {
 
     // Routes
     app.use("/api/socialfeed", socialFeedRoutes);
+    app.use("/api/deals", dealRoutes);
     app.use("/api/companies", companiesRoutes);
-
     app.use("/api/contacts", contactRoutes);
+    app.use("/api/performance/goal-types", goalTypeRoutes);
+    app.use("/api/performance/goal-trackings", goalTrackingRoutes);
+    app.use("/api/tickets", ticketRoutes);
+
+
+
+    app.use("/api/performance/indicators", performanceIndicatorRoutes);
+    app.use("/api/performance/appraisals", performanceAppraisalRoutes);
+    app.use("/api/performance/reviews", performanceReviewRoutes);
 
     app.get("/", (req, res) => {
       res.send("API is running");
@@ -106,7 +129,9 @@ const initializeServer = async () => {
     const PORT = process.env.PORT || 5000;
     httpServer.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log("[Deployment]: Praveen Push");
+      // console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`Environment: Development`);
     });
   } catch (error) {
     console.error("Failed to initialize server:", error);

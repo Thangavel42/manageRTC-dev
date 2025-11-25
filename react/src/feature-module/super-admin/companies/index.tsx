@@ -17,6 +17,8 @@ import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import { ToastContainer, toast } from "react-toastify";
 import moment from "moment";
+import Footer from "../../../core/common/footer";
+
 type PasswordField = "password" | "confirmPassword";
 
 const Companies = () => {
@@ -1295,7 +1297,14 @@ const Companies = () => {
                         <p className="fs-12 fw-medium mb-1 text-truncate">
                           Company Location
                         </p>
-                        <h4>{company_details.location || <Skeleton />}</h4>
+                        <h4>{(() => {
+                          if (typeof company_details.location === 'object' && company_details.location !== null) {
+                            const loc = company_details.location as any;
+                            const parts = [loc?.city, loc?.state, loc?.country].filter(Boolean);
+                            return parts.length > 0 ? parts.join(', ') : '-';
+                          }
+                          return company_details.location || <Skeleton />;
+                        })()}</h4>
                       </div>
                     </div>
                   </div>
@@ -1547,15 +1556,7 @@ const Companies = () => {
               </div>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
         {/* /Page Wrapper */}
         {/* Add Company */}
@@ -2565,9 +2566,16 @@ const Companies = () => {
                           <div className="col-md-4">
                             <div className="mb-3">
                               <p className="fs-12 mb-0">Address</p>
-                              <p className="text-gray-9">
-                                {companydetail.address}
-                              </p>
+                                <p className="text-gray-9">
+                                 {(() => {
+                                   if (typeof companydetail.address === 'object' && companydetail.address !== null) {
+                                     const addr = companydetail.address as any;
+                                     const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
+                                     return parts.length > 0 ? parts.join(', ') : '-';
+                                   }
+                                   return companydetail.address || '-';
+                                 })()}
+                                </p>
                             </div>
                           </div>
                         </div>

@@ -10,6 +10,7 @@ import { DatePicker, TimePicker } from "antd";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 import { timesheet_details } from "../../../core/data/json/timesheet_details";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../core/common/footer";
 
 const TimeSheet = () => {
   const data = timesheet_details;
@@ -265,15 +266,7 @@ const TimeSheet = () => {
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       {/* Add Timesheet */}

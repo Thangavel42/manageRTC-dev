@@ -18,6 +18,8 @@ import { Socket } from "socket.io-client";
 import dayjs from 'dayjs';
 import Select from "react-select";
 import { getStatusClassNames } from "antd/es/_util/statusUtils";
+import Footer from "../../core/common/footer";
+
 
 interface Note {
   _id: string;
@@ -1169,15 +1171,7 @@ const Notes = () => {
               </div>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-            <p className="mb-0">2014 - 2025 © SmartHR.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
         {/* /Page wrapper */}
         {/* Add Note */}

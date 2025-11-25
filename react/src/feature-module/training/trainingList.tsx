@@ -1,29 +1,521 @@
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import { trainingListData } from "../../core/data/json/trainingListData";
 import Table from "../../core/common/dataTable/index";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import TrainingListModal from "../../core/modals/trainingListModal";
+import CommonSelect from '../../core/common/commonSelect';
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Modal, Select, Input } from "antd";
+import dayjs from "dayjs";
+import { DatePicker } from "antd";
+import { format, parse } from "date-fns";
+
+type TrainingRow = {
+  trainingType: string;
+  trainer: string;
+  employee: string [];
+  startDate: string;
+  endDate: string;
+  timeDuration: string;
+  desc: string;
+  cost: string;
+  status: string;
+  trainingId: string;
+};
+
+type TrainingTypesRow = {
+  trainingType: string;
+  desc: string;
+  status: string;
+  typeId: string;
+};
+
+type TrainersRow = {
+  trainer: string;
+  phone: string;
+  email: string;
+  desc: string;
+  status: string;
+  trainerId: string;
+};
+
+type EmployeeRow = {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+};
+
+type Stats = {
+  totalTrainingList: string;
+};
+
+type EmpLite = { 
+  employeeId: string; 
+  firstName: string; 
+  lastName: string; 
+  trainer?: string 
+};
 
 const TrainingList = () => {
+
+    const socket = useSocket() as Socket | null;
+    const [rowsType, setRowsType] = useState<TrainingTypesRow[]>([]);
+    const [rows, setRows] = useState<TrainingRow[]>([]);
+    const [rowsTrainer, setRowsTrainer] = useState<TrainersRow[]>([]);
+    const [rowsEmployee, setRowsEmployee] = useState<EmployeeRow[]>([]);
+    const [stats, setStats] = useState<Stats>({ totalTrainingList: "0",});
+    const [loading, setLoading] = useState<boolean>(true);
+    const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+    const [filterType, setFilterType] = useState<string>("alltime");
+    const [editing, setEditing] = useState<any>(null);
+    const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
+    const [empPopupOpen, setEmpPopupOpen] = useState(false);
+    const [empPopupTrainer, setEmpPopupTrainer] = useState<string>("");
+    const [empPopupList, setEmpPopupList] = useState<EmpLite[]>([]);
+    const [empPopupQuery, setEmpPopupQuery] = useState("");
+    
+    const [editForm, setEditForm] = useState({
+      trainingType: "",
+      trainer: "",
+      employee: [],
+      startDate: "",
+      endDate: "",
+      desc: "",
+      cost: "",
+      status: "Active",
+      trainingId: "",
+    });
+
+    const openEditModal = (row: any) => {
+      setEditForm({
+          trainingType: row.trainingType || "",
+          trainer: row.trainer || "",
+          employee: row.employee || [],
+          startDate: row.startDate || "",
+          endDate: row.endDate || "",
+          desc: row.desc || "",
+          cost: row.cost || "",
+          status: row.status || "Active",
+          trainingId: row.trainingId,
+      });
+    };
+
+    const getModalContainer = () => {
+      const modalElement = document.getElementById("modal-datepicker");
+      return modalElement ? modalElement : document.body;
+    };
+
+    const [addForm, setAddForm] = useState({
+      trainingType: "",
+      trainer: "",
+      employee: [],
+      startDate: "",
+      endDate: "",
+      desc: "",
+      cost: "",
+      status: "Active",
+    });
+
+    const confirmDelete = (onConfirm: () => void) => {
+      Modal.confirm({
+        title: null,
+        icon: null,
+        closable: true,
+        centered: true,
+        okText: "Yes, Delete",
+        cancelText: "Cancel",
+        okButtonProps: { style: { background: "#ff4d4f", borderColor: "#ff4d4f" } },
+        cancelButtonProps: { style: { background: "#f5f5f5" } },
+        content: (
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                margin: "0 auto 12px",
+                borderRadius: 12,
+                background: "#ffecec",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <a aria-label="Delete">
+                <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
+              </a>
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8 }}>
+              Confirm Delete
+            </div>
+            <div style={{ color: "#6b7280" }}>
+              You want to delete all the marked items, this can’t be undone once you delete.
+            </div>
+          </div>
+        ),
+        onOk: async () => {
+          await onConfirm();
+          socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
+        },
+      });
+    };
+
+    const onListResponse = useCallback((res: any) => {
+      if (res?.done) {
+        setRows(res.data || []);
+      } else {
+        setRows([]);
+      }
+      setLoading(false);
+    }, []);
+
+  const onTypeListResponse = useCallback((res: any) => {
+    if (res?.done) {
+      setRowsType(res.data || []);
+    } else {
+      setRowsType([]);
+      // optionally toast error
+      // toast.error(res?.message || "Failed to fetch trainingTypess");
+    }
+    setLoading(false);
+  }, []);
+
+    const onTrainersListResponse = useCallback((res: any) => {
+      if (res?.done) {
+        setRowsTrainer(res.data || []);
+      } else {
+        setRowsTrainer([]);
+      }
+      setLoading(false);
+    }, []);
+
+    const onEmployeeListResponse = useCallback ((res:any) => {
+      if (res?.done) {
+        setRowsEmployee(res.data || []);
+      } else {
+        setRowsEmployee([]);
+      }
+      setLoading(false);
+    },[]);
+
+    const onStatsResponse = useCallback((res: any) => {
+      if (res?.done && res.data) {
+        setStats(res.data);
+      }
+    }, []);
+
+    const onAddResponse = useCallback((res: any) => {
+      // feedback only; list and stats will be broadcast from controller
+      if (!res?.done) {
+        // toast.error(res?.message || "Failed to add training");
+      }
+    }, []);
+
+    const onUpdateResponse = useCallback((res: any) => {
+      if (!res?.done) {
+        // toast.error(res?.message || "Failed to update training");
+      }
+    }, []);
+
+    const onDeleteResponse = useCallback((res: any) => {
+      if (res?.done) {
+        setSelectedKeys([]);
+      } else {
+        // toast.error(res?.message || "Failed to delete");
+      }
+    }, []);
+
+    useEffect(() => {
+      if (!socket) return;
+
+      socket.emit("join-room", "hr_room");
+
+      socket.on("hr/trainingList/trainingListlist-response", onListResponse);
+      socket.on("hr/trainingList/trainingList-details-response", onStatsResponse);
+      socket.on("hr/trainingList/add-trainingList-response", onAddResponse);
+      socket.on("hr/trainingList/update-trainingList-response", onUpdateResponse);
+      socket.on("hr/trainingList/delete-trainingList-response", onDeleteResponse);
+      socket.on("hr/trainingTypes/trainingTypeslist-response", onTypeListResponse);
+      socket.on("hr/trainers/trainerslist-response", onTrainersListResponse);
+      socket.on("hr/trainingList/get-employeeDetails-response", onEmployeeListResponse);
+
+      return () => {
+        socket.off("hr/trainingList/trainingListlist-response", onListResponse);
+        socket.off("hr/trainingList/trainingList-details-response", onStatsResponse);
+        socket.off("hr/trainingList/add-trainingList-response", onAddResponse);
+        socket.off("hr/trainingList/update-trainingList-response", onUpdateResponse);
+        socket.off("hr/trainingList/delete-trainingList-response", onDeleteResponse);
+        socket.off("hr/trainingTypes/trainingTypeslist-response", onTypeListResponse);
+        socket.off("hr/trainers/trainerslist-response", onTrainersListResponse);
+        socket.off("hr/trainingList/get-employeeDetails-response", onEmployeeListResponse);
+      };
+    }, [socket, onListResponse, onStatsResponse, onAddResponse, onUpdateResponse, onDeleteResponse, onTypeListResponse, onTrainersListResponse, onEmployeeListResponse]);
+
+    const fetchList = useCallback(
+      (type: string, range?: { startDate?: string; endDate?: string }) => {
+        if (!socket) return;
+        setLoading(true);
+        const payload: any = { type };
+        if (type === "custom" && range?.startDate && range?.endDate) {
+          payload.startDate = range.startDate;
+          payload.endDate = range.endDate;
+        }
+        socket.emit("hr/trainingList/trainingListlist", payload);
+      },
+      [socket]
+    );
+
+    const fetchTypeList = useCallback(
+      (type: string, range?: { startDate?: string; endDate?: string }) => {
+        if (!socket) return;
+        setLoading(true);
+        const payload= "all time";
+        socket.emit("hr/trainingTypes/trainingTypeslist", payload);
+      },
+      [socket]
+    );
+
+    const fetchTrainersList = useCallback(
+      (type: string, range?: { startDate?: string; endDate?: string }) => {
+        if (!socket) return;
+        setLoading(true);
+        const payload= "all time";
+        socket.emit("hr/trainers/trainerslist", payload);
+      },
+      [socket]
+    );
+
+    const fetchEmployeeList = useCallback(() => {
+        if (!socket) return;
+        setLoading(true);
+        socket.emit("hr/trainingList/get-employeeDetails");
+      },
+      [socket]
+    );
+
+      const toIsoFromDDMMYYYY = (s: string) => {
+        // s like "13-09-2025"
+          const [dd, mm, yyyy] = s.split("-").map(Number);
+          if (!dd || !mm || !yyyy) return null;
+        // Construct UTC date to avoid TZ shifts
+          const d = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0));
+          return isNaN(d.getTime()) ? null : d.toISOString();
+        };
+
+    const fmtYMD = (s: string) :string => {
+      const [dd, mm, yyyy] = s.split("-").map(Number);
+      const d = new Date(Date.UTC(yyyy, (mm ?? 1) - 1, dd ?? 1));
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC'
+      }).formatToParts(d);
+      const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+      // Some locales include commas; rebuild explicitly as "16 Jan 2026"
+      return `${get('day')} ${get('month')} ${get('year')}`;
+    };
+
+
+    const handleAddSave = () => {
+        if (!socket) return;
+
+        // basic validation
+        if (!addForm.trainingType || !addForm.trainer || !addForm.employee || !addForm.startDate || !addForm.endDate || !addForm.desc || !addForm.cost || !addForm.status) {
+          // toast.warn("Please fill required fields");
+          return;
+      }
+      
+      const startIso = toIsoFromDDMMYYYY(addForm.startDate);
+      const endIso = toIsoFromDDMMYYYY(addForm.endDate);
+      const startfmt= fmtYMD(addForm.startDate);
+      const endfmt = fmtYMD(addForm.endDate)
+      const timeDurationfmt= startfmt+" - "+endfmt;
+
+      const payload = {
+          trainingType: addForm.trainingType,
+          trainer: addForm.trainer,
+          employee: addForm.employee,
+          startDate: startIso,
+          endDate: endIso,
+          timeDuration: timeDurationfmt,
+          desc: addForm.desc,
+          cost: addForm.cost,
+          status: addForm.status as "Active" | "Inactive",
+      };
+
+      socket.emit("hr/trainingList/add-trainingList", payload);
+      // modal has data-bs-dismiss; optional: reset form
+      setAddForm({
+        trainingType: "",
+        trainer: "",
+        employee: [],
+        startDate: "",
+        endDate: "",
+        desc: "",
+        cost: "",
+        status: "Active",
+      });
+      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
+    };
+
+    const handleEditSave = () => {
+        if (!socket) return;
+
+      // basic validation
+        if (!editForm.trainingType || !editForm.trainer || !editForm.employee || !editForm.startDate || !editForm.endDate || !editForm.desc || !editForm.cost || !editForm.status || !editForm.trainingId) {
+        // toast.warn("Please fill required fields");
+          return;
+      }
+
+      const startiso=toIsoFromDDMMYYYY(editForm.startDate);
+      const endiso=toIsoFromDDMMYYYY(editForm.endDate);
+      const startfmt = fmtYMD(editForm.startDate);
+      const endfmt = fmtYMD(editForm.endDate);
+    
+      const timeDurationfmt= startfmt+" - "+endfmt;
+
+      const payload = {
+          trainingType: editForm.trainingType,
+          trainer: editForm.trainer,
+          employee: editForm.employee,
+          startDate: startiso,
+          endDate: endiso,
+          timeDuration: timeDurationfmt,
+          desc: editForm.desc,
+          cost: editForm.cost,
+          status: editForm.status as "Active" | "Inactive",
+          trainingId: editForm.trainingId,
+      };
+
+      socket.emit("hr/trainingList/update-trainingList", payload);
+      // modal has data-bs-dismiss; optional: reset form
+      setEditForm({
+          trainingType: "",
+          trainer: "",
+          employee: [],
+          startDate: "",
+          endDate: "",
+          desc: "",
+          cost: "",
+          status: "Active",
+          trainingId: "",
+      });
+      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
+    };
+
+    const fetchStats = useCallback(() => {
+      if (!socket) return;
+      socket.emit("hr/trainingList/trainingList-details");
+    }, [socket]);
+
+    useEffect(() => {
+      if (!socket) return;
+      fetchList(filterType, customRange);
+      fetchTypeList(filterType, customRange);
+      fetchTrainersList(filterType,customRange);
+      fetchEmployeeList();
+      fetchStats();
+    }, [socket, fetchList, fetchTypeList, fetchTrainersList, fetchEmployeeList, fetchStats, filterType, customRange]);
+
+    type Option = { value: string; label: string };
+     
+    const handleFilterChange = (opt: Option | null) => {
+      const value = opt?.value ?? "alltime";
+      setFilterType(value);
+      if (value !== "custom") {
+        setCustomRange({});
+        fetchList(value);
+      }
+    };
+
+    type OptionTypes = { value: string; label: string };
+
+    const trainingTypeOptions: OptionTypes[] = (rowsType as any[]).map((t: any) => ({
+      value: t.trainingType,
+      label: t.trainingType,
+    }));
+
+    // Helper to find option object from string value
+    const toOption = (val: string | undefined) =>
+      val ? trainingTypeOptions.find(o => o.value === val) : undefined;
+
+    type OptionTrainer = { value: string; label: string };
+
+    const trainingTrainerOptions: OptionTrainer[] = (rowsTrainer as any[]).map((t: any) => ({
+      value: t.trainer,
+      label: t.trainer,
+    }));
+
+    // Helper to find option object from string value
+    const toOptionTrainer = (val: string | undefined) =>
+      val ? trainingTrainerOptions.find(o => o.value === val) : undefined;
+
+    type OptionEmployee = { value: string; label: string };
+
+    const trainingEmployeeOptions: OptionEmployee[] = (rowsEmployee as any[]).map((t: any) => ({
+      value: t.employeeId,
+      label: t.firstName+" "+t.lastName+ " - "+t.employeeId,
+    }));
+
+
+    const handleCustomRange = (_: any, dateStrings: [string, string]) => {
+      if (dateStrings && dateStrings[0] && dateStrings[1]) {
+        const range = { startDate: dateStrings[0], endDate: dateStrings[1] };
+        setCustomRange(range);
+        fetchList("custom", range);
+      }
+    };
+
+    const handleBulkDelete = () => {
+      if (!socket || selectedKeys.length === 0) return;
+      if (window.confirm(`Delete ${selectedKeys.length} record(s)? This cannot be undone.`)) {
+        socket.emit("hr/trainingList/delete-trainingList", selectedKeys);
+      }
+    };
+
+    const handleSelectionChange = (keys: React.Key[]) => {
+      setSelectedKeys(keys as string[]);
+    };
+
+    const getModalContainerEmp = () =>
+        document.getElementById("new_training") || document.body;
+
+    const empNameById = React.useMemo(() => {
+      const m = new Map<string, string>();
+      rowsEmployee.forEach(e => {
+        const name = [e.firstName, e.lastName].filter(Boolean).join(" ");
+        m.set(e.employeeId, name || e.employeeId);
+      });
+      return m;
+    }, [rowsEmployee]);
+
+    const filteredEmpPopup = React.useMemo(() => {
+      const q = empPopupQuery.trim().toLowerCase();
+      if (!q) return empPopupList;
+      return empPopupList.filter(e => {
+        const name = [e.firstName, e.lastName].join(" ").toLowerCase();
+        return e.employeeId.toLowerCase().includes(q) || name.includes(q);
+      });
+    }, [empPopupList, empPopupQuery]);
+
   const routes = all_routes;
-  const data = trainingListData;
   const columns = [
     {
       title: "Training Type",
-      dataIndex: "TrainingType",
-      sorter: (a: any, b: any) => a.TrainingType.length - b.TrainingType.length,
+      dataIndex: "trainingType",
+      sorter: (a: TrainingRow, b: TrainingRow) => a.trainingType.localeCompare(b.trainingType),
     },
     {
       title: "Trainer",
-      dataIndex: "Trainer",
+      dataIndex: "trainer",
       render: (text: string, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <Link to="#" className="avatar avatar-md border avatar-rounded">
             <ImageWithBasePath
-              src={`assets/img/users/${record.Image}`}
+              src={"assets/img/favicon.png"}
               className="img-fluid"
               alt="img"
             />
@@ -35,99 +527,144 @@ const TrainingList = () => {
           </div>
         </div>
       ),
-      sorter: (a: any, b: any) => a.Trainer.length - b.Trainer.length,
+      sorter: (a: TrainingRow, b: TrainingRow) => a.trainer.localeCompare(b.trainer),
     },
     {
       title: "Employee",
-      dataIndex: "Employee",
-      render: (text: string, record: any) => (
-        <div className="avatar-list-stacked avatar-group-sm">
-          <span className="avatar border-0">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Img1}`}
-              className="rounded-circle"
-              alt="img"
-            />
-          </span>
-          <span className="avatar border-0">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Img2}`}
-              className="rounded-circle"
-              alt="img"
-            />
-          </span>
-          <span className="avatar border-0">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Img3}`}
-              className="rounded-circle"
-              alt="img"
-            />
-          </span>
-          <span className="avatar border-0">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Img4}`}
-              className="rounded-circle"
-              alt="img"
-            />
-          </span>
-          <span className="avatar border-0">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Img5}`}
-              className="rounded-circle"
-              alt="img"
-            />
-          </span>
-          <span className="avatar group-counts bg-primary rounded-circle border-0 fs-10">
-            +4
-          </span>
-        </div>
-      ),
-      sorter: (a: any, b: any) => a.Employee.length - b.Employee.length,
+      dataIndex: "employee",
+      render: (text: string[] | string, record: any) => {
+          const ids = Array.isArray(record.employee) ? record.employee : [];
+          const max = 4;
+          const visible = ids.slice(0, max);
+          const extra = ids.length - visible.length;
+
+          const handleOpenEmpPopup = () => {
+            // Build employee list for this trainer: map ids -> rowsEmployee info
+            const list: EmpLite[] = ids.map(id => {
+              const full = rowsEmployee.find(e => e.employeeId === id);
+              return {
+                employeeId: id,
+                firstName: full?.firstName || "",
+                lastName: full?.lastName || "",
+              };
+            });
+            setEmpPopupTrainer(record.trainer || "");
+            setEmpPopupList(list);
+            setEmpPopupQuery("");
+            setEmpPopupOpen(true);
+          };
+          return (
+      <div className="d-flex align-items-center file-name-icon">
+        {visible.map((empId) => {
+          const name = empNameById.get(empId) || empId;
+          return (
+                <a
+                  key={empId}
+                  href="#"
+                  className="avatar avatar-md border avatar-rounded me-1"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleOpenEmpPopup();
+                  }}
+                  aria-label={name}
+                  title={name}
+                >
+                  <ImageWithBasePath
+                    src={"assets/img/favicon.png"}
+                    className="img-fluid"
+                    alt={name}
+                  />
+                </a>
+              );
+            })}
+            {extra > 0 && (
+              <a
+                href="#"
+                className="avatar avatar-md border avatar-rounded me-1"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleOpenEmpPopup();
+                }}
+                aria-label={`+${extra}`}
+                title={`+${extra}`}
+                style={{
+                  backgroundColor: "#e5e7eb",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#374151",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                +{extra}
+              </a>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Time Duration",
-      dataIndex: "TimeDuration",
-      sorter: (a: any, b: any) => a.TimeDuration.length - b.TimeDuration.length,
+      dataIndex: "timeDuration",
+      sorter: (a: TrainingRow, b: TrainingRow) => a.timeDuration.localeCompare(b.timeDuration),
     },
     {
       title: "Description",
-      dataIndex: "Description",
-      sorter: (a: any, b: any) => a.Description.length - b.Description.length,
+      dataIndex: "desc",
+      sorter: (a: TrainingRow, b: TrainingRow) => a.desc.localeCompare(b.desc),
     },
     {
       title: "Cost",
-      dataIndex: "Cost",
-      sorter: (a: any, b: any) => a.Cost.length - b.Cost.length,
+      dataIndex: "cost",
+      sorter: (a: TrainingRow, b: TrainingRow) => a.desc.localeCompare(b.desc),
     },
     {
       title: "Status",
-      dataIndex: "Status",
-      render: (text: string) => (
-        <span className="badge badge-success d-inline-flex align-items-center badge-xs">
+      dataIndex: "status",
+      filters: [
+          { text: "Active", value: "Active" },
+          { text: "Inactive", value: "Inactive" },
+        ],
+        render: (text: string) => {
+        const isActive = text === "Active";
+        const cls = `badge ${isActive ? "badge-success" : "badge-danger"} d-inline-flex align-items-center badge-xs`;
+        return (
+          <span className={cls}>
           <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+           {text}
+          </span>
+        );
+        },
+      onFilter: (val: any, rec: any) => rec.status === val,
+      sorter: (a: TrainingRow, b: TrainingRow) => a.status.localeCompare(b.status),
     },
     {
       title: "",
-      dataIndex: "actions",
-      render: () => (
-        <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-bs-target="#edit_training"
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link to="#" data-bs-toggle="modal" data-bs-target="#delete_modal">
-            <i className="ti ti-trash" />
-          </Link>
-        </div>
-      ),
+      dataIndex: "trainingId",
+      render: (id: string, record: TrainingRow) => (
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <a href="#"
+              data-bs-toggle="modal"
+              data-bs-target="#edit_training"
+              onClick={(e) => {
+                // still prefill the form before Bootstrap opens it
+                openEditModal(record);
+              }}>
+                <i className="ti ti-edit" />
+              </a>
+            <a
+              aria-label="Delete"
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete(() =>
+                  socket?.emit("hr/trainingList/delete-trainingList", [record.trainingId]));
+              }}
+            >
+              <i className="ti ti-trash" />
+            </a>
+          </div>
+        ),
     },
   ];
   return (
@@ -146,10 +683,9 @@ const TrainingList = () => {
                       <i className="ti ti-smart-home" />
                     </Link>
                   </li>
-                  <li className="breadcrumb-item">Performance</li>
-                  <li className="breadcrumb-item active" aria-current="page">
-                    Add Training
-                  </li>
+                  <li className="breadcrumb-item">HR</li>
+                  <li className="breadcrumb-item">Training</li>
+                  <li className="breadcrumb-item">Training List</li>
                 </ol>
               </nav>
             </div>
@@ -158,11 +694,11 @@ const TrainingList = () => {
                 <Link
                   to="#"
                   data-bs-toggle="modal"
-                  data-bs-target="#add_training"
+                  data-bs-target="#new_training"
                   className="btn btn-primary d-flex align-items-center"
                 >
                   <i className="ti ti-circle-plus me-2" />
-                  Add Training{" "}
+                  Add Training
                 </Link>
               </div>
               <div className="head-icons ms-2">
@@ -178,61 +714,433 @@ const TrainingList = () => {
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
                 <div className="dropdown">
                   <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    Sort By : Last 7 Days
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Recently Added
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Ascending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Desending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Last Month
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Last 7 Days
-                      </Link>
-                    </li>
-                  </ul>
+                        to="#"
+                        className="d-inline-flex align-items-center fs-12"
+                      >
+                        <label className="fs-12 d-inline-flex me-1">Sort By : </label>
+                        <CommonSelect
+                          className="select"
+                          options={[
+                            { value: "today", label: "Today" },
+                            { value: "yesterday", label: "Yesterday" },
+                            { value: "last7days", label: "Last 7 Days" },
+                            { value: "last30days", label: "Last 30 Days" },
+                            { value: "thismonth", label: "This Month" },
+                            { value: "lastmonth", label: "Last Month" },
+                            { value: "thisyear", label: "This Year" },
+                          ]}
+                          defaultValue={filterType}
+                          onChange={handleFilterChange}
+                        />
+                    </Link>
                 </div>
               </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={data} columns={columns} Selection={true} />
+              <Table dataSource={rows} columns={columns} Selection={true} />
             </div>
           </div>
           {/* /Performance Indicator list */}
         </div>
         <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
+          <p className="mb-0">2014 - 2025 © SmartHR.</p>
           <p>
             Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
+            <Link to="#" className="text-primary">
+              Dreams
             </Link>
           </p>
         </div>
       </div>
       {/* /Page Wrapper */}
+      {/* Add Training */}
+        <div className="modal fade" id="new_training">
+          <div className="modal-dialog modal-dialog-centered modal-md">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h4 className="modal-title">Add Training</h4>
+                <button
+                  type="button"
+                  className="btn-close custom-btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"
+                >
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+              <form>
+                <div className="modal-body pb-0">
+                  <div className="row g-4">
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Training Type
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              defaultValue={toOption(addForm.trainingType)} 
+                              onChange={(opt: OptionTypes | null) =>setAddForm({ ...addForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={trainingTypeOptions}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Trainer
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              defaultValue={toOptionTrainer(addForm.trainer)} 
+                              onChange={(opt: OptionTrainer | null) =>setAddForm({ ...addForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={trainingTrainerOptions}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Employee
+                            </label>
+                            <Select
+                              className="select"
+                              mode="multiple"
+                              style={{width:'100%'}}
+                              showSearch
+                              optionFilterProp="label"
+                              listHeight={256}        
+                              defaultValue={addForm.employee} // string[]
+                              options={trainingEmployeeOptions} // OptionEmployee[]
+                              onChange={(vals: string[]) => setAddForm({ ...addForm, employee: vals })}
+                              getPopupContainer={getModalContainerEmp}  // render dropdown inside modal
+                              dropdownStyle={{ zIndex: 2000 }} 
+                              placeholder="Select employees"
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Training Cost
+                            </label>
+                            <textarea
+                              className="form-control"
+                              rows={1} value={addForm.cost} onChange ={(e) => setAddForm({ ...addForm, cost: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Start Date
+                            </label>
+                            <div className="input-icon-end position-relative">
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{
+                                  format: "DD-MM-YYYY",
+                                  type: "mask",
+                                }}
+                                getPopupContainer={getModalContainer}
+                                placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, startDate: dateString as string })}
+                              />
+                              <span className="input-icon-addon">
+                                <i className="ti ti-calendar text-gray-7" />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              End Date
+                            </label>
+                            <div className="input-icon-end position-relative">
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{
+                                  format: "DD-MM-YYYY",
+                                  type: "mask",
+                                }}
+                                getPopupContainer={getModalContainer}
+                                placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, endDate: dateString as string })}
+                              />
+                              <span className="input-icon-addon">
+                                <i className="ti ti-calendar text-gray-7" />
+                              </span>
+                            </div>
+                          </div>
+                      </div>
 
-      <TrainingListModal />
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Description
+                        </label>
+                        <textarea
+                          className="form-control"
+                          rows={2} value={addForm.desc} onChange ={(e) => setAddForm({ ...addForm, desc: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">Status</label>
+                        <CommonSelect
+                          className="select"
+                          options={[
+                            { value: "Active", label: "Active" },
+                            { value: "Inactive", label: "Inactive" },
+                            ]}
+                          defaultValue={addForm.status} onChange={(opt: { value: string } | null) => setAddForm({ ...addForm, status: opt?.value ?? "Active" })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-white border me-2"
+                    data-bs-dismiss="modal"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    data-bs-dismiss="modal"
+                    className="btn btn-primary"
+                    onClick={handleAddSave}
+                  >
+                    Add Training
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {/* /Add Trainer */}
+        {/* Edit Trainer */}
+        <div className="modal fade" id="edit_training">
+          <div className="modal-dialog modal-dialog-centered modal-md">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h4 className="modal-title">Edit Training</h4>
+                <button
+                  type="button"
+                  className="btn-close custom-btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"
+                >
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+              <form>
+                <div className="modal-body pb-0">
+                  <div className="row g-4">
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Training Type&nbsp;
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              defaultValue={toOption(editForm.trainingType)} 
+                              onChange={(opt: OptionTypes | null) =>setEditForm({ ...editForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={trainingTypeOptions}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">Trainer</label>
+                            <CommonSelect
+                              className="select"
+                              defaultValue={toOptionTrainer(editForm.trainer)} 
+                              onChange={(opt: OptionTrainer | null) =>setEditForm({ ...editForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={trainingTrainerOptions}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">Employee</label>
+                            <Select
+                              className="select"
+                              mode="multiple"
+                              style={{width:'100%'}}
+                              showSearch
+                              optionFilterProp="label"
+                              listHeight={256}
+                              options={trainingEmployeeOptions}                // [{value, label}]
+                              value={editForm.employee}                        // string[] of employeeIds
+                              onChange={(vals: string[]) =>
+                                setEditForm({ ...editForm, employee: vals })   // keep only ids in state
+                              }
+                              getPopupContainer={getModalContainer}  // render dropdown inside modal
+                              dropdownStyle={{ zIndex: 2000 }} 
+                              placeholder="Select employees"
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">Cost</label>
+                            <textarea
+                              className="form-control"
+                              rows={1}
+                              value={editForm.cost}
+                              onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })}
+                            />
+                          </div>
+                        </div>            
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              Start Date
+                            </label>
+                            <div className="input-icon-end position-relative">
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{
+                                  format: "DD-MM-YYYY",
+                                  type: "mask",
+                                }}
+                                getPopupContainer={getModalContainer}
+                                placeholder="DD-MM-YYYY" 
+                                defaultValue={editForm.startDate ? dayjs(editForm.startDate, "DD-MM-YYYY") : null}
+                                onChange={(_, dateString) => setEditForm({ ...editForm, startDate: dateString as string })}
+                              />
+                              <span className="input-icon-addon">
+                                <i className="ti ti-calendar text-gray-7" />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-0">
+                            <label className="form-label">
+                              End Date
+                            </label>
+                            <div className="input-icon-end position-relative">
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{
+                                  format: "DD-MM-YYYY",
+                                  type: "mask",
+                                }}
+                                getPopupContainer={getModalContainer}
+                                placeholder="DD-MM-YYYY" 
+                                defaultValue={editForm.endDate ? dayjs(editForm.endDate, "DD-MM-YYYY") : null}
+                                onChange={(_, dateString) => setEditForm({ ...editForm, endDate: dateString as string })}
+                              />
+                              <span className="input-icon-addon">
+                                <i className="ti ti-calendar text-gray-7" />
+                              </span>
+                            </div>
+                          </div>
+                      </div>
+
+
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">Description</label>
+                        <textarea
+                          className="form-control"
+                          rows={2}
+                          value={editForm.desc}
+                          onChange={(e) => setEditForm({ ...editForm, desc: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">Status</label>
+                        <CommonSelect
+                          className="select"
+                          defaultValue={editForm.status}
+                          onChange={(opt: { value: string } | null) => setEditForm({ ...editForm, status: opt?.value ?? "Active" })}
+                          options={[
+                            { value: "Active", label: "Active" },
+                            { value: "Inactive", label: "Inactive" },
+                            ]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-white border me-2"
+                    data-bs-dismiss="modal"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    data-bs-dismiss="modal"
+                    className="btn btn-primary"
+                    onClick={handleEditSave}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {/* /Edit Training */}     
+        <Modal
+          open={empPopupOpen}
+          onCancel={() => setEmpPopupOpen(false)}
+          footer={null}
+          width={520}
+          centered
+          destroyOnClose
+        >
+          <div className="mb-3">
+            <h5 className="mb-1">Employees for Trainer</h5>
+            <div className="text-muted" style={{ fontSize: 12 }}>{empPopupTrainer}</div>
+          </div>
+          <Input.Search
+            placeholder="Search by name or Employee ID"
+            allowClear
+            autoFocus
+            onChange={(e) => setEmpPopupQuery(e.target.value)}
+            onSearch={(v) => setEmpPopupQuery(v)}
+            style={{ marginBottom: 12 }}
+          />
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            {filteredEmpPopup.map((e) => {
+              const name = [e.firstName, e.lastName].filter(Boolean).join(" ");
+              return (
+                <div
+                  key={e.employeeId}
+                  className="d-flex align-items-center p-2 rounded"
+                  style={{ cursor: "default" }}
+                >
+                  <span className="avatar avatar-md border avatar-rounded me-2">
+                    <ImageWithBasePath
+                      src={"assets/img/favicon.png"}
+                      className="img-fluid"
+                      alt={name || e.employeeId}
+                    />
+                  </span>
+                  <div className="d-flex flex-column">
+                    <span className="fw-medium">{name || e.employeeId}</span>
+                    <span className="text-muted" style={{ fontSize: 12 }}>
+                      {e.employeeId}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredEmpPopup.length === 0 && (
+              <div className="text-muted p-3">No employees found</div>
+            )}
+          </div>
+        </Modal>
     </>
   );
 };

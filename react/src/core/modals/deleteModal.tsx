@@ -2,7 +2,12 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../feature-module/router/all_routes";
 
-const DeleteModal = () => {
+interface DeleteModalProps {
+  onDeleteConfirm?: () => void;
+}
+
+const DeleteModal = ({ onDeleteConfirm }: DeleteModalProps) => {
+  const [isDeleting, setIsDeleting] = useState(false);
   return (
     <>
       <>
@@ -14,26 +19,42 @@ const DeleteModal = () => {
                 <span className="avatar avatar-xl bg-transparent-danger text-danger mb-3">
                   <i className="ti ti-trash-x fs-36" />
                 </span>
-                <h4 className="mb-1">Confirm Kaka</h4>
+                <h4 className="mb-1">Confirm Delete</h4>
                 <p className="mb-3">
-                  You want to delete all the marked items, this cant be undone
-                  once you delete.
+                  Are you sure you want to delete this deal? This action cannot be undone.
                 </p>
                 <div className="d-flex justify-content-center">
-                  <Link
-                    to="#"
+                  <button
+                    type="button"
                     className="btn btn-light me-3"
                     data-bs-dismiss="modal"
                   >
                     Cancel
-                  </Link>
-                  <Link
-                    to="#"
-                    data-bs-dismiss="modal"
+                  </button>
+                  <button
+                    type="button"
                     className="btn btn-danger"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      if (onDeleteConfirm && !isDeleting) {
+                        setIsDeleting(true);
+                        try {
+                          await onDeleteConfirm();
+                        } finally {
+                          setIsDeleting(false);
+                        }
+                      }
+                    }}
                   >
-                    Yes, Delete
-                  </Link>
+                    {isDeleting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Yes, Delete'
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

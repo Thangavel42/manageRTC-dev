@@ -1,14 +1,173 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import PredefinedDateRanges from "../../../core/common/datePicker";
-import { dealListData } from "../../../core/data/json/dealList";
+// Live data via socket hook
+// (remove static seed import)
+import { useDeals, Deal } from "../../../hooks/useDeals";
 import Table from "../../../core/common/dataTable/index";
 import CrmsModal from "../../../core/modals/crms_modal";
+import Footer from "../../../core/common/footer";
+
 const DealsList = () => {
   const routes = all_routes;
-  const data = dealListData;
+  const { deals, loading, fetchDeals, updateDeal, deleteDeal } = useDeals();
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+
+  useEffect(() => {
+    fetchDeals();
+  }, [fetchDeals]);
+
+  const handleEditDeal = (deal: Deal) => {
+    setSelectedDeal(deal);
+    // Trigger edit modal
+    const modal = document.getElementById('edit_deals');
+    if (modal) {
+      // Try multiple ways to show the modal
+      try {
+        // Method 1: Try Bootstrap 5
+        const bootstrap = (window as any).bootstrap;
+        if (bootstrap && bootstrap.Modal) {
+          const modalInstance = new bootstrap.Modal(modal);
+          modalInstance.show();
+          return;
+        }
+        
+        // Method 2: Try jQuery Bootstrap (if available)
+        if ((window as any).$ && (window as any).$.fn.modal) {
+          (window as any).$(modal).modal('show');
+          return;
+        }
+        
+        // Method 3: Fallback - show modal manually
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        document.body.classList.add('modal-open');
+        
+        // Add backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modal-backdrop';
+        document.body.appendChild(backdrop);
+        
+      } catch (error) {
+        console.error('Error showing modal:', error);
+        // Fallback - just show the modal element
+        modal.style.display = 'block';
+        modal.classList.add('show');
+      }
+    }
+  };
+
+  const handleDeleteDeal = (deal: Deal) => {
+    setSelectedDeal(deal);
+    // Trigger delete modal
+    const modal = document.getElementById('delete_modal');
+    if (modal) {
+      // Try multiple ways to show the modal
+      try {
+        // Method 1: Try Bootstrap 5
+        const bootstrap = (window as any).bootstrap;
+        if (bootstrap && bootstrap.Modal) {
+          const modalInstance = new bootstrap.Modal(modal);
+          modalInstance.show();
+          return;
+        }
+        
+        // Method 2: Try jQuery Bootstrap (if available)
+        if ((window as any).$ && (window as any).$.fn.modal) {
+          (window as any).$(modal).modal('show');
+          return;
+        }
+        
+        // Method 3: Fallback - show modal manually
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        document.body.classList.add('modal-open');
+        
+        // Add backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modal-backdrop';
+        document.body.appendChild(backdrop);
+        
+      } catch (error) {
+        console.error('Error showing modal:', error);
+        // Fallback - just show the modal element
+        modal.style.display = 'block';
+        modal.classList.add('show');
+      }
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (selectedDeal) {
+      try {
+        const success = await deleteDeal(selectedDeal.id || selectedDeal._id || '');
+        if (success) {
+          setSelectedDeal(null);
+          // Close modal
+          const modal = document.getElementById('delete_modal');
+          if (modal) {
+            try {
+              // Try Bootstrap 5 method
+              const bootstrap = (window as any).bootstrap;
+              if (bootstrap && bootstrap.Modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                  modalInstance.hide();
+                  return;
+                }
+              }
+              
+              // Try jQuery Bootstrap method
+              if ((window as any).$ && (window as any).$.fn.modal) {
+                (window as any).$(modal).modal('hide');
+                return;
+              }
+              
+              // Fallback - hide modal manually
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              document.body.classList.remove('modal-open');
+              
+              // Remove backdrop
+              const backdrop = document.getElementById('modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+              
+            } catch (error) {
+              console.error('Error hiding modal:', error);
+              // Fallback - just hide the modal element
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting deal:', error);
+      }
+    }
+  };
+
+  const data = useMemo(() => {
+    if (!deals || deals.length === 0) return [] as any[];
+    return deals.map((d: any) => ({
+      key: d.id || d._id,
+      DealName: d.name || "-",
+      Stage: d.stage || "-",
+      DealValue: typeof d.dealValue === "number" ? `$${d.dealValue.toLocaleString()}` : 
+                 (typeof d.value === "number" ? `$${d.value.toLocaleString()}` : "-"),
+      Tags: Array.isArray(d.tags) && d.tags.length ? d.tags[0] : "-",
+      ExpectedClosedDate: d.expectedClosedDate ? new Date(d.expectedClosedDate).toLocaleDateString() : 
+                         (d.expectedClosingDate ? new Date(d.expectedClosingDate).toLocaleDateString() : "-"),
+      Owner: d.owner?.name || d.owner || "-",
+      Probability: typeof d.probability === "number" ? `${d.probability}%` : "-",
+      Status: d.status || "-",
+    }));
+  }, [deals]);
   const columns = [
     {
       title: "Deal Name",
@@ -87,27 +246,33 @@ const DealsList = () => {
           </span>
         </>
       ),
-      sorter: (a: any, b: any) => a.status.length - b.status.length,
+      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
     },
 
     {
       title: "",
       dataIndex: "actions",
-      render: () => (
-        <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-bs-target="#edit_deals"
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link to="#" data-bs-toggle="modal" data-bs-target="#delete_modal">
-            <i className="ti ti-trash" />
-          </Link>
-        </div>
-      ),
+      render: (text: string, record: any) => {
+        const deal = deals.find((d: any) => (d.id || d._id) === record.key);
+        return (
+          <div className="action-icon d-inline-flex">
+            <button
+              className="btn btn-link me-2 p-0"
+              onClick={() => deal && handleEditDeal(deal)}
+              title="Edit Deal"
+            >
+              <i className="ti ti-edit" />
+            </button>
+            <button
+              className="btn btn-link p-0"
+              onClick={() => deal && handleDeleteDeal(deal)}
+              title="Delete Deal"
+            >
+              <i className="ti ti-trash" />
+            </button>
+          </div>
+        );
+      },
     },
   ];
   return (
@@ -288,17 +453,12 @@ const DealsList = () => {
           </div>
           {/* /Contact List */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
-      <CrmsModal />
+      <CrmsModal 
+        selectedDeal={selectedDeal}
+        onDeleteConfirm={confirmDelete}
+      />
     </>
   );
 };

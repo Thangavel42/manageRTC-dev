@@ -6,6 +6,7 @@ import { all_routes } from "../../router/all_routes";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import { useSocket } from "../../../SocketContext";
 import CrmsModal from "../../../core/modals/crms_modal";
+import Footer from "../../../core/common/footer";
 
 interface LeadDetails {
   _id: string;
@@ -247,7 +248,14 @@ const LeadsDetails = () => {
                       </span>
                     </h5>
                     <p className="text-dark mb-1">
-                      {leadDetails.address}
+                      {(() => {
+                        if (typeof leadDetails.address === 'object' && leadDetails.address !== null) {
+                          const addr = leadDetails.address as any;
+                          const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
+                          return parts.length > 0 ? parts.join(', ') : '-';
+                        }
+                        return leadDetails.address || '-';
+                      })()}
                     </p>
                     <p className="d-inline-flex align-items-center text-dark mb-2">
                       <i className="ti ti-building me-1" />
@@ -464,15 +472,7 @@ const LeadsDetails = () => {
             <CommonTabs />
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       <CrmsModal />

@@ -2,6 +2,7 @@ import React from "react";
 import { all_routes } from "../../router/all_routes";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../core/common/footer";
 
 const Prefixes = () => {
   const routes = all_routes;
@@ -292,15 +293,7 @@ const Prefixes = () => {
               </div>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
         {/* /Page Wrapper */}
       </>

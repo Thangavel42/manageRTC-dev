@@ -14,6 +14,8 @@ import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import { planDetails } from "../../../core/data/json/planDetails";
 import moment from "moment";
+import Footer from "../../../core/common/footer";
+
 const Packages = () => {
   const [Data, setData] = useState([]);
   const [logo, setLogo] = useState(null); // To store the base64 image
@@ -992,15 +994,7 @@ const Packages = () => {
               </div>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
         {/* /Page Wrapper */}
         {/* Add Plan */}

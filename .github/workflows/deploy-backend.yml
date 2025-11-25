@@ -1,0 +1,75 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pack backend
+        run: |
+          tar -czf backend.tar.gz \
+            --directory=backend \
+            --exclude=node_modules \
+            --exclude=.env \
+            .
+
+      - name: Upload archive
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "backend.tar.gz"
+          target: "/home/${{ secrets.VPS_USER }}/"
+
+
+      - name: Deploy to /srv/devmanagertc/backend and restart pm2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # in the SSH step script
+            set -e
+            mkdir -p ~/releases/backend && rm -rf ~/releases/backend/*
+            tar -xzf ~/backend.tar.gz -C ~/releases/backend
+            rm -f ~/backend.tar.gz
+
+            # no sudo needed; deploy owns /srv/devmanagertc
+            mkdir -p /srv/devmanagertc/backend
+            rsync -a --delete ~/releases/backend/ /srv/devmanagertc/backend/
+
+            cd /srv/devmanagertc/backend
+
+            cat > .env << 'EOF'
+            PORT=${{ secrets.ENV_PORT }}
+            MONGO_URI=${{ secrets.ENV_MONGO_URI }}
+            CLERK_SECRET_KEY=${{ secrets.ENV_CLERK_SECRET_KEY }}
+            CLERK_JWT_KEY=${{ secrets.ENV_CLERK_JWT_KEY }}
+            CLERK_PUBLISHABLE_KEY=${{ secrets.ENV_CLERK_PUBLISHABLE_KEY }}
+            FRONTEND_URL=${{ secrets.ENV_FRONTEND_URL }}
+            JWT=${{ secrets.ENV_JWT }}
+            NODE_ENV=production
+            EOF
+
+            npm ci --omit=dev
+
+            if pm2 describe managertc-api > /dev/null; then
+              pm2 reload managertc-api
+            else
+              pm2 start server.js --name managertc-api
+              pm2 save
+            fi
+

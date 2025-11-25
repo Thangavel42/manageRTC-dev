@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { Link } from "react-router-dom";
 import { InputOtp } from "primereact/inputotp";
+const currentYear = new Date().getFullYear();
 
 const TwoStepVerification = () => {
   const routes = all_routes;
@@ -118,7 +119,7 @@ const TwoStepVerification = () => {
                     </div>
                     <div className="mt-5 pb-4 text-center">
                       <p className="mb-0 text-gray-9">
-                        Copyright © 2025 - Amasqis
+                        <p className="mb-0">{currentYear} © amasQIS.ai</p>
                       </p>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import ReactApexChart from "react-apexcharts";
 import { useDashboardData } from "../../../core/data/redux/useDashboardData";
+import Footer from "../../../core/common/footer";
 
 const SuperAdminDashboard = () => {
   const routes = all_routes;
@@ -1026,15 +1027,7 @@ const SuperAdminDashboard = () => {
           {/* /Recent Plan Expired */}
         </div>
       </div>
-      <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-        <p className="mb-0">2014 - 2025 © Amasqis.</p>
-        <p>
-          Designed &amp; Developed By{" "}
-          <Link to="#" className="text-primary">
-            Dreams
-          </Link>
-        </p>
-      </div>
+      <Footer />
     </div>
   );
 };

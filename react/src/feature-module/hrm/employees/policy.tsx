@@ -8,6 +8,7 @@ import CollapseHeader from '../../../core/common/collapse-header/collapse-header
 import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { DateTime } from 'luxon';
+import Footer from "../../../core/common/footer";
 
 interface Policy {
   _id: string,
@@ -41,6 +42,10 @@ const Policy = () => {
   const [error, setError] = useState<string | null>(null);
   const [responseData, setResponseData] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(staticOptions[0].value);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+  const [departmentError, setDepartmentError] = useState<string | null>(null);
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
 
   const socket = useSocket() as Socket | null;
 
@@ -58,7 +63,11 @@ const Policy = () => {
         setLoading(false);
       }
     }, 30000);
+
+    setPolicyLoading(true);
     socket.emit("hr/policy/get");
+
+    setDepartmentLoading(true);
     socket.emit("hr/departments/get");
 
     const handleAddPolicyResponse = (response: any) => {
@@ -78,16 +87,16 @@ const Policy = () => {
     };
 
     const handleGetPolicyResponse = (response: any) => {
-      clearTimeout(timeoutId);
+      setPolicyLoading(false);
       if (!isMounted) return;
 
       if (response.done) {
         setPolicies(response.data);
         setSortedPolicies(response.data);
-        setError(null);
+        setPolicyError(null);
         setLoading(false);
       } else {
-        setError(response.error || "Failed to fetch policies");
+        setPolicyError(response.error || "Failed to fetch policies");
         setLoading(false);
       }
     };
@@ -125,14 +134,15 @@ const Policy = () => {
     }
 
     const handleDepartmentsResponse = (response: any) => {
+      setDepartmentLoading(false);
       if (!isMounted) return;
 
       if (response.done) {
         setDepartments(response.data);
-        setError(null);
+        setDepartmentError(null);
         setLoading(false);
       } else {
-        setError(response.error || "Failed to add policy");
+        setDepartmentError(response.error || "Failed to fetch departments");
         setLoading(false);
       }
     }
@@ -156,6 +166,9 @@ const Policy = () => {
   }, [socket]);
 
   // constants
+  if (error) console.error("Page error:", error);
+  if (policyError) console.error("Policy error:", policyError);
+  if (departmentError) console.error("Department error:", departmentError);
 
   const dynamicOptions = Array.isArray(departments)
     ? departments.map(dept => ({
@@ -165,7 +178,7 @@ const Policy = () => {
     : [];
 
   const options = [...staticOptions, ...dynamicOptions];
-  
+
   const columns = [
     {
       title: "Name",
@@ -281,7 +294,7 @@ const Policy = () => {
   };
 
   console.log("selected department", selectedDepartment);
-  
+
   const applyFilters = (updatedFields: {
     department?: string;
     startDate?: string;
@@ -420,6 +433,36 @@ const Policy = () => {
     }
   };
 
+  if (policyLoading || departmentLoading) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (policyError || departmentError) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>Failed to fetch policies</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Page Wrapper */}
@@ -510,17 +553,25 @@ const Policy = () => {
                     Department
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
-                    {options.map((dept) => (
-                      <li key={dept.value}>
-                        <button
-                          type="button"
-                          className="dropdown-item rounded-1"
-                          onClick={() => onSelectDepartment(dept.value)}
-                        >
-                          {dept.label}
-                        </button>
+                    {departmentError ? (
+                      <li>
+                        <div className="alert alert-danger mb-0 p-2" role="alert">
+                          <small>{departmentError}</small>
+                        </div>
                       </li>
-                    ))}
+                    ) : (
+                      options.map((dept) => (
+                        <li key={dept.value}>
+                          <button
+                            type="button"
+                            className="dropdown-item rounded-1"
+                            onClick={() => onSelectDepartment(dept.value)}
+                          >
+                            {dept.label}
+                          </button>
+                        </li>
+                      ))
+                    )}
                   </ul>
                 </div>
                 <div className="dropdown">
@@ -569,15 +620,7 @@ const Policy = () => {
           </div>
           {/* /Policylist list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       {/* Add Policy */}

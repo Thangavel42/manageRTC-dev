@@ -6,11 +6,13 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import CrmsModal from "../../../core/modals/crms_modal";
 import { useCompanies } from "../../../hooks/useCompanies";
 import { useAuth } from "@clerk/clerk-react";
+import Footer from "../../../core/common/footer";
 
 const CompaniesGrid = () => {
   const routes = all_routes;
   const { getToken } = useAuth();
   const { companies, fetchCompanies, loading, error } = useCompanies();
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -25,16 +27,18 @@ const CompaniesGrid = () => {
   useEffect(() => {
     const onChanged = () => fetchCompanies({ limit: 100 });
     window.addEventListener("companies:changed", onChanged as any);
-    return () => window.removeEventListener("companies:changed", onChanged as any);
+    return () =>
+      window.removeEventListener("companies:changed", onChanged as any);
   }, [fetchCompanies]);
 
   const filteredCompanies = useMemo(() => {
     let filtered = companies;
     if (searchTerm) {
-      filtered = filtered.filter((c: any) =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone?.includes(searchTerm)
+      filtered = filtered.filter(
+        (c: any) =>
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.phone?.includes(searchTerm)
       );
     }
     if (statusFilter !== "all") {
@@ -59,23 +63,23 @@ const CompaniesGrid = () => {
     return filtered;
   }, [companies, searchTerm, statusFilter, companyFilter, sortBy, sortOrder]);
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (format: "pdf" | "excel") => {
     try {
       const token = await getToken();
       const response = await fetch(
-        `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/export?format=${format}`,
+        `${backendurl}/api/companies/export?format=${format}`,
         {
-          method: 'GET',
+          method: "GET",
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         }
       );
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `companies.${format}`;
         document.body.appendChild(a);
@@ -83,10 +87,10 @@ const CompaniesGrid = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        alert('Export failed. Please try again.');
+        alert("Export failed. Please try again.");
       }
     } catch (error) {
-      alert('Export failed. Please try again.');
+      alert("Export failed. Please try again.");
     }
   };
 
@@ -141,13 +145,21 @@ const CompaniesGrid = () => {
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("pdf")}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("excel")}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel
                       </Link>
@@ -180,31 +192,51 @@ const CompaniesGrid = () => {
               className="form-control"
               placeholder="Search companies..."
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
               style={{ maxWidth: 200 }}
             />
-            <select className="form-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ maxWidth: 150 }}>
+            <select
+              className="form-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ maxWidth: 150 }}
+            >
               <option value="all">All Status</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
-            <select className="form-select" value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} style={{ maxWidth: 200 }}>
+            <select
+              className="form-select"
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              style={{ maxWidth: 200 }}
+            >
               <option value="all">All Companies</option>
               {companies.map((c: any) => (
-                <option key={c._id} value={c._id}>{c.name}</option>
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
               ))}
             </select>
-            <button className="btn btn-outline-secondary" onClick={() => {
-              setSortBy("name");
-              setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-            }}>
-              Sort by Name {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => {
+                setSortBy("name");
+                setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+              }}
+            >
+              Sort by Name{" "}
+              {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
             </button>
-            <button className="btn btn-outline-secondary" onClick={() => {
-              setSortBy("rating");
-              setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-            }}>
-              Sort by Rating {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => {
+                setSortBy("rating");
+                setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+              }}
+            >
+              Sort by Rating{" "}
+              {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
             </button>
           </div>
 
@@ -223,7 +255,9 @@ const CompaniesGrid = () => {
               <div className="text-center p-5 w-100">
                 <i className="ti ti-building fs-48 text-muted mb-3"></i>
                 <h5>No Companies Found</h5>
-                <p className="text-muted">Try adjusting your filters or add a new company.</p>
+                <p className="text-muted">
+                  Try adjusting your filters or add a new company.
+                </p>
               </div>
             ) : (
               filteredCompanies.map((c: any) => (
@@ -236,11 +270,16 @@ const CompaniesGrid = () => {
                         </div>
                         <div>
                           <Link
-                            to={routes.companiesDetails.replace(':companyId', c._id)}
+                            to={routes.companiesDetails.replace(
+                              ":companyId",
+                              c._id
+                            )}
                             className="avatar avatar-xl avatar-rounded online border rounded-circle"
                           >
                             <ImageWithBasePath
-                              src={`assets/img/company/${c.image || "company-01.svg"}`}
+                              src={`assets/img/company/${
+                                c.image || "company-01.svg"
+                              }`}
                               className="img-fluid h-auto w-auto"
                               alt="img"
                             />
@@ -263,15 +302,37 @@ const CompaniesGrid = () => {
                               </Link>
                             </li> */}
                             <li>
-                              <Link className="dropdown-item rounded-1" to="#" onClick={async () => {
-                                if (!window.confirm('Are you sure you want to delete this company?')) return;
-                                try {
-                                  const token = await getToken();
-                                  await fetch(`${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/${c._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-                                  window.dispatchEvent(new CustomEvent('companies:changed'));
-                                  alert('Company deleted!');
-                                } catch (err) { console.error('delete company', err); alert('Delete failed!') }
-                              }}>
+                              <Link
+                                className="dropdown-item rounded-1"
+                                to="#"
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      "Are you sure you want to delete this company?"
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    const token = await getToken();
+                                    await fetch(
+                                      `${backendurl}/api/companies/${c._id}`,
+                                      {
+                                        method: "DELETE",
+                                        headers: {
+                                          Authorization: `Bearer ${token}`,
+                                        },
+                                      }
+                                    );
+                                    window.dispatchEvent(
+                                      new CustomEvent("companies:changed")
+                                    );
+                                    alert("Company deleted!");
+                                  } catch (err) {
+                                    console.error("delete company", err);
+                                    alert("Delete failed!");
+                                  }
+                                }}
+                              >
                                 <i className="ti ti-trash me-1" />
                                 Delete
                               </Link>
@@ -281,7 +342,14 @@ const CompaniesGrid = () => {
                       </div>
                       <div className="text-center mb-3">
                         <h6 className="mb-1">
-                          <Link to={`${routes.companiesDetails.replace(':companyId', c._id)}`}>{c.name}</Link>
+                          <Link
+                            to={`${routes.companiesDetails.replace(
+                              ":companyId",
+                              c._id
+                            )}`}
+                          >
+                            {c.name}
+                          </Link>
                         </h6>
                       </div>
                       <div className="d-flex flex-column">
@@ -295,7 +363,10 @@ const CompaniesGrid = () => {
                         </p>
                         <p className="text-dark d-inline-flex align-items-center">
                           <i className="ti ti-map-pin text-gray-5 me-2" />
-                          {c.address?.city || c.location || "-"}
+                          {c.address?.city || 
+                           (typeof c.location === 'object' && c.location !== null 
+                             ? `${c.location.city || ''}${c.location.state ? ', ' + c.location.state : ''}${c.location.country ? ', ' + c.location.country : ''}`.replace(/^,\s*/, '') || '-'
+                             : c.location) || "-"}
                         </p>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
@@ -303,7 +374,13 @@ const CompaniesGrid = () => {
                           <i className="ti ti-star-filled text-warning me-1" />
                           {c.rating ?? 0}
                         </span>
-                        <span className={`badge badge-xs ${c.status === "Active" ? "badge-success" : "badge-danger"}`}>
+                        <span
+                          className={`badge badge-xs ${
+                            c.status === "Active"
+                              ? "badge-success"
+                              : "badge-danger"
+                          }`}
+                        >
                           {c.status}
                         </span>
                       </div>
@@ -320,15 +397,7 @@ const CompaniesGrid = () => {
             </Link>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       <CrmsModal />
     </>

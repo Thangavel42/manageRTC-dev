@@ -15,8 +15,15 @@ import EditStage from './edit_stage';
 import PipelineAccess from './pipeline_access';
 import SuccesContacts from './success_contacts';
 import DeleteActivity from './delete_activity';
+import DeleteModal from './deleteModal';
+import { Deal } from '../../hooks/useDeals';
 
-const CrmsModal = () => {
+interface CrmsModalProps {
+  selectedDeal?: Deal | null;
+  onDeleteConfirm?: () => void;
+}
+
+const CrmsModal = ({ selectedDeal, onDeleteConfirm }: CrmsModalProps) => {
   return (
     <>
       <AddActivity />
@@ -29,13 +36,14 @@ const CrmsModal = () => {
       <EditActivity />
       <EditCompany />
       <EditContact />
-      <EditDeals />
+      <EditDeals selectedDeal={selectedDeal} />
       <EditLeads />
       <EditPipeline />
       <EditStage />
       <PipelineAccess />
       <SuccesContacts />
       <DeleteActivity />
+      <DeleteModal onDeleteConfirm={onDeleteConfirm} />
     </>
   );
 };

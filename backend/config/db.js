@@ -31,9 +31,9 @@ export const getTenantCollections = (tenantDbName) => {
     // Existing collections
     stats: db.collection("stats"),
     companies: db.collection("companies"),
-    details: db.collection("details"),     // for company details
+    details: db.collection("details"), // for company details
     contacts: db.collection("contacts"),
-    details: db.collection("details"),     // for contact details
+    details: db.collection("details"), // for contact details
     leads: db.collection("leads"),
 
     // Admin dashboard collections
@@ -48,44 +48,61 @@ export const getTenantCollections = (tenantDbName) => {
     leaveTypes: db.collection("leaveTypes"),
     approvals: db.collection("approvals"),
     invoices: db.collection("invoices"),
+    deals: db.collection("deals"),
     activities: db.collection("activities"),
     todos: db.collection("todos"),
     schedules: db.collection("schedules"),
     birthdays: db.collection("birthdays"),
-    jobApplications: db.collection("jobApplications"),
+    jobs: db.collection("jobApplications"),
     earnings: db.collection("earnings"),
 
-    
-    // employee dashboard collection 
+    // employee dashboard collection
     skills: db.collection("skills"),
     salaryHistory: db.collection("salaryHistory"),
     meetings: db.collection("meetings"),
-    notifications: db.collection('notifications'),
-
+    notifications: db.collection("notifications"),
 
     //Pipeline Collections
     pipelines: db.collection("pipelines"),
     stages: db.collection("stages"),
-    
+
     //Chat Collections
     conversations: db.collection("conversations"),
     messages: db.collection("messages"),
-    
+
     //Social Feed
     socialFeeds: db.collection("socialFeeds"),
     follows: db.collection("follows"),
     hashtags: db.collection("hashtags"),
 
-       // hr employee section collection
-    hr: db.collection("hr"),   
-    permissions:  db.collection("permissions"),
+    // hr employee section collection
+    hr: db.collection("hr"),
+    permissions: db.collection("permissions"),
     policy: db.collection("policy"),
     designations: db.collection("designations"),
     assets: db.collection("assets"),
+    holidays: db.collection("holidays"),
+
+    // invoice section
+    addInvoices: db.collection("invoices"),
+
     termination: db.collection("termination"),
+    resignation: db.collection("resignation"),
 
     // notes - application
     notes: db.collection("notes"),
+    candidates: db.collection("candidates"),
+
+    performanceIndicators: db.collection("performanceIndicators"),
+    performanceAppraisals: db.collection("performanceAppraisals"),
+    performanceReviews: db.collection("performanceReviews"),
+    // Performance Management Collections
+    goalTypes: db.collection("goalTypes"),
+    goalTrackings: db.collection("goalTrackings"),
+    //profile collection
+    profile: db.collection("profile"),
+    tickets: db.collection("tickets"),
+    candidates: db.collection("candidates"),
   };
 };
 
@@ -102,5 +119,8 @@ export const getsuperadminCollections = () => {
     contacts: db.collection("contacts"),
     packagesCollection: db.collection("packages"),
     subscriptionsCollection: db.collection("subscriptions"),
+    trainingtypes: db.collection("trainingtypes"),
+    trainers: db.collection("trainers"),
+    trainings: db.collection("trainings"),
   };
 };

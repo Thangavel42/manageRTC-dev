@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
@@ -6,12 +6,150 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import dragula, { Drake } from "dragula";
 import "dragula/dist/dragula.css";
 import CrmsModal from "../../../core/modals/crms_modal";
+import { useDeals, Deal } from "../../../hooks/useDeals";
+import Footer from "../../../core/common/footer";
+
 const DealsGrid = () => {
   const routes = all_routes;
+  const { deals, fetchDeals, updateDeal, deleteDeal } = useDeals();
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const container1Ref = useRef<HTMLDivElement>(null);
   const container2Ref = useRef<HTMLDivElement>(null);
   const container3Ref = useRef<HTMLDivElement>(null);
   const container4Ref = useRef<HTMLDivElement>(null);
+
+  const handleEditDeal = (deal: Deal) => {
+    setSelectedDeal(deal);
+    // Trigger edit modal
+    const modal = document.getElementById('edit_deals');
+    if (modal) {
+      // Try multiple ways to show the modal
+      try {
+        // Method 1: Try Bootstrap 5
+        const bootstrap = (window as any).bootstrap;
+        if (bootstrap && bootstrap.Modal) {
+          const modalInstance = new bootstrap.Modal(modal);
+          modalInstance.show();
+          return;
+        }
+        
+        // Method 2: Try jQuery Bootstrap (if available)
+        if ((window as any).$ && (window as any).$.fn.modal) {
+          (window as any).$(modal).modal('show');
+          return;
+        }
+        
+        // Method 3: Fallback - show modal manually
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        document.body.classList.add('modal-open');
+        
+        // Add backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modal-backdrop';
+        document.body.appendChild(backdrop);
+        
+      } catch (error) {
+        console.error('Error showing modal:', error);
+        // Fallback - just show the modal element
+        modal.style.display = 'block';
+        modal.classList.add('show');
+      }
+    }
+  };
+
+  const handleDeleteDeal = (deal: Deal) => {
+    setSelectedDeal(deal);
+    // Trigger delete modal
+    const modal = document.getElementById('delete_modal');
+    if (modal) {
+      // Try multiple ways to show the modal
+      try {
+        // Method 1: Try Bootstrap 5
+        const bootstrap = (window as any).bootstrap;
+        if (bootstrap && bootstrap.Modal) {
+          const modalInstance = new bootstrap.Modal(modal);
+          modalInstance.show();
+          return;
+        }
+        
+        // Method 2: Try jQuery Bootstrap (if available)
+        if ((window as any).$ && (window as any).$.fn.modal) {
+          (window as any).$(modal).modal('show');
+          return;
+        }
+        
+        // Method 3: Fallback - show modal manually
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        document.body.classList.add('modal-open');
+        
+        // Add backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'modal-backdrop';
+        document.body.appendChild(backdrop);
+        
+      } catch (error) {
+        console.error('Error showing modal:', error);
+        // Fallback - just show the modal element
+        modal.style.display = 'block';
+        modal.classList.add('show');
+      }
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (selectedDeal) {
+      try {
+        const success = await deleteDeal(selectedDeal.id || selectedDeal._id || '');
+        if (success) {
+          setSelectedDeal(null);
+          // Close modal
+          const modal = document.getElementById('delete_modal');
+          if (modal) {
+            try {
+              // Try Bootstrap 5 method
+              const bootstrap = (window as any).bootstrap;
+              if (bootstrap && bootstrap.Modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                  modalInstance.hide();
+                  return;
+                }
+              }
+              
+              // Try jQuery Bootstrap method
+              if ((window as any).$ && (window as any).$.fn.modal) {
+                (window as any).$(modal).modal('hide');
+                return;
+              }
+              
+              // Fallback - hide modal manually
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              document.body.classList.remove('modal-open');
+              
+              // Remove backdrop
+              const backdrop = document.getElementById('modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+              
+            } catch (error) {
+              console.error('Error hiding modal:', error);
+              // Fallback - just hide the modal element
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error deleting deal:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const containers = [
@@ -26,6 +164,20 @@ const DealsGrid = () => {
       drake.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    fetchDeals();
+  }, [fetchDeals]);
+
+  const grouped = useMemo(() => {
+    const byStage: Record<string, any[]> = { New: [], Prospect: [], Proposal: [], Won: [] };
+    (deals || []).forEach((d: any) => {
+      const stage = (d.stage || 'New');
+      if (!byStage[stage]) byStage[stage] = [];
+      byStage[stage].push(d);
+    });
+    return byStage;
+  }, [deals]);
   return (
     <>
       <div className="page-wrapper">
@@ -192,262 +344,68 @@ const DealsGrid = () => {
                 </div>
               </div>
               <div className="kanban-drag-wrap pt-4" ref={container1Ref}>
-                <div>
-                  <div className="card kanban-card">
+                {(grouped.New || []).map((d: any) => (
+                  <div className="card kanban-card" key={d._id}>
                     <div className="card-body">
                       <div className="d-block">
                         <div className="border-purple border border-2 mb-3" />
                         <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">WR</span>
+                          <Link to={routes.dealsDetails} className="avatar avatar-lg bg-gray flex-shrink-0 me-2">
+                            <span className="avatar-title text-dark">{(d.initials || d.name || 'D').substring(0, 2).toUpperCase()}</span>
                           </Link>
                           <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>
-                              Website Redesign
-                            </Link>
+                            <Link to={routes.dealsDetails}>{d.name || 'Untitled Deal'}</Link>
                           </h6>
                         </div>
                       </div>
                       <div className="mb-3 d-flex flex-column">
                         <p className="text-default d-inline-flex align-items-center mb-2">
                           <i className="ti ti-currency-dollar text-dark me-2" />
-                          $4,50,000
+                          {typeof d.dealValue === 'number' ? `$${d.dealValue.toLocaleString()}` : 
+                           (typeof d.value === 'number' ? `$${d.value.toLocaleString()}` : '-')}
                         </p>
                         <p className="text-default d-inline-flex align-items-center mb-2">
                           <i className="ti ti-mail text-dark me-2" />
-                          darleeo@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (163) 2459 315
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Newyork, United States
+                          {d.owner?.name || d.owner || '-'}
                         </p>
                       </div>
                       <div className="d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-20.jpg"
-                              alt="image"
-                            />
+                          <Link to="#" className="avatar avatar-md avatar-rounded flex-shrink-0 me-2">
+                            <ImageWithBasePath src="assets/img/profiles/avatar-20.jpg" alt="image" />
                           </Link>
-                          <Link to="#" className="text-dark">
-                            Sharon Roy
-                          </Link>
+                          <Link to="#" className="text-dark">{d.owner?.name || d.owner || '-'}</Link>
                         </div>
                         <span className="badge badge-sm badge-info-transparent">
                           <i className="ti ti-progress me-1" />
-                          85%
+                          {typeof d.probability === 'number' ? `${d.probability}%` : '-'}
                         </span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
                         <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
+                          <i className="ti ti-calendar-due text-gray-5" /> {d.expectedClosedDate ? new Date(d.expectedClosedDate).toLocaleDateString() : 
+                           (d.expectedClosingDate ? new Date(d.expectedClosingDate).toLocaleDateString() : '-')}
                         </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div className="card kanban-card">
-                    <div className="card-body">
-                      <div className="d-block">
-                        <div className="border-purple border border-2 mb-3" />
-                        <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">CB</span>
-                          </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>Cloud Backup</Link>
-                          </h6>
-                        </div>
-                      </div>
-                      <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $5,00,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          sheron@example.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (146) 1249 296
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Exeter, United States
-                        </p>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
+                          <button
+                            className="btn btn-link p-1 me-1"
+                            onClick={() => handleEditDeal(d)}
+                            title="Edit Deal"
                           >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-20.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Darlee Robertson
-                          </Link>
-                        </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          15%
-                        </span>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 12
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                            <i className="ti ti-edit text-primary" />
+                          </button>
+                          <button
+                            className="btn btn-link p-1"
+                            onClick={() => handleDeleteDeal(d)}
+                            title="Delete Deal"
                           >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
+                            <i className="ti ti-trash text-danger" />
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div>
-                  <div className="card kanban-card mb-0">
-                    <div className="card-body">
-                      <div className="d-block">
-                        <div className="border-purple border border-2 mb-3" />
-                        <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">EM</span>
-                          </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>
-                              Email Marketing
-                            </Link>
-                          </h6>
-                        </div>
-                      </div>
-                      <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $7,40,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          vaughan@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (135) 3489 516
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Phoenix, United States
-                        </p>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-21.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Vaughan Lewis
-                          </Link>
-                        </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          95%
-                        </span>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
             <div className="kanban-list-items bg-white">
@@ -489,262 +447,50 @@ const DealsGrid = () => {
                 </div>
               </div>
               <div className="kanban-drag-wrap pt-4" ref={container2Ref}>
-                <div>
-                  <div className="card kanban-card">
+                {(grouped.Prospect || []).map((d: any) => (
+                  <div className="card kanban-card" key={d._id}>
                     <div className="card-body">
                       <div className="d-block">
                         <div className="border-skyblue border border-2 mb-3" />
                         <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">AP</span>
+                          <Link to={routes.dealsDetails} className="avatar avatar-lg bg-gray flex-shrink-0 me-2">
+                            <span className="avatar-title text-dark">{(d.initials || d.name || 'D').substring(0, 2).toUpperCase()}</span>
                           </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>
-                              App Development
-                            </Link>
-                          </h6>
+                          <h6 className="fw-medium"><Link to={routes.dealsDetails}>{d.name || 'Untitled Deal'}</Link></h6>
                         </div>
                       </div>
                       <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $3,15,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          jessica@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (158) 3459 596
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Chester, United Kingdom
-                        </p>
+                        <p className="text-default d-inline-flex align-items-center mb-2"><i className="ti ti-currency-dollar text-dark me-2" />{typeof d.dealValue === 'number' ? `$${d.dealValue.toLocaleString()}` : (typeof d.value === 'number' ? `$${d.value.toLocaleString()}` : '-')}</p>
                       </div>
                       <div className="d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-01.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Jessica Louise
-                          </Link>
+                          <Link to="#" className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"><ImageWithBasePath src="assets/img/profiles/avatar-01.jpg" alt="image" /></Link>
+                          <Link to="#" className="text-dark">{d.owner?.name || d.owner || '-'}</Link>
                         </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          95%
-                        </span>
+                        <span className="badge badge-sm badge-info-transparent"><i className="ti ti-progress me-1" />{typeof d.probability === 'number' ? `${d.probability}%` : '-'}</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                        <span className="text-dark"><i className="ti ti-calendar-due text-gray-5" /> {d.expectedClosedDate ? new Date(d.expectedClosedDate).toLocaleDateString() : (d.expectedClosingDate ? new Date(d.expectedClosingDate).toLocaleDateString() : '-')}</span>
+                        <div className="d-flex align-items-center">
+                          <button
+                            className="btn btn-link p-1 me-1"
+                            onClick={() => handleEditDeal(d)}
+                            title="Edit Deal"
                           >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                            <i className="ti ti-edit text-primary" />
+                          </button>
+                          <button
+                            className="btn btn-link p-1"
+                            onClick={() => handleDeleteDeal(d)}
+                            title="Delete Deal"
                           >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
+                            <i className="ti ti-trash text-danger" />
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div>
-                  <div className="card kanban-card">
-                    <div className="card-body">
-                      <div className="d-block">
-                        <div className="border-skyblue border border-2 mb-3" />
-                        <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">SL</span>
-                          </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>SaaS Licensing</Link>
-                          </h6>
-                        </div>
-                      </div>
-                      <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $6,20,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          rachel@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (154) 6481 075
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Bristol, United Kingdom
-                        </p>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-23.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Rachel Hampton
-                          </Link>
-                        </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          15%
-                        </span>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 12
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div className="card kanban-card mb-0">
-                    <div className="card-body">
-                      <div className="d-block">
-                        <div className="border-skyblue border border-2 mb-3" />
-                        <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">MA</span>
-                          </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>
-                              Mobile App Design
-                            </Link>
-                          </h6>
-                        </div>
-                      </div>
-                      <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $5,50,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          dawn@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (163) 6498 256
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Charlotte, United States
-                        </p>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-22.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Dawn Mercha
-                          </Link>
-                        </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          65%
-                        </span>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
             <div className="kanban-list-items bg-white">
@@ -786,174 +532,50 @@ const DealsGrid = () => {
                 </div>
               </div>
               <div className="kanban-drag-wrap pt-4" ref={container3Ref}>
-                <div>
-                  <div className="card kanban-card">
+                {(grouped.Proposal || []).map((d: any) => (
+                  <div className="card kanban-card" key={d._id}>
                     <div className="card-body">
                       <div className="d-block">
                         <div className="border-warning border border-2 mb-3" />
                         <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">SS</span>
+                          <Link to={routes.dealsDetails} className="avatar avatar-lg bg-gray flex-shrink-0 me-2">
+                            <span className="avatar-title text-dark">{(d.initials || d.name || 'D').substring(0, 2).toUpperCase()}</span>
                           </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>SEO Services</Link>
-                          </h6>
+                          <h6 className="fw-medium"><Link to={routes.dealsDetails}>{d.name || 'Untitled Deal'}</Link></h6>
                         </div>
                       </div>
                       <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $8,40,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          jonelle@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (184) 6348 195
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Coventry, United Kingdom
-                        </p>
+                        <p className="text-default d-inline-flex align-items-center mb-2"><i className="ti ti-currency-dollar text-dark me-2" />{typeof d.dealValue === 'number' ? `$${d.dealValue.toLocaleString()}` : (typeof d.value === 'number' ? `$${d.value.toLocaleString()}` : '-')}</p>
                       </div>
                       <div className="d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-24.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Jonelle Curtiss
-                          </Link>
+                          <Link to="#" className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"><ImageWithBasePath src="assets/img/profiles/avatar-24.jpg" alt="image" /></Link>
+                          <Link to="#" className="text-dark">{d.owner?.name || d.owner || '-'}</Link>
                         </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          60%
-                        </span>
+                        <span className="badge badge-sm badge-info-transparent"><i className="ti ti-progress me-1" />{typeof d.probability === 'number' ? `${d.probability}%` : '-'}</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                        <span className="text-dark"><i className="ti ti-calendar-due text-gray-5" /> {d.expectedClosedDate ? new Date(d.expectedClosedDate).toLocaleDateString() : (d.expectedClosingDate ? new Date(d.expectedClosingDate).toLocaleDateString() : '-')}</span>
+                        <div className="d-flex align-items-center">
+                          <button
+                            className="btn btn-link p-1 me-1"
+                            onClick={() => handleEditDeal(d)}
+                            title="Edit Deal"
                           >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                            <i className="ti ti-edit text-primary" />
+                          </button>
+                          <button
+                            className="btn btn-link p-1"
+                            onClick={() => handleDeleteDeal(d)}
+                            title="Delete Deal"
                           >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
+                            <i className="ti ti-trash text-danger" />
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div>
-                  <div className="card kanban-card">
-                    <div className="card-body">
-                      <div className="d-block">
-                        <div className="border-warning border border-2 mb-3" />
-                        <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">UI</span>
-                          </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>UX/UI Design</Link>
-                          </h6>
-                        </div>
-                      </div>
-                      <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $4,50,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          carol@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (196) 4862 196
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          Manchester, United Kingdom
-                        </p>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-16.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Carol Thomas
-                          </Link>
-                        </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          15%
-                        </span>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 12
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
-                          >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
             <div className="kanban-list-items bg-white me-0">
@@ -995,108 +617,61 @@ const DealsGrid = () => {
                 </div>
               </div>
               <div className="kanban-drag-wrap pt-4" ref={container4Ref}>
-                <div>
-                  <div className="card kanban-card">
+                {(grouped.Won || []).map((d: any) => (
+                  <div className="card kanban-card" key={d._id}>
                     <div className="card-body">
                       <div className="d-block">
                         <div className="border-success border border-2 mb-3" />
                         <div className="d-flex align-items-center mb-3">
-                          <Link
-                            to={routes.dealsDetails}
-                            className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
-                          >
-                            <span className="avatar-title text-dark">CM</span>
+                          <Link to={routes.dealsDetails} className="avatar avatar-lg bg-gray flex-shrink-0 me-2">
+                            <span className="avatar-title text-dark">{(d.initials || d.name || 'D').substring(0, 2).toUpperCase()}</span>
                           </Link>
-                          <h6 className="fw-medium">
-                            <Link to={routes.dealsDetails}>
-                              Cloud Migration
-                            </Link>
-                          </h6>
+                          <h6 className="fw-medium"><Link to={routes.dealsDetails}>{d.name || 'Untitled Deal'}</Link></h6>
                         </div>
                       </div>
                       <div className="mb-3 d-flex flex-column">
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-currency-dollar text-dark me-2" />
-                          $2,45,000
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-mail text-dark me-2" />
-                          jonathan@gmail.com
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center mb-2">
-                          <i className="ti ti-phone text-dark me-2" />
-                          (163) 2459 315
-                        </p>
-                        <p className="text-default d-inline-flex align-items-center">
-                          <i className="ti ti-map-pin-2 text-dark me-2" />
-                          London, United Kingdom
-                        </p>
+                        <p className="text-default d-inline-flex align-items-center mb-2"><i className="ti ti-currency-dollar text-dark me-2" />{typeof d.dealValue === 'number' ? `$${d.dealValue.toLocaleString()}` : (typeof d.value === 'number' ? `$${d.value.toLocaleString()}` : '-')}</p>
                       </div>
                       <div className="d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-10.jpg"
-                              alt="image"
-                            />
-                          </Link>
-                          <Link to="#" className="text-dark">
-                            Jonathan Smith
-                          </Link>
+                          <Link to="#" className="avatar avatar-md avatar-rounded flex-shrink-0 me-2"><ImageWithBasePath src="assets/img/profiles/avatar-10.jpg" alt="image" /></Link>
+                          <Link to="#" className="text-dark">{d.owner?.name || d.owner || '-'}</Link>
                         </div>
-                        <span className="badge badge-sm badge-info-transparent">
-                          <i className="ti ti-progress me-1" />
-                          85%
-                        </span>
+                        <span className="badge badge-sm badge-info-transparent"><i className="ti ti-progress me-1" />{typeof d.probability === 'number' ? `${d.probability}%` : '-'}</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                        <span className="text-dark">
-                          <i className="ti ti-calendar-due text-gray-5" /> 10
-                          Jan 2024
-                        </span>
-                        <div className="d-flex  align-items-center">
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                        <span className="text-dark"><i className="ti ti-calendar-due text-gray-5" /> {d.expectedClosedDate ? new Date(d.expectedClosedDate).toLocaleDateString() : (d.expectedClosingDate ? new Date(d.expectedClosingDate).toLocaleDateString() : '-')}</span>
+                        <div className="d-flex align-items-center">
+                          <button
+                            className="btn btn-link p-1 me-1"
+                            onClick={() => handleEditDeal(d)}
+                            title="Edit Deal"
                           >
-                            <i className="ti ti-phone-check" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center me-2"
+                            <i className="ti ti-edit text-primary" />
+                          </button>
+                          <button
+                            className="btn btn-link p-1"
+                            onClick={() => handleDeleteDeal(d)}
+                            title="Delete Deal"
                           >
-                            <i className="ti ti-message-circle-2" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-color-swatch" />
-                          </Link>
+                            <i className="ti ti-trash text-danger" />
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
           {/* /Deals Grid */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
-      <CrmsModal />
+      <CrmsModal 
+        selectedDeal={selectedDeal}
+        onDeleteConfirm={confirmDelete}
+      />
     </>
   );
 };

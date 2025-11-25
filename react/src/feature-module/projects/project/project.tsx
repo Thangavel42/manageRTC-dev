@@ -7,6 +7,7 @@ import { useSocket } from "../../../SocketContext";
 import { toast } from "react-toastify";
 import { Socket } from "socket.io-client";
 import ProjectModals from "../../../core/modals/projectModal";
+import Footer from "../../../core/common/footer";
 
 interface Project {
   _id: string;
@@ -575,15 +576,7 @@ const Project = () => {
               )}
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
       </>
 

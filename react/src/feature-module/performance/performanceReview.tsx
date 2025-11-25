@@ -1,15 +1,103 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../router/all_routes";
 import CommonSelect from "../../core/common/commonSelect";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import Footer from "../../core/common/footer";
+import performanceReviewService from "../../core/services/performance/performanceReview.service";
+
 const PerformanceReview = () => {
   const routes = all_routes;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [formData, setFormData] = useState({
+    employeeInfo: {
+      name: '',
+      empId: '',
+      department: '',
+      designation: '',
+      qualification: '',
+      dateOfJoin: '',
+      dateOfConfirmation: '',
+      previousExperience: '',
+      reportingOfficer: {
+        name: '',
+        designation: ''
+      }
+    }
+  });
+
   const yesNo = [
     { value: "Select", label: "Select" },
     { value: "Yes", label: "Yes" },
     { value: "No", label: "No" },
   ];
+
+  const handleInputChange = (section: string, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+         const handleSubmit = async () => {
+           try {
+             setLoading(true);
+             setError(null);
+             
+             // Basic validation
+             if (!formData.employeeInfo.name.trim()) {
+               setError('Employee name is required');
+               return;
+             }
+             if (!formData.employeeInfo.empId.trim()) {
+               setError('Employee ID is required');
+               return;
+             }
+             if (!formData.employeeInfo.department.trim()) {
+               setError('Department is required');
+               return;
+             }
+             if (!formData.employeeInfo.designation.trim()) {
+               setError('Designation is required');
+               return;
+             }
+             
+             const response = await performanceReviewService.createPerformanceReview(formData);
+             console.log('Performance Review API Response:', response);
+             if (response.done) {
+               // Reset form
+               setFormData({
+                 employeeInfo: {
+                   name: '',
+                   empId: '',
+                   department: '',
+                   designation: '',
+                   qualification: '',
+                   dateOfJoin: '',
+                   dateOfConfirmation: '',
+                   previousExperience: '',
+                   reportingOfficer: {
+                     name: '',
+                     designation: ''
+                   }
+                 }
+               });
+               
+               alert('Performance review created successfully!');
+             } else {
+               setError(response.error || 'Failed to create performance review');
+             }
+           } catch (err) {
+             setError('Failed to create performance review');
+             console.error('Error creating performance review:', err);
+           } finally {
+             setLoading(false);
+           }
+         };
   return (
     <>
       {/* Page Wrapper */}
@@ -2052,16 +2140,34 @@ const PerformanceReview = () => {
               </div>
             </div>
           </div>
+          
+          {/* Submit Button */}
+          <div className="row mb-4">
+            <div className="col-md-12 text-center">
+              {error && (
+                <div className="alert alert-danger mb-3" role="alert">
+                  {error}
+                </div>
+              )}
+              <button 
+                type="button" 
+                className="btn btn-primary btn-lg"
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Performance Review'
+                )}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
     </>

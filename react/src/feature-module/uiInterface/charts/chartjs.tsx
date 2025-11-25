@@ -21,6 +21,7 @@ import {
   Legend,
 } from "chart.js";
 import { Link } from "react-router-dom";
+import Footer from "../../../core/common/footer";
 
 // Register the necessary components for Chart.js
 ChartJS.register(
@@ -250,15 +251,8 @@ const ChartJSExample = () => {
           {/* /Polar Area Chart */}
         </div>
       </div>
-      <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-        <p className="mb-0">2014 - 2025 © Amasqis.</p>
-        <p>
-          Designed &amp; Developed By{" "}
-          <Link to="#" className="text-primary">
-            Dreams
-          </Link>
-        </p>
-      </div>
+      
+      <Footer />
     </div>
   );
 };

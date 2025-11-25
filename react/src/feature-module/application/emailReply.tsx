@@ -6,6 +6,8 @@ import Scrollbars from "react-custom-scrollbars-2";
 import { Chips, ChipsChangeEvent } from "primereact/chips";
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
+import Footer from "../../core/common/footer";
+
 const EmailReply = () => {
   const routes = all_routes;
   const [open1, setOpen1] = React.useState(false);
@@ -759,15 +761,7 @@ const EmailReply = () => {
               </Scrollbars>
             </div>
           </div>
-          <div className="footer d-sm-flex align-items-center justify-content-between bg-white p-3">
-            <p className="mb-0">2014 - 2025 © Amasqis.</p>
-            <p>
-              Designed &amp; Developed By{" "}
-              <Link to="#" className="text-primary">
-                Dreams
-              </Link>
-            </p>
-          </div>
+          <Footer />
         </div>
       </div>
       {/* /Page Wrapper */}

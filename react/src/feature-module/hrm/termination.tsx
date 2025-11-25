@@ -28,17 +28,22 @@ type Stats = {
   recentTerminations: string;
 };
 
+type DepartmentRow = {
+  department: string;
+}
+
 const Termination = () => {
   const socket = useSocket() as Socket | null;
 
   const [rows, setRows] = useState<TerminationRow[]>([]);
+  const [rowsDepartments, setRowsDepartments] = useState<DepartmentRow[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalTerminations: "0",
     recentTerminations: "0",
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [filterType, setFilterType] = useState<string>("thisyear");
+  const [filterType, setFilterType] = useState<string>("alltime");
   const [customRange, setCustomRange] = useState<{
     startDate?: string;
     endDate?: string;
@@ -167,6 +172,17 @@ const Termination = () => {
     setLoading(false);
   }, []);
 
+  const onDepartmentsListResponse = useCallback((res: any) => {
+    if (res?.done) {
+      setRowsDepartments(res.data || []);
+    } else {
+      setRowsDepartments([]);
+      // optionally toast error
+      // toast.error(res?.message || "Failed to fetch resignations");
+    }
+    setLoading(false);
+  }, []);
+
   const onStatsResponse = useCallback((res: any) => {
     if (res?.done && res.data) {
       setStats(res.data);
@@ -201,6 +217,7 @@ const Termination = () => {
     socket.emit("join-room", "hr_room");
 
     socket.on("hr/termination/terminationlist-response", onListResponse);
+    socket.on("hr/resignation/departmentlist-response", onDepartmentsListResponse);
     socket.on("hr/termination/termination-details-response", onStatsResponse);
     socket.on("hr/termination/add-termination-response", onAddResponse);
     socket.on("hr/termination/update-termination-response", onUpdateResponse);
@@ -208,6 +225,7 @@ const Termination = () => {
 
     return () => {
       socket.off("hr/termination/terminationlist-response", onListResponse);
+      socket.off("hr/resignation/departmentlist-response", onDepartmentsListResponse);
       socket.off(
         "hr/termination/termination-details-response",
         onStatsResponse
@@ -225,6 +243,7 @@ const Termination = () => {
   }, [
     socket,
     onListResponse,
+    onDepartmentsListResponse,
     onStatsResponse,
     onAddResponse,
     onUpdateResponse,
@@ -245,6 +264,14 @@ const Termination = () => {
     },
     [socket]
   );
+
+    const fetchDepartmentsList = useCallback(() => {
+        if (!socket) return;
+        setLoading(true);
+        socket.emit("hr/resignation/departmentlist");
+      },
+      [socket]
+    );
 
   const toIsoFromDDMMYYYY = (s: string) => {
     // s like "13-09-2025"
@@ -299,7 +326,7 @@ const Termination = () => {
       noticeDate: "", // YYYY-MM-DD from DatePicker
       terminationDate: "",
     });
-    socket.emit("hr/termination/terminationlist", { type: "thisyear" });
+    socket.emit("hr/termination/terminationlist", { type: "alltime" });
   };
 
   const handleEditSave = () => {
@@ -350,7 +377,7 @@ const Termination = () => {
       terminationDate: "",
       terminationId: "",
     });
-    socket.emit("hr/termination/terminationlist", { type: "last7days" });
+    socket.emit("hr/termination/terminationlist", { type: "alltime" });
   };
 
   const fetchStats = useCallback(() => {
@@ -362,13 +389,14 @@ const Termination = () => {
   useEffect(() => {
     if (!socket) return;
     fetchList(filterType, customRange);
+    fetchDepartmentsList();
     fetchStats();
-  }, [socket, fetchList, fetchStats, filterType, customRange]);
+  }, [socket, fetchList, fetchDepartmentsList, fetchStats, filterType, customRange]);
 
   // ui events
   type Option = { value: string; label: string };
   const handleFilterChange = (opt: Option | null) => {
-    const value = opt?.value ?? "last7days";
+    const value = opt?.value ?? "alltime";
     setFilterType(value);
     if (value !== "custom") {
       setCustomRange({});
@@ -398,6 +426,17 @@ const Termination = () => {
   const handleSelectionChange = (keys: React.Key[]) => {
     setSelectedKeys(keys as string[]);
   };
+
+  type OptionDepartments = { value: string; label: string };
+
+    const departmentsOptions: OptionDepartments[] = (rowsDepartments as any[]).map((t: any) => ({
+      value: t.department,
+      label: t.department,
+    }));
+
+    // Helper to find option object from string value
+    const toOption = (val: string | undefined) =>
+      val ? departmentsOptions.find(o => o.value === val) : undefined;
 
   // table columns (preserved look, wired to backend fields)
   const columns: any[] = [
@@ -548,6 +587,7 @@ const Termination = () => {
                             { value: "thismonth", label: "This Month" },
                             { value: "lastmonth", label: "Last Month" },
                             { value: "thisyear", label: "This Year" },
+                            { value: "alltime", label: "All Time"},
                           ]}
                           defaultValue={filterType}
                           onChange={handleFilterChange}
@@ -631,17 +671,12 @@ const Termination = () => {
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">Department</label>
-                        <textarea
-                          className="form-control"
-                          rows={1}
-                          defaultValue={addForm.department}
-                          onChange={(e) =>
-                            setAddForm({
-                              ...addForm,
-                              department: e.target.value,
-                            })
-                          }
-                        />
+                        <CommonSelect
+                              className="select"
+                              defaultValue={toOption(addForm.department)} 
+                              onChange={(opt: OptionDepartments | null) =>setAddForm({ ...addForm, department: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={departmentsOptions}
+                            />
                       </div>
                     </div>
                     <div className="col-md-12">
@@ -796,17 +831,12 @@ const Termination = () => {
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">Department</label>
-                        <textarea
-                          className="form-control"
-                          rows={1}
-                          defaultValue={editForm.department}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              department: e.target.value,
-                            })
-                          }
-                        />
+                        <CommonSelect
+                              className="select"
+                              defaultValue={toOption(editForm.department)} 
+                              onChange={(opt: OptionDepartments | null) =>setEditForm({ ...editForm, department: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={departmentsOptions}
+                            />
                       </div>
                     </div>
                     <div className="col-md-12">

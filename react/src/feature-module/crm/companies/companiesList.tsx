@@ -9,6 +9,7 @@ import PredefinedDateRanges from "../../../core/common/datePicker";
 import Table from "../../../core/common/dataTable/index";
 import CrmsModal from "../../../core/modals/crms_modal";
 import { useAuth } from "@clerk/clerk-react";
+import Footer from "../../../core/common/footer";
 
 const CompaniesList = () => {
   const routes = all_routes;
@@ -19,27 +20,33 @@ const CompaniesList = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
   const data = useMemo(() => {
     let filteredCompanies = companies;
 
     // Apply search filter
     if (searchTerm) {
-      filteredCompanies = filteredCompanies.filter((c: any) =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone?.includes(searchTerm)
+      filteredCompanies = filteredCompanies.filter(
+        (c: any) =>
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.phone?.includes(searchTerm)
       );
     }
 
     // Apply status filter
     if (statusFilter !== "all") {
-      filteredCompanies = filteredCompanies.filter((c: any) => c.status === statusFilter);
+      filteredCompanies = filteredCompanies.filter(
+        (c: any) => c.status === statusFilter
+      );
     }
 
     // Apply company filter (for specific company selection)
     if (companyFilter !== "all") {
-      filteredCompanies = filteredCompanies.filter((c: any) => c._id === companyFilter);
+      filteredCompanies = filteredCompanies.filter(
+        (c: any) => c._id === companyFilter
+      );
     }
 
     // Apply sorting
@@ -83,7 +90,8 @@ const CompaniesList = () => {
   useEffect(() => {
     const onChanged = () => fetchCompanies({ limit: 100 });
     window.addEventListener("companies:changed", onChanged as any);
-    return () => window.removeEventListener("companies:changed", onChanged as any);
+    return () =>
+      window.removeEventListener("companies:changed", onChanged as any);
   }, [fetchCompanies]);
 
   const handleSort = (field: string) => {
@@ -95,16 +103,16 @@ const CompaniesList = () => {
     }
   };
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (format: "pdf" | "excel") => {
     try {
       const token = await getToken();
       const response = await fetch(
-        `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/export?format=${format}`,
+        `${backendurl}/api/companies/export?format=${format}`,
         {
-          method: 'GET',
+          method: "GET",
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         }
       );
@@ -112,7 +120,7 @@ const CompaniesList = () => {
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `companies.${format}`;
         document.body.appendChild(a);
@@ -120,12 +128,12 @@ const CompaniesList = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        console.error('Export failed');
-        alert('Export failed. Please try again.');
+        console.error("Export failed");
+        alert("Export failed. Please try again.");
       }
     } catch (error) {
-      console.error('Export error:', error);
-      alert('Export failed. Please try again.');
+      console.error("Export error:", error);
+      alert("Export failed. Please try again.");
     }
   };
 
@@ -138,8 +146,16 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("name")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "name" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "name" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "name" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "name" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -147,7 +163,7 @@ const CompaniesList = () => {
       render: (text: string, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <Link
-            to={routes.companiesDetails.replace(':companyId', record._id)}
+            to={routes.companiesDetails.replace(":companyId", record._id)}
             className="avatar avatar-md border rounded-circle"
           >
             <ImageWithBasePath
@@ -158,7 +174,11 @@ const CompaniesList = () => {
           </Link>
           <div className="ms-2">
             <h6 className="fw-medium">
-              <Link to={routes.companiesDetails.replace(':companyId', record._id)}>{text}</Link>
+              <Link
+                to={routes.companiesDetails.replace(":companyId", record._id)}
+              >
+                {text}
+              </Link>
             </h6>
           </div>
         </div>
@@ -172,8 +192,16 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("email")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "email" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "email" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "email" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "email" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -187,8 +215,16 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("phone")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "phone" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "phone" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "phone" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "phone" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -202,8 +238,20 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("location")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "location" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "location" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "location" && sortOrder === "asc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "location" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -217,8 +265,18 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("rating")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "rating" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "rating" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "rating" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "rating" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -238,8 +296,20 @@ const CompaniesList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("ownerName")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "ownerName" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "ownerName" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "ownerName" && sortOrder === "asc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "ownerName" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -342,8 +412,8 @@ const CompaniesList = () => {
       dataIndex: "actions",
       render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
-          <Link 
-            to={routes.companiesDetails.replace(':companyId', record._id)} 
+          <Link
+            to={routes.companiesDetails.replace(":companyId", record._id)}
             className="me-2"
             title="View Details"
           >
@@ -366,29 +436,31 @@ const CompaniesList = () => {
           >
             <i className="ti ti-edit" />
           </Link> */}
-          <Link 
-            to="#" 
+          <Link
+            to="#"
             onClick={async () => {
-              if (window.confirm('Are you sure you want to delete this company?')) {
+              if (
+                window.confirm("Are you sure you want to delete this company?")
+              ) {
                 try {
                   const token = await getToken();
                   const response = await fetch(
-                    `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/companies/${record._id}`,
+                    `${backendurl}/api/companies/${record._id}`,
                     {
-                      method: 'DELETE',
-                      headers: { Authorization: `Bearer ${token}` }
+                      method: "DELETE",
+                      headers: { Authorization: `Bearer ${token}` },
                     }
                   );
-                  
+
                   if (response.ok) {
-                    window.dispatchEvent(new CustomEvent('companies:changed'));
-                    alert('Company deleted successfully!');
+                    window.dispatchEvent(new CustomEvent("companies:changed"));
+                    alert("Company deleted successfully!");
                   } else {
-                    alert('Failed to delete company. Please try again.');
+                    alert("Failed to delete company. Please try again.");
                   }
                 } catch (err) {
-                  console.error('delete company', err);
-                  alert('Error deleting company. Please try again.');
+                  console.error("delete company", err);
+                  alert("Error deleting company. Please try again.");
                 }
               }
             }}
@@ -502,7 +574,7 @@ const CompaniesList = () => {
                     </span>
                   </div>
                 </div>
-                
+
                 {/* Company Filter */}
                 <div className="dropdown me-3">
                   <Link
@@ -510,12 +582,15 @@ const CompaniesList = () => {
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
                   >
-                    {companyFilter === "all" ? "All Companies" : companies.find((c: any) => c._id === companyFilter)?.name || "Select Company"}
+                    {companyFilter === "all"
+                      ? "All Companies"
+                      : companies.find((c: any) => c._id === companyFilter)
+                          ?.name || "Select Company"}
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => setCompanyFilter("all")}
                       >
@@ -524,8 +599,8 @@ const CompaniesList = () => {
                     </li>
                     {companies.map((company: any) => (
                       <li key={company._id}>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={() => setCompanyFilter(company._id)}
                         >
@@ -535,7 +610,7 @@ const CompaniesList = () => {
                     ))}
                   </ul>
                 </div>
-                
+
                 {/* Status Filter */}
                 <div className="dropdown me-3">
                   <Link
@@ -547,8 +622,8 @@ const CompaniesList = () => {
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => setStatusFilter("all")}
                       >
@@ -556,8 +631,8 @@ const CompaniesList = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => setStatusFilter("Active")}
                       >
@@ -565,8 +640,8 @@ const CompaniesList = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => setStatusFilter("Inactive")}
                       >
@@ -575,7 +650,7 @@ const CompaniesList = () => {
                     </li>
                   </ul>
                 </div>
-                
+
                 {/* Export Dropdown */}
                 <div className="dropdown me-3">
                   <Link
@@ -588,20 +663,20 @@ const CompaniesList = () => {
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => handleExport('pdf')}
+                        onClick={() => handleExport("pdf")}
                       >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => handleExport('excel')}
+                        onClick={() => handleExport("excel")}
                       >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel
@@ -625,7 +700,7 @@ const CompaniesList = () => {
                     <i className="ti ti-alert-circle fs-48 text-danger mb-3"></i>
                     <h5>Error Loading Companies</h5>
                     <p className="text-muted">{error}</p>
-                    <button 
+                    <button
                       className="btn btn-primary"
                       onClick={() => fetchCompanies({ limit: 100 })}
                     >
@@ -639,12 +714,16 @@ const CompaniesList = () => {
                     <i className="ti ti-building fs-48 text-muted mb-3"></i>
                     <h5>No Companies Found</h5>
                     <p className="text-muted">
-                      {searchTerm || statusFilter !== "all" || companyFilter !== "all" 
-                        ? "No companies match your current filters." 
+                      {searchTerm ||
+                      statusFilter !== "all" ||
+                      companyFilter !== "all"
+                        ? "No companies match your current filters."
                         : "Get started by adding your first company."}
                     </p>
-                    {searchTerm || statusFilter !== "all" || companyFilter !== "all" ? (
-                      <button 
+                    {searchTerm ||
+                    statusFilter !== "all" ||
+                    companyFilter !== "all" ? (
+                      <button
                         className="btn btn-outline-primary"
                         onClick={() => {
                           setSearchTerm("");
@@ -673,15 +752,8 @@ const CompaniesList = () => {
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed & Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+
+        <Footer />
       </div>
       <CrmsModal />
     </>

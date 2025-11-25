@@ -8,6 +8,7 @@ import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
 import { DatePicker } from "antd";
 import { leaveemployee_details } from "../../../../core/data/json/leaveemployee_details";
 import CollapseHeader from "../../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../../core/common/footer";
 
 const LeaveEmployee = () => {
   const data = leaveemployee_details;
@@ -507,15 +508,7 @@ const LeaveEmployee = () => {
           </div>
           {/* /Leaves list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
       {/* Add Leaves */}

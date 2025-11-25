@@ -120,7 +120,7 @@ const Sidebar = () => {
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
-        <div className="sidebar-logo">
+        <div className="sidebar-logo text-center">
           <Link to="routes.index" className="logo logo-normal">
             <ImageWithBasePath src="assets/img/logo.svg" alt="Logo" />
           </Link>

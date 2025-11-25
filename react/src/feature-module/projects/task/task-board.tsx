@@ -8,243 +8,7 @@ import CommonTextEditor from "../../../core/common/textEditor";
 import dragula, { Drake } from "dragula";
 import "dragula/dist/dragula.css";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useSocket } from "../../../SocketContext";
-import { toast } from "react-toastify";
-
-interface Task {
-  _id: string;
-  title: string;
-  description?: string;
-  status: string;
-  priority: string;
-  projectId?: string;
-  assignee?: string[];
-  tags?: string[];
-  progress?: number;
-  dueDate?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface TaskStats {
-  total: number;
-  pending: number;
-  inprogress: number;
-  completed: number;
-  onhold: number;
-}
-
-interface KanbanTasks {
-  todo: Task[];
-  inprogress: Task[];
-  completed: Task[];
-  onhold: Task[];
-}
-
-
-const TaskCard: React.FC<{ task: Task; onStatusUpdate: (taskId: string, newStatus: string) => void }> = ({ task, onStatusUpdate }) => {
-  const getPriorityColor = (priority: string) => {
-    switch (priority?.toLowerCase()) {
-      case 'high': return 'badge-danger';
-      case 'medium': return 'badge-warning';
-      case 'low': return 'badge-success';
-      default: return 'badge-secondary';
-    }
-  };
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return 'No due date';
-    return new Date(date).toLocaleDateString();
-  };
-
-  return (
-    <div className="card kanban-card mb-2" data-task-id={task._id}>
-      <div className="card-body">
-        <div className="d-flex align-items-center justify-content-between mb-3">
-          <div className="d-flex align-items-center">
-            <span className={`badge bg-outline-dark me-2`}>
-              {task.tags?.[0] || 'Task'}
-            </span>
-            <span className={`badge ${getPriorityColor(task.priority)} badge-xs d-flex align-items-center justify-content-center`}>
-              <i className="fas fa-circle fs-6 me-1" />
-              {task.priority}
-            </span>
-          </div>
-          <div className="dropdown">
-            <Link
-              to="#"
-              className="d-inline-flex align-items-center"
-              data-bs-toggle="dropdown"
-            >
-              <i className="ti ti-dots-vertical" />
-            </Link>
-            <ul className="dropdown-menu dropdown-menu-end p-3">
-              <li>
-                <Link
-                  to="#"
-                  className="dropdown-item rounded-1"
-                  data-bs-toggle="modal"
-                  data-bs-target="#edit_task"
-                >
-                  <i className="ti ti-edit me-2" />
-                  Edit
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="#"
-                  className="dropdown-item rounded-1"
-                  data-bs-toggle="modal"
-                  data-bs-target="#delete_modal"
-                >
-                  <i className="ti ti-trash me-2" />
-                  Delete
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div className="mb-2">
-          <h6 className="d-flex align-items-center">
-            {task.title}
-          </h6>
-        </div>
-        {task.progress !== undefined && (
-          <div className="d-flex align-items-center mb-2">
-            <div
-              className="progress progress-sm flex-fill"
-              role="progressbar"
-              aria-valuenow={task.progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className="progress-bar bg-warning"
-                style={{ width: `${task.progress}%` }}
-              />
-            </div>
-            <span className="d-block ms-2 text-gray-9 fw-medium">
-              {task.progress}%
-            </span>
-          </div>
-        )}
-        <p className="fw-medium mb-0">
-          Due on :{" "}
-          <span className="text-gray-9">
-            {formatDate(task.dueDate)}
-          </span>
-        </p>
-        <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
-          <div className="avatar-list-stacked avatar-group-sm me-3">
-            {task.assignee && task.assignee.length > 0 ? (
-              task.assignee.slice(0, 3).map((assignee, index) => (
-                <span key={index} className="avatar avatar-rounded">
-                  <ImageWithBasePath
-                    className="border border-white"
-                    src="assets/img/profiles/avatar-19.jpg"
-                    alt="img"
-                  />
-                </span>
-              ))
-            ) : (
-              <span className="avatar avatar-rounded bg-secondary text-white">
-                <span className="fs-12 fw-medium">?</span>
-              </span>
-            )}
-            {task.assignee && task.assignee.length > 3 && (
-              <span className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium">
-                +{task.assignee.length - 3}
-              </span>
-            )}
-          </div>
-          <div className="d-flex align-items-center">
-            <Link
-              to="#"
-              className="d-flex align-items-center text-dark me-2"
-            >
-              <i className="ti ti-message-circle text-gray me-1" />
-              {task.tags?.length || 0}
-            </Link>
-            <Link
-              to="#"
-              className="d-flex align-items-center text-dark"
-            >
-              <i className="ti ti-paperclip text-gray me-1" />
-              {task.tags?.length || 0}
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-const KanbanColumn = React.forwardRef<HTMLDivElement, {
-  title: string;
-  count: number;
-  tasks: Task[];
-  status: string;
-  colorClass: string;
-  bgColorClass: string;
-  onTaskDrop: (taskId: string, newStatus: string) => void;
-}>(({ title, count, tasks, status, colorClass, bgColorClass, onTaskDrop }, ref) => {
-  return (
-    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-      <div className="bg-white p-2 rounded mb-2">
-        <div className="d-flex align-items-center justify-content-between">
-          <div className="d-flex align-items-center">
-            <span className={`${bgColorClass} p-1 d-flex rounded-circle me-2`}>
-              <span className={`${colorClass} rounded-circle d-block p-1`} />
-            </span>
-            <h5 className="me-2">{title}</h5>
-            <span className="badge bg-light rounded-pill">
-              {count}
-            </span>
-          </div>
-          <div className="dropdown">
-            <Link
-              to="#"
-              className="d-inline-flex align-items-center"
-              data-bs-toggle="dropdown"
-            >
-              <i className="ti ti-dots-vertical" />
-            </Link>
-            <ul className="dropdown-menu dropdown-menu-end p-3">
-              <li>
-                <Link
-                  to="#"
-                  className="dropdown-item rounded-1"
-                  data-bs-toggle="modal"
-                  data-bs-target="#add_task"
-                >
-                  <i className="ti ti-plus me-2" />
-                  Add Task
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div className="kanban-drag-wrap" ref={ref}>
-        {tasks.length === 0 ? (
-          <div className="text-center py-4 text-muted">
-            <i className="ti ti-clipboard-off fs-2 mb-2"></i>
-            <p>No tasks</p>
-          </div>
-        ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task._id}
-              task={task}
-              onStatusUpdate={onTaskDrop}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-});
+import Footer from "../../../core/common/footer";
 
 const TaskBoard = () => {
   const socket = useSocket();
@@ -1196,7 +960,7827 @@ const TaskBoard = () => {
                               Add New Board
                             </button>
                           </div>
-                        </form>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container3Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container4Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-10.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-12.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-13.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-14.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Inprogress</h5>
+                            <span className="badge bg-light rounded-pill">
+                              04
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container5Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Doctor Module
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "35%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  35%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  20 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-15.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-17.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-18.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container6Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Inventory and Supplies
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-purple"
+                                    style={{ width: "60%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  60%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  21 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-success p-1 d-flex rounded-circle me-2">
+                              <span className="bg-success rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Completed</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container7Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Billing and Payments
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-25.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-26.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-27.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-28.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-warning p-1 d-flex rounded-circle me-2">
+                              <span className="bg-warning rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">On-hold</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container8Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "15%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  15%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container9Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Telemedicine Implementation
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Review</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container10Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  16 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container11Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Appointment Scheduling
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  24 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="tab-pane fade"
+                  id="pills-contact"
+                  role="tabpanel"
+                >
+                  <div className="d-flex align-items-start overflow-auto project-status pb-4">
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-transparent-purple p-1 d-flex rounded-circle me-2">
+                              <span className="bg-purple rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">To Do</h5>
+                            <span className="badge bg-light rounded-pill">
+                              02
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container12Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  18 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container13Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-pink p-1 d-flex rounded-circle me-2">
+                              <span className="bg-pink rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Pending</h5>
+                            <span className="badge bg-light rounded-pill">
+                              13
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container14Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container15Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-10.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-12.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-13.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-14.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Inprogress</h5>
+                            <span className="badge bg-light rounded-pill">
+                              04
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container16Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Doctor Module
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "35%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  35%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  20 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-15.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-17.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-18.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container17Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Inventory and Supplies
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-purple"
+                                    style={{ width: "60%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  60%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  21 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-success p-1 d-flex rounded-circle me-2">
+                              <span className="bg-success rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Completed</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container18Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Billing and Payments
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-25.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-26.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-27.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-28.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-warning p-1 d-flex rounded-circle me-2">
+                              <span className="bg-warning rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">On-hold</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container19Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "15%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  15%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container20Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Telemedicine Implementation
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Review</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container21Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  16 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container22Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Appointment Scheduling
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  24 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="tab-pane fade"
+                  id="pills-medium"
+                  role="tabpanel"
+                >
+                  <div className="d-flex align-items-start overflow-auto project-status pb-4">
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-transparent-purple p-1 d-flex rounded-circle me-2">
+                              <span className="bg-purple rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">To Do</h5>
+                            <span className="badge bg-light rounded-pill">
+                              02
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container23Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  18 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container24Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-pink p-1 d-flex rounded-circle me-2">
+                              <span className="bg-pink rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Pending</h5>
+                            <span className="badge bg-light rounded-pill">
+                              13
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container25Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container26Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-10.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-12.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-13.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-14.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Inprogress</h5>
+                            <span className="badge bg-light rounded-pill">
+                              04
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container27Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Doctor Module
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "35%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  35%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  20 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-15.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-17.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-18.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container28Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Inventory and Supplies
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-purple"
+                                    style={{ width: "60%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  60%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  21 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-success p-1 d-flex rounded-circle me-2">
+                              <span className="bg-success rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Completed</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container29Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Billing and Payments
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-25.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-26.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-27.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-28.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-warning p-1 d-flex rounded-circle me-2">
+                              <span className="bg-warning rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">On-hold</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container30Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "15%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  15%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container31Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Telemedicine Implementation
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Review</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container32Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  16 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container33Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Appointment Scheduling
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  24 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="tab-pane fade" id="pills-low" role="tabpanel">
+                  <div className="d-flex align-items-start overflow-auto project-status pb-4">
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-transparent-purple p-1 d-flex rounded-circle me-2">
+                              <span className="bg-purple rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">To Do</h5>
+                            <span className="badge bg-light rounded-pill">
+                              02
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container34Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  18 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container35Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-pink p-1 d-flex rounded-circle me-2">
+                              <span className="bg-pink rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Pending</h5>
+                            <span className="badge bg-light rounded-pill">
+                              13
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container36Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient appointment booking
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "20%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  20%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-01.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-02.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-03.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-04.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container37Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Payment Gateway
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  15 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-10.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-12.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-13.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-14.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Inprogress</h5>
+                            <span className="badge bg-light rounded-pill">
+                              04
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container38Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Doctor Module
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "35%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  35%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  20 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-15.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-16.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-17.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-18.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-19.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container39Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Inventory and Supplies
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-purple"
+                                    style={{ width: "60%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  60%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  21 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-success p-1 d-flex rounded-circle me-2">
+                              <span className="bg-success rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Completed</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container40Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Billing and Payments
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-25.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-26.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-27.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-28.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-29.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-warning p-1 d-flex rounded-circle me-2">
+                              <span className="bg-warning rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">On-hold</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container41Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-danger"
+                                    style={{ width: "15%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  15%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="card kanban-card mb-2">
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-success badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Low
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Telemedicine Implementation
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-warning"
+                                    style={{ width: "40%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  40%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  22 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded bg-transparent-secondary w-100">
+                      <div className="bg-white p-2 rounded mb-2">
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center">
+                            <span className="bg-soft-skyblue p-1 d-flex rounded-circle me-2">
+                              <span className="bg-skyblue rounded-circle d-block p-1" />
+                            </span>
+                            <h5 className="me-2">Review</h5>
+                            <span className="badge bg-light rounded-pill">
+                              10
+                            </span>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center"
+                              data-bs-toggle="dropdown"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_task"
+                                >
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#delete_modal"
+                                >
+                                  <i className="ti ti-trash me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="kanban-drag-wrap">
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container42Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-warning badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    Medium
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Patient Feedback
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  16 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-30.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-31.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-05.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-09.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-11.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="card kanban-card mb-2"
+                            ref={container43Ref}
+                          >
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <span className="badge bg-outline-dark me-2">
+                                    Web Layout
+                                  </span>
+                                  <span className="badge bg-danger badge-xs d-flex align-items-center justify-content-center">
+                                    <i className="fas fa-circle fs-6 me-1" />
+                                    High
+                                  </span>
+                                </div>
+                                <div className="dropdown">
+                                  <Link
+                                    to="#"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
+                                  >
+                                    <i className="ti ti-dots-vertical" />
+                                  </Link>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <h6 className="d-flex align-items-center">
+                                  Appointment Scheduling
+                                </h6>
+                              </div>
+                              <div className="d-flex align-items-center mb-2">
+                                <div
+                                  className="progress progress-sm flex-fill"
+                                  role="progressbar"
+                                  aria-label="Basic example"
+                                  aria-valuenow={0}
+                                  aria-valuemin={0}
+                                  aria-valuemax={20}
+                                >
+                                  <div
+                                    className="progress-bar bg-success"
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                                <span className="d-block ms-2 text-gray-9 fw-medium">
+                                  100%
+                                </span>
+                              </div>
+                              <p className="fw-medium mb-0">
+                                Due on :{" "}
+                                <span className="text-gray-9">
+                                  {" "}
+                                  24 Apr 2024
+                                </span>
+                              </p>
+                              <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                                <div className="avatar-list-stacked avatar-group-sm me-3">
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-20.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-21.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-22.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-23.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded">
+                                    <ImageWithBasePath
+                                      className="border border-white"
+                                      src="assets/img/profiles/avatar-24.jpg"
+                                      alt="img"
+                                    />
+                                  </span>
+                                  <span className="avatar avatar-rounded bg-primary fs-12">
+                                    1+
+                                  </span>
+                                </div>
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark me-2"
+                                  >
+                                    <i className="ti ti-message-circle text-gray me-1" />
+                                    14
+                                  </Link>
+                                  <Link
+                                    to="#"
+                                    className="d-flex align-items-center text-dark"
+                                  >
+                                    <i className="ti ti-paperclip text-gray me-1" />
+                                    14
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_task"
+                        >
+                          <i className="ti ti-plus me-2" /> New Task
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </div>
+      {/* /Page Wrapper */}
+
+      {/* Add Task */}
+      <div className="modal fade" id="add_task">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Add New Task</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body">
+                <div className="row">
+                  <div className="col-12">
+                    <div className="mb-3">
+                      <label className="form-label">Title</label>
+                      <input type="text" className="form-control" />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Due Date</label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: "DD-MM-YYYY",
+                            type: "mask",
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Project</label>
+                      <CommonSelect
+                        className="select"
+                        options={projectChoose}
+                        defaultValue={projectChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label me-2">Team Members</label>
+                      <CommonTagsInput
+                        value={tags}
+                        onChange={setTags}
+                        placeholder="Add new"
+                        className="custom-input-class" // Optional custom class
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Tag</label>
+                      <CommonTagsInput
+                        value={tags1}
+                        onChange={setTags1}
+                        placeholder="Add new"
+                        className="custom-input-class" // Optional custom class
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Status</label>
+                      <CommonSelect
+                        className="select"
+                        options={statusChoose}
+                        defaultValue={statusChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Priority</label>
+                      <CommonSelect
+                        className="select"
+                        options={priorityChoose}
+                        defaultValue={priorityChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <label className="form-label">Who Can See this Task?</label>
+                    <div className="d-flex align-items-center mb-3">
+                      <div className="form-check me-3">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault1"
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault1"
+                        >
+                          Public
+                        </label>
+                      </div>
+                      <div className="form-check me-3">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault2"
+                          defaultChecked
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault2"
+                        >
+                          Private
+                        </label>
+                      </div>
+                      <div className="form-check ">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault3"
+                          defaultChecked
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault3"
+                        >
+                          Admin Only
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-lg-12">
+                    <div className="mb-3">
+                      <label className="form-label">Descriptions</label>
+                      <CommonTextEditor />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <label className="form-label">Upload Attachment</label>
+                    <div className="bg-light rounded p-2">
+                      <div className="profile-uploader border-bottom mb-2 pb-2">
+                        <div className="drag-upload-btn btn btn-sm btn-white border px-3">
+                          Select File
+                          <input
+                            type="file"
+                            className="form-control image-sign"
+                            multiple
+                          />
+                        </div>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between border-bottom mb-2 pb-2">
+                        <div className="d-flex align-items-center">
+                          <h6 className="fs-12 fw-medium me-1">Logo.zip</h6>
+                          <span className="badge badge-soft-info">21MB </span>
+                        </div>
+                        <Link to="#" className="btn btn-sm btn-icon">
+                          <i className="ti ti-trash" />
+                        </Link>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div className="d-flex align-items-center">
+                          <h6 className="fs-12 fw-medium me-1">Files.zip</h6>
+                          <span className="badge badge-soft-info">25MB </span>
+                        </div>
+                        <Link to="#" className="btn btn-sm btn-icon">
+                          <i className="ti ti-trash" />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-bs-dismiss="modal"
+                  className="btn btn-primary"
+                >
+                  Add New Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Task */}
+      {/* Edit Task */}
+      <div className="modal fade" id="edit_task">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Edit Task</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body">
+                <div className="row">
+                  <div className="col-12">
+                    <div className="mb-3">
+                      <label className="form-label">Title</label>
+                      <input type="text" className="form-control" />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Due Date</label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: "DD-MM-YYYY",
+                            type: "mask",
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Project</label>
+                      <CommonSelect
+                        className="select"
+                        options={projectChoose}
+                        defaultValue={projectChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label me-2">Team Members</label>
+                      <CommonTagsInput
+                        value={tags}
+                        onChange={setTags}
+                        placeholder="Add new"
+                        className="custom-input-class" // Optional custom class
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Tag</label>
+                      <CommonTagsInput
+                        value={tags1}
+                        onChange={setTags1}
+                        placeholder="Add new"
+                        className="custom-input-class" // Optional custom class
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Status</label>
+                      <CommonSelect
+                        className="select"
+                        options={statusChoose}
+                        defaultValue={statusChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Priority</label>
+                      <CommonSelect
+                        className="select"
+                        options={priorityChoose}
+                        defaultValue={priorityChoose[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <label className="form-label">Who Can See this Task?</label>
+                    <div className="d-flex align-items-center mb-3">
+                      <div className="form-check me-3">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault1"
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault1"
+                        >
+                          Public
+                        </label>
+                      </div>
+                      <div className="form-check me-3">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault2"
+                          defaultChecked
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault2"
+                        >
+                          Private
+                        </label>
+                      </div>
+                      <div className="form-check ">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault3"
+                          defaultChecked
+                        />
+                        <label
+                          className="form-check-label text-dark"
+                          htmlFor="flexRadioDefault3"
+                        >
+                          Admin Only
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-lg-12">
+                    <div className="mb-3">
+                      <label className="form-label">Descriptions</label>
+                      <div className="summernote" />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <label className="form-label">Upload Attachment</label>
+                    <div className="bg-light rounded p-2">
+                      <div className="profile-uploader border-bottom mb-2 pb-2">
+                        <div className="drag-upload-btn btn btn-sm btn-white border px-3">
+                          Select File
+                          <input
+                            type="file"
+                            className="form-control image-sign"
+                            multiple
+                          />
+                        </div>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between border-bottom mb-2 pb-2">
+                        <div className="d-flex align-items-center">
+                          <h6 className="fs-12 fw-medium me-1">Logo.zip</h6>
+                          <span className="badge badge-soft-info">21MB </span>
+                        </div>
+                        <Link to="#" className="btn btn-sm btn-icon">
+                          <i className="ti ti-trash" />
+                        </Link>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div className="d-flex align-items-center">
+                          <h6 className="fs-12 fw-medium me-1">Files.zip</h6>
+                          <span className="badge badge-soft-info">25MB </span>
+                        </div>
+                        <Link to="#" className="btn btn-sm btn-icon">
+                          <i className="ti ti-trash" />
+                        </Link>
                       </div>
                     </div>
                   </div>

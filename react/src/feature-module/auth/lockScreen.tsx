@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { all_routes } from "../router/all_routes";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 type PasswordField = "password" | "confirmPassword";
+const currentYear = new Date().getFullYear();
 
 const LockScreen = () => {
   const routes = all_routes;
@@ -83,7 +84,7 @@ const LockScreen = () => {
                   </Link>
                 </div>
                 <div className="p-2 text-center">
-                  <p className="mb-0 text-gray-9">Copyright © 2025 - Amasqis</p>
+                  <p className="mb-0 text-gray-9"><p className="mb-0">{currentYear} © amasQIS.ai</p></p>
                 </div>
               </div>
             </div>

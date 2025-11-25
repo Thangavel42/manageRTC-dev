@@ -11,6 +11,7 @@ import AddClient from "./add_client";
 import EditClient from "./edit_client";
 import DeleteClient from "./delete_client";
 import { message } from "antd";
+import Footer from "../../../core/common/footer";
 
 interface Client {
   _id: string;
@@ -821,15 +822,7 @@ const ClientList = () => {
           </div>
           {/* /Clients list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 

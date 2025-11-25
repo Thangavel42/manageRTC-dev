@@ -6,6 +6,8 @@ import PredefinedDateRanges from "../../core/common/datePicker";
 import { budgetRevenuesData } from "../../core/data/json/budgetRevenuesData";
 import Table from "../../core/common/dataTable/index";
 import BudgetRevenuesModal from "../../core/modals/budgetRevenuesModal";
+import Footer from "../../core/common/footer";
+
 
 const BudgetRevenues = () => {
   const routes = all_routes;
@@ -271,15 +273,7 @@ const BudgetRevenues = () => {
           </div>
           {/* /Budgets list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © Amasqis.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="https://amasqis.ai" className="text-primary">
-              Amasqis
-            </Link>
-          </p>
-        </div>
+        <Footer />
       </div>
       {/* /Page Wrapper */}
 
