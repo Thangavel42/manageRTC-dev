@@ -1,4 +1,4 @@
-import { getsuperadminCollections } from "../../config/db.js";
+import { getTenantCollections, getsuperadminCollections } from "../../config/db.js";
 import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
 
@@ -27,13 +27,37 @@ const getTrainingListStats = async () => {
       { $project: { totalTrainingList: { $ifNull: [{ $arrayElemAt: ["$totalTrainingList.count", 0] }, 0] } } },
     ];
     const [result = { totalTrainingList: 0 }] = await collection.trainings.aggregate(pipeline).toArray();
-    console.log(result);
     return { done: true, message: "success", data: { totalTrainingList: String(result.totalTrainingList || 0) } };
   } catch (error) {
     console.error("Error fetching trainingList stats:", error);
     return { done: false, message: "Error fetching trainingList stats" };
   }
 };
+
+const getEmployeeDetails = async(companyId) => {
+  try {
+    const collection = getTenantCollections(companyId);
+
+    const pipeline = [
+      {
+        $project: {
+          _id: 0,
+          employeeId: 1,
+          firstName: 1,
+          lastName: 1,
+        },
+      },
+    ];
+
+    const record = await collection.employees.aggregate(pipeline).toArray();
+
+    if (!record) throw new Error("employees not found");
+    return { done: true, message: "success", data: record };
+  } catch (error) {
+    console.error("Error fetching trainingList record:", error);
+    return { done: false, message: error.message, data: [] };
+  }
+}
 
 // 2. Get TrainingLists by date filter
 const getTrainingList = async ({type,startDate,endDate}={}) => {
@@ -249,6 +273,7 @@ const deleteTrainingList = async (trainingIds) => {
 export {
   getTrainingListStats,
   getTrainingList,
+  getEmployeeDetails,
   getSpecificTrainingList,
   addTrainingList,
   updateTrainingList,

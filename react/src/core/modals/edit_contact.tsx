@@ -1,16 +1,14 @@
-import { DatePicker } from 'antd';
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import CommonSelect from '../common/commonSelect';
-import CommonTagsInput from '../common/Taginput';
-import ImageWithBasePath from '../common/imageWithBasePath';
+import { DatePicker } from "antd";
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import CommonSelect from "../common/commonSelect";
+import CommonTagsInput from "../common/Taginput";
+import ImageWithBasePath from "../common/imageWithBasePath";
 import { useAuth } from "@clerk/clerk-react";
 
 const EditContact = () => {
-  const API_BASE_URL =
-    (typeof import.meta !== "undefined" && (import.meta as any).env?.REACT_APP_BACKEND_URL) ||
-    (typeof window !== "undefined" && (window as any).REACT_APP_BACKEND_URL) ||
-    "http://localhost:5000";
+  const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+
   const { getToken } = useAuth();
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -60,9 +58,12 @@ const EditContact = () => {
         setLoading(true);
         try {
           const token = await getToken();
-          const response = await fetch(`${API_BASE_URL}/api/contacts/${contactId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const response = await fetch(
+            `${API_BASE_URL}/api/contacts/${contactId}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
           const data = await response.json();
           if (data.done) {
             const contact = data.data;
@@ -99,18 +100,18 @@ const EditContact = () => {
             setTags(contact.tags || []);
           }
         } catch (error) {
-          console.error('Error loading contact:', error);
+          console.error("Error loading contact:", error);
         } finally {
           setLoading(false);
         }
       }
     };
 
-    const modal = document.getElementById('edit_contact');
+    const modal = document.getElementById("edit_contact");
     if (modal) {
-      modal.addEventListener('shown.bs.modal', loadContactData);
+      modal.addEventListener("shown.bs.modal", loadContactData);
       return () => {
-        modal.removeEventListener('shown.bs.modal', loadContactData);
+        modal.removeEventListener("shown.bs.modal", loadContactData);
       };
     }
   }, [getToken, API_BASE_URL]);
@@ -157,25 +158,30 @@ const EditContact = () => {
         rating: Number(form.rating) || 0,
       };
       const res = await fetch(`${API_BASE_URL}/api/contacts/${id}`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.done) {
-        window.dispatchEvent(new CustomEvent('contacts:changed'));
-        const modal = document.getElementById('edit_contact');
+        window.dispatchEvent(new CustomEvent("contacts:changed"));
+        const modal = document.getElementById("edit_contact");
         if (modal) {
-          const modalInstance = (window as any).bootstrap?.Modal?.getInstance(modal);
+          const modalInstance = (window as any).bootstrap?.Modal?.getInstance(
+            modal
+          );
           if (modalInstance) modalInstance.hide();
         }
-        alert('Contact updated successfully!');
+        alert("Contact updated successfully!");
       } else {
         alert(`Failed to update contact: ${data.error}`);
       }
     } catch (err) {
-      console.error('edit contact error', err);
-      alert('Error updating contact. Please try again.');
+      console.error("edit contact error", err);
+      alert("Error updating contact. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

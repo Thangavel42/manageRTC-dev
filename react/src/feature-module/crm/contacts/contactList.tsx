@@ -9,7 +9,6 @@ import CrmsModal from "../../../core/modals/crms_modal";
 import { useAuth } from "@clerk/clerk-react";
 import Footer from "../../../core/common/footer";
 
-
 const ContactList = () => {
   const routes = all_routes;
   const { contacts, fetchContacts, loading, error } = useContacts();
@@ -18,22 +17,26 @@ const ContactList = () => {
   const [sortOrder, setSortOrder] = useState("asc");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
   const data = useMemo(() => {
     let filteredContacts = contacts;
 
     // Search filter
     if (searchTerm) {
-      filteredContacts = filteredContacts.filter((c: any) =>
-        c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone?.includes(searchTerm)
+      filteredContacts = filteredContacts.filter(
+        (c: any) =>
+          c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.phone?.includes(searchTerm)
       );
     }
 
     // Status filter
     if (statusFilter !== "all") {
-      filteredContacts = filteredContacts.filter((c: any) => c.status === statusFilter);
+      filteredContacts = filteredContacts.filter(
+        (c: any) => c.status === statusFilter
+      );
     }
 
     // Sorting
@@ -73,7 +76,8 @@ const ContactList = () => {
   useEffect(() => {
     const onChanged = () => fetchContacts({ limit: 100 });
     window.addEventListener("contacts:changed", onChanged as any);
-    return () => window.removeEventListener("contacts:changed", onChanged as any);
+    return () =>
+      window.removeEventListener("contacts:changed", onChanged as any);
   }, [fetchContacts]);
 
   const handleSort = (field: string) => {
@@ -85,23 +89,23 @@ const ContactList = () => {
     }
   };
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (format: "pdf" | "excel") => {
     try {
       const token = await getToken();
-      const response = await fetch(
-        `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/contacts/export?format=${format}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const backendurl = process.env.REACT_APP_BACKEND_URL;
+      const urllink = backendurl + `/api/contacts/export?format=${format}`;
+      console.log("Backend Contact LIST -> ", urllink);
+      const response = await fetch(urllink, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `contacts.${format}`;
         document.body.appendChild(a);
@@ -109,10 +113,10 @@ const ContactList = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        alert('Export failed. Please try again.');
+        alert("Export failed. Please try again.");
       }
     } catch (error) {
-      alert('Export failed. Please try again.');
+      alert("Export failed. Please try again.");
     }
   };
 
@@ -125,8 +129,16 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("name")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "name" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "name" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "name" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "name" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -134,7 +146,7 @@ const ContactList = () => {
       render: (text: string, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <Link
-            to={routes.contactDetails.replace(':contactId', record._id)}
+            to={routes.contactDetails.replace(":contactId", record._id)}
             className="avatar avatar-md border avatar-rounded"
           >
             <ImageWithBasePath
@@ -145,7 +157,11 @@ const ContactList = () => {
           </Link>
           <div className="ms-2">
             <h6 className="fw-medium">
-              <Link to={routes.contactDetails.replace(':contactId', record._id)}>{text}</Link>
+              <Link
+                to={routes.contactDetails.replace(":contactId", record._id)}
+              >
+                {text}
+              </Link>
             </h6>
             <span className="fs-12 fw-normal">{record.role}</span>
           </div>
@@ -160,8 +176,16 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("email")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "email" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "email" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "email" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "email" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -175,8 +199,16 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("phone")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "phone" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "phone" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "phone" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "phone" && sortOrder === "desc" ? "text-primary" : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -190,8 +222,20 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("location")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "location" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "location" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "location" && sortOrder === "asc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "location" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -205,8 +249,18 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("rating")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "rating" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "rating" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "rating" && sortOrder === "asc" ? "text-primary" : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "rating" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -226,8 +280,20 @@ const ContactList = () => {
             className="btn btn-sm btn-link p-0 ms-1"
             onClick={() => handleSort("ownerName")}
           >
-            <i className={`ti ti-arrow-up ${sortBy === "ownerName" && sortOrder === "asc" ? "text-primary" : ""}`}></i>
-            <i className={`ti ti-arrow-down ${sortBy === "ownerName" && sortOrder === "desc" ? "text-primary" : ""}`}></i>
+            <i
+              className={`ti ti-arrow-up ${
+                sortBy === "ownerName" && sortOrder === "asc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
+            <i
+              className={`ti ti-arrow-down ${
+                sortBy === "ownerName" && sortOrder === "desc"
+                  ? "text-primary"
+                  : ""
+              }`}
+            ></i>
           </button>
         </div>
       ),
@@ -239,35 +305,50 @@ const ContactList = () => {
       render: () => (
         <ul className="contact-icon d-flex align-items-center ">
           <li>
-            <Link to="#" className="p-1 rounded-circle contact-icon-mail d-flex align-items-center justify-content-center">
+            <Link
+              to="#"
+              className="p-1 rounded-circle contact-icon-mail d-flex align-items-center justify-content-center"
+            >
               <span className="d-flex align-items-center justify-content-center">
                 <i className="ti ti-mail text-gray-5"></i>
               </span>
             </Link>
           </li>
           <li>
-            <Link to="#" className="p-1 rounded-circle contact-icon-call d-flex align-items-center justify-content-center">
+            <Link
+              to="#"
+              className="p-1 rounded-circle contact-icon-call d-flex align-items-center justify-content-center"
+            >
               <span className="d-flex align-items-center justify-content-center">
                 <i className="ti ti-phone-call text-gray-5"></i>
               </span>
             </Link>
           </li>
           <li>
-            <Link to="#" className="p-1 rounded-circle contact-icon-msg d-flex align-items-center justify-content-center">
+            <Link
+              to="#"
+              className="p-1 rounded-circle contact-icon-msg d-flex align-items-center justify-content-center"
+            >
               <span className="d-flex align-items-center justify-content-center">
                 <i className="ti ti-message-2 text-gray-5"></i>
               </span>
             </Link>
           </li>
           <li>
-            <Link to="#" className="p-1 rounded-circle contact-icon-skype d-flex align-items-center justify-content-center">
+            <Link
+              to="#"
+              className="p-1 rounded-circle contact-icon-skype d-flex align-items-center justify-content-center"
+            >
               <span className="d-flex align-items-center justify-content-center">
                 <i className="ti ti-brand-skype text-gray-5"></i>
               </span>
             </Link>
           </li>
           <li>
-            <Link to="#" className="p-1 rounded-circle contact-icon-facebook d-flex align-items-center justify-content-center">
+            <Link
+              to="#"
+              className="p-1 rounded-circle contact-icon-facebook d-flex align-items-center justify-content-center"
+            >
               <span className="d-flex align-items-center justify-content-center">
                 <i className="ti ti-brand-facebook text-gray-5"></i>
               </span>
@@ -296,7 +377,7 @@ const ContactList = () => {
       render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
           <Link
-            to={routes.contactDetails.replace(':contactId', record._id)}
+            to={routes.contactDetails.replace(":contactId", record._id)}
             className="me-2"
             title="View Details"
           >
@@ -305,24 +386,26 @@ const ContactList = () => {
           <Link
             to="#"
             onClick={async () => {
-              if (window.confirm('Are you sure you want to delete this contact?')) {
+              if (
+                window.confirm("Are you sure you want to delete this contact?")
+              ) {
                 try {
                   const token = await getToken();
                   const response = await fetch(
-                    `${(import.meta as any).env?.REACT_APP_BACKEND_URL || "http://localhost:5000"}/api/contacts/${record._id}`,
+                    `${backendurl}/api/contacts/${record._id}`,
                     {
-                      method: 'DELETE',
-                      headers: { Authorization: `Bearer ${token}` }
+                      method: "DELETE",
+                      headers: { Authorization: `Bearer ${token}` },
                     }
                   );
                   if (response.ok) {
-                    window.dispatchEvent(new CustomEvent('contacts:changed'));
-                    alert('Contact deleted successfully!');
+                    window.dispatchEvent(new CustomEvent("contacts:changed"));
+                    alert("Contact deleted successfully!");
                   } else {
-                    alert('Failed to delete contact. Please try again.');
+                    alert("Failed to delete contact. Please try again.");
                   }
                 } catch (err) {
-                  alert('Error deleting contact. Please try again.');
+                  alert("Error deleting contact. Please try again.");
                 }
               }
             }}
@@ -383,13 +466,21 @@ const ContactList = () => {
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("pdf")}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleExport("excel")}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel
                       </Link>
@@ -487,7 +578,7 @@ const ContactList = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => handleExport('pdf')}
+                        onClick={() => handleExport("pdf")}
                       >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
@@ -497,7 +588,7 @@ const ContactList = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => handleExport('excel')}
+                        onClick={() => handleExport("excel")}
                       >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel
@@ -568,10 +659,10 @@ const ContactList = () => {
             </div>
           </div>
         </div>
-       
+
         {/* Footer */}
         <Footer />
-      {/* /Footer */}
+        {/* /Footer */}
       </div>
       <CrmsModal />
     </>

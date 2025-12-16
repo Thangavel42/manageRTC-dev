@@ -10,6 +10,7 @@ import resignationController from "./resignation.controller.js";
 import trainingTypesController from "./trainingTypes.controller.js";
 import trainersController from "./trainers.controller.js";
 import trainingListController from "./trainingList.controller.js";
+import holidayController from "./holidays.controller.js";
 
 const hrDashboardController = (socket, io) => {
   console.log("Setting up termination controller...");
@@ -22,6 +23,8 @@ const hrDashboardController = (socket, io) => {
   trainersController(socket,io);
   console.log("Attaching trainings controller...");
   trainingListController(socket,io);
+  console.log("Attaching holidays controller...**********");
+  holidayController(socket,io);
   const isDevelopment =
     process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "production";
@@ -923,10 +926,10 @@ const hrDashboardController = (socket, io) => {
       if (!result.done) {
         console.error(
           "[hrm/designations/get] Service returned failure:",
-          result.error || result.message
+          result.error || "Failed to fetch designations"
         );
         throw new Error(
-          result.error || result.message || "Failed to display designations"
+          result.error || "Failed to fetch designations"
         );
       }
 

@@ -8,7 +8,7 @@ const initialState = {
   dataSidebarAll: localStorage.getItem("dataSidebarAll") || "57, 22, 148",
   dataTopBar: localStorage.getItem("dataTopBar") || "all",
   dataTopbarAll: localStorage.getItem("dataTopbarAll") || "123, 47, 247",
-  dataTopBarColor: localStorage.getItem("dataTopBarColor") || "white",   // <-- fixed key
+  dataTopBarColor: localStorage.getItem("dataTopBarColor") || "white", 
   dataTopBarColorAll: localStorage.getItem("dataTopBarColorAll") || "",
   dataColor: localStorage.getItem("dataColor") || "all",
   dataColorAll: localStorage.getItem("dataColorAll") || "242, 7, 231",

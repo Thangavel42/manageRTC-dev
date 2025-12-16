@@ -9,6 +9,7 @@ import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 import dayjs from "dayjs";
+import { useUser } from "@clerk/clerk-react";
 import Footer from "../../../core/common/footer";
 
 type PasswordField = "password" | "confirmPassword";
@@ -20,6 +21,20 @@ interface EmployeeStats {
   activeCount: number;
   inactiveCount: number;
   newJoinersCount: number;
+}
+
+interface Address {
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+interface PersonalInfo {
+  gender: string;
+  birthday: string | null;
+  address: Address;
 }
 
 interface Employee {
@@ -35,6 +50,7 @@ interface Employee {
     email: string;
     phone: string;
   },
+  personal?: PersonalInfo;
   companyName: string;
   departmentId: string;
   designationId: string;
@@ -130,6 +146,7 @@ const initialState = {
 };
 
 const EmployeesGrid = () => {
+   const {  isLoaded } = useUser();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("basic-info");
@@ -168,6 +185,17 @@ const EmployeesGrid = () => {
     designationId: "",
     departmentId: "",
     about: "",
+    personal: {
+      gender: "",
+      birthday: null,
+      address: {
+        street: "",
+        city: "",
+        state: "",
+        postalCode: "",
+        country: ""
+      }
+    }
   })
   const [permissions, setPermissions] = useState(initialState);
 
@@ -513,6 +541,7 @@ const EmployeesGrid = () => {
         departmentId,
         designationId,
         about,
+        personal
       } = formData;
 
       const basicInfo = {
@@ -533,6 +562,7 @@ const EmployeesGrid = () => {
         departmentId,
         designationId,
         about,
+        personal
       };
 
       // Prepare full submission data
@@ -581,6 +611,17 @@ const EmployeesGrid = () => {
       departmentId: "",
       designationId: "",
       about: "",
+      personal: {
+        gender: "",
+        birthday: null,
+        address: {
+          street: "",
+          city: "",
+          state: "",
+          postalCode: "",
+          country: ""
+        }
+      }
     });
 
     setPermissions(initialState);
@@ -831,6 +872,35 @@ const EmployeesGrid = () => {
     }
   };
 
+  if (loading || !isLoaded) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       {/* Page Wrapper */}
@@ -1101,7 +1171,7 @@ const EmployeesGrid = () => {
             {/* <div className="col-md-12">
                             <div className="text-center mb-4"> */}
             {employees.length === 0 ? (
-                <p className='text-center'>No employees found</p>
+              <p className='text-center'>No employees found</p>
             ) : (employees.map(emp => {
               const {
                 _id,
@@ -1423,6 +1493,159 @@ const EmployeesGrid = () => {
                             name="email"
                             value={formData.contact.email}
                             onChange={handleChange} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            Gender <span className="text-danger"> *</span>
+                          </label>
+                          <select 
+                            className="form-control"
+                            name="gender"
+                            value={formData.personal?.gender || ""}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              personal: {
+                                ...prev.personal,
+                                gender: e.target.value
+                              }
+                            }))}
+                          >
+                            <option value="">Select Gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            Birthday <span className="text-danger"> *</span>
+                          </label>
+                          <div className="input-icon-end position-relative">
+                            <DatePicker
+                              className="form-control datetimepicker"
+                              format="DD-MM-YYYY"
+                              getPopupContainer={getModalContainer}
+                              placeholder="DD-MM-YYYY"
+                              name="birthday"
+                              value={formData.personal?.birthday ? dayjs(formData.personal.birthday) : null}
+                              onChange={(date) => setFormData(prev => ({
+                                ...prev,
+                                personal: {
+                                  ...prev.personal,
+                                  birthday: date ? date.toDate().toISOString() : null
+                                }
+                              }))}
+                            />
+                            <span className="input-icon-addon">
+                              <i className="ti ti-calendar text-gray-7" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Address</label>
+                          <input 
+                            type="text" 
+                            className="form-control"
+                            placeholder="Street"
+                            name="street"
+                            value={formData.personal?.address?.street || ""}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              personal: {
+                                ...prev.personal,
+                                address: {
+                                  ...prev.personal?.address,
+                                  street: e.target.value
+                                }
+                              }
+                            }))}
+                          />
+                          <div className="row mt-3">
+                            <div className="col-md-6">
+                              <input 
+                                type="text" 
+                                className="form-control"
+                                placeholder="City"
+                                name="city"
+                                value={formData.personal?.address?.city || ""}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  personal: {
+                                    ...prev.personal,
+                                    address: {
+                                      ...prev.personal?.address,
+                                      city: e.target.value
+                                    }
+                                  }
+                                }))}
+                              />
+                            </div>
+                            <div className="col-md-6">
+                              <input 
+                                type="text" 
+                                className="form-control"
+                                placeholder="State"
+                                name="state"
+                                value={formData.personal?.address?.state || ""}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  personal: {
+                                    ...prev.personal,
+                                    address: {
+                                      ...prev.personal?.address,
+                                      state: e.target.value
+                                    }
+                                  }
+                                }))}
+                              />
+                            </div>
+                          </div>
+                          <div className="row mt-3">
+                            <div className="col-md-6">
+                              <input 
+                                type="text" 
+                                className="form-control"
+                                placeholder="Postal Code"
+                                name="postalCode"
+                                value={formData.personal?.address?.postalCode || ""}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  personal: {
+                                    ...prev.personal,
+                                    address: {
+                                      ...prev.personal?.address,
+                                      postalCode: e.target.value
+                                    }
+                                  }
+                                }))}
+                              />
+                            </div>
+                            <div className="col-md-6">
+                              <input 
+                                type="text" 
+                                className="form-control"
+                                placeholder="Country"
+                                name="country"
+                                value={formData.personal?.address?.country || ""}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  personal: {
+                                    ...prev.personal,
+                                    address: {
+                                      ...prev.personal?.address,
+                                      country: e.target.value
+                                    }
+                                  }
+                                }))}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="col-md-6">

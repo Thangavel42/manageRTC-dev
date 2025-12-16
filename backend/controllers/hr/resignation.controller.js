@@ -1,4 +1,4 @@
-import * as resignationService from "../../services/hr/resignation.services.js";
+ import * as resignationService from "../../services/hr/resignation.services.js";
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
@@ -29,6 +29,17 @@ const resignationController = (socket, io) => {
       socket.emit("hr/resignation/resignationlist-response", res);
     } catch (error) {
       socket.emit("hr/resignation/resignationlist-response", toErr(error));
+    }
+  });
+
+  socket.on("hr/resignation/departmentlist", async () => {
+    try {
+      const res = await resignationService.getDepartments(
+        companyId
+      );
+      socket.emit("hr/resignation/departmentlist-response", res);
+    } catch (error) {
+      socket.emit("hr/resignation/departmentlist-response", toErr(error));
     }
   });
 

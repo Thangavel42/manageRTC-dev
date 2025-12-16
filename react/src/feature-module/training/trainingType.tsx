@@ -30,7 +30,7 @@ const TrainingType = () => {
   const [stats, setStats] = useState<Stats>({ totalTrainingTypes: "0",});
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [filterType, setFilterType] = useState<string>("last7days");
+  const [filterType, setFilterType] = useState<string>("alltime");
   const [editing, setEditing] = useState<any>(null);
   const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
 
@@ -100,6 +100,7 @@ const TrainingType = () => {
         ),
         onOk: async () => {
           await onConfirm();
+          socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
         },
       });
     };
@@ -200,7 +201,7 @@ const TrainingType = () => {
       desc: "",
       status: "Active",
     });
-    socket.emit("hr/trainingTypes/trainingTypeslist", { type: "last7days" });
+    socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
     };
 
   const handleEditSave = () => {
@@ -215,7 +216,7 @@ const TrainingType = () => {
     const payload = {
      trainingType: editForm.trainingType,
      status: editForm.status as "Active" | "Inactive",
-     desx: editForm.desc,
+     desc: editForm.desc,
      typeId: editForm.typeId,
     };
 
@@ -227,7 +228,7 @@ const TrainingType = () => {
       status: "Active", 
       typeId:"",
     });
-    socket.emit("hr/trainingTypes/trainingTypelist", { type: "last7days" });
+    socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
     };
 
   const fetchStats = useCallback(() => {
@@ -244,7 +245,7 @@ const TrainingType = () => {
 
   type Option = { value: string; label: string };
     const handleFilterChange = (opt: Option | null) => {
-    const value = opt?.value ?? "last7days";
+    const value = opt?.value ?? "alltime";
     setFilterType(value);
     if (value !== "custom") {
       setCustomRange({});
@@ -419,7 +420,6 @@ const TrainingType = () => {
             </Link>
           </p>
         </div>
-        <Footer />
       </div>
       {/* /Page Wrapper */}
 

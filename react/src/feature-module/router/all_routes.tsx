@@ -315,7 +315,7 @@ export const all_routes = {
   projectlist: "/projects",
   projectdetails: "/projects-details",
   tasks: "/tasks",
-  tasksdetails: "/task-details",
+  tasksdetails: "/task-details/:taskId",
   taskboard: "/task-board",
   contactGrid: "/contact-grid",
   contactList: "/contact-list",
@@ -355,6 +355,7 @@ export const all_routes = {
   // RECRUITMENT
   jobgrid: "/job-grid",
   joblist: "/job-list",
+  jobdetails: "/jobs/:jobId",
   candidatesGrid: "/candidates-grid",
   candidateslist: "/candidates",
   candidateskanban: "/candidates-kanban",

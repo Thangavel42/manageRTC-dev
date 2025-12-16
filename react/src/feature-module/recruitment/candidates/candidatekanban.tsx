@@ -1,53 +1,245 @@
-import React, { useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
-import dragula, { Drake } from "dragula";
+import { useSocket } from "../../../SocketContext";
+import { Socket } from "socket.io-client";
+import { useCandidates, Candidate } from "../../../hooks/useCandidates";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import Footer from "../../../core/common/footer";
+import AddCandidate from "./add_candidate";
+import EditCandidate from "./edit_candidate";
+import DeleteCandidate from "./delete_candidate";
+import { message } from "antd";
+
+// Define status columns for Kanban
+const STATUS_COLUMNS = [
+  { key: "New Application", title: "New Applications", color: "info" },
+  { key: "Screening", title: "Screening", color: "warning" },
+  { key: "Interview", title: "Interview", color: "primary" },
+  { key: "Technical Test", title: "Technical Test", color: "secondary" },
+  { key: "Offer Stage", title: "Offer Stage", color: "success" },
+  { key: "Hired", title: "Hired", color: "success" },
+  { key: "Rejected", title: "Rejected", color: "danger" }
+];
+
 
 const CandidateKanban = () => {
-  const container1Ref = useRef<HTMLDivElement>(null);
-  const container2Ref = useRef<HTMLDivElement>(null);
-  const container3Ref = useRef<HTMLDivElement>(null);
-  const container4Ref = useRef<HTMLDivElement>(null);
-  const container5Ref = useRef<HTMLDivElement>(null);
-  const container6Ref = useRef<HTMLDivElement>(null);
-  const container7Ref = useRef<HTMLDivElement>(null);
-  const container8Ref = useRef<HTMLDivElement>(null);
-  const container9Ref = useRef<HTMLDivElement>(null);
-  const container10Ref = useRef<HTMLDivElement>(null);
-  const container11Ref = useRef<HTMLDivElement>(null);
-  const container12Ref = useRef<HTMLDivElement>(null);
-  const container13Ref = useRef<HTMLDivElement>(null);
-  const container14Ref = useRef<HTMLDivElement>(null);
-  const container15Ref = useRef<HTMLDivElement>(null);
+  const socket = useSocket() as Socket | null;
 
+  // State management using the custom hook
+  const {
+    candidates,
+    stats,
+    fetchAllData,
+    loading,
+    error,
+    exportPDF,
+    exportExcel,
+    exporting,
+    updateCandidateStatus,
+  } = useCandidates();
+
+  const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
+  
+  // Filter states
+  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedExperience, setSelectedExperience] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+
+  // Extract unique roles for filters
+  const [roles, setRoles] = useState<string[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+
+  // Group candidates by status
+  const [candidatesByStatus, setCandidatesByStatus] = useState<{[key: string]: Candidate[]}>({});
+
+  // Initialize data fetch
   useEffect(() => {
-    const containers = [
-      container1Ref.current as HTMLDivElement,
-      container2Ref.current as HTMLDivElement,
-      container3Ref.current as HTMLDivElement,
-      container4Ref.current as HTMLDivElement,
-      container5Ref.current as HTMLDivElement,
-      container6Ref.current as HTMLDivElement,
-      container7Ref.current as HTMLDivElement,
-      container8Ref.current as HTMLDivElement,
-      container9Ref.current as HTMLDivElement,
-      container10Ref.current as HTMLDivElement,
-      container11Ref.current as HTMLDivElement,
-      container12Ref.current as HTMLDivElement,
-      container13Ref.current as HTMLDivElement,
-      container14Ref.current as HTMLDivElement,
-      container15Ref.current as HTMLDivElement,
-    ].filter((container) => container !== null);
+    console.log("CandidateKanban component mounted");
+    fetchAllData();
+  }, [fetchAllData]);
 
-    const drake: Drake = dragula(containers);
-    return () => {
-      drake.destroy();
-    };
-  }, []);
+  // Extract unique values for filters whenever candidates change
+  useEffect(() => {
+    if (candidates && candidates.length > 0) {
+      // Fix TypeScript error by properly typing the filter operation
+      const uniqueRoles = Array.from(new Set(
+        candidates
+          .map(c => c.applicationInfo?.appliedRole)
+          .filter((role): role is string => Boolean(role))
+      ));
+      setRoles(uniqueRoles);
+    }
+  }, [candidates]);
+
+  // Apply filters whenever candidates or filter states change
+  useEffect(() => {
+    console.log("[CandidateKanban] Applying filters...");
+
+    if (!candidates || candidates.length === 0) {
+      setFilteredCandidates([]);
+      return;
+    }
+
+    let result = [...candidates];
+
+    // Role filter
+    if (selectedRole && selectedRole !== "") {
+      result = result.filter((candidate) => candidate.applicationInfo?.appliedRole === selectedRole);
+    }
+
+    // Experience level filter
+    if (selectedExperience && selectedExperience !== "") {
+      result = result.filter((candidate) => {
+        const experience = candidate.professionalInfo?.experienceYears || 0;
+        switch (selectedExperience) {
+          case "Entry Level":
+            return experience < 2;
+          case "Mid Level":
+            return experience >= 2 && experience < 5;
+          case "Senior Level":
+            return experience >= 5 && experience < 10;
+          case "Expert Level":
+            return experience >= 10;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Date range filter
+    if (dateRange.start && dateRange.end) {
+      const startDate = new Date(dateRange.start);
+      const endDate = new Date(dateRange.end);
+      result = result.filter((candidate) => {
+        const appliedDate = new Date(candidate.applicationInfo?.appliedDate || candidate.createdAt);
+        return appliedDate >= startDate && appliedDate <= endDate;
+      });
+    }
+
+    // Search query filter
+    if (searchQuery && searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((candidate) => {
+        const fullName = `${candidate.personalInfo?.firstName || ''} ${candidate.personalInfo?.lastName || ''}`.toLowerCase();
+        const email = candidate.personalInfo?.email?.toLowerCase() || '';
+        const phone = candidate.personalInfo?.phone?.toLowerCase() || '';
+        const appliedRole = candidate.applicationInfo?.appliedRole?.toLowerCase() || '';
+        const currentRole = candidate.professionalInfo?.currentRole?.toLowerCase() || '';
+        const skills = candidate.professionalInfo?.skills?.join(' ').toLowerCase() || '';
+        
+        return fullName.includes(query) ||
+               email.includes(query) ||
+               phone.includes(query) ||
+               appliedRole.includes(query) ||
+               currentRole.includes(query) ||
+               skills.includes(query);
+      });
+    }
+
+    setFilteredCandidates(result);
+  }, [candidates, selectedRole, selectedExperience, searchQuery, dateRange]);
+
+  // Group filtered candidates by status
+  useEffect(() => {
+    const grouped = STATUS_COLUMNS.reduce((acc, column) => {
+      acc[column.key] = filteredCandidates.filter(candidate => candidate.status === column.key);
+      return acc;
+    }, {} as {[key: string]: Candidate[]});
+
+    setCandidatesByStatus(grouped);
+  }, [filteredCandidates]);
+
+  // Handle filter changes
+  const handleRoleChange = (role: string) => {
+    setSelectedRole(role);
+  };
+
+  const handleExperienceChange = (experience: string) => {
+    setSelectedExperience(experience);
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedRole("");
+    setSelectedExperience("");
+    setSearchQuery("");
+    setDateRange({ start: "", end: "" });
+  };
+
+  // Handle candidate actions
+  const handleEditCandidate = (candidate: Candidate) => {
+    setSelectedCandidate(candidate);
+    window.dispatchEvent(
+      new CustomEvent("edit-candidate", { detail: { candidate } })
+    );
+  };
+
+  const handleDeleteCandidate = (candidate: Candidate) => {
+    setSelectedCandidate(candidate);
+    window.dispatchEvent(
+      new CustomEvent("delete-candidate", { detail: { candidate } })
+    );
+  };
+
+  // Handle status change (drag and drop simulation)
+  const handleStatusUpdate = async (candidateId: string, newStatus: string) => {
+    const success = await updateCandidateStatus(candidateId, newStatus, `Status updated to ${newStatus} via Kanban`);
+    if (success) {
+      // Data will be refreshed automatically via the hook
+    }
+  };
+
+  // Export functions
+  const handleExportPDF = useCallback(() => {
+    exportPDF();
+  }, [exportPDF]);
+
+  const handleExportExcel = useCallback(() => {
+    exportExcel();
+  }, [exportExcel]);
+
+  // Get status badge class
+  const getStatusBadgeClass = (status: string) => {
+    const column = STATUS_COLUMNS.find(col => col.key === status);
+    return `badge bg-${column?.color || 'light'}`;
+  };
+
+  // Get experience level badge
+  const getExperienceBadge = (years: number) => {
+    if (years < 2) return { text: "Entry", class: "badge bg-info" };
+    if (years < 5) return { text: "Mid", class: "badge bg-warning" };
+    if (years < 10) return { text: "Senior", class: "badge bg-primary" };
+    return { text: "Expert", class: "badge bg-success" };
+  };
+
+  // Kanban custom styles object (replacing styled-jsx)
+  const kanbanStyles = {
+    kanbanColumn: {
+      background: '#f8f9fa',
+      minWidth: '300px',
+      width: '300px'
+    },
+    kanbanColumnHeader: {
+      position: 'sticky' as const,
+      top: 0,
+      zIndex: 10
+    },
+    kanbanCard: {
+      cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s'
+    },
+    kanbanContainer: {
+      minHeight: '70vh'
+    },
+    candidateDetails: {
+      minHeight: '120px'
+    }
+  };
 
   return (
     <>
@@ -55,24 +247,22 @@ const CandidateKanban = () => {
       <div className="page-wrapper">
         <div className="content">
           {/* Breadcrumb */}
-          <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+          <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
             <div className="my-auto mb-2">
-              <h2 className="mb-1">Candidates</h2>
+              <h3 className="page-title mb-1">Candidates</h3>
               <nav>
                 <ol className="breadcrumb mb-0">
                   <li className="breadcrumb-item">
-                    <Link to={all_routes.adminDashboard}>
-                      <i className="ti ti-smart-home" />
-                    </Link>
+                    <Link to={all_routes.adminDashboard}>Dashboard</Link>
                   </li>
-                  <li className="breadcrumb-item">Administration</li>
+                  <li className="breadcrumb-item">Employee</li>
                   <li className="breadcrumb-item active" aria-current="page">
-                    Candidates Kanban
+                    Candidate Kanban
                   </li>
                 </ol>
               </nav>
             </div>
-            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
+            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
                   <Link
@@ -95,2127 +285,484 @@ const CandidateKanban = () => {
                   </Link>
                 </div>
               </div>
-              <div className="me-2 mb-2">
+              <div className="mb-2 me-2">
                 <div className="dropdown">
                   <Link
                     to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                    className="btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
                   >
-                    <i className="ti ti-file-export me-1" />
                     Export
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleExportPDF();
+                        }}
+                      >
+                        {exporting ? "Exporting..." : "Export as PDF"}
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleExportExcel();
+                        }}
+                      >
+                        {exporting ? "Exporting..." : "Export as Excel"}
                       </Link>
                     </li>
                   </ul>
                 </div>
               </div>
-              <div className="head-icons">
-                <CollapseHeader />
+              <div className="mb-2 me-2">
+                <Link
+                  to="#"
+                  data-bs-toggle="modal"
+                  data-bs-target="#add_candidate"
+                  className="btn btn-primary d-flex align-items-center"
+                >
+                  <i className="ti ti-plus me-2"></i>Add Candidate
+                </Link>
               </div>
+              <CollapseHeader />
             </div>
           </div>
           {/* /Breadcrumb */}
-          <div className="card">
-            <div className="card-body p-3">
-              <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-                <h5>Candidates Kanban</h5>
-                <div className="d-flex align-items-center flex-wrap row-gap-3">
-                  <div className="me-3">
-                    <div className="input-icon-end position-relative">
-                      <PredefinedDateRanges />
-                      <span className="input-icon-addon">
-                        <i className="ti ti-chevron-down" />
-                      </span>
-                    </div>
-                  </div>
-                  <div className="dropdown me-3">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      Role
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Accountant
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          App Developer
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Technician
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="dropdown me-3">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      Select Status
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Select Status
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Active
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Inactive
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="dropdown">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      Sort By : Last 7 Days
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Recently Added
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Ascending
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Desending
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Last Month
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Last 7 Days
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* Candidates Kanban */}
+
+          {/* Candidates Statistics */}
           <div className="row">
-            <div className="d-flex align-items-start overflow-auto project-status pb-4">
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
+            <div className="col-xl-3 col-md-6">
+              <div className="card">
+                <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-pink p-1 d-flex rounded-circle me-2">
-                        <span className="bg-purple rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">New</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
+                    <div className="me-2">
+                      <p className="fs-13 fw-medium text-gray-9 mb-1">Total Candidates</p>
+                      <h4>{stats?.totalCandidates || 0}</h4>
                     </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                    <span className="avatar avatar-lg bg-primary-transparent rounded-circle">
+                      <i className="ti ti-users fs-20"></i>
+                    </span>
                   </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container1Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-001
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-39.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Harold Gaynor
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              harold@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Accountant
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container2Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-002
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-40.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Sandra Ornellas
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              sandra@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Accountant
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
                 </div>
               </div>
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
+            </div>
+            <div className="col-xl-3 col-md-6">
+              <div className="card">
+                <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-pink p-1 d-flex rounded-circle me-2">
-                        <span className="bg-pink rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">Scheduled</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
+                    <div className="me-2">
+                      <p className="fs-13 fw-medium text-gray-9 mb-1">New Applications</p>
+                      <h4>{stats?.newApplications || 0}</h4>
                     </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                    <span className="avatar avatar-lg bg-info-transparent rounded-circle">
+                      <i className="ti ti-user-plus fs-20"></i>
+                    </span>
                   </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container3Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-003
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-41.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  John Harris
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              john@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Technician
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container4Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-004
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-42.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Carole Langan
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              carole@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Web Developer
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container5Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-005
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-44.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Charles Marks
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              charles@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              SEO
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container6Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-006
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-43.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Kerry Drake
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              kerry@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Designer
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
                 </div>
               </div>
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
+            </div>
+            <div className="col-xl-3 col-md-6">
+              <div className="card">
+                <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-info p-1 d-flex rounded-circle me-2">
-                        <span className="bg-info rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">Interviewed</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
+                    <div className="me-2">
+                      <p className="fs-13 fw-medium text-gray-9 mb-1">In Interview</p>
+                      <h4>{stats?.interview || 0}</h4>
                     </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                    <span className="avatar avatar-lg bg-warning-transparent rounded-circle">
+                      <i className="ti ti-message-circle fs-20"></i>
+                    </span>
                   </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container7Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-007
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-46.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  David Carmona
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              david@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Manager
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container8Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-008
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-45.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Margaret Soto
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              margaret@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              SEO Analyst
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container9Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-009
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-48.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Jeffrey Thaler
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              jeffrey@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Admin
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
                 </div>
               </div>
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
+            </div>
+            <div className="col-xl-3 col-md-6">
+              <div className="card">
+                <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-warning p-1 d-flex rounded-circle me-2">
-                        <span className="bg-warning rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">Offered</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
+                    <div className="me-2">
+                      <p className="fs-13 fw-medium text-gray-9 mb-1">Hired This Month</p>
+                      <h4>{stats?.monthlyHires || 0}</h4>
                     </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                    <span className="avatar avatar-lg bg-success-transparent rounded-circle">
+                      <i className="ti ti-check fs-20"></i>
+                    </span>
                   </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container10Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-010
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-47.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Joyce Golston
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              joyce@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Business
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container11Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-011
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-49.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Cedric Rosalez
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              cedric@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Financial
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
-                </div>
-              </div>
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-success p-1 d-flex rounded-circle me-2">
-                        <span className="bg-success rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">Hired</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
-                    </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container12Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-012
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-50.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Lillie Diaz
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              lillie@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Receptionist
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container13Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-013
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-51.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Thomas Bordelon
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              thomas@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Director
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
-                </div>
-              </div>
-              <div className="p-3 rounded bg-transparent-secondary w-100 me-3">
-                <div className="bg-white p-2 rounded mb-2">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <span className="bg-soft-danger p-1 d-flex rounded-circle me-2">
-                        <span className="bg-danger rounded-circle d-block p-1" />
-                      </span>
-                      <h5 className="me-2">Rejected</h5>
-                      <span className="badge bg-light rounded-pill">30</span>
-                    </div>
-                    <div className="dropdown">
-                      <Link
-                        to="#"
-                        className="d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-dots-vertical" />
-                      </Link>
-                      <ul className="dropdown-menu dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            <i className="ti ti-edit me-2" />
-                            Edit
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#delete_modal"
-                          >
-                            <i className="ti ti-trash me-2" />
-                            Delete
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="kanban-drag-wrap">
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container14Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-014
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                >
-                                  <i className="ti ti-edit me-2" />
-                                  Edit
-                                </Link>
-                              </li>
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-53.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Bruce Wright
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              bruce@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              CEO
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="card kanban-card mb-2" ref={container15Ref}>
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
-                          <div className="d-flex align-items-center flex-shrink-0">
-                            <span className="badge bg-primary-transparent">
-                              Cand-013
-                            </span>
-                          </div>
-                          <div className="dropdown">
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                              data-bs-toggle="dropdown"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </Link>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                >
-                                  <i className="ti ti-edit me-2" />
-                                  Edit
-                                </Link>
-                              </li>
-                              <li>
-                                <Link
-                                  to="#"
-                                  className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                >
-                                  <i className="ti ti-trash me-2" />
-                                  Delete
-                                </Link>
-                              </li>
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center flex-shrink-0 mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-lg avatar rounded-circle me-2"
-                            data-bs-toggle="offcanvas"
-                            data-bs-target="#candidate_details"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-54.jpg"
-                              className="img-fluid h-auto w-auto"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="d-flex flex-column">
-                            <div className="d-flex flex-wrap">
-                              <h6 className="text-dark fs-16 fw-semibold">
-                                <Link
-                                  to="#"
-                                  data-bs-toggle="offcanvas"
-                                  data-bs-target="#candidate_details"
-                                >
-                                  Angela Thomas
-                                </Link>
-                              </h6>
-                            </div>
-                            <p className="text-gray fs-13 fw-normal">
-                              angela@example.com
-                            </p>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Role
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              Consultant
-                            </span>
-                          </div>
-                          <span className="border-start text-gray fs-14 fw-normal" />
-                          <div>
-                            <h6 className="text-gray fs-14 fw-normal mb-2">
-                              Applied Date
-                            </h6>
-                            <span className="text-dark fs-14 fw-medium">
-                              12 Sep 2024
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link
-                    to="#"
-                    className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                  >
-                    <i className="ti ti-plus me-2" />
-                    New Project
-                  </Link>
                 </div>
               </div>
             </div>
           </div>
-          {/* /Candidates Kanban */}
-        </div>
-        <Footer />
-      </div>
-      {/* /Page Wrapper */}
-      {/* Candidate Details */}
-      <div
-        className="offcanvas offcanvas-end offcanvas-large"
-        tabIndex={-1}
-        id="candidate_details"
-      >
-        <div className="offcanvas-header border-bottom">
-          <h4 className="d-flex align-items-center">
-            Candidate Details
-            <span className="badge bg-primary-transparent fw-medium ms-2">
-              Cand-001
-            </span>
-          </h4>
-          <button
-            type="button"
-            className="btn-close custom-btn-close"
-            data-bs-dismiss="offcanvas"
-            aria-label="Close"
-          >
-            <i className="ti ti-x" />
-          </button>
-        </div>
-        <div className="offcanvas-body">
-          <div className="card">
+          {/* /Candidates Statistics */}
+
+          {/* Filters */}
+          <div className="card mb-3">
             <div className="card-body">
-              <div className="d-flex align-items-center flex-wrap flex-md-nowrap row-gap-3">
-                <span className="avatar avatar-xxxl candidate-img flex-shrink-0 me-3">
-                  <ImageWithBasePath
-                    src="assets/img/users/user-03.jpg"
-                    alt="Img"
+              <div className="d-flex align-items-center flex-wrap">
+                {/* Search Input */}
+                <div className="input-icon-start mb-3 me-2 position-relative">
+                  <span className="icon-addon">
+                    <i className="ti ti-search"></i>
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search candidates..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                   />
-                </span>
-                <div className="flex-fill border rounded p-3 pb-0">
-                  <div className="row align-items-center">
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Candiate Name</p>
-                        <h6 className="fw-normal">Harold Gaynor</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Applied Role</p>
-                        <h6 className="fw-normal">Accountant</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Applied Date</p>
-                        <h6 className="fw-normal">12 Sep 2024</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Email</p>
-                        <h6 className="fw-normal">harold@example.com</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Recruiter</p>
-                        <h6 className="fw-normal d-flex align-items-center">
-                          <span className="avatar avatar-xs avatar-rounded me-1">
-                            <ImageWithBasePath
-                              src="assets/img/users/user-01.jpg"
-                              alt="Img"
-                            />
-                          </span>
-                          Anthony Lewis
-                        </h6>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-3">
-                        <p className="mb-1">Recruiter</p>
-                        <span className="badge badge-purple d-inline-flex align-items-center">
-                          <i className="ti ti-point-filled me-1" />
-                          New
-                        </span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-          <div className="contact-grids-tab p-0 mb-3">
-            <ul className="nav nav-underline" id="myTab" role="tablist">
-              <li className="nav-item" role="presentation">
-                <button
-                  className="nav-link active pt-0"
-                  id="info-tab"
-                  data-bs-toggle="tab"
-                  data-bs-target="#basic-info"
-                  type="button"
-                  role="tab"
-                  aria-selected="true"
-                >
-                  Profile
-                </button>
-              </li>
-              <li className="nav-item" role="presentation">
-                <button
-                  className="nav-link pt-0"
-                  id="address-tab"
-                  data-bs-toggle="tab"
-                  data-bs-target="#address"
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                >
-                  Hiring Pipeline
-                </button>
-              </li>
-              <li className="nav-item" role="presentation">
-                <button
-                  className="nav-link pt-0"
-                  id="address-tab2"
-                  data-bs-toggle="tab"
-                  data-bs-target="#address2"
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                >
-                  Notes
-                </button>
-              </li>
-            </ul>
-          </div>
-          <div className="tab-content" id="myTabContent">
-            <div
-              className="tab-pane fade show active"
-              id="basic-info"
-              role="tabpanel"
-              aria-labelledby="info-tab"
-              tabIndex={0}
-            >
-              <div className="card">
-                <div className="card-header">
-                  <h5>Personal Information</h5>
-                </div>
-                <div className="card-body pb-0">
-                  <div className="row align-items-center">
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Candiate Name</p>
-                        <h6 className="fw-normal">Harold Gaynor</h6>
-                      </div>
+
+                {/* Role Filter */}
+                <div className="dropdown mb-3 me-2">
+                  <Link
+                    to="#"
+                    className="btn btn-outline-light bg-white dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                  >
+                    {selectedRole ? `Role: ${selectedRole}` : "Select Role"}
+                  </Link>
+                  <div className="dropdown-menu dropdown-menu-end p-3">
+                    <div className="dropdown-item">
+                      <Link
+                        to="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleRoleChange("");
+                        }}
+                      >
+                        All Roles
+                      </Link>
                     </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Phone</p>
-                        <h6 className="fw-normal">(146) 8964 278</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Gender</p>
-                        <h6 className="fw-normal">Male</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Date of Birth</p>
-                        <h6 className="fw-normal">23 Oct 2000</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Email</p>
-                        <h6 className="fw-normal">harold@example.com</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Nationality</p>
-                        <h6 className="fw-normal">Indian</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Religion</p>
-                        <h6 className="fw-normal">Christianity</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Marital status</p>
-                        <h6 className="fw-normal">No</h6>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="card">
-                <div className="card-header">
-                  <h5>Address Information</h5>
-                </div>
-                <div className="card-body pb-0">
-                  <div className="row align-items-center">
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Address</p>
-                        <h6 className="fw-normal">1861 Bayonne Ave</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">City</p>
-                        <h6 className="fw-normal">New York</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">State</p>
-                        <h6 className="fw-normal">New York</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Country</p>
-                        <h6 className="fw-normal">United States Of America</h6>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="card">
-                <div className="card-header">
-                  <h5>Resume</h5>
-                </div>
-                <div className="card-body pb-0">
-                  <div className="row align-items-center">
-                    <div className="col-md-6">
-                      <div className="d-flex align-items-center mb-3">
-                        <span className="avatar avatar-lg bg-light-500 border text-dark me-2">
-                          <i className="ti ti-file-description fs-24" />
-                        </span>
-                        <div>
-                          <h6 className="fw-medium">Resume.doc</h6>
-                          <span>120 KB</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3 text-md-end">
+                    {roles.map(role => (
+                      <div key={role} className="dropdown-item">
                         <Link
                           to="#"
-                          className="btn btn-dark d-inline-flex align-items-center"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleRoleChange(role);
+                          }}
                         >
-                          <i className="ti ti-download me-1" />
-                          Download
+                          {role}
                         </Link>
                       </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-            </div>
-            <div
-              className="tab-pane fade"
-              id="address"
-              role="tabpanel"
-              aria-labelledby="address-tab"
-              tabIndex={0}
-            >
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="fw-medium mb-2">Candidate Pipeline Stage</h5>
-                  <div className="pipeline-list candidates border-0 mb-0">
-                    <ul className="mb-0">
-                      <li>
-                        <Link to="#" className="bg-purple">
-                          New
+
+                {/* Experience Filter */}
+                <div className="dropdown mb-3 me-2">
+                  <Link
+                    to="#"
+                    className="btn btn-outline-light bg-white dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                  >
+                    {selectedExperience ? `Experience: ${selectedExperience}` : "Experience Level"}
+                  </Link>
+                  <div className="dropdown-menu dropdown-menu-end p-3">
+                    <div className="dropdown-item">
+                      <Link
+                        to="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleExperienceChange("");
+                        }}
+                      >
+                        All Levels
+                      </Link>
+                    </div>
+                    {["Entry Level", "Mid Level", "Senior Level", "Expert Level"].map(level => (
+                      <div key={level} className="dropdown-item">
+                        <Link
+                          to="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleExperienceChange(level);
+                          }}
+                        >
+                          {level}
                         </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="bg-gray-100">
-                          Scheduled
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="bg-grat-100">
-                          Interviewed
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="bg-gray-100">
-                          Offered
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="bg-gray-100">
-                          Hired / Rejected
-                        </Link>
-                      </li>
-                    </ul>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-              <div className="card">
-                <div className="card-header">
-                  <h5>Details</h5>
-                </div>
-                <div className="card-body pb-0">
-                  <div className="row align-items-center">
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Current Status</p>
-                        <span className="badge badge-soft-purple d-inline-flex align-items-center">
-                          <i className="ti ti-point-filled me-1" />
-                          New
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Applied Role</p>
-                        <h6 className="fw-normal">Accountant</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Applied Date</p>
-                        <h6 className="fw-normal">12 Sep 2024</h6>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="mb-3">
-                        <p className="mb-1">Recruiter</p>
-                        <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-01.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6>
-                            <Link to="#">Anthony Lewis</Link>
-                          </h6>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-footer">
-                  <div className="d-flex align-items-center justify-content-end">
-                    <Link to="#" className="btn btn-dark me-3">
-                      Reject
-                    </Link>
-                    <Link to="#" className="btn btn-primary">
-                      Move to Next Stage
+
+                {/* Clear Filters */}
+                {(selectedRole ||
+                  selectedExperience ||
+                  searchQuery ||
+                  dateRange.start ||
+                  dateRange.end) && (
+                  <div className="mb-3">
+                    <Link
+                      to="#"
+                      className="btn btn-outline-danger"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleClearFilters();
+                      }}
+                    >
+                      Clear Filters
                     </Link>
                   </div>
-                </div>
-              </div>
-            </div>
-            <div
-              className="tab-pane fade"
-              id="address2"
-              role="tabpanel"
-              aria-labelledby="address-tab2"
-              tabIndex={0}
-            >
-              <div className="card">
-                <div className="card-header">
-                  <h5>Notes</h5>
-                </div>
-                <div className="card-body">
-                  <p>
-                    Harold Gaynor is a detail-oriented and highly motivated
-                    accountant with 4 years of experience in financial
-                    reporting, auditing, and tax preparation.
-                  </p>
+                )}
+
+                {/* Filter Summary */}
+                <div className="mb-3 ms-auto">
+                  <span className="text-muted">
+                    Showing {filteredCandidates.length} of {candidates.length} candidates
+                  </span>
                 </div>
               </div>
             </div>
           </div>
+          {/* /Filters */}
+
+          {/* Kanban Board */}
+          <div className="card">
+            <div className="card-body p-0">
+              {loading ? (
+                <div className="text-center p-4">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading candidates...</span>
+                  </div>
+                  <p className="mt-2">Loading candidates...</p>
+                </div>
+              ) : error ? (
+                <div className="text-center p-4">
+                  <div className="alert alert-danger" role="alert">
+                    <strong>Error loading candidates:</strong> {error}
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => fetchAllData()}
+                  >
+                    <i className="ti ti-refresh me-2"></i>Retry
+                  </button>
+                </div>
+              ) : (
+                <div className="d-flex overflow-auto" style={kanbanStyles.kanbanContainer}>
+                  {STATUS_COLUMNS.map((column) => (
+                    <div 
+                      key={column.key} 
+                      className="kanban-column flex-shrink-0 border-end" 
+                      style={kanbanStyles.kanbanColumn}
+                    >
+                      {/* Column Header */}
+                      <div 
+                        className={`kanban-column-header p-3 border-bottom`}
+                        style={{
+                          ...kanbanStyles.kanbanColumnHeader,
+                          backgroundColor: `rgba(var(--bs-${column.color}-rgb), 0.1)`
+                        }}
+                      >
+                        <div className="d-flex justify-content-between align-items-center">
+                          <h6 className="mb-0 fw-semibold">
+                            {column.title}
+                          </h6>
+                          <span className={`badge bg-${column.color}`}>
+                            {candidatesByStatus[column.key]?.length || 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Column Content */}
+                      <div className="kanban-column-content p-3" style={{ maxHeight: 'calc(70vh - 80px)', overflowY: 'auto' }}>
+                        <div className="d-flex flex-column gap-3">
+                          {candidatesByStatus[column.key]?.map((candidate) => {
+                            const experienceBadge = getExperienceBadge(candidate.professionalInfo?.experienceYears || 0);
+                            return (
+                              <div 
+                                key={candidate._id} 
+                                className="kanban-card card border shadow-sm h-auto"
+                                style={kanbanStyles.kanbanCard}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.boxShadow = '';
+                                }}
+                              >
+                                <div className="card-body p-3">
+                                  {/* Card Header */}
+                                  <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <span className={experienceBadge.class}>
+                                      {experienceBadge.text}
+                                    </span>
+                                    <div className="dropdown">
+                                      <button
+                                        className="btn btn-sm btn-light p-1"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                      >
+                                        <i className="ti ti-dots-vertical"></i>
+                                      </button>
+                                      <ul className="dropdown-menu">
+                                        <li>
+                                          <button
+                                            className="dropdown-item"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              handleEditCandidate(candidate);
+                                            }}
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#edit_candidate"
+                                          >
+                                            <i className="ti ti-edit me-2"></i>Edit
+                                          </button>
+                                        </li>
+                                        <li>
+                                          <button
+                                            className="dropdown-item text-danger"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              handleDeleteCandidate(candidate);
+                                            }}
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#delete_candidate"
+                                          >
+                                            <i className="ti ti-trash me-2"></i>Delete
+                                          </button>
+                                        </li>
+                                        <li><hr className="dropdown-divider" /></li>
+                                        <li className="dropdown-header">Move to:</li>
+                                        {STATUS_COLUMNS.filter(col => col.key !== candidate.status).map(status => (
+                                          <li key={status.key}>
+                                            <button
+                                              className="dropdown-item"
+                                              onClick={() => handleStatusUpdate(candidate._id, status.key)}
+                                            >
+                                              <i className="ti ti-arrow-right me-2"></i>{status.title}
+                                            </button>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+
+                                  {/* Candidate Info */}
+                                  <div className="text-center mb-3">
+                                    <div className="avatar avatar-md mb-2">
+                                      <ImageWithBasePath
+                                        src="assets/img/profiles/avatar-01.jpg"
+                                        className="img-fluid rounded-circle"
+                                        alt="Profile"
+                                      />
+                                    </div>
+                                    <h6 className="mb-1 fw-semibold">{candidate.fullName}</h6>
+                                    <p className="text-muted fs-13 mb-0">
+                                      {candidate.applicationInfo?.appliedRole || "N/A"}
+                                    </p>
+                                  </div>
+
+                                  {/* Candidate Details */}
+                                  <div className="candidate-details" style={kanbanStyles.candidateDetails}>
+                                    {candidate.personalInfo?.email && (
+                                      <div className="d-flex align-items-center mb-1">
+                                        <i className="ti ti-mail me-2 text-muted fs-12"></i>
+                                        <span className="fs-12 text-muted text-truncate">
+                                          {candidate.personalInfo.email}
+                                        </span>
+                                      </div>
+                                    )}
+                                    
+                                    {candidate.personalInfo?.phone && (
+                                      <div className="d-flex align-items-center mb-1">
+                                        <i className="ti ti-phone me-2 text-muted fs-12"></i>
+                                        <span className="fs-12 text-muted">
+                                          {candidate.personalInfo.phone}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {candidate.professionalInfo?.experienceYears !== undefined && (
+                                      <div className="d-flex align-items-center mb-1">
+                                        <i className="ti ti-briefcase me-2 text-muted fs-12"></i>
+                                        <span className="fs-12 text-muted">
+                                          {candidate.professionalInfo.experienceYears} years exp.
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {candidate.applicationInfo?.appliedDate && (
+                                      <div className="d-flex align-items-center mb-2">
+                                        <i className="ti ti-calendar me-2 text-muted fs-12"></i>
+                                        <span className="fs-12 text-muted">
+                                          {new Date(candidate.applicationInfo.appliedDate).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {candidate.professionalInfo?.skills && candidate.professionalInfo.skills.length > 0 && (
+                                      <div className="mt-2">
+                                        <div className="d-flex flex-wrap gap-1">
+                                          {candidate.professionalInfo.skills.slice(0, 2).map((skill, index) => (
+                                            <span key={index} className="badge bg-light text-dark fs-11">
+                                              {skill}
+                                            </span>
+                                          ))}
+                                          {candidate.professionalInfo.skills.length > 2 && (
+                                            <span className="badge bg-light text-muted fs-11">
+                                              +{candidate.professionalInfo.skills.length - 2}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {candidate.applicationInfo?.recruiterName && (
+                                      <div className="mt-2 pt-2 border-top">
+                                        <div className="d-flex align-items-center">
+                                          <i className="ti ti-user-check me-2 text-muted fs-12"></i>
+                                          <span className="fs-12 text-muted">
+                                            {candidate.applicationInfo.recruiterName}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* /Kanban Board */}
         </div>
+
+        {/* Footer */}
+        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
+          <p className="mb-0">2014 - 2025 © AmasQIS.</p>
+          <p className="mb-0">
+            Designed &amp; Developed By{" "}
+            <Link to="#" className="text-primary">
+              AmasQIS
+            </Link>
+          </p>
+        </div>
+        {/* /Footer */}
       </div>
-      {/* Candidate Details */}
+      {/* /Page Wrapper */}
+
+      {/* Modal Components */}
+      <AddCandidate />
+      <EditCandidate />
+      <DeleteCandidate />
     </>
   );
 };

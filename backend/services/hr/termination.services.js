@@ -123,6 +123,13 @@ const getTerminations = async (
         dateFilter.noticeDate = { $gte: start, $lt: end };
         break;
       }
+      case "thisyear": {
+        const now = new Date();
+        const start = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), 0, 1)));
+        const end = toYMDStr(new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1)));
+        dateFilter.noticeDate = { $gte: start, $lt: end };
+        break;
+      }
       default:
         // no date filter
         break;

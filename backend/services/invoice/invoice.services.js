@@ -1,52 +1,66 @@
 import { getTenantCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 
-/**
- * Build a Mongo filter + sort from UI filters
- */
 const buildQueryAndSort = (filters = {}) => {
-  const { createdDate, dueDate, status, sortBy } = filters;
+  const { createdDate, dueDate, status, sortBy, projectId } = filters;
 
-  // Base query – skip deleted
+  
   const query = { isDeleted: { $ne: true } };
 
-  // Created Date (single day match)
+  
+  if (projectId) {
+    query.projectId = projectId;
+  }
+
+  
   if (createdDate?.from || createdDate?.to) {
     query.createdAt = {};
     if (createdDate.from) query.createdAt.$gte = new Date(createdDate.from);
     if (createdDate.to) query.createdAt.$lte = new Date(createdDate.to);
   }
 
-  // Due Date (stored as string 'YYYY-MM-DD' in your sample)
+  
   if (dueDate?.from || dueDate?.to) {
     query.dueDate = {};
-    if (dueDate.from) query.dueDate.$gte = dueDate.from; // string compare ok for YYYY-MM-DD
+    if (dueDate.from) query.dueDate.$gte = dueDate.from; 
     if (dueDate.to) query.dueDate.$lte = dueDate.to;
   }
 
-  // Status filter
+  
   if (status && status !== "All") {
     query.status = status;
   }
 
-  // Sort
+  
   const sort = {};
   switch (sortBy) {
     case "created_asc":  sort.createdAt = 1; break;
     case "created_desc": sort.createdAt = -1; break;
     case "due_asc":      sort.dueDate   = 1; break;
     case "due_desc":     sort.dueDate   = -1; break;
-    default:             sort.createdAt = -1; // recent
+    default:             sort.createdAt = -1; 
   }
 
   return { query, sort };
 };
 
 export const getInvoices = async (companyId, filters = {}) => {
-  const { invoices } = getTenantCollections(companyId);
-  const { query, sort } = buildQueryAndSort(filters);
-  const docs = await invoices.find(query).sort(sort).toArray();
-  return docs.map(d => ({ ...d, _id: d._id.toString() }));
+  try {
+    const { invoices } = getTenantCollections(companyId);
+    const { query, sort } = buildQueryAndSort(filters);
+    const docs = await invoices.find(query).sort(sort).toArray();
+    return docs.map(d => ({ ...d, _id: d._id.toString() }));
+  } catch (error) {
+    console.error('Error getting invoices:', error);
+
+    
+    if (error.message && error.message.includes('buffering timed out')) {
+      console.log('Invoices collection does not exist yet, returning empty results');
+      return [];
+    }
+
+    throw error;
+  }
 };
 
 export const createInvoice = async (companyId, payload) => {
@@ -56,9 +70,10 @@ export const createInvoice = async (companyId, payload) => {
     invoiceNumber: payload.invoiceNumber,
     title: payload.title,
     clientId: payload.clientId ? new ObjectId(payload.clientId) : null,
+    projectId: payload.projectId ? new ObjectId(payload.projectId) : null,
     amount: Number(payload.amount) || 0,
-    status: payload.status || "Unpaid", // Paid | Unpaid | Pending | Draft | Overdue
-    dueDate: payload.dueDate,           // "YYYY-MM-DD"
+    status: payload.status || "Unpaid", 
+    dueDate: payload.dueDate,           
     createdAt: new Date(),
     updatedAt: new Date(),
     isDeleted: false,
@@ -74,6 +89,7 @@ export const updateInvoice = async (companyId, invoiceId, updatedData) => {
 
   const { _id, companyId: _cid, ...update } = updatedData;
   if (update.clientId) update.clientId = new ObjectId(update.clientId);
+  if (update.projectId) update.projectId = new ObjectId(update.projectId);
   if ("amount" in update) update.amount = Number(update.amount);
 
   update.updatedAt = new Date();
@@ -96,58 +112,75 @@ export const deleteInvoice = async (companyId, invoiceId) => {
   if (!res.matchedCount) throw new Error("Invoice not found");
   return res;
 };
-// Add near other exports in invoice.services.js
-// Add near other exports in invoice.services.js
+
 export const getInvoiceStats = async (companyId) => {
-  if (!companyId) throw new Error("companyId is required for stats");
+  try {
+    if (!companyId) throw new Error("companyId is required for stats");
 
-  const { invoices } = getTenantCollections(companyId);
+    const { invoices } = getTenantCollections(companyId);
 
-  // Aggregate once for both totals and status groups
-  const agg = await invoices.aggregate([
-    { $match: { isDeleted: { $ne: true } } },
-    {
-      $facet: {
-        total: [
-          {
-            $group: {
-              _id: null,
-              count: { $sum: 1 },
-              amount: { $sum: "$amount" }
+    
+    const agg = await invoices.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
+      {
+        $facet: {
+          total: [
+            {
+              $group: {
+                _id: null,
+                count: { $sum: 1 },
+                amount: { $sum: "$amount" }
+              }
             }
-          }
-        ],
-        byStatus: [
-          {
-            $group: {
-              _id: "$status",
-              count: { $sum: 1 },
-              amount: { $sum: "$amount" }
+          ],
+          byStatus: [
+            {
+              $group: {
+                _id: "$status",
+                count: { $sum: 1 },
+                amount: { $sum: "$amount" }
+              }
             }
-          }
-        ]
+          ]
+        }
       }
+    ]).toArray();
+
+    const totals = agg[0]?.total[0] || { count: 0, amount: 0 };
+    const statusGroups = agg[0]?.byStatus || [];
+
+    let outstanding = 0, draft = 0, overdue = 0;
+
+    statusGroups.forEach(s => {
+      const status = String(s._id);
+      
+      if (status === "Unpaid" || status === "Pending") outstanding = s.amount;
+      if (status === "Draft") draft = s.amount;
+      if (status === "Overdue") overdue = s.amount;
+    });
+
+    return {
+      totalInvoiceCount: totals.count,   
+      totalInvoiceAmount: totals.amount, 
+      outstanding,
+      draft,
+      overdue
+    };
+  } catch (error) {
+    console.error('Error getting invoice stats:', error);
+
+    
+    if (error.message && error.message.includes('buffering timed out')) {
+      console.log('Invoices collection does not exist yet, returning empty stats');
+      return {
+        totalInvoiceCount: 0,
+        totalInvoiceAmount: 0,
+        outstanding: 0,
+        draft: 0,
+        overdue: 0
+      };
     }
-  ]).toArray();
 
-  const totals = agg[0]?.total[0] || { count: 0, amount: 0 };
-  const statusGroups = agg[0]?.byStatus || [];
-
-  let outstanding = 0, draft = 0, overdue = 0;
-
-  statusGroups.forEach(s => {
-    const status = String(s._id);
-    // Treat both "Unpaid" and "Pending" as outstanding
-    if (status === "Unpaid" || status === "Pending") outstanding = s.amount;
-    if (status === "Draft") draft = s.amount;
-    if (status === "Overdue") overdue = s.amount;
-  });
-
-  return {
-    totalInvoiceCount: totals.count,   // number of invoices
-    totalInvoiceAmount: totals.amount, // sum of all amounts
-    outstanding,
-    draft,
-    overdue
-  };
+    throw error;
+  }
 };

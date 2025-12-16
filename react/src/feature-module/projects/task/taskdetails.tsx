@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
@@ -8,12 +9,48 @@ import { DatePicker } from "antd";
 import CommonTagsInput from "../../../core/common/Taginput";
 import CommonTextEditor from "../../../core/common/textEditor";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import { useSocket } from "../../../SocketContext";
 import Footer from "../../../core/common/footer";
 
 const TaskDetails = () => {
+  const { taskId } = useParams();
+  const socket = useSocket() as any;
+
+  const [task, setTask] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadTask = useCallback(() => {
+    if (!taskId || !socket) return;
+
+    setLoading(true);
+    setError(null);
+    socket.emit("task:getById", taskId);
+  }, [taskId, socket]);
+
+  const handleTaskResponse = useCallback((response: any) => {
+    setLoading(false);
+    if (response.done && response.data) {
+      setTask(response.data);
+    } else {
+      setError(response.error || "Failed to load task details");
+    }
+  }, [taskId, socket]);
+
+  useEffect(() => {
+    if (socket) {
+      socket.on("task:getById-response", handleTaskResponse);
+      loadTask();
+
+      return () => {
+        socket.off("task:getById-response", handleTaskResponse);
+      };
+    }
+  }, [socket, handleTaskResponse, loadTask]);
+
   const getModalContainer = () => {
     const modalElement = document.getElementById("modal-datepicker");
-    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
+    return modalElement ? modalElement : document.body;
   };
 
   const projectChoose = [
@@ -42,12 +79,62 @@ const TaskDetails = () => {
     "Davis",
   ]);
   const [tags1, setTags1] = useState<string[]>(["Collab", "Rated"]);
-  return (
-    <>
-      {/* Page Wrapper */}
+
+  if (loading) {
+    return (
       <div className="page-wrapper">
         <div className="content">
-          {/* Breadcrumb */}
+          <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading task details...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="text-center py-5">
+            <i className="ti ti-alert-circle fs-1 text-danger mb-3"></i>
+            <h5 className="text-danger">Error Loading Task</h5>
+            <p className="text-muted mb-3">{error}</p>
+            <button
+              className="btn btn-primary"
+              onClick={loadTask}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="text-center py-5">
+            <i className="ti ti-file-x fs-1 text-muted mb-3"></i>
+            <h5 className="mb-2">Task Not Found</h5>
+            <p className="text-muted mb-3">The task you're looking for doesn't exist or has been deleted.</p>
+            <Link to={all_routes.tasks} className="btn btn-primary">
+              Back to Tasks
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="page-wrapper">
+        <div className="content">
           <div className="row align-items-center mb-4">
             <div className="d-md-flex d-sm-block justify-content-between align-items-center flex-wrap">
               <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
@@ -74,7 +161,6 @@ const TaskDetails = () => {
               </div>
             </div>
           </div>
-          {/* /Breadcrumb */}
           <div className="row">
             <div className="col-xl-8">
               <div className="card">
@@ -82,13 +168,16 @@ const TaskDetails = () => {
                   <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-4">
                     <div>
                       <h4 className="mb-1">
-                        Patient and Doctor video conferencing Module
+                        {task.title || 'Untitled Task'}
                       </h4>
                       <p>
                         Priority :{" "}
-                        <span className="badge badge-danger">
+                        <span className={`badge ${task.priority === 'High' ? 'badge-danger' :
+                          task.priority === 'Medium' ? 'badge-warning' :
+                            'badge-success'
+                          }`}>
                           <i className="ti ti-point-filled me-1" />
-                          High
+                          {task.priority || 'Low'}
                         </span>
                       </p>
                     </div>
@@ -140,13 +229,7 @@ const TaskDetails = () => {
                       <div className="mb-3">
                         <h6 className="mb-1">Description</h6>
                         <p>
-                          The Enhanced Patient Management System (EPMS) project
-                          aims to modernize and streamline the patient
-                          management processes within. By integrating advanced
-                          technologies and optimizing existing workflows, the
-                          project seeks to improve patient care, enhance
-                          operational efficiency, and ensure compliance with
-                          regulatory standards.
+                          {task.description || 'No description available for this task.'}
                         </p>
                       </div>
                     </div>
@@ -158,62 +241,26 @@ const TaskDetails = () => {
                     </div>
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
-                        <div className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-12.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6 className="fs-12">
-                            <Link to="#">Lewis</Link>
-                          </h6>
-                        </div>
-                        <div className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-19.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6 className="fs-12">
-                            <Link to="#">Leona</Link>
-                          </h6>
-                        </div>
-                        <div className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-33.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6 className="fs-12">
-                            <Link to="#">Pineiro</Link>
-                          </h6>
-                        </div>
-                        <div className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-37.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6 className="fs-12">
-                            <Link to="#">Moseley</Link>
-                          </h6>
-                        </div>
+                        {task.team && task.team.length > 0 ? (
+                          task.team.map((member: any, index: number) => (
+                            <div key={index} className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
+                              <Link
+                                to="#"
+                                className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath
+                                  src={member.avatar || `assets/img/profiles/avatar-${(index % 10) + 1}.jpg`}
+                                  alt="Img"
+                                />
+                              </Link>
+                              <h6 className="fs-12">
+                                <Link to="#">{member.name || member}</Link>
+                              </h6>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted mb-0">No team members assigned</p>
+                        )}
                         <div>
                           <Link
                             to="#"
@@ -233,20 +280,26 @@ const TaskDetails = () => {
                     </div>
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
-                        <div className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
-                          <Link
-                            to="#"
-                            className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/users/user-42.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <h6 className="fs-12">
-                            <Link to="#">Ruth</Link>
-                          </h6>
-                        </div>
+                        {task.assignee && task.assignee.length > 0 ? (
+                          task.assignee.map((assignee: any, index: number) => (
+                            <div key={index} className="bg-gray-100 p-1 rounded d-flex align-items-center me-2">
+                              <Link
+                                to="#"
+                                className="avatar avatar-sm avatar-rounded border border-white flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath
+                                  src={assignee.avatar || `assets/img/profiles/avatar-${(index % 10) + 1}.jpg`}
+                                  alt="Img"
+                                />
+                              </Link>
+                              <h6 className="fs-12">
+                                <Link to="#">{assignee.name || assignee}</Link>
+                              </h6>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted mb-0">No assignee assigned</p>
+                        )}
                         <div>
                           <Link
                             to="#"
@@ -266,189 +319,20 @@ const TaskDetails = () => {
                     </div>
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
-                        <Link
-                          to="#"
-                          className="badge task-tag bg-pink rounded-pill me-2"
-                        >
-                          Admin Panel
-                        </Link>
-                        <Link
-                          to="#"
-                          className="badge task-tag badge-info rounded-pill"
-                        >
-                          High Tech
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="custom-accordion-items">
-                <div className="accordion accordions-items-seperate">
-                  <div className="accordion-item">
-                    <div className="accordion-header" id="headingFour">
-                      <div className="accordion-button">
-                        <div className="d-flex align-items-center flex-fill">
-                          <h5>Files</h5>
-                          <div className=" ms-auto d-flex align-items-center">
+                        {task.tags && task.tags.length > 0 ? (
+                          task.tags.map((tag: string, index: number) => (
                             <Link
+                              key={index}
                               to="#"
-                              className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
+                              className={`badge task-tag rounded-pill me-2 ${index % 2 === 0 ? 'bg-pink' : 'badge-info'
+                                }`}
                             >
-                              <i className="ti ti-square-rounded-plus-filled me-1" />
-                              Add New
+                              {tag}
                             </Link>
-                            <Link
-                              to="#"
-                              className="d-flex align-items-center collapse-arrow"
-                              data-bs-toggle="collapse"
-                              data-bs-target="#primaryBorderFour"
-                              aria-expanded="true"
-                              aria-controls="primaryBorderFour"
-                            >
-                              <i className="ti ti-chevron-down fs-18" />
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      id="primaryBorderFour"
-                      className="accordion-collapse collapse show border-top"
-                      aria-labelledby="headingFour"
-                    >
-                      <div className="accordion-body">
-                        <div className="files-carousel owl-carousel">
-                          <div className="card shadow-none mb-0">
-                            <div className="card-body">
-                              <div className="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                <div className="d-flex align-items-center overflow-hidden">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-md bg-light me-2"
-                                  >
-                                    <ImageWithBasePath
-                                      src="assets/img/icons/file-02.svg"
-                                      className="w-auto h-auto"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="overflow-hidden">
-                                    <h6 className="mb-1 text-truncate">
-                                      Project_1.docx
-                                    </h6>
-                                    <span>7.6 MB</span>
-                                  </div>
-                                </div>
-                                <div className="d-flex align-items-center">
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-download" />
-                                  </Link>
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-trash" />
-                                  </Link>
-                                </div>
-                              </div>
-                              <div className="d-flex align-items-center justify-content-between">
-                                <p className="fw-medium mb-0">
-                                  15 May 2024, 6:53 PM
-                                </p>
-                                <span className="avatar avatar-sm avatar-rounded">
-                                  <ImageWithBasePath
-                                    src="assets/img/profiles/avatar-02.jpg"
-                                    alt="Img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="card shadow-none mb-0">
-                            <div className="card-body">
-                              <div className="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                <div className="d-flex align-items-center overflow-hidden">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-md bg-light me-2"
-                                  >
-                                    <ImageWithBasePath
-                                      src="assets/img/icons/file-01.svg"
-                                      className="w-auto h-auto"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="overflow-hidden">
-                                    <h6 className="mb-1 text-truncate">
-                                      Proposal.pdf
-                                    </h6>
-                                    <span>12.6 MB</span>
-                                  </div>
-                                </div>
-                                <div className="d-flex align-items-center">
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-download" />
-                                  </Link>
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-trash" />
-                                  </Link>
-                                </div>
-                              </div>
-                              <div className="d-flex align-items-center justify-content-between">
-                                <p className="fw-medium mb-0">
-                                  16 Jan 2025, 7:25 PM
-                                </p>
-                                <span className="avatar avatar-sm avatar-rounded">
-                                  <ImageWithBasePath
-                                    src="assets/img/users/user-19.jpg"
-                                    alt="Img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="card shadow-none mb-0">
-                            <div className="card-body">
-                              <div className="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                <div className="d-flex align-items-center overflow-hidden">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-md bg-light me-2"
-                                  >
-                                    <ImageWithBasePath
-                                      src="assets/img/icons/file-04.svg"
-                                      className="w-auto h-auto"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="overflow-hidden">
-                                    <h6 className="mb-1 text-truncate">
-                                      Logo-Img.zip
-                                    </h6>
-                                    <span>6.2 MB</span>
-                                  </div>
-                                </div>
-                                <div className="d-flex align-items-center">
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-download" />
-                                  </Link>
-                                  <Link to="#" className="btn btn-sm btn-icon">
-                                    <i className="ti ti-trash" />
-                                  </Link>
-                                </div>
-                              </div>
-                              <div className="d-flex align-items-center justify-content-between">
-                                <p className="fw-medium mb-0">
-                                  31 July 2025, 8:40 AM
-                                </p>
-                                <span className="avatar avatar-sm avatar-rounded">
-                                  <ImageWithBasePath
-                                    src="assets/img/users/user-20.jpg"
-                                    alt="Img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                          ))
+                        ) : (
+                          <p className="text-muted mb-0">No tags assigned</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -461,19 +345,19 @@ const TaskDetails = () => {
                   <div className="d-flex flex-column">
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">
                       <p className="mb-0">Project</p>
-                      <h6 className="fw-normal">Hospital Administration</h6>
+                      <h6 className="fw-normal">{task.projectName || task.project || 'No project assigned'}</h6>
                     </div>
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">
                       <p className="mb-0">Created on</p>
-                      <h6 className="fw-normal">14 Nov 2026</h6>
+                      <h6 className="fw-normal">{task.createdAt ? new Date(task.createdAt).toLocaleDateString() : 'Not set'}</h6>
                     </div>
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">
                       <p className="mb-0">Started on</p>
-                      <h6 className="fw-normal">15 Jan 2026</h6>
+                      <h6 className="fw-normal">{task.startedAt ? new Date(task.startedAt).toLocaleDateString() : 'Not started'}</h6>
                     </div>
                     <div className="d-flex align-items-center justify-content-between p-3">
                       <p className="mb-0">Due Date</p>
-                      <h6 className="fw-normal">15 Nov 2026</h6>
+                      <h6 className="fw-normal">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'}</h6>
                     </div>
                   </div>
                 </div>
@@ -514,95 +398,63 @@ const TaskDetails = () => {
                     >
                       <div className="accordion-body">
                         <div className="notice-widget">
-                          <div className="d-flex align-items-center justify-content-between mb-4">
-                            <div className="d-flex overflow-hidden">
-                              <span className="bg-info avatar avatar-md me-3 rounded-circle flex-shrink-0">
-                                <i className="ti ti-checkup-list fs-16" />
-                              </span>
-                              <div className="overflow-hidden">
-                                <p className="text-truncate mb-1">
-                                  <span className="text-gray-9 fw-medium">
-                                    Andrew
+                          {task.activities && task.activities.length > 0 ? (
+                            task.activities.map((activity: any, index: number) => (
+                              <div key={index} className="d-flex align-items-center justify-content-between mb-4">
+                                <div className="d-flex overflow-hidden">
+                                  <span className={`avatar avatar-md me-3 rounded-circle flex-shrink-0 ${activity.type === 'task_created' ? 'bg-info' :
+                                    activity.type === 'task_updated' ? 'bg-warning' :
+                                      activity.type === 'task_completed' ? 'bg-success' :
+                                        activity.type === 'file_uploaded' ? 'bg-secondary' : 'bg-purple'
+                                    }`}>
+                                    <i className={`fs-16 ${activity.type === 'task_created' ? 'ti ti-checkup-list' :
+                                      activity.type === 'task_updated' ? 'ti ti-circle-dot' :
+                                        activity.type === 'task_completed' ? 'ti ti-check' :
+                                          activity.type === 'file_uploaded' ? 'ti ti-photo' : 'ti ti-activity'
+                                      }`} />
                                   </span>
-                                  added a New Task
-                                </p>
-                                <p className="mb-1">15 May 2024, 6:53 PM</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-4">
-                            <div className="d-flex overflow-hidden me-2">
-                              <span className="bg-warning avatar avatar-md me-3 rounded-circle flex-shrink-0">
-                                <i className="ti ti-circle-dot fs-16" />
-                              </span>
-                              <div className="overflow-hidden">
-                                <p className="text-truncate mb-1">
-                                  <span className="text-gray-9 fw-medium">
-                                    Jermai{" "}
-                                  </span>
-                                  Moved task{" "}
-                                  <span className="text-gray-9 fw-medium">
-                                    {" "}
-                                    “Private chat module”
-                                  </span>
-                                </p>
-                                <p className="mb-1">15 May 2024, 6:53 PM</p>
-                                <div className="d-flex align-items-center">
-                                  <span className="badge badge-success me-2">
-                                    <i className="ti ti-point-filled me-1" />
-                                    Completed
-                                  </span>
-                                  <span>
-                                    <i className="ti ti-arrows-left-right me-2" />
-                                  </span>
-                                  <span className="badge badge-purple">
-                                    <i className="ti ti-point-filled me-1" />
-                                    Inprogress
-                                  </span>
+                                  <div className="overflow-hidden">
+                                    <p className="text-truncate mb-1">
+                                      <span className="text-gray-9 fw-medium">
+                                        {activity.user || 'Unknown User'}
+                                      </span>
+                                      {" "}
+                                      {activity.message || activity.description}
+                                    </p>
+                                    <p className="mb-1">
+                                      {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'Unknown time'}
+                                    </p>
+                                    {activity.statusChange && (
+                                      <div className="d-flex align-items-center">
+                                        {activity.oldStatus && (
+                                          <span className="badge badge-success me-2">
+                                            <i className="ti ti-point-filled me-1" />
+                                            {activity.oldStatus}
+                                          </span>
+                                        )}
+                                        {activity.oldStatus && activity.newStatus && (
+                                          <span>
+                                            <i className="ti ti-arrows-left-right me-2" />
+                                          </span>
+                                        )}
+                                        {activity.newStatus && (
+                                          <span className="badge badge-purple">
+                                            <i className="ti ti-point-filled me-1" />
+                                            {activity.newStatus}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-4">
+                              <i className="ti ti-activity fs-1 text-muted mb-3"></i>
+                              <p className="text-muted">No activities found for this task</p>
                             </div>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-4">
-                            <div className="d-flex overflow-hidden me-2">
-                              <span className="bg-purple avatar avatar-md me-3 rounded-circle flex-shrink-0">
-                                <i className="ti ti-checkup-list fs-16" />
-                              </span>
-                              <div className="overflow-hidden">
-                                <p className="text-truncate mb-1">
-                                  <span className="text-gray-9 fw-medium">
-                                    Jermai{" "}
-                                  </span>
-                                  Created task{" "}
-                                  <span className="text-gray-9 fw-medium">
-                                    {" "}
-                                    “Private chat module”
-                                  </span>
-                                </p>
-                                <p className="mb-1">15 May 2024, 6:53 PM</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between">
-                            <div className="d-flex overflow-hidden">
-                              <span className="bg-secondary avatar avatar-md me-3 rounded-circle flex-shrink-0">
-                                <i className="ti ti-photo fs-16" />
-                              </span>
-                              <div className="overflow-hidden">
-                                <p className="text-truncate mb-1">
-                                  <span className="text-gray-9 fw-medium">
-                                    Hendry
-                                  </span>{" "}
-                                  Updated Image{" "}
-                                  <span className="text-gray-9 fw-medium">
-                                    {" "}
-                                    “logo.jpg”{" "}
-                                  </span>
-                                </p>
-                                <p className="mb-1">15 May 2024, 6:53 PM</p>
-                              </div>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -640,7 +492,7 @@ const TaskDetails = () => {
                       <input
                         type="text"
                         className="form-control"
-                        value="Patient appointment booking"
+                        defaultValue={task.title || ''}
                       />
                     </div>
                   </div>
@@ -656,6 +508,7 @@ const TaskDetails = () => {
                           }}
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
+                          defaultValue={task.dueDate ? new Date(task.dueDate) : undefined}
                         />
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-7" />
@@ -669,7 +522,7 @@ const TaskDetails = () => {
                       <CommonSelect
                         className="select"
                         options={projectChoose}
-                        defaultValue={projectChoose[1]}
+                        defaultValue={projectChoose.find(p => p.value === task.projectName || p.value === task.project) || projectChoose[0]}
                       />
                     </div>
                   </div>
@@ -677,10 +530,10 @@ const TaskDetails = () => {
                     <div className="mb-3">
                       <label className="form-label me-2">Team Members</label>
                       <CommonTagsInput
-                        value={tags}
+                        value={task.team ? task.team.map((member: any) => member.name || member).filter(Boolean) : []}
                         onChange={setTags}
                         placeholder="Add new"
-                        className="custom-input-class" // Optional custom class
+                        className="custom-input-class"
                       />
                     </div>
                   </div>
@@ -688,10 +541,10 @@ const TaskDetails = () => {
                     <div className="mb-3">
                       <label className="form-label">Tag</label>
                       <CommonTagsInput
-                        value={tags1}
+                        value={task.tags || []}
                         onChange={setTags1}
                         placeholder="Add new"
-                        className="custom-input-class" // Optional custom class
+                        className="custom-input-class"
                       />
                     </div>
                   </div>
@@ -701,7 +554,7 @@ const TaskDetails = () => {
                       <CommonSelect
                         className="select"
                         options={statusChoose}
-                        defaultValue={statusChoose[1]}
+                        defaultValue={statusChoose.find(s => s.value.toLowerCase() === (task.status || '').toLowerCase()) || statusChoose[0]}
                       />
                     </div>
                   </div>
@@ -711,7 +564,7 @@ const TaskDetails = () => {
                       <CommonSelect
                         className="select"
                         options={priorityChoose}
-                        defaultValue={priorityChoose[1]}
+                        defaultValue={priorityChoose.find(p => p.value.toLowerCase() === (task.priority || '').toLowerCase()) || priorityChoose[0]}
                       />
                     </div>
                   </div>
@@ -767,7 +620,10 @@ const TaskDetails = () => {
                   <div className="col-lg-12">
                     <div className="mb-3">
                       <label className="form-label">Descriptions</label>
-                      <div className="summernote" />
+                      <CommonTextEditor
+                        defaultValue={task.description || ''}
+                        onChange={() => { }}
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -783,24 +639,24 @@ const TaskDetails = () => {
                           />
                         </div>
                       </div>
-                      <div className="d-flex align-items-center justify-content-between border-bottom mb-2 pb-2">
-                        <div className="d-flex align-items-center">
-                          <h6 className="fs-12 fw-medium me-1">Logo.zip</h6>
-                          <span className="badge badge-soft-info">21MB </span>
+                      {task.attachments && task.attachments.length > 0 ? (
+                        task.attachments.map((attachment: any, index: number) => (
+                          <div key={index} className="d-flex align-items-center justify-content-between border-bottom mb-2 pb-2">
+                            <div className="d-flex align-items-center">
+                              <h6 className="fs-12 fw-medium me-1">{attachment.name || attachment.filename}</h6>
+                              <span className="badge badge-soft-info">{attachment.size || 'Unknown size'}</span>
+                            </div>
+                            <Link to="#" className="btn btn-sm btn-icon">
+                              <i className="ti ti-trash" />
+                            </Link>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-3">
+                          <i className="ti ti-file-x fs-2 text-muted mb-2"></i>
+                          <p className="text-muted mb-0">No attachments uploaded</p>
                         </div>
-                        <Link to="#" className="btn btn-sm btn-icon">
-                          <i className="ti ti-trash" />
-                        </Link>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <h6 className="fs-12 fw-medium me-1">Files.zip</h6>
-                          <span className="badge badge-soft-info">25MB </span>
-                        </div>
-                        <Link to="#" className="btn btn-sm btn-icon">
-                          <i className="ti ti-trash" />
-                        </Link>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -825,7 +681,6 @@ const TaskDetails = () => {
           </div>
         </div>
       </div>
-      {/* /Edit Task */}
     </>
   );
 };

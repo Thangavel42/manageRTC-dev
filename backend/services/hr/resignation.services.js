@@ -110,6 +110,13 @@ const getResignations = async (companyId,{ type, startDate, endDate } = {}) => {
         dateFilter.noticeDate = { $gte: start, $lt: end };
         break;
       }
+      case "thisyear": {
+        const now = new Date();
+        const start = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), 0, 1)));
+        const end = toYMDStr(new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1)));
+        dateFilter.noticeDate = { $gte: start, $lt: end };
+        break;
+      }
       default:
         // no date filter
         break;
@@ -142,6 +149,34 @@ const getResignations = async (companyId,{ type, startDate, endDate } = {}) => {
     };
   } catch (error) {
     console.error("Error fetching Resignations:", error);
+    return { done: false, message: error.message, data: [] };
+  }
+};
+
+const getDepartments = async (companyId) => {
+  try {
+    const collection = getTenantCollections(companyId);
+    
+    const pipeline = [
+      {
+        $project: {
+          _id: 0,
+          department: 1,
+        },
+      },
+    ];
+
+
+    const results = await collection.departments.aggregate(pipeline).toArray();
+
+    return {
+      done: true,
+      message: "success",
+      data: results,
+      count: results.length,
+    };
+  } catch (error) {
+    console.error("Error fetching departments:", error);
     return { done: false, message: error.message, data: [] };
   }
 };
@@ -260,6 +295,7 @@ const deleteResignation = async (companyId,resignationIds) => {
 export {
   getResignationStats,
   getResignations,
+  getDepartments,
   getSpecificResignation,
   addResignation,
   updateResignation,

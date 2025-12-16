@@ -62,6 +62,8 @@ const Department = () => {
       if (response.done) {
         setResponseData(response.data);
         setError(null);
+        // Reset form fields after successful submission
+        resetAddDepartmentForm();
         if (socket) {
           socket.emit("hr/departmentsStats/get");
         }
@@ -79,7 +81,7 @@ const Department = () => {
         setError(null);
         setLoading(false);
       } else {
-        setError(response.error || "Failed to fetch policies");
+        setError(response.error || "Failed to fetch department");
         setLoading(false);
       }
     }
@@ -197,6 +199,14 @@ const Department = () => {
   }));
 
   // helper functions
+  
+  // Reset Add Department form fields to default values
+  const resetAddDepartmentForm = () => {
+    setDepartmentName("");
+    setSelectedStatus(statusChoose[0].value);
+    setError(null);
+  };
+
   const handleSubmit = () => {
     try {
       setError(null);
@@ -347,7 +357,36 @@ const Department = () => {
       setLoading(false);
     }
   };
+  if (loading) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <>
       {/* Page Wrapper */}
@@ -405,6 +444,7 @@ const Department = () => {
                   data-inert={true}
                   data-bs-target="#add_department"
                   className="btn btn-primary d-flex align-items-center"
+                  onClick={resetAddDepartmentForm}
                 >
                   <i className="ti ti-circle-plus me-2" />
                   Add Department
@@ -503,6 +543,7 @@ const Department = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={resetAddDepartmentForm}
               >
                 <i className="ti ti-x" />
               </button>
@@ -536,6 +577,7 @@ const Department = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  onClick={resetAddDepartmentForm}
                 >
                   Cancel
                 </button>

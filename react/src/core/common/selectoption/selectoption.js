@@ -337,8 +337,8 @@ export const gender = [
 ];
 export const status = [
   { value: "Select", label: "Select" },
-  { value: "Active", label: "Active" },
-  { value: "Inactive", label: "Inactive" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
 ];
 export const Marital = [
   { value: "Single", label: "Single" },

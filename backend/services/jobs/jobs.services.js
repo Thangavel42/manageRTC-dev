@@ -1,841 +1,577 @@
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
-import Job from "../../models/job.model.js";
-import fs from "fs";
-import { promises as fsp } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import PDFDocument from "pdfkit";
-import crypto from "crypto";
+import PDFDocument from "pdfkit-table";
 import ExcelJS from "exceljs";
+import fs from "fs";
+import path from "path";
+import { format } from "date-fns";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Create new job
+export const createJob = async (companyId, jobData) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] createJob", { companyId, jobData });
 
-// Helper function to get collections
-const getCollections = () => {
-  return getTenantCollections();
+    // Validate required fields
+    if (!jobData.title || !jobData.category || !jobData.type) {
+      throw new Error("Missing required fields: title, category, type");
+    }
+
+    const newJob = {
+      ...jobData,
+      companyId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: jobData.status || "Active",
+      isDeleted: false,
+      appliedCount: 0,
+      numberOfPositions: jobData.numberOfPositions || 1,
+      description: jobData.description || "",
+      requirements: jobData.requirements || "",
+      skills: jobData.skills || [],
+      tags: jobData.tags || [],
+      location: {
+        country: jobData.country || "",
+        state: jobData.state || "",
+        city: jobData.city || ""
+      },
+      salaryRange: {
+        min: jobData.minSalary || 0,
+        max: jobData.maxSalary || 0,
+        currency: jobData.salaryCurrency || "USD"
+      }
+    };
+
+    const result = await collections.jobs.insertOne(newJob);
+    console.log("[JobService] insertOne result", { result });
+
+    if (result.insertedId) {
+      const inserted = await collections.jobs.findOne({
+        _id: result.insertedId
+      });
+      console.log("[JobService] inserted job", { inserted });
+      return { done: true, data: inserted };
+    } else {
+      console.error("[JobService] Failed to insert job");
+      return { done: false, error: "Failed to insert job" };
+    }
+  } catch (error) {
+    console.error("[JobService] Error in createJob", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
+  }
 };
 
-// 1. Get Jobs Statistics
-const getJobsStats = async (companyId) => {
+// Get all jobs with filters
+export const getJobs = async (companyId, filters = {}) => {
   try {
-    const collection = getTenantCollections(companyId);
-    
-    const stats = await collection.jobs.aggregate([
-      { $match: { companyId: companyId, isActive: true } },
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] getJobs", { companyId, filters });
+
+    const query = { companyId, isDeleted: { $ne: true } };
+
+    // Apply filters
+    if (filters.status && filters.status !== "All") {
+      query.status = filters.status;
+    }
+
+    // Category filter
+    if (filters.category) {
+      query.category = filters.category;
+    }
+
+    // Type filter
+    if (filters.type) {
+      query.type = filters.type;
+    }
+
+    // Location filters
+    if (filters.country) {
+      query["location.country"] = filters.country;
+    }
+    if (filters.state) {
+      query["location.state"] = filters.state;
+    }
+    if (filters.city) {
+      query["location.city"] = filters.city;
+    }
+
+    // Salary range filter
+    if (filters.minSalary) {
+      query["salaryRange.min"] = { $gte: parseFloat(filters.minSalary) };
+    }
+    if (filters.maxSalary) {
+      query["salaryRange.max"] = { $lte: parseFloat(filters.maxSalary) };
+    }
+
+    // Search filter
+    if (filters.search) {
+      query.$or = [
+        { title: { $regex: filters.search, $options: "i" } },
+        { description: { $regex: filters.search, $options: "i" } },
+        { skills: { $in: [new RegExp(filters.search, "i")] } },
+        { tags: { $in: [new RegExp(filters.search, "i")] } }
+      ];
+    }
+
+    // Date range filter
+    if (filters.startDate && filters.endDate) {
+      query.createdAt = {
+        $gte: new Date(filters.startDate),
+        $lte: new Date(filters.endDate)
+      };
+    }
+
+    // Sort options
+    let sort = { createdAt: -1 };
+    if (filters.sortBy) {
+      switch (filters.sortBy) {
+        case "salary":
+          sort = { "salaryRange.min": filters.sortOrder === "asc" ? 1 : -1 };
+          break;
+        case "positions":
+          sort = { numberOfPositions: filters.sortOrder === "asc" ? 1 : -1 };
+          break;
+        case "applications":
+          sort = { appliedCount: filters.sortOrder === "asc" ? 1 : -1 };
+          break;
+        case "title":
+          sort = { title: filters.sortOrder === "asc" ? 1 : -1 };
+          break;
+        default:
+          sort = { createdAt: filters.sortOrder === "asc" ? 1 : -1 };
+      }
+    }
+
+    console.log("[JobService] Final query", { query, sort });
+    const jobs = await collections.jobs.find(query).sort(sort).toArray();
+    console.log("[JobService] found jobs", { count: jobs.length });
+
+    // Ensure dates are properly converted to Date objects
+    const processedJobs = jobs.map((job) => ({
+      ...job,
+      createdAt: job.createdAt ? new Date(job.createdAt) : null,
+      updatedAt: job.updatedAt ? new Date(job.updatedAt) : null
+    }));
+
+    return { done: true, data: processedJobs };
+  } catch (error) {
+    console.error("[JobService] Error in getJobs", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
+  }
+};
+
+// Get single job by ID
+export const getJobById = async (companyId, jobId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] getJobById", { companyId, jobId });
+
+    if (!ObjectId.isValid(jobId)) {
+      return { done: false, error: "Invalid job ID format" };
+    }     
+
+    const job = await collections.jobs.findOne({
+      _id: new ObjectId(jobId),
+      companyId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!job) {
+      return { done: false, error: "Job not found" };
+    }
+
+    // Ensure dates are properly converted
+    const processedJob = {
+      ...job,
+      createdAt: job.createdAt ? new Date(job.createdAt) : null,
+      updatedAt: job.updatedAt ? new Date(job.updatedAt) : null
+    };
+
+    return { done: true, data: processedJob };
+  } catch (error) {
+    console.error("[JobService] Error in getJobById", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
+  }
+};
+
+// Update job
+export const updateJob = async (companyId, jobId, updateData) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] updateJob", {
+      companyId,
+      jobId,
+      updateData
+    });
+
+    if (!ObjectId.isValid(jobId)) {
+      return { done: false, error: "Invalid job ID format" };
+    }
+
+    const updateFields = {
+      ...updateData,
+      updatedAt: new Date()
+    };
+
+    // Remove _id from update data to prevent conflicts
+    delete updateFields._id;
+
+    const result = await collections.jobs.updateOne(
+      { _id: new ObjectId(jobId), companyId, isDeleted: { $ne: true } },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return { done: false, error: "Job not found" };
+    }
+
+    if (result.modifiedCount === 0) {
+      return { done: false, error: "No changes made to job" };
+    }
+
+    // Return updated job
+    const updatedJob = await collections.jobs.findOne({
+      _id: new ObjectId(jobId),
+      companyId
+    });
+
+    const processedJob = {
+      ...updatedJob,
+      createdAt: updatedJob.createdAt
+        ? new Date(updatedJob.createdAt)
+        : null,
+      updatedAt: updatedJob.updatedAt
+        ? new Date(updatedJob.updatedAt)
+        : null
+    };
+
+    return { done: true, data: processedJob };
+  } catch (error) {
+    console.error("[JobService] Error in updateJob", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
+  }
+};
+
+// Delete job (soft delete)
+export const deleteJob = async (companyId, jobId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] deleteJob", { companyId, jobId });
+
+    if (!ObjectId.isValid(jobId)) {
+      return { done: false, error: "Invalid job ID format" };
+    }
+
+    const result = await collections.jobs.updateOne(
+      { _id: new ObjectId(jobId), companyId, isDeleted: { $ne: true } },
       {
-        $group: {
-          _id: null,
-          totalJobs: { $sum: 1 },
-          publishedJobs: {
-            $sum: { $cond: [{ $eq: ["$status", "Published"] }, 1, 0] }
-          },
-          draftJobs: {
-            $sum: { $cond: [{ $eq: ["$status", "Draft"] }, 1, 0] }
-          },
-          closedJobs: {
-            $sum: { $cond: [{ $eq: ["$status", "Closed"] }, 1, 0] }
-          },
-          expiredJobs: {
-            $sum: { $cond: [{ $eq: ["$status", "Expired"] }, 1, 0] }
-          },
-          totalApplicants: { $sum: "$applicantsCount" },
-          totalViews: { $sum: "$viewsCount" }
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          updatedAt: new Date()
         }
       }
-    ]).toArray();
+    );
 
-    const categoryStats = await collection.jobs.aggregate([
-      { $match: { companyId: companyId, isActive: true } },
+    if (result.matchedCount === 0) {
+      return { done: false, error: "Job not found" };
+    }
+
+    return { done: true, data: { _id: jobId, deleted: true } };
+  } catch (error) {
+    console.error("[JobService] Error in deleteJob", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
+  }
+};
+
+// Get job statistics
+export const getJobStats = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    console.log("[JobService] getJobStats", { companyId });
+
+    const totalJobs = await collections.jobs.countDocuments({
+      companyId,
+      isDeleted: { $ne: true }
+    });
+
+    const activeJobs = await collections.jobs.countDocuments({
+      companyId,
+      isDeleted: { $ne: true },
+      status: "Active"
+    });
+
+    const inactiveJobs = await collections.jobs.countDocuments({
+      companyId,
+      isDeleted: { $ne: true },
+      status: "Inactive"
+    });
+
+    // New jobs in last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const newJobs = await collections.jobs.countDocuments({
+      companyId,
+      isDeleted: { $ne: true },
+      createdAt: { $gte: thirtyDaysAgo }
+    });
+
+    // Category stats
+    const categoryStats = await collections.jobs.aggregate([
+      {
+        $match: {
+          companyId,
+          isDeleted: { $ne: true }
+        }
+      },
       {
         $group: {
           _id: "$category",
           count: { $sum: 1 }
         }
       },
-      { $sort: { count: -1 } }
+      {
+        $sort: { count: -1 }
+      }
     ]).toArray();
 
-    const recentJobs = await collection.jobs.find(
-      { companyId: companyId, isActive: true },
+    // Type stats
+    const typeStats = await collections.jobs.aggregate([
       {
-        sort: { postedDate: -1 },
-        limit: 5,
-        projection: {
-          jobId: 1,
-          title: 1,
-          category: 1,
-          status: 1,
-          postedDate: 1,
-          applicantsCount: 1
+        $match: {
+          companyId,
+          isDeleted: { $ne: true }
         }
-      }
-    ).toArray();
-
-    return {
-      done: true,
-      data: {
-        stats: stats[0] || {
-          totalJobs: 0,
-          publishedJobs: 0,
-          draftJobs: 0,
-          closedJobs: 0,
-          expiredJobs: 0,
-          totalApplicants: 0,
-          totalViews: 0
-        },
-        categoryStats,
-        recentJobs
-      }
-    };
-  } catch (error) {
-    console.error("Error getting jobs stats:", error);
-    return { done: false, message: error.message, data: null };
-  }
-};
-
-// 2. Get Jobs List with filters and pagination
-const getJobsList = async (filters = {}) => {
-  try {
-    
-    const {
-      companyId,
-      page = 1,
-      limit = 10,
-      sortBy = 'postedDate',
-      sortOrder = 'desc',
-      search = '',
-      status = '',
-      category = '',
-      jobType = '',
-      location = '',
-      dateRange = null
-    } = filters;
-
-    const collection = getTenantCollections(companyId);
-
-    // Build match criteria
-    const matchCriteria = { companyId: companyId, isActive: true };
-
-    if (search) {
-      matchCriteria.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { jobId: { $regex: search, $options: 'i' } },
-        { 'location.city': { $regex: search, $options: 'i' } },
-        { 'location.country': { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    if (status) {
-      matchCriteria.status = status;
-    }
-
-    if (category) {
-      matchCriteria.category = category;
-    }
-
-    if (jobType) {
-      matchCriteria.jobType = jobType;
-    }
-
-    if (location) {
-      matchCriteria.$or = [
-        { 'location.city': { $regex: location, $options: 'i' } },
-        { 'location.state': { $regex: location, $options: 'i' } },
-        { 'location.country': { $regex: location, $options: 'i' } }
-      ];
-    }
-
-    if (dateRange && dateRange.start && dateRange.end) {
-      matchCriteria.postedDate = {
-        $gte: new Date(dateRange.start),
-        $lte: new Date(dateRange.end)
-      };
-    }
-
-    // Get total count
-    const totalCount = await collection.jobs.countDocuments(matchCriteria);
-    const totalPages = Math.ceil(totalCount / limit);
-    const skip = (page - 1) * limit;
-
-    // Build sort criteria
-    const sortCriteria = {};
-    sortCriteria[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    // Get jobs with pagination
-    const jobs = await collection.jobs.find(matchCriteria, {
-      sort: sortCriteria,
-      skip: skip,
-      limit: parseInt(limit)
-    }).toArray();
-
-    return {
-      done: true,
-      data: {
-        jobs,
-        pagination: {
-          totalCount,
-          totalPages,
-          currentPage: parseInt(page),
-          limit: parseInt(limit)
-        }
-      }
-    };
-  } catch (error) {
-    console.error("Error getting jobs list:", error);
-    return { done: false, message: error.message, data: [] };
-  }
-};
-
-// 3. Get specific job details
-const getJobDetails = async (jobId, companyId) => {
-  try {
-    const collection = getTenantCollections(companyId);
-    
-    const job = await collection.jobs.findOne({
-      jobId: jobId,
-      companyId: companyId,
-      isActive: true
-    });
-
-    if (!job) {
-      return { done: false, message: "Job not found", data: null };
-    }
-
-    // Increment view count
-    await collection.jobs.updateOne(
-      { jobId: jobId, companyId: companyId },
-      { $inc: { viewsCount: 1 } }
-    );
-
-    return { done: true, data: job };
-  } catch (error) {
-    console.error("Error getting job details:", error);
-    return { done: false, message: error.message, data: null };
-  }
-};
-
-// 4. Create a new job
-const createJob = async (jobData) => {
-  try {
-    const { companyId } = jobData;
-    const collection = getTenantCollections(companyId);
-    
-    // Basic validation
-    const required = [
-      "title", "description", "category", "jobType", "jobLevel", 
-      "experience", "qualification", "minSalary", "maxSalary", 
-      "expiredDate", "location", "createdBy", "companyId"
-    ];
-    
-    for (const field of required) {
-      if (!jobData[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
-
-    // Validate salary range
-    if (jobData.minSalary >= jobData.maxSalary) {
-      throw new Error("Minimum salary must be less than maximum salary");
-    }
-
-    // Validate expired date
-    if (new Date(jobData.expiredDate) <= new Date()) {
-      throw new Error("Expired date must be in the future");
-    }
-
-    const newJob = {
-      ...jobData,
-      jobId: `JOB-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 3).toUpperCase()}`,
-      postedDate: new Date(),
-      applicantsCount: 0,
-      viewsCount: 0,
-      status: jobData.status || 'Draft',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    // If frontend sent a data URL image, store a small thumbnail path or inline base64 (optional)
-    // For now, persist the data URL as provided (if small). In production, move to object storage.
-    if (newJob.image && typeof newJob.image === 'string') {
-        // keep imageName and imageMime for potential later processing
-        // Do not log image content here
-    }
-
-    const result = await collection.jobs.insertOne(newJob);
-    
-    if (result.insertedId) {
-      return { done: true, message: "Job created successfully", data: newJob };
-    } else {
-      throw new Error("Failed to create job");
-    }
-  } catch (error) {
-    console.error("Error creating job:", error);
-    return { done: false, message: error.message };
-  }
-};
-
-// 5. Update a job
-const updateJob = async (jobId, jobData, companyId) => {
-  try {
-    const collection = getTenantCollections(companyId);
-    
-    // Check if job exists
-    const existingJob = await collection.jobs.findOne({
-      jobId: jobId,
-      companyId: companyId,
-      isActive: true
-    });
-
-    if (!existingJob) {
-      return { done: false, message: "Job not found" };
-    }
-
-    // Validate salary range if provided
-    if (jobData.minSalary && jobData.maxSalary) {
-      if (jobData.minSalary >= jobData.maxSalary) {
-        throw new Error("Minimum salary must be less than maximum salary");
-      }
-    }
-
-    // Validate expired date if provided
-    if (jobData.expiredDate) {
-      if (new Date(jobData.expiredDate) <= new Date()) {
-        throw new Error("Expired date must be in the future");
-      }
-    }
-
-    const updateData = {
-      ...jobData,
-      updatedAt: new Date()
-    };
-
-    const result = await collection.jobs.updateOne(
-      { jobId: jobId, companyId: companyId },
-      { $set: updateData }
-    );
-
-    if (result.modifiedCount > 0) {
-      const updatedJob = await collection.jobs.findOne({
-        jobId: jobId,
-        companyId: companyId
-      });
-      return { done: true, message: "Job updated successfully", data: updatedJob };
-    } else {
-      return { done: false, message: "No changes made to the job" };
-    }
-  } catch (error) {
-    console.error("Error updating job:", error);
-    return { done: false, message: error.message };
-  }
-};
-
-// 6. Delete a job (soft delete)
-const deleteJob = async (jobId, companyId) => {
-  try {
-    const collection = getTenantCollections(companyId);
-    
-    const result = await collection.jobs.updateOne(
-      { jobId: jobId, companyId: companyId },
-      { 
-        $set: { 
-          isActive: false,
-          status: 'Cancelled',
-          updatedAt: new Date()
-        }
-      }
-    );
-
-    if (result.modifiedCount > 0) {
-      return { done: true, message: "Job deleted successfully" };
-    } else {
-      return { done: false, message: "Job not found or already deleted" };
-    }
-  } catch (error) {
-    console.error("Error deleting job:", error);
-    return { done: false, message: error.message };
-  }
-};
-
-// 7. Bulk delete jobs
-const bulkDeleteJobs = async (jobIds, companyId) => {
-  try {
-    const collection = getTenantCollections(companyId);
-    
-    const result = await collection.jobs.updateMany(
-      { 
-        jobId: { $in: jobIds },
-        companyId: companyId 
       },
-      { 
-        $set: { 
-          isActive: false,
-          status: 'Cancelled',
-          updatedAt: new Date()
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 }
         }
+      },
+      {
+        $sort: { count: -1 }
       }
-    );
+    ]).toArray();
 
-    return { 
-      done: true, 
-      message: `${result.modifiedCount} jobs deleted successfully`,
-      deletedCount: result.modifiedCount
-    };
-  } catch (error) {
-    console.error("Error bulk deleting jobs:", error);
-    return { done: false, message: error.message };
-  }
-};
-
-// 8. Update job status
-const updateJobStatus = async (jobId, status, companyId) => {
-  try {
-    const collection = getTenantCollections(companyId);
-    
-    const validStatuses = ['Draft', 'Published', 'Closed', 'Expired', 'Cancelled'];
-    if (!validStatuses.includes(status)) {
-      throw new Error("Invalid status");
-    }
-
-    const updateData = {
-      status: status,
-      updatedAt: new Date()
+    const stats = {
+      totalJobs,
+      activeJobs,
+      inactiveJobs,
+      newJobs,
+      byCategory: categoryStats,
+      byType: typeStats
     };
 
-    if (status === 'Closed' || status === 'Cancelled') {
-      updateData.closedDate = new Date();
-    }
-
-    const result = await collection.jobs.updateOne(
-      { jobId: jobId, companyId: companyId },
-      { $set: updateData }
-    );
-
-    if (result.modifiedCount > 0) {
-      return { done: true, message: `Job status updated to ${status}` };
-    } else {
-      return { done: false, message: "Job not found" };
-    }
+    console.log("[JobService] Job stats", stats);
+    return { done: true, data: stats };
   } catch (error) {
-    console.error("Error updating job status:", error);
-    return { done: false, message: error.message };
+    console.error("[JobService] Error in getJobStats", {
+      error: error.message
+    });
+    return { done: false, error: error.message };
   }
 };
 
-// 9. Get job categories
-const getJobCategories = async () => {
+// Export jobs as PDF
+export const exportJobsPDF = async (companyId) => {
   try {
-    const categories = [
-      'Software', 'Hardware', 'Networking', 'Design', 
-      'Marketing', 'Sales', 'HR', 'Finance', 'Operations'
-    ];
-    
-    return { done: true, data: categories };
-  } catch (error) {
-    console.error("Error getting job categories:", error);
-    return { done: false, message: error.message, data: [] };
-  }
-};
-
-// 10. Get job types
-const getJobTypes = async () => {
-  try {
-    const jobTypes = [
-      'Full Time', 'Part Time', 'Contract', 'Internship', 'Freelance'
-    ];
-    
-    return { done: true, data: jobTypes };
-  } catch (error) {
-    console.error("Error getting job types:", error);
-    return { done: false, message: error.message, data: [] };
-  }
-};
-
-// 11. Export jobs as PDF 
-const exportJobsPDF = async (companyId, userId, filters = {}) => {
-  let filePath = null;
-  try {
-    console.log("[JobExport] Starting PDF export for companyId:", companyId, "userId:", userId);
-    
     const collections = getTenantCollections(companyId);
-    const jobsCollection = collections.jobs;
-    
-    // Build secure query with company isolation
-    let query = {
-      companyId: companyId,
-      isActive: true
-    };
-    
-    // Apply filters
-    if (filters.status && filters.status !== '') {
-      query.status = filters.status;
-    }
-    
-    if (filters.category && filters.category !== '') {
-      query.category = filters.category;
-    }
-    
-    if (filters.jobType && filters.jobType !== '') {
-      query.jobType = filters.jobType;
-    }
-    
-    if (filters.search) {
-      query.$or = [
-        { title: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } },
-        { 'location.city': { $regex: filters.search, $options: 'i' } }
-      ];
+    console.log("[JobService] exportJobsPDF", { companyId });
+
+    const jobs = await collections.jobs.find({
+      companyId,
+      isDeleted: { $ne: true }
+    }).sort({ createdAt: -1 }).toArray();
+
+    const doc = new PDFDocument();
+    const fileName = `jobs_${companyId}_${Date.now()}.pdf`;
+    const tempDir = path.join(process.cwd(), "temp");
+    const filePath = path.join(tempDir, fileName);
+
+    // Ensure temp directory exists
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    // Fetch jobs data
-    const jobs = await jobsCollection
-      .find(query)
-      .sort({ postedDate: -1 })
-      .toArray();
-    
-    console.log("[JobExport] Found jobs for PDF export:", jobs.length);
-    
-    if (jobs.length === 0) {
-      return { 
-        done: false, 
-        message: "No jobs found matching the selected criteria" 
-      };
-    }
-    
-    // Generate secure filename
-    const sanitizedCompanyId = companyId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const timestamp = Date.now();
-    const randomSuffix = crypto.randomBytes(4).toString('hex');
-    const fileName = `jobs_${sanitizedCompanyId}_${sanitizedUserId}_${timestamp}_${randomSuffix}.pdf`;
-    
-    // Create secure file path
-    const tempDir = path.join(process.cwd(), 'temp', 'exports');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { mode: 0o700, recursive: true });
-    }
-    
-    filePath = path.join(tempDir, fileName);
-    
-    // Create PDF document
-    const doc = new PDFDocument();
-    const writeStream = fs.createWriteStream(filePath);
-    doc.pipe(writeStream);
-    
-    // Add content to PDF
-    doc.fontSize(20).text('Jobs Report', 50, 50);
-    doc.fontSize(12).text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 80);
-    doc.text(`Company: ${sanitizedCompanyId}`, 50, 100);
-    doc.text(`Total Jobs: ${jobs.length}`, 50, 120);
-    
-    let yPosition = 150;
-    
-    // Table header
-    doc.fontSize(10).text("Job Title", 50, yPosition);
-    doc.text("Category", 200, yPosition);
-    doc.text("Type", 300, yPosition);
-    doc.text("Location", 350, yPosition);
-    doc.text("Salary", 450, yPosition);
-    doc.text("Status", 520, yPosition);
-    
-    yPosition += 20;
-    
-    // Draw line under header
-    doc.moveTo(50, yPosition).lineTo(580, yPosition).stroke();
-    yPosition += 10;
-    
-    // Job data
+    doc.pipe(fs.createWriteStream(filePath));
+
+    // Add company header
+    doc.fontSize(16).text("Jobs Report", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(12).text(`Generated on: ${format(new Date(), "PPP")}`, { align: "right" });
+    doc.moveDown();
+    doc.text(`Total Jobs: ${jobs.length}`, { align: "right" });
+    doc.moveDown();
+    doc.moveDown();
+
+    // Add jobs
     jobs.forEach((job, index) => {
-      if (yPosition > 750) {
+      // Start new page if not first job and close to bottom of page
+      if (index > 0 && doc.y > 700) {
         doc.addPage();
-        yPosition = 50;
       }
+
+      doc.fontSize(14).text(`Job ${index + 1}: ${job.title}`);
+      doc.fontSize(10);
+      doc.text(`Category: ${job.category}`);
+      doc.text(`Type: ${job.type}`);
+      doc.text(`Status: ${job.status}`);
+      doc.text(`Location: ${job.location.city}, ${job.location.state}, ${job.location.country}`);
+      doc.text(`Salary Range: ${job.salaryRange.min} - ${job.salaryRange.max} ${job.salaryRange.currency}`);
+      doc.text(`Number of Positions: ${job.numberOfPositions}`);
+      doc.text(`Posted: ${format(new Date(job.createdAt), "PPP")}`);
       
-      doc.text(job.title || "N/A", 50, yPosition, { width: 140 });
-      doc.text(job.category || "N/A", 200, yPosition, { width: 90 });
-      doc.text(job.jobType || "N/A", 300, yPosition, { width: 40 });
-      doc.text(`${job.location?.city || 'N/A'}, ${job.location?.country || 'N/A'}`, 350, yPosition, { width: 90 });
-      
-      const salaryRange = job.minSalary && job.maxSalary 
-        ? `${job.minSalary} - ${job.maxSalary} ${job.currency || 'USD'}`
-        : 'N/A';
-      doc.text(salaryRange, 450, yPosition, { width: 60 });
-      
-      doc.text(job.status || "N/A", 520, yPosition, { width: 50 });
-      
-      yPosition += 20;
+      if (job.description) {
+        doc.moveDown();
+        doc.text("Description:", { underline: true });
+        doc.text(job.description);
+      }
+
+      if (job.requirements) {
+        doc.moveDown();
+        doc.text("Requirements:", { underline: true });
+        doc.text(job.requirements);
+      }
+
+      if (job.skills && job.skills.length > 0) {
+        doc.moveDown();
+        doc.text("Required Skills:", { underline: true });
+        doc.text(job.skills.join(", "));
+      }
+
+      doc.moveDown();
+      doc.moveDown();
     });
-    
+
     doc.end();
-    
-    // Wait for the write stream to finish
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-    
-    // Generate proper download URL
-    const frontendUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/temp/exports/${fileName}`;
-    
-    // Schedule cleanup after 1 hour
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log("[JobExport] Cleaned up PDF file:", fileName);
-        }
-      } catch (cleanupError) {
-        console.error("[JobExport] Error cleaning up PDF file:", cleanupError);
-      }
-    }, 60 * 60 * 1000);
-    
-    console.log("[JobExport] PDF generation completed successfully");
-    
+
+    console.log("[JobService] PDF generation completed", { filePath });
+    const frontendUrl = process.env.FRONTEND_URL + `/temp/${fileName}`;
+
     return {
       done: true,
       data: {
-        downloadUrl: frontendUrl,
-        fileName: fileName,
-        filePath: filePath,
-        recordCount: jobs.length,
-        message: `PDF exported successfully with ${jobs.length} jobs`
+        pdfPath: filePath,
+        pdfUrl: frontendUrl
       }
     };
-    
   } catch (error) {
-    console.error("[JobExport] Error in exportJobsPDF:", error);
-    // Clean up file if it was created
-    if (filePath && fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (cleanupError) {
-        console.error("[JobExport] Error cleaning up failed PDF file:", cleanupError);
-      }
-    }
-    return { 
-      done: false, 
-      message: "Failed to export jobs as PDF: " + error.message 
-    };
+    console.error("[JobService] Error in exportJobsPDF", { error: error.message });
+    return { done: false, error: error.message };
   }
 };
 
-// 12. Export jobs as Excel 
-const exportJobsExcel = async (companyId, userId, filters = {}) => {
-  let filePath = null;
+// Export jobs as Excel
+export const exportJobsExcel = async (companyId) => {
   try {
-    console.log("[JobExport] Starting Excel export for companyId:", companyId, "userId:", userId);
-    
     const collections = getTenantCollections(companyId);
-    const jobsCollection = collections.jobs;
-    
-    // Build secure query (same as PDF)
-    let query = {
-      companyId: companyId,
-      isActive: true
-    };
-    
-    // Apply filters
-    if (filters.status && filters.status !== '') {
-      query.status = filters.status;
-    }
-    
-    if (filters.category && filters.category !== '') {
-      query.category = filters.category;
-    }
-    
-    if (filters.jobType && filters.jobType !== '') {
-      query.jobType = filters.jobType;
-    }
-    
-    if (filters.search) {
-      query.$or = [
-        { title: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } },
-        { 'location.city': { $regex: filters.search, $options: 'i' } }
-      ];
-    }
+    console.log("[JobService] exportJobsExcel", { companyId });
 
-    // Fetch jobs data
-    const jobs = await jobsCollection
-      .find(query)
-      .sort({ postedDate: -1 })
-      .toArray();
-    
-    console.log("[JobExport] Found jobs for Excel export:", jobs.length);
-    
-    if (jobs.length === 0) {
-      return { 
-        done: false, 
-        message: "No jobs found matching the selected criteria" 
-      };
-    }
-    
-    // Generate secure filename
-    const sanitizedCompanyId = companyId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const timestamp = Date.now();
-    const randomSuffix = crypto.randomBytes(4).toString('hex');
-    const fileName = `jobs_${sanitizedCompanyId}_${sanitizedUserId}_${timestamp}_${randomSuffix}.xlsx`;
-    
-    // Create secure file path
-    const tempDir = path.join(process.cwd(), 'temp', 'exports');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { mode: 0o700, recursive: true });
-    }
-    
-    filePath = path.join(tempDir, fileName);
-    
-    // Generate Excel using ExcelJS
+    const jobs = await collections.jobs.find({
+      companyId,
+      isDeleted: { $ne: true }
+    }).sort({ createdAt: -1 }).toArray();
+
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Jobs");
-    
+
     // Define columns
     worksheet.columns = [
-      { header: "Job ID", key: "jobId", width: 15 },
-      { header: "Title", key: "title", width: 30 },
-      { header: "Category", key: "category", width: 15 },
-      { header: "Type", key: "jobType", width: 12 },
-      { header: "Level", key: "jobLevel", width: 15 },
-      { header: "Experience", key: "experience", width: 15 },
-      { header: "Location", key: "location", width: 25 },
-      { header: "Min Salary", key: "minSalary", width: 12 },
-      { header: "Max Salary", key: "maxSalary", width: 12 },
+      { header: "Job Title", key: "title", width: 30 },
+      { header: "Category", key: "category", width: 20 },
+      { header: "Type", key: "type", width: 15 },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Country", key: "country", width: 20 },
+      { header: "State", key: "state", width: 20 },
+      { header: "City", key: "city", width: 20 },
+      { header: "Min Salary", key: "minSalary", width: 15 },
+      { header: "Max Salary", key: "maxSalary", width: 15 },
       { header: "Currency", key: "currency", width: 10 },
-      { header: "Status", key: "status", width: 12 },
-      { header: "Posted Date", key: "postedDate", width: 15 },
-      { header: "Applicants", key: "applicantsCount", width: 12 }
+      { header: "Positions", key: "positions", width: 10 },
+      { header: "Applications", key: "applications", width: 15 },
+      { header: "Skills", key: "skills", width: 40 },
+      { header: "Posted Date", key: "postedDate", width: 20 },
+      { header: "Last Updated", key: "updatedDate", width: 20 }
     ];
-    
-    // Add data
-    jobs.forEach((job) => {
+
+    // Add job data
+    jobs.forEach(job => {
       worksheet.addRow({
-        jobId: job.jobId || "",
-        title: job.title || "",
-        category: job.category || "",
-        jobType: job.jobType || "",
-        jobLevel: job.jobLevel || "",
-        experience: job.experience || "",
-        location: `${job.location?.city || ''}, ${job.location?.country || ''}`,
-        minSalary: job.minSalary || 0,
-        maxSalary: job.maxSalary || 0,
-        currency: job.currency || "USD",
-        status: job.status || "",
-        postedDate: job.postedDate ? new Date(job.postedDate).toLocaleDateString() : "",
-        applicantsCount: job.applicantsCount || 0
+        title: job.title,
+        category: job.category,
+        type: job.type,
+        status: job.status,
+        country: job.location.country,
+        state: job.location.state,
+        city: job.location.city,
+        minSalary: job.salaryRange.min,
+        maxSalary: job.salaryRange.max,
+        currency: job.salaryRange.currency,
+        positions: job.numberOfPositions,
+        applications: job.appliedCount,
+        skills: job.skills.join(", "),
+        postedDate: format(new Date(job.createdAt), "PPP"),
+        updatedDate: job.updatedAt ? format(new Date(job.updatedAt), "PPP") : ""
       });
     });
-    
-    // Style the header
+
+    // Style header row
     worksheet.getRow(1).font = { bold: true };
     worksheet.getRow(1).fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FFE0E0E0" }
+      fgColor: { argb: "FFE9ECEF" }
     };
-    
+
+    // Add borders to all cells
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" }
+        };
+      });
+    });
+
+    // Save workbook
+    const fileName = `jobs_${companyId}_${Date.now()}.xlsx`;
+    const tempDir = path.join(process.cwd(), "temp");
+    const filePath = path.join(tempDir, fileName);
+
+    // Ensure temp directory exists
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
     await workbook.xlsx.writeFile(filePath);
-    
-    // Generate proper download URL
-    const frontendUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/temp/exports/${fileName}`;
-    
-    // Schedule cleanup after 1 hour
-    setTimeout(() => {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log("[JobExport] Cleaned up Excel file:", fileName);
-        }
-      } catch (cleanupError) {
-        console.error("[JobExport] Error cleaning up Excel file:", cleanupError);
-      }
-    }, 60 * 60 * 1000);
-    
-    console.log("[JobExport] Excel generation completed successfully");
-    
+
+    console.log("[JobService] Excel generation completed", { filePath });
+    const frontendUrl = process.env.FRONTEND_URL + `/temp/${fileName}`;
+
     return {
       done: true,
       data: {
-        downloadUrl: frontendUrl,
-        fileName: fileName,
-        filePath: filePath,
-        recordCount: jobs.length,
-        message: `Excel exported successfully with ${jobs.length} jobs`
+        excelPath: filePath,
+        excelUrl: frontendUrl,
+        totalJobs: jobs.length
       }
     };
-    
   } catch (error) {
-    console.error("[JobExport] Error in exportJobsExcel:", error);
-    // Clean up file if it was created
-    if (filePath && fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (cleanupError) {
-        console.error("[JobExport] Error cleaning up failed Excel file:", cleanupError);
-      }
-    }
-    return { 
-      done: false, 
-      message: "Failed to export jobs as Excel: " + error.message 
-    };
+    console.error("[JobService] Error in exportJobsExcel", { error: error.message });
+    return { done: false, error: error.message };
   }
 };
-
-// File cleanup service (run this periodically)
-const cleanupExportFiles = async (maxAgeHours = 24) => {
-  try {
-    const exportsDir = path.join(process.cwd(), "temp", "exports");
-    if (!fs.existsSync(exportsDir)) {
-      return { cleanedCount: 0 };
-    }
-    
-    const files = fs.readdirSync(exportsDir);
-    const now = Date.now();
-    const maxAge = maxAgeHours * 60 * 60 * 1000;
-    
-    let cleanedCount = 0;
-    
-    for (const file of files) {
-      const filePath = path.join(exportsDir, file);
-      const stats = fs.statSync(filePath);
-      const fileAge = now - stats.mtimeMs;
-      
-      if (fileAge > maxAge) {
-        fs.unlinkSync(filePath);
-        cleanedCount++;
-        console.log(`[Cleanup] Removed old export file: ${file}`);
-      }
-    }
-    
-    console.log(`[Cleanup] Cleaned up ${cleanedCount} old export files`);
-    return { cleanedCount };
-  } catch (error) {
-    console.error("[Cleanup] Error cleaning export files:", error);
-    return { error: error.message };
-  }
-};
-
-// Run cleanup every 24 hours
-setInterval(() => {
-  cleanupExportFiles().catch(error => {
-    console.error("Scheduled cleanup failed:", error);
-  });
-}, 24 * 60 * 60 * 1000);
-
-export {
-  getJobsStats,
-  getJobsList,
-  getJobDetails,
-  createJob,
-  updateJob,
-  deleteJob,
-  bulkDeleteJobs,
-  updateJobStatus,
-  getJobCategories,
-  getJobTypes,
-  exportJobsPDF,
-  exportJobsExcel
-};
-

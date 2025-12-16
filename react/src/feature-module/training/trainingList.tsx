@@ -8,7 +8,7 @@ import CommonSelect from '../../core/common/commonSelect';
 import { useSocket } from "../../SocketContext";
 import { Socket } from "socket.io-client";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Modal, Select } from "antd";
+import { Modal, Select, Input } from "antd";
 import dayjs from "dayjs";
 import { DatePicker } from "antd";
 import { format, parse } from "date-fns";
@@ -52,6 +52,13 @@ type Stats = {
   totalTrainingList: string;
 };
 
+type EmpLite = { 
+  employeeId: string; 
+  firstName: string; 
+  lastName: string; 
+  trainer?: string 
+};
+
 const TrainingList = () => {
 
     const socket = useSocket() as Socket | null;
@@ -62,9 +69,13 @@ const TrainingList = () => {
     const [stats, setStats] = useState<Stats>({ totalTrainingList: "0",});
     const [loading, setLoading] = useState<boolean>(true);
     const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-    const [filterType, setFilterType] = useState<string>("last7days");
+    const [filterType, setFilterType] = useState<string>("alltime");
     const [editing, setEditing] = useState<any>(null);
     const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
+    const [empPopupOpen, setEmpPopupOpen] = useState(false);
+    const [empPopupTrainer, setEmpPopupTrainer] = useState<string>("");
+    const [empPopupList, setEmpPopupList] = useState<EmpLite[]>([]);
+    const [empPopupQuery, setEmpPopupQuery] = useState("");
     
     const [editForm, setEditForm] = useState({
       trainingType: "",
@@ -146,6 +157,7 @@ const TrainingList = () => {
         ),
         onOk: async () => {
           await onConfirm();
+          socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
         },
       });
     };
@@ -346,7 +358,7 @@ const TrainingList = () => {
         cost: "",
         status: "Active",
       });
-      socket.emit("hr/trainingList/trainingListlist", { type: "last7days" });
+      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
     };
 
     const handleEditSave = () => {
@@ -391,7 +403,7 @@ const TrainingList = () => {
           status: "Active",
           trainingId: "",
       });
-      socket.emit("hr/trainingList/trainingListlist", { type: "last7days" });
+      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
     };
 
     const fetchStats = useCallback(() => {
@@ -411,7 +423,7 @@ const TrainingList = () => {
     type Option = { value: string; label: string };
      
     const handleFilterChange = (opt: Option | null) => {
-      const value = opt?.value ?? "last7days";
+      const value = opt?.value ?? "alltime";
       setFilterType(value);
       if (value !== "custom") {
         setCustomRange({});
@@ -445,7 +457,7 @@ const TrainingList = () => {
 
     const trainingEmployeeOptions: OptionEmployee[] = (rowsEmployee as any[]).map((t: any) => ({
       value: t.employeeId,
-      label: t.firstName+" "+t.lastName,
+      label: t.firstName+" "+t.lastName+ " - "+t.employeeId,
     }));
 
 
@@ -471,6 +483,23 @@ const TrainingList = () => {
     const getModalContainerEmp = () =>
         document.getElementById("new_training") || document.body;
 
+    const empNameById = React.useMemo(() => {
+      const m = new Map<string, string>();
+      rowsEmployee.forEach(e => {
+        const name = [e.firstName, e.lastName].filter(Boolean).join(" ");
+        m.set(e.employeeId, name || e.employeeId);
+      });
+      return m;
+    }, [rowsEmployee]);
+
+    const filteredEmpPopup = React.useMemo(() => {
+      const q = empPopupQuery.trim().toLowerCase();
+      if (!q) return empPopupList;
+      return empPopupList.filter(e => {
+        const name = [e.firstName, e.lastName].join(" ").toLowerCase();
+        return e.employeeId.toLowerCase().includes(q) || name.includes(q);
+      });
+    }, [empPopupList, empPopupQuery]);
 
   const routes = all_routes;
   const columns = [
@@ -504,27 +533,77 @@ const TrainingList = () => {
       title: "Employee",
       dataIndex: "employee",
       render: (text: string[] | string, record: any) => {
-          const ids = Array.isArray(text) ? text : [];
+          const ids = Array.isArray(record.employee) ? record.employee : [];
+          const max = 4;
+          const visible = ids.slice(0, max);
+          const extra = ids.length - visible.length;
+
+          const handleOpenEmpPopup = () => {
+            // Build employee list for this trainer: map ids -> rowsEmployee info
+            const list: EmpLite[] = ids.map(id => {
+              const full = rowsEmployee.find(e => e.employeeId === id);
+              return {
+                employeeId: id,
+                firstName: full?.firstName || "",
+                lastName: full?.lastName || "",
+              };
+            });
+            setEmpPopupTrainer(record.trainer || "");
+            setEmpPopupList(list);
+            setEmpPopupQuery("");
+            setEmpPopupOpen(true);
+          };
           return (
-            <div className="d-flex align-items-center file-name-icon">
-              {ids.map((empId) => (
-                <Link
+      <div className="d-flex align-items-center file-name-icon">
+        {visible.map((empId) => {
+          const name = empNameById.get(empId) || empId;
+          return (
+                <a
                   key={empId}
-                  to="#"
+                  href="#"
                   className="avatar avatar-md border avatar-rounded me-1"
-                  title={empId}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleOpenEmpPopup();
+                  }}
+                  aria-label={name}
+                  title={name}
                 >
                   <ImageWithBasePath
                     src={"assets/img/favicon.png"}
                     className="img-fluid"
-                    alt="img"
+                    alt={name}
                   />
-                </Link>
-              ))}
-            </div>
-          );
-        },
+                </a>
+              );
+            })}
+            {extra > 0 && (
+              <a
+                href="#"
+                className="avatar avatar-md border avatar-rounded me-1"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleOpenEmpPopup();
+                }}
+                aria-label={`+${extra}`}
+                title={`+${extra}`}
+                style={{
+                  backgroundColor: "#e5e7eb",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#374151",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                +{extra}
+              </a>
+            )}
+          </div>
+        );
       },
+    },
     {
       title: "Time Duration",
       dataIndex: "timeDuration",
@@ -1012,6 +1091,56 @@ const TrainingList = () => {
           </div>
         </div>
         {/* /Edit Training */}     
+        <Modal
+          open={empPopupOpen}
+          onCancel={() => setEmpPopupOpen(false)}
+          footer={null}
+          width={520}
+          centered
+          destroyOnClose
+        >
+          <div className="mb-3">
+            <h5 className="mb-1">Employees for Trainer</h5>
+            <div className="text-muted" style={{ fontSize: 12 }}>{empPopupTrainer}</div>
+          </div>
+          <Input.Search
+            placeholder="Search by name or Employee ID"
+            allowClear
+            autoFocus
+            onChange={(e) => setEmpPopupQuery(e.target.value)}
+            onSearch={(v) => setEmpPopupQuery(v)}
+            style={{ marginBottom: 12 }}
+          />
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            {filteredEmpPopup.map((e) => {
+              const name = [e.firstName, e.lastName].filter(Boolean).join(" ");
+              return (
+                <div
+                  key={e.employeeId}
+                  className="d-flex align-items-center p-2 rounded"
+                  style={{ cursor: "default" }}
+                >
+                  <span className="avatar avatar-md border avatar-rounded me-2">
+                    <ImageWithBasePath
+                      src={"assets/img/favicon.png"}
+                      className="img-fluid"
+                      alt={name || e.employeeId}
+                    />
+                  </span>
+                  <div className="d-flex flex-column">
+                    <span className="fw-medium">{name || e.employeeId}</span>
+                    <span className="text-muted" style={{ fontSize: 12 }}>
+                      {e.employeeId}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredEmpPopup.length === 0 && (
+              <div className="text-muted p-3">No employees found</div>
+            )}
+          </div>
+        </Modal>
     </>
   );
 };

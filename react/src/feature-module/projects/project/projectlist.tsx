@@ -1,202 +1,355 @@
-import React from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import Table from "../../../core/common/dataTable/index";
-import { projectlistdetails } from "../../../core/data/json/projectlistdetails";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import { useSocket } from "../../../SocketContext";
+import { toast } from "react-toastify";
+import CommonSelect, { Option } from "../../../core/common/commonSelect";
+import ProjectModals from "../../../core/modals/projectModal";
 import Footer from "../../../core/common/footer";
 
+interface Project {
+  _id: string;
+  name: string;
+  description?: string;
+  status: string;
+  priority: string;
+  client?: string;
+  teamMembers?: string[];
+  startDate?: Date;
+  endDate?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface ProjectStats {
+  total: number;
+  active: number;
+  completed: number;
+  onHold: number;
+  overdue: number;
+}
+
 const ProjectList = () => {
-  const data = projectlistdetails;
+  const socket = useSocket() as any;
+
+  useEffect(() => {
+  }, [socket]);
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [stats, setStats] = useState<ProjectStats>({ total: 0, active: 0, completed: 0, onHold: 0, overdue: 0 });
+  const [clients, setClients] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    status: "all",
+    priority: "all",
+    client: "all",
+    search: ""
+  });
+
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const statusOptions = [
+    { value: "all", label: "All Status" },
+    { value: "Active", label: "Active" },
+    { value: "Completed", label: "Completed" },
+    { value: "On Hold", label: "On Hold" },
+  ];
+
+  const priorityOptions = [
+    { value: "all", label: "All Priority" },
+    { value: "High", label: "High" },
+    { value: "Medium", label: "Medium" },
+    { value: "Low", label: "Low" },
+  ];
+
+  const clientOptions = [
+    { value: "all", label: "All Clients" },
+    ...clients.map(client => ({ value: client, label: client }))
+  ];
+
+
+  const handleSearchChange = useCallback((value: string) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: value }));
+    }, 500);
+  }, []);
+
+
+  const clearFilters = useCallback(() => {
+    setFilters({
+      status: "all",
+      priority: "all",
+      client: "all",
+      search: ""
+    });
+  }, []);
+
+  const loadProjects = useCallback((filterParams = {}) => {
+
+    if (!socket) return;
+
+    setLoading(true);
+    socket.emit("project:getAllData", filterParams);
+  }, [socket]);
+
+  const handleCreateProject = useCallback((projectData: any) => {
+    if (!socket) return;
+
+    socket.emit("project:create", projectData);
+  }, [socket]);
+
+  const handleUpdateProject = useCallback((projectId: string, updateData: any) => {
+    if (!socket) return;
+
+    socket.emit("project:update", { projectId, update: updateData });
+  }, [socket]);
+
+  const handleDeleteProject = useCallback((projectId: string) => {
+    if (!socket) return;
+
+    socket.emit("project:delete", { projectId });
+  }, [socket]);
+
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleGetAllDataResponse = (response: any) => {
+      setLoading(false);
+
+      if (response.done) {
+        setProjects(response.data.projects || []);
+        setStats(response.data.stats || { total: 0, active: 0, completed: 0, onHold: 0, overdue: 0 });
+        setClients(response.data.clients || []);
+        setError(null);
+      } else {
+        setError(response.error || "Failed to load projects");
+        toast.error(response.error || "Failed to load projects");
+      }
+    };
+
+    const handleCreateResponse = (response: any) => {
+      if (response.done) {
+        toast.success("Project created successfully");
+        loadProjects(filters);
+      } else {
+        toast.error(response.error || "Failed to create project");
+      }
+    };
+
+    const handleUpdateResponse = (response: any) => {
+      if (response.done) {
+        toast.success("Project updated successfully");
+        loadProjects(filters);
+      } else {
+        toast.error(response.error || "Failed to update project");
+      }
+    };
+
+    const handleDeleteResponse = (response: any) => {
+      if (response.done) {
+        toast.success("Project deleted successfully");
+        loadProjects(filters);
+      } else {
+        toast.error(response.error || "Failed to delete project");
+      }
+    };
+
+
+    socket.on("project:getAllData-response", handleGetAllDataResponse);
+    socket.on("admin/project/add-response", handleCreateResponse);
+    socket.on("project:update-response", handleUpdateResponse);
+    socket.on("project:delete-response", handleDeleteResponse);
+
+
+    loadProjects(filters);
+
+    return () => {
+      socket.off("project:getAllData-response", handleGetAllDataResponse);
+      socket.off("admin/project/add-response", handleCreateResponse);
+      socket.off("project:update-response", handleUpdateResponse);
+      socket.off("project:delete-response", handleDeleteResponse);
+    };
+  }, [socket, loadProjects, filters]);
+
+
+  useEffect(() => {
+    if (socket) {
+      loadProjects(filters);
+    }
+  }, [filters, socket, loadProjects]);
+
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const columns = [
     {
       title: "Project ID",
-      dataIndex: "ProjectID",
-      render: (text: String, record: any) => (
-        <Link to={all_routes.projectdetails}>{record.ProjectID}</Link>
+      dataIndex: "_id",
+      render: (text: string, record: Project) => (
+        <Link to={`/projects-details/${record._id}`}>
+          {record._id.substring(0, 8).toUpperCase()}
+        </Link>
       ),
-      sorter: (a: any, b: any) => a.ProjectID.length - b.ProjectID.length,
+      sorter: (a: Project, b: Project) => a._id.localeCompare(b._id),
     },
     {
       title: "Project Name",
-      dataIndex: "ProjectName",
-      render: (text: string, record: any) => (
+      dataIndex: "name",
+      render: (text: string, record: Project) => (
         <h6 className="fw-medium">
-          <Link to={all_routes.projectdetails}>Office Management App</Link>
+          <Link to={`${all_routes.projectdetails}/${record._id}`}>
+            {record.name || "Unnamed Project"}
+          </Link>
         </h6>
       ),
-      sorter: (a: any, b: any) => a.ProjectName.length - b.ProjectName.length,
+      sorter: (a: Project, b: Project) => (a.name || "").localeCompare(b.name || ""),
     },
     {
-      title: "Leader",
-      dataIndex: "Leader",
-      render: (text: String, record: any) => (
+      title: "Client",
+      dataIndex: "client",
+      render: (text: string, record: Project) => (
         <div className="d-flex align-items-center file-name-icon">
-          <Link to="#" className="avatar avatar-sm border avatar-rounded">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.UserImg}`}
-              className="img-fluid"
-              alt="img"
-            />
-          </Link>
+          <div className="avatar avatar-sm border avatar-rounded bg-primary text-white">
+            <span className="fs-12 fw-medium">
+              {(record.client && record.client.length > 0 ? record.client.charAt(0).toUpperCase() : '?')}
+            </span>
+          </div>
           <div className="ms-2">
             <h6 className="fw-normal">
-              <Link to="#">{text}</Link>
+              <Link to="#">{record.client || "No Client"}</Link>
             </h6>
           </div>
         </div>
       ),
-      sorter: (a: any, b: any) => a.Leader.length - b.Leader.length,
+      sorter: (a: Project, b: Project) => (a.client || "").localeCompare(b.client || ""),
     },
     {
       title: "Team",
-      dataIndex: "Team",
-      render: (text: String, record: any) => (
+      dataIndex: "teamMembers",
+      render: (text: string[], record: Project) => (
         <div className="avatar-list-stacked avatar-group-sm">
-          <span className="avatar avatar-rounded">
-            <ImageWithBasePath
-              className="border border-white"
-              src={`assets/img/profiles/${record.share[0]}`}
-              alt="img"
-            />
-          </span>
-          <span className="avatar avatar-rounded">
-            <ImageWithBasePath
-              className="border border-white"
-              src={`assets/img/profiles/${record.share[1]}`}
-              alt="img"
-            />
-          </span>
-          <span className="avatar avatar-rounded">
-            <ImageWithBasePath
-              className="border border-white"
-              src={`assets/img/profiles/${record.share[2]}`}
-              alt="img"
-            />
-          </span>
-          <Link
-            className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium"
-            to="#"
-          >
-            {record.Team}
-          </Link>
+          {record.teamMembers && record.teamMembers.length > 0 ? (
+            record.teamMembers.slice(0, 3).map((member, index) => (
+              <span key={index} className="avatar avatar-rounded bg-primary text-white">
+                <span className="fs-12 fw-medium">
+                  {member && typeof member === 'string' && member.length > 0 ? member.charAt(0).toUpperCase() : '?'}
+                </span>
+              </span>
+            ))
+          ) : (
+            <span className="avatar avatar-rounded bg-secondary text-white">
+              <span className="fs-12 fw-medium">?</span>
+            </span>
+          )}
+          {record.teamMembers && record.teamMembers.length > 3 && (
+            <Link
+              className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium"
+              to="#"
+            >
+              +{record.teamMembers.length - 3}
+            </Link>
+          )}
         </div>
       ),
-      sorter: (a: any, b: any) => a.Team.length - b.Team.length,
+      sorter: (a: Project, b: Project) => (a.teamMembers?.length || 0) - (b.teamMembers?.length || 0),
     },
     {
       title: "Deadline",
-      dataIndex: "Deadline",
-      sorter: (a: any, b: any) => a.Deadline.length - b.Deadline.length,
+      dataIndex: "endDate",
+      render: (text: Date, record: Project) => (
+        <span>
+          {record.endDate ? new Date(record.endDate).toLocaleDateString() : "No Deadline"}
+        </span>
+      ),
+      sorter: (a: Project, b: Project) => {
+        const aDate = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const bDate = b.endDate ? new Date(b.endDate).getTime() : 0;
+        return aDate - bDate;
+      },
     },
     {
       title: "Priority",
-      dataIndex: "Priority",
-      render: (text: String, record: any) => (
-        <div className="dropdown">
-          <Link
-            to="#"
-            className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
-            data-bs-toggle="dropdown"
-          >
-            <span
-              className={`rounded-circle  d-flex justify-content-center align-items-center me-2${
-                text === "High"
-                  ? "bg-transparent-danger"
-                  : text === "Low"
-                  ? "bg-transparent-success"
-                  : "bg-transparent-warning"
-              }`}
-            >
-              <i
-                className={`ti ti-point-filled ${
-                  text === "High"
-                    ? "text-danger"
-                    : text === "Low"
-                    ? "text-success"
-                    : "text-warning"
-                }`}
-              />
-            </span>{" "}
-            {text}
-          </Link>
-          <ul className="dropdown-menu  dropdown-menu-end p-3">
-            <li>
-              <Link
-                to="#"
-                className="dropdown-item rounded-1 d-flex justify-content-start align-items-center"
-              >
-                <span className="rounded-circle d-flex justify-content-center align-items-center me-2">
-                  <i className="ti ti-point-filled text-danger" />
-                </span>
-                High
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="#"
-                className="dropdown-item rounded-1 d-flex justify-content-start align-items-center"
-              >
-                <span className="rounded-circle bg-transparent-warning d-flex justify-content-center align-items-center me-2">
-                  <i className="ti ti-point-filled text-warning" />
-                </span>
-                Medium
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="#"
-                className="dropdown-item rounded-1 d-flex justify-content-start align-items-center"
-              >
-                <span className="rounded-circle bg-transparent-success d-flex justify-content-center align-items-center me-2">
-                  <i className="ti ti-point-filled text-success" />
-                </span>
-                Low
-              </Link>
-            </li>
-          </ul>
-        </div>
+      dataIndex: "priority",
+      render: (text: string, record: Project) => (
+        <span
+          className={`badge ${record.priority === "High"
+            ? "badge-danger"
+            : record.priority === "Low"
+              ? "badge-success"
+              : "badge-warning"
+            } d-inline-flex align-items-center`}
+        >
+          <i className="ti ti-point-filled me-1" />
+          {record.priority || "Medium"}
+        </span>
       ),
-      sorter: (a: any, b: any) => a.Priority.length - b.Priority.length,
+      sorter: (a: Project, b: Project) => {
+        const priorityOrder = { High: 3, Medium: 2, Low: 1 };
+        return (priorityOrder[a.priority as keyof typeof priorityOrder] || 2) -
+          (priorityOrder[b.priority as keyof typeof priorityOrder] || 2);
+      },
     },
     {
       title: "Status",
-      dataIndex: "Status",
-      render: (text: string, record: any) => (
+      dataIndex: "status",
+      render: (text: string, record: Project) => (
         <span
-          className={`badge  ${
-            text === "Active" ? "badge-success" : "badge-danger"
-          } d-inline-flex align-items-center badge-xs`}
+          className={`badge ${record.status === "Active"
+            ? "badge-success"
+            : record.status === "Completed"
+              ? "badge-primary"
+              : record.status === "On Hold"
+                ? "badge-warning"
+                : "badge-secondary"
+            } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
-          {text}
+          {record.status || "Unknown"}
         </span>
       ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+      sorter: (a: Project, b: Project) => (a.status || "").localeCompare(b.status || ""),
     },
     {
       title: "",
       dataIndex: "actions",
-      render: () => (
+      render: (text: any, record: Project) => (
         <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_client"
+          <button
+            className="btn btn-icon btn-sm me-2"
+            onClick={() => {
+
+              alert(`Edit project: ${record.name}`);
+            }}
+            title="Edit"
           >
             <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
+          </button>
+          <button
+            className="btn btn-icon btn-sm text-danger"
+            onClick={() => {
+              if (window.confirm(`Are you sure you want to delete "${record.name}"?`)) {
+                handleDeleteProject(record._id);
+              }
+            }}
+            title="Delete"
           >
             <i className="ti ti-trash" />
-          </Link>
+          </button>
         </div>
       ),
     },
@@ -204,10 +357,8 @@ const ProjectList = () => {
   return (
     <>
       <>
-        {/* Page Wrapper */}
         <div className="page-wrapper">
           <div className="content">
-            {/* Breadcrumb */}
             <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
               <div className="my-auto mb-2">
                 <h2 className="mb-1">Projects</h2>
@@ -285,749 +436,73 @@ const ProjectList = () => {
                 </div>
               </div>
             </div>
-            {/* /Breadcrumb */}
-            {/* Project list */}
             <div className="card">
               <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                 <h5>Project List</h5>
                 <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                  <div className="dropdown me-3">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      Select Status
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Active
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Inactive
-                        </Link>
-                      </li>
-                    </ul>
+                  <div className="dropdown me-2">
+                    <CommonSelect
+                      className="select"
+                      options={statusOptions}
+                      defaultValue={filters.status}
+                      onChange={(option) => setFilters(prev => ({ ...prev, status: option?.value || "all" }))}
+                    />
                   </div>
-                  <div className="dropdown">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      Sort By : Last 7 Days
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Recently Added
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Ascending
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Desending
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Last Month
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className="dropdown-item rounded-1">
-                          Last 7 Days
-                        </Link>
-                      </li>
-                    </ul>
+                  <div className="dropdown me-2">
+                    <CommonSelect
+                      className="select"
+                      options={priorityOptions}
+                      defaultValue={filters.priority}
+                      onChange={(option) => setFilters(prev => ({ ...prev, priority: option?.value || "all" }))}
+                    />
                   </div>
+                  <div className="dropdown me-2">
+                    <CommonSelect
+                      className="select"
+                      options={clientOptions}
+                      defaultValue={filters.client}
+                      onChange={(option) => setFilters(prev => ({ ...prev, client: option?.value || "all" }))}
+                    />
+                  </div>
+                  <div className="input-group me-2" style={{ width: '200px' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Search projects..."
+                      defaultValue={filters.search}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                    />
+                  </div>
+                  {(filters.status !== "all" || filters.priority !== "all" || filters.client !== "all" || filters.search) && (
+                    <button
+                      className="btn btn-outline-secondary me-2"
+                      onClick={clearFilters}
+                      title="Clear all filters"
+                    >
+                      <i className="ti ti-x" />
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="card-body p-0">
-                <Table dataSource={data} columns={columns} Selection={true} />
+                {loading ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <p className="mt-2 text-muted">Loading projects...</p>
+                  </div>
+                ) : (
+                  <Table dataSource={projects} columns={columns} Selection={true} />
+                )}
               </div>
             </div>
-            {/* / Project list  */}
           </div>
           
           <Footer />
         </div>
-        {/* /Page Wrapper */}
       </>
-
-      {/* Add Project */}
-      <div className="modal fade" id="add_project" role="dialog">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header header-border align-items-center justify-content-between">
-              <div className="d-flex align-items-center">
-                <h5 className="modal-title me-2">Add Project </h5>
-                <p className="text-dark">Project ID : PRO-0004</p>
-              </div>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="add-info-fieldset ">
-              <div className="contact-grids-tab p-3 pb-0">
-                <ul className="nav nav-underline" id="myTab" role="tablist">
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link active"
-                      id="basic-tab"
-                      data-bs-toggle="tab"
-                      data-bs-target="#basic-info"
-                      type="button"
-                      role="tab"
-                      aria-selected="true"
-                    >
-                      Basic Information
-                    </button>
-                  </li>
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link"
-                      id="member-tab"
-                      data-bs-toggle="tab"
-                      data-bs-target="#member"
-                      type="button"
-                      role="tab"
-                      aria-selected="false"
-                    >
-                      Members
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div className="tab-content" id="myTabContent">
-                <div
-                  className="tab-pane fade show active"
-                  id="basic-info"
-                  role="tabpanel"
-                  aria-labelledby="basic-tab"
-                  tabIndex={0}
-                >
-                  <form>
-                    <div className="modal-body">
-                      <div className="row">
-                        <div className="col-md-12">
-                          <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                            <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                              <i className="ti ti-photo text-gray-2 fs-16" />
-                            </div>
-                            <div className="profile-upload">
-                              <div className="mb-2">
-                                <h6 className="mb-1">Upload Project Logo</h6>
-                                <p className="fs-12">
-                                  Image should be below 4 mb
-                                </p>
-                              </div>
-                              <div className="profile-uploader d-flex align-items-center">
-                                <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                  Upload
-                                  <input
-                                    type="file"
-                                    className="form-control image-sign"
-                                    multiple
-                                  />
-                                </div>
-                                <Link to="#" className="btn btn-light btn-sm">
-                                  Cancel
-                                </Link>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Project Name</label>
-                            <input type="text" className="form-control" />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Client</label>
-                            <select className="select">
-                              <option>Select</option>
-                              <option>Anthony Lewis</option>
-                              <option>Brian Villalobos</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="row">
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">Start Date</label>
-                                <div className="input-icon-end position-relative">
-                                  <input
-                                    type="text"
-                                    className="form-control datetimepicker"
-                                    placeholder="dd/mm/yyyy"
-                                    defaultValue="02-05-2024"
-                                  />
-                                  <span className="input-icon-addon">
-                                    <i className="ti ti-calendar text-gray-7" />
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">End Date</label>
-                                <div className="input-icon-end position-relative">
-                                  <input
-                                    type="text"
-                                    className="form-control datetimepicker"
-                                    placeholder="dd/mm/yyyy"
-                                    defaultValue="02-05-2024"
-                                  />
-                                  <span className="input-icon-addon">
-                                    <i className="ti ti-calendar text-gray-7" />
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">Priority</label>
-                                <select className="select">
-                                  <option>Select</option>
-                                  <option>High</option>
-                                  <option>Medium</option>
-                                  <option>Low</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">
-                                  Project Value
-                                </label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  defaultValue="$"
-                                />
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">Price Type</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  defaultValue=""
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Description</label>
-                            <div className="summernote" />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="input-block mb-0">
-                            <label className="form-label">Upload Files</label>
-                            <input className="form-control" type="file" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer">
-                      <div className="d-flex align-items-center justify-content-end">
-                        <button
-                          type="button"
-                          className="btn btn-outline-light border me-2"
-                          data-bs-dismiss="modal"
-                        >
-                          Cancel
-                        </button>
-                        <button className="btn btn-primary" type="submit">
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-                <div
-                  className="tab-pane fade"
-                  id="member"
-                  role="tabpanel"
-                  aria-labelledby="member-tab"
-                  tabIndex={0}
-                >
-                  <form>
-                    <div className="modal-body">
-                      <div className="row">
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Members
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Jerald,Andrew,Philip,Davis"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Leader
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Hendry,James"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Project Manager
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Dwight"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div>
-                            <label className="form-label">Tags</label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Collab,Promotion,Rated"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Status</label>
-                            <select className="select">
-                              <option>Select</option>
-                              <option>Active</option>
-                              <option>Inactive</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer">
-                      <div className="d-flex align-items-center justify-content-end">
-                        <button
-                          type="button"
-                          className="btn btn-outline-light border me-2"
-                          data-bs-dismiss="modal"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="btn btn-primary"
-                          type="button"
-                          data-bs-toggle="modal"
-                          data-inert={true}
-                          data-bs-target="#success_modal"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Add Project */}
-      {/* Edit Project */}
-      <div className="modal fade" id="edit_project" role="dialog">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header header-border align-items-center justify-content-between">
-              <div className="d-flex align-items-center">
-                <h5 className="modal-title me-2">Edit Project </h5>
-                <p className="text-dark">Project ID : PRO-0004</p>
-              </div>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="add-info-fieldset ">
-              <div className="contact-grids-tab p-3 pb-0">
-                <ul className="nav nav-underline" id="myTab1" role="tablist">
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link active"
-                      id="basic-tab1"
-                      data-bs-toggle="tab"
-                      data-bs-target="#basic-info1"
-                      type="button"
-                      role="tab"
-                      aria-selected="true"
-                    >
-                      Basic Information
-                    </button>
-                  </li>
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link"
-                      id="member-tab1"
-                      data-bs-toggle="tab"
-                      data-bs-target="#member1"
-                      type="button"
-                      role="tab"
-                      aria-selected="false"
-                    >
-                      Members
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div className="tab-content" id="myTabContent1">
-                <div
-                  className="tab-pane fade show active"
-                  id="basic-info1"
-                  role="tabpanel"
-                  aria-labelledby="basic-tab1"
-                  tabIndex={0}
-                >
-                  <form>
-                    <div className="modal-body">
-                      <div className="row">
-                        <div className="col-md-12">
-                          <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                            <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                              <i className="ti ti-photo text-gray-2 fs-16" />
-                            </div>
-                            <div className="profile-upload">
-                              <div className="mb-2">
-                                <h6 className="mb-1">Upload Project Logo</h6>
-                                <p className="fs-12">
-                                  Image should be below 4 mb
-                                </p>
-                              </div>
-                              <div className="profile-uploader d-flex align-items-center">
-                                <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                  Upload
-                                  <input
-                                    type="file"
-                                    className="form-control image-sign"
-                                    multiple
-                                  />
-                                </div>
-                                <Link to="#" className="btn btn-light btn-sm">
-                                  Cancel
-                                </Link>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Project Name</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              defaultValue="Office Management"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Client</label>
-                            <select className="select">
-                              <option>Select</option>
-                              <option>Anthony Lewis</option>
-                              <option>Brian Villalobos</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="row">
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">Start Date</label>
-                                <div className="input-icon-end position-relative">
-                                  <input
-                                    type="text"
-                                    className="form-control datetimepicker"
-                                    placeholder="dd/mm/yyyy"
-                                    defaultValue="02-05-2024"
-                                  />
-                                  <span className="input-icon-addon">
-                                    <i className="ti ti-calendar text-gray-7" />
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">End Date</label>
-                                <div className="input-icon-end position-relative">
-                                  <input
-                                    type="text"
-                                    className="form-control datetimepicker"
-                                    placeholder="dd/mm/yyyy"
-                                    defaultValue="02-05-2024"
-                                  />
-                                  <span className="input-icon-addon">
-                                    <i className="ti ti-calendar text-gray-7" />
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">Priority</label>
-                                <select className="select">
-                                  <option>Select</option>
-                                  <option>High</option>
-                                  <option>Medium</option>
-                                  <option>Low</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">
-                                  Project Value
-                                </label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  defaultValue="$"
-                                />
-                              </div>
-                            </div>
-                            <div className="col-md-4">
-                              <div className="mb-3">
-                                <label className="form-label">Price Type</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  defaultValue=""
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Description</label>
-                            <div className="summernote" />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="input-block mb-0">
-                            <label className="form-label">Upload Files</label>
-                            <input className="form-control" type="file" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer">
-                      <div className="d-flex align-items-center justify-content-end">
-                        <button
-                          type="button"
-                          className="btn btn-outline-light border me-2"
-                          data-bs-dismiss="modal"
-                        >
-                          Cancel
-                        </button>
-                        <button className="btn btn-primary" type="submit">
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-                <div
-                  className="tab-pane fade"
-                  id="member1"
-                  role="tabpanel"
-                  aria-labelledby="member-tab1"
-                  tabIndex={0}
-                >
-                  <form>
-                    <div className="modal-body">
-                      <div className="row">
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Members
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Jerald,Andrew,Philip,Davis"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Leader
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Hendry,James"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label me-2">
-                              Project Manager
-                            </label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Dwight"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div>
-                            <label className="form-label">Tags</label>
-                            <input
-                              className="input-tags form-control"
-                              placeholder="Add new"
-                              type="text"
-                              data-role="tagsinput"
-                              name="Label"
-                              defaultValue="Collab,Promotion,Rated"
-                            />
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="mb-3">
-                            <label className="form-label">Status</label>
-                            <select className="select">
-                              <option>Select</option>
-                              <option>Active</option>
-                              <option>Inactive</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="modal-footer">
-                      <div className="d-flex align-items-center justify-content-end">
-                        <button
-                          type="button"
-                          className="btn btn-outline-light border me-2"
-                          data-bs-dismiss="modal"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="btn btn-primary"
-                          type="button"
-                          data-bs-toggle="modal"
-                          data-inert={true}
-                          data-bs-target="#success_modal"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Edit Project */}
-      {/* Add Project Success */}
-      <div className="modal fade" id="success_modal" role="dialog">
-        <div className="modal-dialog modal-dialog-centered modal-sm">
-          <div className="modal-content">
-            <div className="modal-body">
-              <div className="text-center p-3">
-                <span className="avatar avatar-lg avatar-rounded bg-success mb-3">
-                  <i className="ti ti-check fs-24" />
-                </span>
-                <h5 className="mb-2">Project Added Successfully</h5>
-                <p className="mb-3">
-                  Stephan Peralt has been added with Client ID :{" "}
-                  <span className="text-primary">#pro - 0004</span>
-                </p>
-                <div>
-                  <div className="row g-2">
-                    <div className="col-6">
-                      <Link
-                        to={all_routes.project}
-                        className="btn btn-dark w-100"
-                      >
-                        Back to List
-                      </Link>
-                    </div>
-                    <div className="col-6">
-                      <Link
-                        to={all_routes.projectdetails}
-                        className="btn btn-primary w-100"
-                      >
-                        Detail Page
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Add Project Success */}
+      <ProjectModals onProjectCreated={() => loadProjects(filters)} />
     </>
   );
 };

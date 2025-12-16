@@ -12,8 +12,6 @@ import { format, parse } from "date-fns";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Modal } from "antd";
 import dayjs from "dayjs";
-import Footer from "../../core/common/footer";
-
 
 type ResignationRow = {
   employeeName: string;
@@ -29,10 +27,15 @@ type Stats = {
   recentResignations: string;
 };
 
+type DepartmentRow = {
+  department: string;
+}
+
 const Resignation = () => {
   const socket = useSocket() as Socket | null;
 
   const [rows, setRows] = useState<ResignationRow[]>([]);
+  const [rowsDepartments, setRowsDepartments] = useState<DepartmentRow[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalResignations: "0",
     recentResignations: "0",
@@ -165,6 +168,17 @@ const Resignation = () => {
     setLoading(false);
   }, []);
 
+  const onDepartmentsListResponse = useCallback((res: any) => {
+    if (res?.done) {
+      setRowsDepartments(res.data || []);
+    } else {
+      setRowsDepartments([]);
+      // optionally toast error
+      // toast.error(res?.message || "Failed to fetch resignations");
+    }
+    setLoading(false);
+  }, []);
+
   const onStatsResponse = useCallback((res: any) => {
     if (res?.done && res.data) {
       setStats(res.data);
@@ -199,6 +213,7 @@ const Resignation = () => {
     socket.emit("join-room", "hr_room");
 
     socket.on("hr/resignation/resignationlist-response", onListResponse);
+    socket.on("hr/resignation/departmentlist-response", onDepartmentsListResponse);
     socket.on("hr/resignation/resignation-details-response", onStatsResponse);
     socket.on("hr/resignation/add-resignation-response", onAddResponse);
     socket.on("hr/resignation/update-resignation-response", onUpdateResponse);
@@ -206,6 +221,7 @@ const Resignation = () => {
 
     return () => {
       socket.off("hr/resignation/resignationlist-response", onListResponse);
+      socket.off("hr/resignation/departmentlist-response", onDepartmentsListResponse);
       socket.off(
         "hr/resignation/resignation-details-response",
         onStatsResponse
@@ -223,6 +239,7 @@ const Resignation = () => {
   }, [
     socket,
     onListResponse,
+    onDepartmentsListResponse,
     onStatsResponse,
     onAddResponse,
     onUpdateResponse,
@@ -243,6 +260,14 @@ const Resignation = () => {
     },
     [socket]
   );
+
+    const fetchDepartmentsList = useCallback(() => {
+        if (!socket) return;
+        setLoading(true);
+        socket.emit("hr/resignation/departmentlist");
+      },
+      [socket]
+    );
 
   const toIsoFromDDMMYYYY = (s: string) => {
     // s like "13-09-2025"
@@ -293,7 +318,7 @@ const Resignation = () => {
       noticeDate: "", // YYYY-MM-DD from DatePicker
       resignationDate: "",
     });
-    socket.emit("hr/resignation/resignationlist", { type: "thisyear" });
+    socket.emit("hr/resignation/resignationlist", { type: "alltime" });
     socket.emit("hr/resignation/resignation-details");
   };
 
@@ -339,7 +364,7 @@ const Resignation = () => {
       resignationDate: "",
       resignationId: "",
     });
-    socket.emit("hr/resignation/resignationlist", { type: "last7days" });
+    socket.emit("hr/resignation/resignationlist", { type: "alltime" });
     socket.emit("hr/resignation/resignation-details");
   };
 
@@ -352,13 +377,14 @@ const Resignation = () => {
   useEffect(() => {
     if (!socket) return;
     fetchList(filterType, customRange);
+    fetchDepartmentsList();
     fetchStats();
-  }, [socket, fetchList, fetchStats, filterType, customRange]);
+  }, [socket, fetchList, fetchDepartmentsList, fetchStats, filterType, customRange]);
 
   // ui events
   type Option = { value: string; label: string };
   const handleFilterChange = (opt: Option | null) => {
-    const value = opt?.value ?? "last7days";
+    const value = opt?.value ?? "alltime";
     setFilterType(value);
     if (value !== "custom") {
       setCustomRange({});
@@ -388,6 +414,17 @@ const Resignation = () => {
   const handleSelectionChange = (keys: React.Key[]) => {
     setSelectedKeys(keys as string[]);
   };
+
+  type OptionDepartments = { value: string; label: string };
+
+    const departmentsOptions: OptionDepartments[] = (rowsDepartments as any[]).map((t: any) => ({
+      value: t.department,
+      label: t.department,
+    }));
+
+    // Helper to find option object from string value
+    const toOption = (val: string | undefined) =>
+      val ? departmentsOptions.find(o => o.value === val) : undefined;
 
   // table columns (preserved look, wired to backend fields)
   const columns: any[] = [
@@ -527,6 +564,7 @@ const Resignation = () => {
                             { value: "thismonth", label: "This Month" },
                             { value: "lastmonth", label: "Last Month" },
                             { value: "thisyear", label: "This Year" },
+                            { value: "alltime", label: "All Time"},
                           ]}
                           defaultValue={filterType}
                           onChange={handleFilterChange}
@@ -544,7 +582,15 @@ const Resignation = () => {
           {/* /Resignation List  */}
         </div>
         {/* Footer */}
-        <Footer />
+        <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
+          <p className="mb-0">2014 - 2025 © SmartHR.</p>
+          <p>
+            Designed &amp; Developed By{" "}
+            <Link to="#" className="text-primary">
+              Dreams
+            </Link>
+          </p>
+        </div>
         {/* /Footer */}
       </div>
       {/* Add Resignation */}
@@ -584,14 +630,12 @@ const Resignation = () => {
                   <div className="col-md-12">
                     <div className="mb-3">
                       <label className="form-label">Department</label>
-                      <textarea
-                        className="form-control"
-                        rows={1}
-                        defaultValue={addForm.department}
-                        onChange={(e) =>
-                          setAddForm({ ...addForm, department: e.target.value })
-                        }
-                      />
+                      <CommonSelect
+                              className="select"
+                              defaultValue={toOption(addForm.department)} 
+                              onChange={(opt: OptionDepartments | null) =>setAddForm({ ...addForm, department: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={departmentsOptions}
+                            />
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -720,17 +764,12 @@ const Resignation = () => {
                   <div className="col-md-12">
                     <div className="mb-3">
                       <label className="form-label">Department</label>
-                      <textarea
-                        className="form-control"
-                        rows={1}
-                        defaultValue={editForm.department}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            department: e.target.value,
-                          })
-                        }
-                      />
+                      <CommonSelect
+                              className="select"
+                              defaultValue={toOption(editForm.department)} 
+                              onChange={(opt: OptionDepartments | null) =>setEditForm({ ...editForm, department: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              options={departmentsOptions}
+                            />
                     </div>
                   </div>
                   <div className="col-md-12">

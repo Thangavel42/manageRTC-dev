@@ -73,10 +73,7 @@ const status = [
 ];
 
 const AddCompany = () => {
-  const API_BASE_URL =
-    (typeof import.meta !== "undefined" && (import.meta as any).env?.REACT_APP_BACKEND_URL) ||
-    (typeof window !== "undefined" && (window as any).REACT_APP_BACKEND_URL) ||
-    "http://localhost:5000";
+  const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
   const { getToken } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -235,15 +232,17 @@ const AddCompany = () => {
         setImageBase64(null);
         setErrors({});
         // Close modal
-        const modal = document.getElementById('add_company');
+        const modal = document.getElementById("add_company");
         if (modal) {
-          const modalInstance = (window as any).bootstrap?.Modal?.getInstance(modal);
+          const modalInstance = (window as any).bootstrap?.Modal?.getInstance(
+            modal
+          );
           if (modalInstance) modalInstance.hide();
         }
-        window.dispatchEvent(new CustomEvent('companies:changed'));
-        alert('Company added successfully!');
+        window.dispatchEvent(new CustomEvent("companies:changed"));
+        alert("Company added successfully!");
       } else {
-        alert(`Failed to add company: ${result.error || 'Unknown error'}`);
+        alert(`Failed to add company: ${result.error || "Unknown error"}`);
       }
     } catch (error) {
       alert("Error adding company. Please try again.");
@@ -268,77 +267,124 @@ const AddCompany = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit();
+              }}
+            >
               <div className="modal-body pb-0 ">
                 <div className="row">
                   {/* Company Name */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Company Name <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Company Name <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
-                        className={`form-control ${errors.name ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          errors.name ? "is-invalid" : ""
+                        }`}
                         name="name"
                         value={formData.name}
                         onChange={handleChange}
                       />
-                      {errors.name && <div className="invalid-feedback">{errors.name}</div>}
+                      {errors.name && (
+                        <div className="invalid-feedback">{errors.name}</div>
+                      )}
                     </div>
                   </div>
                   {/* Email */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Email <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Email <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="email"
-                        className={`form-control ${errors.email ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          errors.email ? "is-invalid" : ""
+                        }`}
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
                       />
-                      {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+                      {errors.email && (
+                        <div className="invalid-feedback">{errors.email}</div>
+                      )}
                     </div>
                   </div>
                   {/* Phone */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Phone Number <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Phone Number <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
-                        className={`form-control ${errors.phone ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          errors.phone ? "is-invalid" : ""
+                        }`}
                         name="phone"
                         value={formData.phone}
                         onChange={handleChange}
                       />
-                      {errors.phone && <div className="invalid-feedback">{errors.phone}</div>}
+                      {errors.phone && (
+                        <div className="invalid-feedback">{errors.phone}</div>
+                      )}
                     </div>
                   </div>
                   {/* Phone2 */}
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Phone Number 2</label>
-                      <input type="text" className="form-control" name="phone2" value={formData.phone2} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="phone2"
+                        value={formData.phone2}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   {/* Fax */}
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Fax</label>
-                      <input type="text" className="form-control" name="fax" value={formData.fax} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="fax"
+                        value={formData.fax}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   {/* Website */}
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Website</label>
-                      <input type="text" className="form-control" name="website" value={formData.website} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="website"
+                        value={formData.website}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   {/* Rating */}
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Ratings</label>
-                      <input type="text" className="form-control" name="rating" value={formData.rating} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="rating"
+                        value={formData.rating}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   {/* Owner */}
@@ -348,8 +394,13 @@ const AddCompany = () => {
                       <CommonSelect
                         className="select"
                         options={owner}
-                        defaultValue={owner.find(o => o.value === formData.ownerName) || owner[0]}
-                        onChange={opt => handleSelectChange("ownerName", opt?.value || "")}
+                        defaultValue={
+                          owner.find((o) => o.value === formData.ownerName) ||
+                          owner[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("ownerName", opt?.value || "")
+                        }
                       />
                     </div>
                   </div>
@@ -372,164 +423,297 @@ const AddCompany = () => {
                       <CommonSelect
                         className="select"
                         options={dealsChoose}
-                        defaultValue={dealsChoose.find(d => deals.includes(d.value)) || dealsChoose[0]}
-                        onChange={opt => setDeals(opt ? [opt.value] : [])}
+                        defaultValue={
+                          dealsChoose.find((d) => deals.includes(d.value)) ||
+                          dealsChoose[0]
+                        }
+                        onChange={(opt) => setDeals(opt ? [opt.value] : [])}
                       />
                     </div>
                   </div>
                   {/* Industry */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Industry <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Industry <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={industryChoose}
-                        defaultValue={industryChoose.find(i => i.value === formData.industry) || industryChoose[0]}
-                        onChange={opt => handleSelectChange("industry", opt?.value || "")}
+                        defaultValue={
+                          industryChoose.find(
+                            (i) => i.value === formData.industry
+                          ) || industryChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("industry", opt?.value || "")
+                        }
                       />
-                      {errors.industry && <div className="invalid-feedback d-block">{errors.industry}</div>}
+                      {errors.industry && (
+                        <div className="invalid-feedback d-block">
+                          {errors.industry}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Source */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Source <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Source <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={sourcesChoose}
-                        defaultValue={sourcesChoose.find(s => s.value === formData.source) || sourcesChoose[0]}
-                        onChange={opt => handleSelectChange("source", opt?.value || "")}
+                        defaultValue={
+                          sourcesChoose.find(
+                            (s) => s.value === formData.source
+                          ) || sourcesChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("source", opt?.value || "")
+                        }
                       />
-                      {errors.source && <div className="invalid-feedback d-block">{errors.source}</div>}
+                      {errors.source && (
+                        <div className="invalid-feedback d-block">
+                          {errors.source}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Currency */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Currency <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Currency <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={currencyChoose}
-                        defaultValue={currencyChoose.find(c => c.value === formData.currency) || currencyChoose[0]}
-                        onChange={opt => handleSelectChange("currency", opt?.value || "")}
+                        defaultValue={
+                          currencyChoose.find(
+                            (c) => c.value === formData.currency
+                          ) || currencyChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("currency", opt?.value || "")
+                        }
                       />
-                      {errors.currency && <div className="invalid-feedback d-block">{errors.currency}</div>}
+                      {errors.currency && (
+                        <div className="invalid-feedback d-block">
+                          {errors.currency}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Language */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Language <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Language <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={languageChoose}
-                        defaultValue={languageChoose.find(l => l.value === formData.language) || languageChoose[0]}
-                        onChange={opt => handleSelectChange("language", opt?.value || "")}
+                        defaultValue={
+                          languageChoose.find(
+                            (l) => l.value === formData.language
+                          ) || languageChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("language", opt?.value || "")
+                        }
                       />
-                      {errors.language && <div className="invalid-feedback d-block">{errors.language}</div>}
+                      {errors.language && (
+                        <div className="invalid-feedback d-block">
+                          {errors.language}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Country */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Country <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Country <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={countryChoose}
-                        defaultValue={countryChoose.find(c => c.value === formData.country) || countryChoose[0]}
-                        onChange={opt => handleSelectChange("country", opt?.value || "")}
+                        defaultValue={
+                          countryChoose.find(
+                            (c) => c.value === formData.country
+                          ) || countryChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("country", opt?.value || "")
+                        }
                       />
-                      {errors.country && <div className="invalid-feedback d-block">{errors.country}</div>}
+                      {errors.country && (
+                        <div className="invalid-feedback d-block">
+                          {errors.country}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* State */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">State <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        State <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={stateChoose}
-                        defaultValue={stateChoose.find(s => s.value === formData.state) || stateChoose[0]}
-                        onChange={opt => handleSelectChange("state", opt?.value || "")}
+                        defaultValue={
+                          stateChoose.find((s) => s.value === formData.state) ||
+                          stateChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("state", opt?.value || "")
+                        }
                       />
-                      {errors.state && <div className="invalid-feedback d-block">{errors.state}</div>}
+                      {errors.state && (
+                        <div className="invalid-feedback d-block">
+                          {errors.state}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* City */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">City <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        City <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={cityChoose}
-                        defaultValue={cityChoose.find(c => c.value === formData.city) || cityChoose[0]}
-                        onChange={opt => handleSelectChange("city", opt?.value || "")}
+                        defaultValue={
+                          cityChoose.find((c) => c.value === formData.city) ||
+                          cityChoose[0]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("city", opt?.value || "")
+                        }
                       />
-                      {errors.city && <div className="invalid-feedback d-block">{errors.city}</div>}
+                      {errors.city && (
+                        <div className="invalid-feedback d-block">
+                          {errors.city}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Zipcode */}
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Zipcode <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Zipcode <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
-                        className={`form-control ${errors.zipcode ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          errors.zipcode ? "is-invalid" : ""
+                        }`}
                         name="zipcode"
                         value={formData.zipcode}
                         onChange={handleChange}
                       />
-                      {errors.zipcode && <div className="invalid-feedback">{errors.zipcode}</div>}
+                      {errors.zipcode && (
+                        <div className="invalid-feedback">{errors.zipcode}</div>
+                      )}
                     </div>
                   </div>
                   {/* About */}
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">About <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        About <span className="text-danger">*</span>
+                      </label>
                       <textarea
-                        className={`form-control ${errors.about ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          errors.about ? "is-invalid" : ""
+                        }`}
                         name="about"
                         value={formData.about}
                         onChange={handleChange}
                       />
-                      {errors.about && <div className="invalid-feedback">{errors.about}</div>}
+                      {errors.about && (
+                        <div className="invalid-feedback">{errors.about}</div>
+                      )}
                     </div>
                   </div>
                   {/* Social Links */}
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Facebook</label>
-                      <input type="text" className="form-control" name="facebook" value={formData.facebook} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="facebook"
+                        value={formData.facebook}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Twitter</label>
-                      <input type="text" className="form-control" name="twitter" value={formData.twitter} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="twitter"
+                        value={formData.twitter}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">LinkedIn</label>
-                      <input type="text" className="form-control" name="linkedin" value={formData.linkedin} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="linkedin"
+                        value={formData.linkedin}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Skype</label>
-                      <input type="text" className="form-control" name="skype" value={formData.skype} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="skype"
+                        value={formData.skype}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Whatsapp</label>
-                      <input type="text" className="form-control" name="whatsapp" value={formData.whatsapp} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="whatsapp"
+                        value={formData.whatsapp}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Instagram</label>
-                      <input type="text" className="form-control" name="instagram" value={formData.instagram} onChange={handleChange} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="instagram"
+                        value={formData.instagram}
+                        onChange={handleChange}
+                      />
                     </div>
                   </div>
                   {/* Status */}
@@ -539,8 +723,13 @@ const AddCompany = () => {
                       <CommonSelect
                         className="select"
                         options={status}
-                        defaultValue={status.find(s => s.value === formData.status) || status[1]}
-                        onChange={opt => handleSelectChange("status", opt?.value || "Active")}
+                        defaultValue={
+                          status.find((s) => s.value === formData.status) ||
+                          status[1]
+                        }
+                        onChange={(opt) =>
+                          handleSelectChange("status", opt?.value || "Active")
+                        }
                       />
                     </div>
                   </div>
@@ -561,11 +750,15 @@ const AddCompany = () => {
                 >
                   {isSubmitting ? (
                     <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
                       Saving...
                     </>
                   ) : (
-                    'Save'
+                    "Save"
                   )}
                 </button>
               </div>
