@@ -12,10 +12,14 @@ import socialFeedSocketController from "../controllers/socialfeed/socialFeed.soc
 import employeeController from "../controllers/employee/employee.controller.js";
 import notesController from "../controllers/employee/notes.controller.js";
 import ticketsSocketController from "../controllers/tickets/tickets.socket.controller.js";
+import assetSocketController from "../controllers/assets/asset.socket.controller.js";
+import assetCategorySocketController from "../controllers/assets/assetCategory.socket.controller.js";
 
 import jobsController from "../controllers/jobs/jobs.controllers.js";
 import candidateController from "../controllers/candidates/candidates.controllers.js";
 import trainersController from "../controllers/hr/trainers.controller.js";
+import trainingTypesController from "../controllers/hr/trainingTypes.controller.js";
+import trainingListController from "../controllers/hr/trainingList.controller.js";
 import goalTypeController from "../controllers/performance/goalType.controller.js";
 import goalTrackingController from "../controllers/performance/goalTracking.controller.js";
 import jobController from "../controllers/jobs/jobs.controllers.js";
@@ -88,6 +92,16 @@ const router = (socket, io, role) => {
       candidateController(socket, io);
       console.log("Attaching jobsController for admin...");
       jobsController(socket, io);
+      console.log("Attaching asset controller for admin...");
+      assetSocketController(socket, io);
+      console.log("Attaching asset category controller for admin...");
+      assetCategorySocketController(socket, io);
+      console.log("Attaching trainers controller for admin...");
+      trainersController(socket, io);
+      console.log("Attaching training types controller for admin...");
+      trainingTypesController(socket, io);
+      console.log("Attaching training list controller for admin...");
+      trainingListController(socket, io);
 
       performanceIndicatorController(socket, io);
       performanceAppraisalController(socket, io);
@@ -130,6 +144,16 @@ const router = (socket, io, role) => {
       goalTrackingController(socket, io);
       console.log("Attaching job controller for hr...");
       jobController(socket, io);
+      console.log("Attaching asset controller for hr...");
+      assetSocketController(socket, io);
+      console.log("Attaching asset category controller for hr...");
+      assetCategorySocketController(socket, io);
+      console.log("Attaching trainers controller for hr...");
+      trainersController(socket, io);
+      console.log("Attaching training types controller for hr...");
+      trainingTypesController(socket, io);
+      console.log("Attaching training list controller for hr...");
+      trainingListController(socket, io);
 
       // Initialize profile controller for all authenticated users
       console.log("Attaching profile controller...");

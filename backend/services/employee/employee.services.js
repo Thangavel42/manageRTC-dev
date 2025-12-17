@@ -10,10 +10,18 @@ import { getTenantCollections } from "../../config/db.js";
 export const getAllEmployees = async (companyId) => {
   try {
     const collections = getTenantCollections(companyId);
+    
+    // Get employees with case-insensitive active status, excluding resigned
     const employees = await collections.employees
-      .find({ status: "Active" }) // You can adjust this filter if needed
+      .find({ 
+        status: { 
+          $regex: /^active$/i, // Case-insensitive match for "active"
+        }
+      })
       .sort({ createdAt: -1 })
       .toArray();
+    
+    console.log("✅ Active employees returned:", employees.length);
 
     return employees;
   } catch (error) {
