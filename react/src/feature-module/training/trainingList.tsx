@@ -90,12 +90,22 @@ const TrainingList = () => {
     });
 
     const openEditModal = (row: any) => {
+      // Convert ISO dates back to DD-MM-YYYY format if they exist
+      const formatISOtoDD_MM_YYYY = (isoDate: string) => {
+        if (!isoDate) return "";
+        const date = new Date(isoDate);
+        const day = String(date.getUTCDate()).padStart(2, "0");
+        const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+        const year = date.getUTCFullYear();
+        return `${day}-${month}-${year}`;
+      };
+
       setEditForm({
           trainingType: row.trainingType || "",
           trainer: row.trainer || "",
           employee: row.employee || [],
-          startDate: row.startDate || "",
-          endDate: row.endDate || "",
+          startDate: formatISOtoDD_MM_YYYY(row.startDate),
+          endDate: formatISOtoDD_MM_YYYY(row.endDate),
           desc: row.desc || "",
           cost: row.cost || "",
           status: row.status || "Active",
@@ -118,6 +128,33 @@ const TrainingList = () => {
       cost: "",
       status: "Active",
     });
+
+    const resetAddForm = () => {
+      setAddForm({
+        trainingType: "",
+        trainer: "",
+        employee: [],
+        startDate: "",
+        endDate: "",
+        desc: "",
+        cost: "",
+        status: "Active",
+      });
+    };
+
+    const resetEditForm = () => {
+      setEditForm({
+        trainingType: "",
+        trainer: "",
+        employee: [],
+        startDate: "",
+        endDate: "",
+        desc: "",
+        cost: "",
+        status: "Active",
+        trainingId: "",
+      });
+    };
 
     const confirmDelete = (onConfirm: () => void) => {
       Modal.confirm({
@@ -157,15 +194,16 @@ const TrainingList = () => {
         ),
         onOk: async () => {
           await onConfirm();
-          socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
         },
       });
     };
 
     const onListResponse = useCallback((res: any) => {
       if (res?.done) {
+        console.log("📥 Training list received:", res.data);
         setRows(res.data || []);
       } else {
+        console.error("❌ Failed to fetch training list:", res);
         setRows([]);
       }
       setLoading(false);
@@ -208,13 +246,23 @@ const TrainingList = () => {
 
     const onAddResponse = useCallback((res: any) => {
       // feedback only; list and stats will be broadcast from controller
-      if (!res?.done) {
+      if (res?.done) {
+        console.log("✅ Training added successfully:", res);
+        // Optional: Show success toast
+        // toast.success("Training added successfully");
+      } else {
+        console.error("❌ Failed to add training:", res);
         // toast.error(res?.message || "Failed to add training");
       }
     }, []);
 
     const onUpdateResponse = useCallback((res: any) => {
-      if (!res?.done) {
+      if (res?.done) {
+        console.log("✅ Training updated successfully:", res);
+        // Optional: Show success toast
+        // toast.success("Training updated successfully");
+      } else {
+        console.error("❌ Failed to update training:", res);
         // toast.error(res?.message || "Failed to update training");
       }
     }, []);
@@ -324,14 +372,24 @@ const TrainingList = () => {
 
         // basic validation
         if (!addForm.trainingType || !addForm.trainer || !addForm.employee || !addForm.startDate || !addForm.endDate || !addForm.desc || !addForm.cost || !addForm.status) {
+          console.warn("⚠️ Validation failed: Missing required fields");
           // toast.warn("Please fill required fields");
           return;
       }
+
+      console.log("📤 Submitting training data:", addForm);
       
       const startIso = toIsoFromDDMMYYYY(addForm.startDate);
       const endIso = toIsoFromDDMMYYYY(addForm.endDate);
+
+      if (!startIso || !endIso) {
+        console.error("❌ Invalid date format");
+        // toast.error("Invalid date format. Please use DD-MM-YYYY");
+        return;
+      }
+
       const startfmt= fmtYMD(addForm.startDate);
-      const endfmt = fmtYMD(addForm.endDate)
+      const endfmt = fmtYMD(addForm.endDate);
       const timeDurationfmt= startfmt+" - "+endfmt;
 
       const payload = {
@@ -346,19 +404,11 @@ const TrainingList = () => {
           status: addForm.status as "Active" | "Inactive",
       };
 
+      console.log("📤 Payload being sent:", payload);
+
       socket.emit("hr/trainingList/add-trainingList", payload);
-      // modal has data-bs-dismiss; optional: reset form
-      setAddForm({
-        trainingType: "",
-        trainer: "",
-        employee: [],
-        startDate: "",
-        endDate: "",
-        desc: "",
-        cost: "",
-        status: "Active",
-      });
-      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
+      // Reset form after submission
+      resetAddForm();
     };
 
     const handleEditSave = () => {
@@ -366,12 +416,22 @@ const TrainingList = () => {
 
       // basic validation
         if (!editForm.trainingType || !editForm.trainer || !editForm.employee || !editForm.startDate || !editForm.endDate || !editForm.desc || !editForm.cost || !editForm.status || !editForm.trainingId) {
+        console.warn("⚠️ Validation failed: Missing required fields");
         // toast.warn("Please fill required fields");
           return;
       }
 
+      console.log("📤 Updating training data:", editForm);
+
       const startiso=toIsoFromDDMMYYYY(editForm.startDate);
       const endiso=toIsoFromDDMMYYYY(editForm.endDate);
+
+      if (!startiso || !endiso) {
+        console.error("❌ Invalid date format");
+        // toast.error("Invalid date format. Please use DD-MM-YYYY");
+        return;
+      }
+
       const startfmt = fmtYMD(editForm.startDate);
       const endfmt = fmtYMD(editForm.endDate);
     
@@ -390,20 +450,11 @@ const TrainingList = () => {
           trainingId: editForm.trainingId,
       };
 
+      console.log("📤 Update payload being sent:", payload);
+
       socket.emit("hr/trainingList/update-trainingList", payload);
-      // modal has data-bs-dismiss; optional: reset form
-      setEditForm({
-          trainingType: "",
-          trainer: "",
-          employee: [],
-          startDate: "",
-          endDate: "",
-          desc: "",
-          cost: "",
-          status: "Active",
-          trainingId: "",
-      });
-      socket.emit("hr/trainingList/trainingListlist", { type: "alltime" });
+      // Reset form after submission
+      resetEditForm();
     };
 
     const fetchStats = useCallback(() => {
@@ -764,6 +815,7 @@ const TrainingList = () => {
                   className="btn-close custom-btn-close"
                   data-bs-dismiss="modal"
                   aria-label="Close"
+                  onClick={resetAddForm}
                 >
                   <i className="ti ti-x" />
                 </button>
@@ -903,6 +955,7 @@ const TrainingList = () => {
                     type="button"
                     className="btn btn-white border me-2"
                     data-bs-dismiss="modal"
+                    onClick={resetAddForm}
                   >
                     Cancel
                   </button>
@@ -931,6 +984,7 @@ const TrainingList = () => {
                   className="btn-close custom-btn-close"
                   data-bs-dismiss="modal"
                   aria-label="Close"
+                  onClick={resetEditForm}
                 >
                   <i className="ti ti-x" />
                 </button>
@@ -1074,6 +1128,7 @@ const TrainingList = () => {
                     type="button"
                     className="btn btn-white border me-2"
                     data-bs-dismiss="modal"
+                    onClick={resetEditForm}
                   >
                     Cancel
                   </button>

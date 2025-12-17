@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 import sendCredentialsEmail from "../../utils/emailer.js";
 import generateRandomPassword from "../../utils/generatePassword.js";
+import { initializeCompanyDatabase } from "../../utils/initializeCompanyDatabase.js";
 
 const fetchPackages = async () => {
   try {
@@ -85,6 +86,18 @@ const addCompany = async (data, user) => {
       }
     );
 
+    // Step 5.5: Initialize company database with collections and default data
+    console.log(`🔧 Initializing database for company: ${companyId}`);
+    const dbInitResult = await initializeCompanyDatabase(companyId);
+    
+    if (!dbInitResult.done) {
+      console.error(`⚠️ Database initialization failed for ${companyId}:`, dbInitResult.error);
+      // Note: We don't fail the whole operation, but log the error
+      // The company is still created, but might need manual DB setup
+    } else {
+      console.log(`✅ Database initialized successfully for company: ${companyId}`);
+    }
+
     // Step 6: Send credentials email
     await sendCredentialsEmail({
       to: data.email,
@@ -98,6 +111,7 @@ const addCompany = async (data, user) => {
       message: "Company and user created. Credentials emailed.",
       companyId,
       clerkUserId,
+      databaseInitialized: dbInitResult.done,
     };
   } catch (error) {
     console.error("Error creating company/org/user:", error);

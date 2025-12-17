@@ -3,15 +3,17 @@ import * as trainersService from "../../services/hr/trainers.services.js";
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
 const trainersController = (socket, io) => {
+  const companyId = socket.companyId;
+  
   const Broadcast = async () => {
-    const res = await trainersService.getTrainersStats();
-    io.to("hr_room").emit("hr/trainers/trainers-details-response", res);
+    const res = await trainersService.getTrainersStats(companyId);
+    io.to(`company_${companyId}`).emit("hr/trainers/trainers-details-response", res);
   };
 
   // READ
   socket.on("hr/trainers/trainers-details", async () => {
     try {
-      const res = await trainersService.getTrainersStats();
+      const res = await trainersService.getTrainersStats(companyId);
       socket.emit("hr/trainers/trainers-details-response", res);
     } catch (error) {
       socket.emit("hr/trainers/trainers-details-response", toErr(error));
@@ -20,7 +22,7 @@ const trainersController = (socket, io) => {
 
   socket.on("hr/trainers/trainerslist", async (args) => {
     try {
-      const res = await trainersService.getTrainers(args || {});
+      const res = await trainersService.getTrainers(companyId, args || {});
       socket.emit("hr/trainers/trainerslist-response", res);
     } catch (error) {
       socket.emit("hr/trainers/trainerslist-response", toErr(error));
@@ -29,7 +31,7 @@ const trainersController = (socket, io) => {
 
   socket.on("hr/trainers/get-trainers", async (trainerId) => {
     try {
-      const res = await trainersService.getSpecificTrainers(trainerId);
+      const res = await trainersService.getSpecificTrainers(companyId, trainerId);
       socket.emit("hr/trainers/get-trainers-response", res);
     } catch (error) {
       socket.emit("hr/trainers/get-trainers-response", toErr(error));
@@ -40,11 +42,11 @@ const trainersController = (socket, io) => {
   socket.on("hr/trainers/add-trainers", async (trainer) => {
     try {
       // trainers should contain created_by if needed
-      const res = await trainersService.addTrainers(trainer);
+      const res = await trainersService.addTrainers(companyId, trainer);
       socket.emit("hr/trainers/add-trainers-response", res);
       if (res.done) {
-        const updatedList = await trainersService.getTrainers({});
-        io.to("hr_room").emit("hr/trainers/trainerslist-response", updatedList);
+        const updatedList = await trainersService.getTrainers(companyId, {});
+        io.to(`company_${companyId}`).emit("hr/trainers/trainerslist-response", updatedList);
         await Broadcast();
       }
     } catch (error) {
@@ -54,11 +56,11 @@ const trainersController = (socket, io) => {
 
   socket.on("hr/trainers/update-trainers", async (trainer) => {
     try {
-      const res = await trainersService.updateTrainers(trainer);
+      const res = await trainersService.updateTrainers(companyId, trainer);
       socket.emit("hr/trainers/update-trainers-response", res);
       if (res.done) {
-        const updatedList = await trainersService.getTrainers({});
-        io.to("hr_room").emit("hr/trainers/trainerslist-response", updatedList);
+        const updatedList = await trainersService.getTrainers(companyId, {});
+        io.to(`company_${companyId}`).emit("hr/trainers/trainerslist-response", updatedList);
         await Broadcast();
       }
     } catch (error) {
@@ -68,11 +70,11 @@ const trainersController = (socket, io) => {
 
   socket.on("hr/trainers/delete-trainers", async (trainerIds) => {
     try {
-      const res = await trainersService.deleteTrainers(trainerIds);
+      const res = await trainersService.deleteTrainers(companyId, trainerIds);
       socket.emit("hr/trainers/delete-trainers-response", res);
       if (res.done) {
-        const updatedList = await trainersService.getTrainers({});
-        io.to("hr_room").emit("hr/trainers/trainerslist-response", updatedList);
+        const updatedList = await trainersService.getTrainers(companyId, {});
+        io.to(`company_${companyId}`).emit("hr/trainers/trainerslist-response", updatedList);
         await Broadcast();
       }
     } catch (error) {

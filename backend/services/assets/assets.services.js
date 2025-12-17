@@ -77,7 +77,7 @@ export const getAssets = async (companyId, params = {}) => {
     $addFields: {
       employeeId: "$_id",
       employeeName: { $concat: ["$firstName", " ", "$lastName"] },
-      employeeAvatar: "$avatar",
+      employeeAvatar: "$avatarUrl",
     },
   },
   { $match: Object.keys(match).length ? match : {} },
@@ -266,4 +266,3 @@ export const deleteAsset = async (companyId, assetId, employeeId = null) => {
   if (!res.matchedCount) throw new Error("Asset not found or already deleted");
   return { done: true };
 };
-

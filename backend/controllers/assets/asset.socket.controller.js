@@ -4,8 +4,8 @@ import {
   addAsset,
   updateAsset,
   deleteAsset,
-} from "../../services/assets/assets.services.js";;
-import { getAllEmployees } from "../../services/employee/employee.services.js"; // used to serve employee dropdown
+} from "../../services/assets/assets.services.js";
+import { getAllEmployees } from "../../services/employee/employee.services.js";
 
 const authorize = (socket, allowed = []) => {
   const role = (socket.role || "").toLowerCase();
@@ -106,16 +106,20 @@ const assetSocketController = (socket, io) => {
       authorize(socket, ["admin", "hr"]);
       const companyId = socket.companyId;
       const emps = await getAllEmployees(companyId);
-      // Simplify employee payload
+      
+      // Simplify employee payload - include both _id and employeeId
       const list = (emps || []).map((e) => ({
         _id: String(e._id),
-        firstName: e.firstName, // ✅ Use actual DB fields
+        employeeId: e.employeeId ? String(e.employeeId) : String(e._id), // Use employeeId if exists, fallback to _id
+        firstName: e.firstName,
         lastName: e.lastName,
-        avatar: e.avatar || null,
+        avatar: e.avatarUrl || e.avatar || null, // Use avatarUrl field, fallback to avatar
       }));
 
+      console.log("Sending employee list response:", list.length);
       socket.emit("admin/employees/get-list-response", { done: true, data: list });
     } catch (err) {
+      console.error("Error fetching employees:", err);
       socket.emit("admin/employees/get-list-response", { done: false, error: err.message });
     }
   });

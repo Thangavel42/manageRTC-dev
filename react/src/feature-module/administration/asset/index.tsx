@@ -8,7 +8,6 @@ import { all_routes } from "../../router/all_routes";
 import { DatePicker } from "antd";
 import PredefinedDateRanges from "../../../core/common/datePicker";
 import Table from "../../../core/common/dataTable/index";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import { Modal } from "bootstrap";
 import dayjs from "dayjs";
@@ -44,7 +43,7 @@ const Assets = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 const [employees, setEmployees] = useState<
-  { _id: string; firstName: string; lastName: string; avatar?: string }[]
+  { _id: string; employeeId?: string; firstName: string; lastName: string; avatar?: string }[]
 >([]);
 
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
@@ -56,6 +55,17 @@ const [employees, setEmployees] = useState<
     return modalElement ? modalElement : document.body;
   };
 
+  // Format employees for select dropdown with ID
+  const getEmployeeOptions = () => {
+    return employees.map((emp) => ({
+      value: emp._id,
+      label: `${emp.firstName} ${emp.lastName} ${emp.employeeId ? `(EmpID: ${emp.employeeId})` : `(ID: ${emp._id.slice(-6)})`}`,
+    }));
+  };
+
+  // Check if employees are loaded
+  const employeesLoaded = employees.length > 0;
+
   const columns = [
     {
       title: "Asset Name",
@@ -66,27 +76,35 @@ const [employees, setEmployees] = useState<
     {
       title: "Asset User",
       dataIndex: "employeeName",
-      render: (text: string, record: any) => (
-        <div className="d-flex align-items-center file-name-icon">
-          <Link to="#" className="avatar avatar-md border avatar-rounded">
-            <ImageWithBasePath
-              src={record.employeeAvatar}
-              className="img-fluid"
-              alt="img"
-            />
-          </Link>
-          <div className="ms-2">
-            <h6 className="fw-medium">
-              <Link to="#">{text}</Link>
-            </h6>
+      render: (text: string, record: any) => {
+        const employee = employees.find(emp => emp._id === record.employeeId);
+        const employeeDisplayId = employee?.employeeId || record.employeeId?.slice(-6) || "";
+        const avatarSrc = employee?.avatar || record.employeeAvatar || "assets/img/favicon.png";
+        
+        return (
+          <div className="d-flex align-items-center">
+            <Link to="#" className="avatar avatar-md">
+              <img
+                src={avatarSrc}
+                className="img-fluid rounded-circle"
+                alt="img"
+              />
+            </Link>
+            <div className="ms-2">
+              <h6 className="fw-medium mb-0">
+                <Link to="#">{text}</Link>
+              </h6>
+              <small className="text-muted">ID: {employeeDisplayId}</small>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
       sorter: (a: any, b: any) => a.employeeName.length - b.employeeName.length,
     },
     {
       title: "Purchase Date",
       dataIndex: "purchaseDate",
+      render: (text: string) => text ? dayjs(text).format("DD-MM-YYYY") : "-",
       sorter: (a: any, b: any) =>
         (a.purchaseDate || "").length - (b.purchaseDate || "").length,
     },
@@ -100,6 +118,7 @@ const [employees, setEmployees] = useState<
     {
       title: "Warrenty End Date",
       dataIndex: "warrantyEndDate",
+      render: (text: string) => text ? dayjs(text).format("DD-MM-YYYY") : "-",
       sorter: (a: any, b: any) =>
       (a.warrantyEndDate || "").length - (b.warrantyEndDate || "").length,
 
@@ -115,11 +134,10 @@ const [employees, setEmployees] = useState<
               : text.toLowerCase() === "inactive"
               ? "badge-danger"
               : "badge-warning"
-          }`}
->
-  <i className="ti ti-point-filled me-1"></i>
-  {text}
-</span>
+          }`}>
+          <i className="ti ti-point-filled me-1"></i>
+          {text}
+        </span>
 
       ),
       sorter: (a: any, b: any) => a.status.length - b.status.length,
@@ -135,17 +153,12 @@ const [employees, setEmployees] = useState<
             data-bs-toggle="modal"
             data-bs-target="#edit_assets"
             onClick={() => {
-              console.log("🟡 Edit Clicked - Asset Record:", record);
-              console.log("🟡 Record EmployeeId:", record.employeeId);
-              console.log("🟡 Employees List at Click:", employees);
-              console.log("Edit clicked - record:", record);
               setEditingAsset(record);
               setEditForm({
                 ...record,
                 employeeId: record.employeeId?.trim() || "",
               });
             }}
-
           >
             <i className="ti ti-edit" />
           </Link>
@@ -196,12 +209,25 @@ useEffect(() => {
 
 
 useEffect(() => {
-  if (!socket) return;
+  if (!socket) {
+    console.log("⚠️ Socket not available for employee list request");
+    return;
+  }
 
+  console.log("📤 Requesting employee list...");
   socket.emit("admin/employees/get-list");
+  
   const handler = (res: any) => {
-    if (res.done) setEmployees(res.data || []);
+    console.log("📥 Employee list response:", res);
+    if (res.done) {
+      console.log("✅ Loaded employees:", res.data?.length || 0);
+      setEmployees(res.data || []);
+    } else {
+      console.error("❌ Failed to load employees:", res.error);
+      setEmployees([]);
+    }
   };
+  
   socket.on("admin/employees/get-list-response", handler);
 
   return () => {
@@ -214,14 +240,8 @@ useEffect(() => {
   if (!socket) return;
   // Normalize mapping so frontend always gets clean Asset[]
  const mapAssets = (assets: any[] = []): Asset[] =>
-  
   assets.map((asset) => {
-    console.log("🟢 mapAssets received:", assets);
     const employee = employees.find(emp => emp._id === asset.employeeId);
-
-    console.log("🔵 Mapping Asset:", asset.assetName);
-    console.log("🔵 Backend employeeId:", asset.employeeId);
-    console.log("🔵 Matched Employee:", employee);
 
     return {
       _id: asset._id || asset.id || "",
@@ -263,9 +283,11 @@ useEffect(() => {
     setLoading(false);
   };
 
-  // Handle list update (backend sends plain list, not wrapped in { done })
-  const handleListUpdate = (assets: any[]) => {
-     setData(mapAssets(Array.isArray(assets) ? assets : []));
+  // Handle list update - backend sends same format as GET response
+  const handleListUpdate = (res: { done: boolean; data?: any[] }) => {
+    if (res.done && res.data) {
+      setData(mapAssets(Array.isArray(res.data) ? res.data : []));
+    }
   };
 
   socket.on("admin/assets/get-response", handleGetResponse);
@@ -275,23 +297,34 @@ useEffect(() => {
     socket.off("admin/assets/get-response", handleGetResponse);
     socket.off("admin/assets/list-update", handleListUpdate);
   };
-}, [socket]);
+}, [socket, employees]);
 
 
   // ===== CRUD =====
 const handleAddAsset = (newAsset: Partial<Asset>) => {
   if (!socket) return;
-  console.log("🔴 Submit - editForm.employeeId:", editForm.employeeId);
-console.log("🔴 Submit - Employees List:", employees);
-  const selectedEmployee = employees.find(emp => emp._id === newAsset.employeeId);
-  console.log("🔴 Submit - Selected Employee:", selectedEmployee);
-
-  if (!selectedEmployee) {
-    alert("Please select an employee before saving");
+  
+  // Validation
+  if (!newAsset.assetName?.trim()) {
+    alert("Please enter an asset name");
     return;
   }
 
+  if (!newAsset.employeeId) {
+    alert("Please select an employee");
+    return;
+  }
+
+  const selectedEmployee = employees.find(emp => emp._id === newAsset.employeeId);
+
+  if (!selectedEmployee) {
+    alert("Please select a valid employee");
+    return;
+  }
+
+  // Backend expects: { employeeId, asset: {...fields} }
   socket.emit("admin/assets/create", {
+    employeeId: selectedEmployee._id,
     asset: { 
       assetName: newAsset.assetName,
       serialNumber: newAsset.serialNumber,
@@ -300,12 +333,7 @@ console.log("🔴 Submit - Employees List:", employees);
       model: newAsset.model,
       purchaseDate: newAsset.purchaseDate,
       warrantyMonths: newAsset.warrantyMonths,
-      status: newAsset.status?.toLowerCase(),
-
-      // ✅ Include employee details here
-      employeeId: selectedEmployee._id,
-      employeeName: `${selectedEmployee.firstName} ${selectedEmployee.lastName}`,
-      employeeAvatar: selectedEmployee.avatar || null,
+      status: newAsset.status?.toLowerCase() || "active",
     },
   });
 };
@@ -313,34 +341,69 @@ console.log("🔴 Submit - Employees List:", employees);
 
 useEffect(() => {
   if (!socket) return;
-  socket.on("admin/assets/create-response", (res) => {
-    console.log("CREATE RESPONSE:", res);
-  });
-  socket.on("admin/assets/update-response", (res) => {
-    console.log("UPDATE RESPONSE:", res);
-  });
+  
+  const handleCreateResponse = (res: any) => {
+    if (res.done) {
+      // Close modal
+      const modal = document.getElementById("add_assets");
+      if (modal) {
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+        modalInstance.hide();
+      }
+      // Reset form
+      setNewAsset({});
+    } else {
+      alert(res.error || "Failed to create asset");
+    }
+  };
+
+  const handleUpdateResponse = (res: any) => {
+    if (res.done) {
+      // Close modal
+      const modal = document.getElementById("edit_assets");
+      if (modal) {
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+        modalInstance.hide();
+      }
+      // Reset form
+      setEditingAsset(null);
+      setEditForm({});
+    } else {
+      alert(res.error || "Failed to update asset");
+    }
+  };
+
+  socket.on("admin/assets/create-response", handleCreateResponse);
+  socket.on("admin/assets/update-response", handleUpdateResponse);
+
+  return () => {
+    socket.off("admin/assets/create-response", handleCreateResponse);
+    socket.off("admin/assets/update-response", handleUpdateResponse);
+  };
 }, [socket]);
 
 
 
 const handleUpdateSubmit = (e: React.FormEvent) => {
-  e.preventDefault(); // ✅ Prevent default form submit
+  e.preventDefault();
 
   if (!socket || !editForm._id) {
-  alert("No asset selected for update!");
-  return;
-}
+    alert("No asset selected for update!");
+    return;
+  }
 
-if (!editForm.employeeId || editForm.employeeId.trim() === "") {
-  alert("Please select an Asset User before saving!");
-  return;
-}
+  if (!editForm.assetName?.trim()) {
+    alert("Please enter an asset name");
+    return;
+  }
 
-
-const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
+  if (!editForm.employeeId || editForm.employeeId.trim() === "") {
+    alert("Please select an Asset User before saving!");
+    return;
+  }
 
   socket.emit("admin/assets/update", {
-    assetId: editForm._id, // ✅ must be correct
+    assetId: editForm._id,
     updateData: {
       assetName: editForm.assetName,
       serialNumber: editForm.serialNumber,
@@ -349,14 +412,8 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
       model: editForm.model,
       purchaseDate: editForm.purchaseDate,
       warrantyMonths: editForm.warrantyMonths,
-      status: editForm.status?.toLowerCase(),
-
-      // ✅ include employee details here
-      employeeId: selectedEmployee?._id,
-      employeeName: selectedEmployee
-        ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`
-        : "",
-      employeeAvatar: selectedEmployee?.avatar || "",
+      status: editForm.status?.toLowerCase() || "active",
+      employeeId: editForm.employeeId, // Backend handles employee transfer
     },
   });
 };
@@ -368,7 +425,30 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
     if (!socket || !assetToDelete) return;
     socket.emit("admin/assets/delete", { assetId: assetToDelete });
     setAssetToDelete(null);
+    
+    // Close modal
+    const modal = document.getElementById("delete_modal");
+    if (modal) {
+      const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+      modalInstance.hide();
+    }
   };
+
+  // Handle delete response
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleDeleteResponse = (res: any) => {
+      if (!res.done) {
+        alert(res.error || "Failed to delete asset");
+      }
+    };
+
+    socket.on("admin/assets/delete-response", handleDeleteResponse);
+    return () => {
+      socket.off("admin/assets/delete-response", handleDeleteResponse);
+    };
+  }, [socket]);
 
   return (
     <>
@@ -572,6 +652,7 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={() => setNewAsset({})}
               >
                 <i className="ti ti-x" />
               </button>
@@ -580,7 +661,6 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
               onSubmit={(e) => {
                 e.preventDefault();
                 handleAddAsset(newAsset);
-                setNewAsset({}); // reset after add
               }}
             >
 
@@ -588,13 +668,13 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
                 <div className="row">
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Asset Name</label>
+                      <label className="form-label">Asset Name <span className="text-danger">*</span></label>
                       <input
                         type="text"
                         className="form-control"
                         value={newAsset.assetName || ""}
                         onChange={(e) => setNewAsset({ ...newAsset, assetName: e.target.value })}
-
+                        required
                       />
                     </div>
                   </div>
@@ -686,29 +766,21 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
 
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Asset User</label>
+                      <label className="form-label">
+                        Asset User <span className="text-danger">*</span> {employees.length > 0 && <span className="text-muted">({employees.length} available)</span>}
+                      </label>
                       <CommonSelect
-                        options={employees.map((emp) => ({
-                          value: emp._id,
-                          label: `${emp.firstName} ${emp.lastName}`,
-                        }))}
-                        value={
-                            employees
-                              .map((emp) => ({
-                                value: emp._id,
-                                label: `${emp.firstName} ${emp.lastName}`,
-                              }))
-                              .find((opt) => opt.value === newAsset.employeeId) || null
-                          }
-
+                        options={getEmployeeOptions()}
+                        value={getEmployeeOptions().find((opt) => opt.value === newAsset.employeeId) || null}
                         onChange={(opt) => {
-                          console.log(setEmployees);
                           if (opt) setNewAsset({ ...newAsset, employeeId: opt.value });
                         }}
+                        isSearchable={true}
+                        disabled={!employeesLoaded}
                       />
-
-
-
+                      {!employeesLoaded && (
+                        <small className="text-muted">Loading employees...</small>
+                      )}
                     </div>
                   </div>
 
@@ -733,6 +805,7 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  onClick={() => setNewAsset({})}
                 >
                   Cancel
                 </button>
@@ -756,6 +829,10 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
           className="btn-close custom-btn-close"
           data-bs-dismiss="modal"
           aria-label="Close"
+          onClick={() => {
+            setEditingAsset(null);
+            setEditForm({});
+          }}
         >
           <i className="ti ti-x" />
         </button>
@@ -766,12 +843,13 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
             {/* Asset Name */}
             <div className="col-md-6">
               <div className="mb-3">
-                <label className="form-label">Asset Name</label>
+                <label className="form-label">Asset Name <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   className="form-control"
                   value={editForm.assetName || ""}
                   onChange={(e) => setEditForm({ ...editForm, assetName: e.target.value })}
+                  required
                 />
               </div>
             </div>
@@ -874,30 +952,21 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
             {/* Asset User */}
             <div className="col-md-12">
               <div className="mb-3">
-                <label className="form-label">Asset User</label>
+                <label className="form-label">
+                  Asset User <span className="text-danger">*</span> {employees.length > 0 && <span className="text-muted">({employees.length} available)</span>}
+                </label>
                 <CommonSelect
-                  options={employees.map((emp) => ({
-                    value: emp._id,
-                    label: `${emp.firstName} ${emp.lastName}`,
-                  }))}
-                  value={
-                    employees
-                      .map((emp) => ({
-                        value: emp._id,
-                        label: `${emp.firstName} ${emp.lastName}`,
-                      }))
-                      .find((opt) => opt.value === editForm.employeeId) || null
-                  }
-
-
+                  options={getEmployeeOptions()}
+                  value={getEmployeeOptions().find((opt) => opt.value === editForm.employeeId) || null}
                   onChange={(opt) => {
-                    console.log(employees);
                     if (opt) setEditForm({ ...editForm, employeeId: opt.value });
                   }}
+                  isSearchable={true}
+                  disabled={!employeesLoaded}
                 />
-
-
-
+                {!employeesLoaded && (
+                  <small className="text-muted">Loading employees...</small>
+                )}
               </div>
             </div>
 
@@ -924,6 +993,10 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
             type="button"
             className="btn btn-light me-2"
             data-bs-dismiss="modal"
+            onClick={() => {
+              setEditingAsset(null);
+              setEditForm({});
+            }}
           >
             Cancel
           </button>
@@ -936,6 +1009,45 @@ const selectedEmployee = employees.find(emp => emp._id === editForm.employeeId);
   </div>
 </div>
 {/* /Edit Assets */}
+
+{/* Delete Modal */}
+<div className="modal fade" id="delete_modal">
+  <div className="modal-dialog modal-dialog-centered">
+    <div className="modal-content">
+      <div className="modal-header">
+        <h4 className="modal-title">Delete Asset</h4>
+        <button
+          type="button"
+          className="btn-close custom-btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        >
+          <i className="ti ti-x" />
+        </button>
+      </div>
+      <div className="modal-body">
+        <p>Are you sure you want to delete this asset? This action cannot be undone.</p>
+      </div>
+      <div className="modal-footer">
+        <button
+          type="button"
+          className="btn btn-light me-2"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={confirmDelete}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{/* /Delete Modal */}
 
     </>
   );

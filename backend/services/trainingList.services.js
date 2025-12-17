@@ -1,4 +1,4 @@
-import { getTenantCollections, getsuperadminCollections } from "../../config/db.js";
+import { getTenantCollections } from "../../config/db.js";
 import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
 
@@ -19,9 +19,10 @@ const addDaysStr = (ymdStr, days) => {
 
 
 // 1. Stats - total, recent
-const getTrainingListStats = async () => {
+const getTrainingListStats = async (companyId) => {
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
     const pipeline = [
       { $facet: { totalTrainingList: [{ $count: "count" }] } },
       { $project: { totalTrainingList: { $ifNull: [{ $arrayElemAt: ["$totalTrainingList.count", 0] }, 0] } } },
@@ -60,9 +61,10 @@ const getEmployeeDetails = async(companyId) => {
 }
 
 // 2. Get TrainingLists by date filter
-const getTrainingList = async ({type,startDate,endDate}={}) => {
+const getTrainingList = async (companyId, {type,startDate,endDate}={}) => {
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
 
     const dateFilter = {};
     const today = toYMDStr(new Date());
@@ -147,9 +149,10 @@ const getTrainingList = async ({type,startDate,endDate}={}) => {
 };
 
 // 3. Get a specific TrainingList record
-const getSpecificTrainingList = async (trainingId) => {
+const getSpecificTrainingList = async (companyId, trainingId) => {
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
     const record = await collection.trainings.findOne(
       { trainingId: trainingId },
       {
@@ -177,9 +180,10 @@ const getSpecificTrainingList = async (trainingId) => {
 };
 
 // 4. Add a TrainingList (single-arg signature: form)
-const addTrainingList = async (form) => {
+const addTrainingList = async (companyId, form) => {
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
     // basic validation
     const required = ["trainingType", "trainer", "employee", "startDate", "timeDuration", "desc", "cost", "status"];
     for (const k of required) {
@@ -213,10 +217,11 @@ const addTrainingList = async (form) => {
 };
 
 // 5. Update a TrainingList
-const updateTrainingList = async (form) => {
+const updateTrainingList = async (companyId, form) => {
     console.log(form);
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
     if (!form.trainingId) throw new Error("Missing trainingId");
 
     const existing = await collection.trainings.findOne({ trainingId: form.trainingId });
@@ -253,9 +258,10 @@ const updateTrainingList = async (form) => {
 };
 
 // 6. Delete multiple TrainingList
-const deleteTrainingList = async (trainingIds) => {
+const deleteTrainingList = async (companyId, trainingIds) => {
   try {
-    const collection = getsuperadminCollections();
+    if (!companyId) throw new Error("Company ID is required");
+    const collection = getTenantCollections(companyId);
     const result = await collection.trainings.deleteMany({
       trainingId: { $in: trainingIds },
     });

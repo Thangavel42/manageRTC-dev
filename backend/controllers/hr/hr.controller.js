@@ -7,9 +7,6 @@ import * as hrmDepartment from "../../services/hr/hrm.department.js";
 import * as hrmEmployee from "../../services/hr/hrm.employee.js";
 import terminationController from "./termination.controller.js";
 import resignationController from "./resignation.controller.js";
-import trainingTypesController from "./trainingTypes.controller.js";
-import trainersController from "./trainers.controller.js";
-import trainingListController from "./trainingList.controller.js";
 import holidayController from "./holidays.controller.js";
 
 const hrDashboardController = (socket, io) => {
@@ -17,12 +14,6 @@ const hrDashboardController = (socket, io) => {
   terminationController(socket,io);
   console.log("Setting up resignation controller...");
   resignationController(socket,io);
-  console.log("Attaching training types controller...");
-  trainingTypesController(socket, io);
-  console.log("Attaching trainers controller...");
-  trainersController(socket,io);
-  console.log("Attaching trainings controller...");
-  trainingListController(socket,io);
   console.log("Attaching holidays controller...**********");
   holidayController(socket,io);
   const isDevelopment =
@@ -1347,7 +1338,7 @@ const hrDashboardController = (socket, io) => {
           throw new Error("Personal details are required");
         }
 
-        const response = await hrmEmployee.updatePersonalInfoDetails(
+        const response = await hrmEmployee.updatePersonalInfo(
           companyId,
           hrId,
           data

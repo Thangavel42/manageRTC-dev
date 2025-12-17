@@ -23,6 +23,17 @@ type Stats = {
   totalTrainers: string;
 };
 
+type Employee = {
+  _id: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  contact?: {
+    email?: string;
+    phone?: string;
+  };
+};
+
 const Trainers = () => {
 
     const socket = useSocket() as Socket | null;
@@ -33,6 +44,8 @@ const Trainers = () => {
     const [filterType, setFilterType] = useState<string>("alltime");
     const [editing, setEditing] = useState<any>(null);
     const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     
     const [editForm, setEditForm] = useState({
       trainer: "",
@@ -105,7 +118,6 @@ const Trainers = () => {
         ),
         onOk: async () => {
           await onConfirm();
-          socket.emit("hr/trainers/trainerslist", { type: "alltime" });
         },
       });
     };
@@ -148,6 +160,12 @@ const Trainers = () => {
       }
     }, []);
 
+    const onEmployeesResponse = useCallback((res: any) => {
+      if (res?.done && res.data) {
+        setEmployees(res.data);
+      }
+    }, []);
+
     useEffect(() => {
       if (!socket) return;
 
@@ -158,6 +176,10 @@ const Trainers = () => {
       socket.on("hr/trainers/add-trainers-response", onAddResponse);
       socket.on("hr/trainers/update-trainers-response", onUpdateResponse);
       socket.on("hr/trainers/delete-trainers-response", onDeleteResponse);
+      socket.on("users/get-all-response", onEmployeesResponse);
+
+      // Fetch employees list
+      socket.emit("users/get-all");
 
       return () => {
         socket.off("hr/trainers/trainerslist-response", onListResponse);
@@ -165,8 +187,9 @@ const Trainers = () => {
         socket.off("hr/trainers/add-trainers-response", onAddResponse);
         socket.off("hr/trainers/update-trainers-response", onUpdateResponse);
         socket.off("hr/trainers/delete-trainers-response", onDeleteResponse);
+        socket.off("users/get-all-response", onEmployeesResponse);
       };
-    }, [socket, onListResponse, onStatsResponse, onAddResponse, onUpdateResponse, onDeleteResponse]);
+    }, [socket, onListResponse, onStatsResponse, onAddResponse, onUpdateResponse, onDeleteResponse, onEmployeesResponse]);
 
 
     const fetchList = useCallback(
@@ -182,6 +205,31 @@ const Trainers = () => {
       },
       [socket]
     );
+
+    const handleEmployeeSelect = (opt: { value: string; label: string } | null) => {
+      if (!opt) {
+        setSelectedEmployee(null);
+        setAddForm({
+          trainer: "",
+          phone: "",
+          email: "",
+          desc: "",
+          status: "Active",
+        });
+        return;
+      }
+
+      const employee = employees.find(emp => emp._id === opt.value);
+      if (employee) {
+        setSelectedEmployee(employee);
+        setAddForm({
+          ...addForm,
+          trainer: `${employee.firstName} ${employee.lastName}`,
+          phone: employee.contact?.phone || "",
+          email: employee.contact?.email || "",
+        });
+      }
+    };
 
     const handleAddSave = () => {
         if (!socket) return;
@@ -210,7 +258,7 @@ const Trainers = () => {
         phone: "",
         email: "",
       });
-      socket.emit("hr/trainers/trainerslist", { type: "alltime" });
+      setSelectedEmployee(null);
     };
 
     const handleEditSave = () => {
@@ -241,7 +289,6 @@ const Trainers = () => {
         status: "Active", 
         trainerId:"",
       });
-      socket.emit("hr/trainers/trainerslist", { type: "alltime" });
     };
 
     const fetchStats = useCallback(() => {
@@ -473,33 +520,49 @@ const Trainers = () => {
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Name
+                          Select Employee <span className="text-danger">*</span>
                         </label>
-                        <textarea
-                          className="form-control"
-                          rows={1} value={addForm.trainer} onChange ={(e) => setAddForm({ ...addForm, trainer: e.target.value})}
+                        <CommonSelect
+                          className="select"
+                          options={employees.map(emp => ({
+                            value: emp._id,
+                            label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
+                          }))}
+                          value={selectedEmployee ? {
+                            value: selectedEmployee._id,
+                            label: `${selectedEmployee.employeeId} - ${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                          } : null}
+                          onChange={handleEmployeeSelect}
                         />
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Phone
+                          Phone <span className="text-danger">*</span>
                         </label>
-                        <textarea
+                        <input
+                          type="text"
                           className="form-control"
-                          rows={1} value={addForm.phone} onChange ={(e) => setAddForm({ ...addForm, phone: e.target.value})}
+                          value={addForm.phone}
+                          readOnly
+                          disabled
+                          style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                         />
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Email
+                          Email <span className="text-danger">*</span>
                         </label>
-                        <textarea
+                        <input
+                          type="text"
                           className="form-control"
-                          rows={1} value={addForm.email} onChange ={(e) => setAddForm({ ...addForm, email: e.target.value})}
+                          value={addForm.email}
+                          readOnly
+                          disabled
+                          style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                         />
                       </div>
                     </div>

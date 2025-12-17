@@ -11,6 +11,7 @@ import { useSocket } from "../../SocketContext";
 import { Socket } from "socket.io-client";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Modal } from "antd";
+import { log } from "console";
 
 type TrainingTypesRow = {
   trainingType: string;
@@ -100,7 +101,6 @@ const TrainingType = () => {
         ),
         onOk: async () => {
           await onConfirm();
-          socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
         },
       });
     };
@@ -180,12 +180,13 @@ const TrainingType = () => {
   );
 
   const handleAddSave = () => {
-      if (!socket) return;
-
-      // basic validation
-      if (!addForm.trainingType || !addForm.desc || !addForm.status) {
-        // toast.warn("Please fill required fields");
-        return;
+    console.log("Adding training type:", addForm); // Debug log 
+    // return;
+    if (!socket) return;
+    // basic validation
+    if (!addForm.trainingType || !addForm.desc || !addForm.status) {
+      // toast.warn("Please fill required fields");
+      return;
     }
 
     const payload = {
@@ -201,8 +202,7 @@ const TrainingType = () => {
       desc: "",
       status: "Active",
     });
-    socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
-    };
+  };
 
   const handleEditSave = () => {
       if (!socket) return;
@@ -228,7 +228,6 @@ const TrainingType = () => {
       status: "Active", 
       typeId:"",
     });
-    socket.emit("hr/trainingTypes/trainingTypeslist", { type: "alltime" });
     };
 
   const fetchStats = useCallback(() => {
@@ -363,15 +362,15 @@ const TrainingType = () => {
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="mb-2">
-                <Link
-                  to="#"
+                <button
+                  type="button"
                   data-bs-toggle="modal"
                   data-bs-target="#new_trainingtype"
                   className="btn btn-primary d-flex align-items-center"
                 >
                   <i className="ti ti-circle-plus me-2" />
                   Add Training type
-                </Link>
+                </button>
               </div>
               <div className="head-icons ms-2">
                 <CollapseHeader />
@@ -435,11 +434,12 @@ const TrainingType = () => {
                   className="btn-close custom-btn-close"
                   data-bs-dismiss="modal"
                   aria-label="Close"
+                  onClick={() => setAddForm({ trainingType: "", desc: "", status: "Active" })}
                 >
                   <i className="ti ti-x" />
                 </button>
               </div>
-              <form>
+              <form onSubmit={(e) => e.preventDefault()}>
                 <div className="modal-body pb-0">
                   <div className="row">
                     <div className="col-md-12">
@@ -449,7 +449,7 @@ const TrainingType = () => {
                         </label>
                         <textarea
                           className="form-control"
-                          rows={1} defaultValue={addForm.trainingType} onChange ={(e) => setAddForm({ ...addForm, trainingType: e.target.value})}
+                          rows={1} value={addForm.trainingType} onChange ={(e) => setAddForm({ ...addForm, trainingType: e.target.value})}
                         />
                       </div>
                     </div>
@@ -460,7 +460,7 @@ const TrainingType = () => {
                         </label>
                         <textarea
                           className="form-control"
-                          rows={1} defaultValue={addForm.desc} onChange ={(e) => setAddForm({ ...addForm, desc: e.target.value})}
+                          rows={1} value={addForm.desc} onChange ={(e) => setAddForm({ ...addForm, desc: e.target.value})}
                         />
                       </div>
                     </div>
@@ -484,6 +484,7 @@ const TrainingType = () => {
                     type="button"
                     className="btn btn-white border me-2"
                     data-bs-dismiss="modal"
+                    onClick={() => setAddForm({ trainingType: "", desc: "", status: "Active" })}
                   >
                     Cancel
                   </button>
@@ -512,11 +513,12 @@ const TrainingType = () => {
                   className="btn-close custom-btn-close"
                   data-bs-dismiss="modal"
                   aria-label="Close"
+                  onClick={() => setEditForm({ trainingType: "", desc: "", status: "Active", typeId: "" })}
                 >
                   <i className="ti ti-x" />
                 </button>
               </div>
-              <form>
+              <form onSubmit={(e) => e.preventDefault()}>
                 <div className="modal-body pb-0">
                   <div className="row">
                     <div className="col-md-12">
@@ -527,7 +529,7 @@ const TrainingType = () => {
                         <input
                           type="text"
                           className="form-control"
-                          defaultValue={editForm.trainingType}
+                          value={editForm.trainingType}
                           onChange={(e) => setEditForm({ ...editForm, trainingType: e.target.value })}
                         />
                       </div>
@@ -538,7 +540,7 @@ const TrainingType = () => {
                         <textarea
                           className="form-control"
                           rows={1}
-                          defaultValue={editForm.desc}
+                          value={editForm.desc}
                           onChange={(e) => setEditForm({ ...editForm, desc: e.target.value })}
                         />
                       </div>
@@ -564,6 +566,7 @@ const TrainingType = () => {
                     type="button"
                     className="btn btn-white border me-2"
                     data-bs-dismiss="modal"
+                    onClick={() => setEditForm({ trainingType: "", desc: "", status: "Active", typeId: "" })}
                   >
                     Cancel
                   </button>

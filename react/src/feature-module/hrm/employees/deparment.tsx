@@ -172,7 +172,7 @@ const Department = () => {
           {text}
         </span>
       ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+      sorter: (a: any, b: any) => a.status.length - b.status.length,
     },
     {
       title: "",
