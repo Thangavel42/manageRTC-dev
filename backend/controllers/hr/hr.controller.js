@@ -1085,6 +1085,40 @@ const hrDashboardController = (socket, io) => {
   );
 
   socket.on(
+    "hrm/employees/check-phone",
+    withRateLimit(async (data) => {
+      try {
+        const { companyId } = validateHrAccess(socket);
+
+        if (!data || typeof data !== "object") {
+          throw new Error("Invalid payload");
+        }
+
+        const phone = typeof data.phone === "string" ? data.phone.trim() : "";
+        if (!phone) {
+          throw new Error("Phone number is required");
+        }
+
+        const excludeEmployeeId = data.excludeEmployeeId || null;
+
+        const response = await hrmEmployee.checkPhoneExists(
+          companyId,
+          phone,
+          excludeEmployeeId
+        );
+
+        socket.emit("hrm/employees/check-phone-response", response);
+      } catch (error) {
+        console.error("Error in hrm/employees/check-phone:", error);
+        socket.emit("hrm/employees/check-phone-response", {
+          done: false,
+          error: error.message || "Unexpected error checking phone number",
+        });
+      }
+    })
+  );
+
+  socket.on(
     "hrm/employees/delete",
     withRateLimit(async (data) => {
       try {

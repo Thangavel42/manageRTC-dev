@@ -46,6 +46,7 @@ const Task = () => {
   const socket = useSocket() as any;
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,12 @@ const Task = () => {
     socket.emit("project:getAll", {});
   }, [socket]);
 
+  const loadEmployees = useCallback(() => {
+    if (!socket) return;
+
+    socket.emit("hrm/employees/get-employee-stats", {});
+  }, [socket]);
+
   const handleTaskDataResponse = useCallback((response: any) => {
     setLoading(false);
     if (response.done && response.data) {
@@ -86,23 +93,44 @@ const Task = () => {
     }
   }, []);
 
+  const handleEmployeeResponse = useCallback((response: any) => {
+    if (response.done && response.data && response.data.employees) {
+      setEmployees(response.data.employees || []);
+    }
+  }, []);
+
   const handlePriorityFilter = useCallback((priority: string) => {
     setFilters(prev => ({ ...prev, priority }));
   }, []);
+
+  const getEmployeeById = useCallback((employeeId: string) => {
+    if (!employeeId || !employees.length) return null;
+    const employee = employees.find(emp => emp._id === employeeId);
+    if (employee) {
+      return {
+        name: `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
+        employeeId: employee.employeeId || ''
+      };
+    }
+    return null;
+  }, [employees]);
 
   useEffect(() => {
     if (socket) {
       socket.on("task:getAllData-response", handleTaskDataResponse);
       socket.on("project:getAll-response", handleProjectResponse);
+      socket.on("hrm/employees/get-employee-stats-response", handleEmployeeResponse);
       loadTasks();
       loadProjects();
+      loadEmployees();
 
       return () => {
         socket.off("task:getAllData-response", handleTaskDataResponse);
         socket.off("project:getAll-response", handleProjectResponse);
+        socket.off("hrm/employees/get-employee-stats-response", handleEmployeeResponse);
       };
     }
-  }, [socket, handleTaskDataResponse, handleProjectResponse, loadTasks, loadProjects]);
+  }, [socket, handleTaskDataResponse, handleProjectResponse, handleEmployeeResponse, loadTasks, loadProjects, loadEmployees]);
 
   useEffect(() => {
     loadTasks();
@@ -217,12 +245,32 @@ const Task = () => {
                             <div className="mb-3">
                               <span className="mb-1 d-block">Project Lead</span>
                               <h6 className="fw-normal d-flex align-items-center">
-                                <ImageWithBasePath
-                                  className="avatar avatar-xs rounded-circle me-1"
-                                  src={`assets/img/profiles/avatar-0${(index % 10) + 1}.jpg`}
-                                  alt="Img"
-                                />
-                                {project.projectManager?.[0] || project.teamLead?.[0] || 'Unassigned'}
+                                {(() => {
+                                  const managerId = project.projectManager?.[0] || project.teamLead?.[0];
+                                  const employee = managerId ? getEmployeeById(managerId) : null;
+                                  
+                                  if (employee) {
+                                    return (
+                                      <>
+                                        <span className="text-truncate" title={`${employee.name} (${employee.employeeId})`}>
+                                          {employee.name}
+                                          <small className="text-muted ms-1">({employee.employeeId})</small>
+                                        </span>
+                                      </>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <>
+                                      <ImageWithBasePath
+                                        className="avatar avatar-xs rounded-circle me-1"
+                                        src={`assets/img/profiles/avatar-0${(index % 10) + 1}.jpg`}
+                                        alt="Unassigned"
+                                      />
+                                      <span className="text-muted">Unassigned</span>
+                                    </>
+                                  );
+                                })()}
                               </h6>
                             </div>
                           </div>
