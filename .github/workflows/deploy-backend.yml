@@ -33,25 +33,22 @@ jobs:
           source: "backend.tar.gz"
           target: "/home/${{ secrets.VPS_USER }}/"
 
-
-      - name: Deploy to /srv/devmanagertc/backend and restart pm2
+      - name: Deploy to /var/www/api.dev.manage-rtc.com/backend and restart pm2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # in the SSH step script
             set -e
             mkdir -p ~/releases/backend && rm -rf ~/releases/backend/*
             tar -xzf ~/backend.tar.gz -C ~/releases/backend
             rm -f ~/backend.tar.gz
 
-            # no sudo needed; deploy owns /srv/devmanagertc
-            mkdir -p /srv/devmanagertc/backend
-            rsync -a --delete ~/releases/backend/ /srv/devmanagertc/backend/
+            mkdir -p /var/www/api.dev.manage-rtc.com/backend
+            rsync -a --delete ~/releases/backend/ /var/www/api.dev.manage-rtc.com/backend/
 
-            cd /srv/devmanagertc/backend
+            cd /var/www/api.dev.manage-rtc.com/backend
 
             cat > .env << 'EOF'
             PORT=${{ secrets.ENV_PORT }}
@@ -66,10 +63,10 @@ jobs:
 
             npm ci --omit=dev
 
-            if pm2 describe managertc-api > /dev/null; then
-              pm2 reload managertc-api
+            # new PM2 app name so it doesn't collide with the old one
+            if pm2 describe manage-rtc-api-dev > /dev/null; then
+              pm2 reload manage-rtc-api-dev
             else
-              pm2 start server.js --name managertc-api
+              pm2 start server.js --name manage-rtc-api-dev
               pm2 save
             fi
-
