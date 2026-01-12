@@ -5,8 +5,8 @@ const mailTransporter = nodemailer.createTransport({
   port: 465,
   secure: true,
   auth: {
-    user: "****",
-    pass: "****",
+    user: "noreply@manage-rtc.com",
+    pass: "7g[+r@RF2P",
   },
 });
 

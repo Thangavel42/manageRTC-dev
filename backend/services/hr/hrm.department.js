@@ -16,7 +16,7 @@ export const allDepartments = async (companyId, hrId) => {
     // if (!hrExists) return { done: false, error: "HR not found" };
 
     const result = await collections.departments
-      .find({ status: "active" }, { projection: { department: 1, _id: 1 } })
+      .find({ status: "active" }, { projection: { department: 1, _id: 1, status: 1 } })
       .toArray();
 
     return {
@@ -39,22 +39,29 @@ export const addDepartment = async (companyId, hrId, payload) => {
       return { done: false, error: "Missing required fields" };
     }
     if (!payload.department) {
-      return { done: false, message: "Department name are required" };
+      return { done: false, error: "Department name is required" };
     }
 
     const collections = getTenantCollections(companyId);
     // const hrExists = await collections.hr.countDocuments({ userId: hrId });
     // if (!hrExists) return { done: false, message: "HR doesn't exist" };
 
+    // Escape special regex characters and trim whitespace
+    const departmentName = payload.department.trim();
+    const escapedName = departmentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
     const departmentExists = await collections.departments.countDocuments({
-      name: { $regex: `^${payload.department}$`, $options: "i" },
+      department: { $regex: new RegExp(`^${escapedName}$`, "i") },
     });
-    if (departmentExists) {
-      return { done: false, message: "Department already exists" };
+    
+    console.log("Checking for duplicate department:", departmentName, "Found:", departmentExists);
+    
+    if (departmentExists > 0) {
+      return { done: false, error: "Department already exists" };
     }
 
     const newDepartment = {
-      department: payload.department,
+      department: departmentName,
       status: payload.status || "active",
       createdBy: hrId,
       createdAt: new Date(),
@@ -129,11 +136,38 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
         },
       },
       {
-        $addFields: {
-          employeeCount: { $size: "$employees" },
+        $lookup: {
+          from: "designations",
+          let: { deptIdStr: "$departmentIdString" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ["$departmentId", "$$deptIdStr"],
+                    },
+                    {
+                      $or: [
+                        { $eq: ["$status", "active"] },
+                        { $eq: ["$status", "Active"] }
+                      ]
+                    }
+                  ],
+                },
+              },
+            },
+          ],
+          as: "designations",
         },
       },
-      { $project: { employees: 0, departmentIdString: 0 } },
+      {
+        $addFields: {
+          employeeCount: { $size: "$employees" },
+          designationCount: { $size: "$designations" },
+        },
+      },
+      { $project: { employees: 0, designations: 0, departmentIdString: 0 } },
     ];
 
     const departments = await collections.departments
@@ -164,7 +198,7 @@ export const updateDepartment = async (companyId, hrId, payload) => {
       !payload?.department ||
       !payload?.status
     ) {
-      return { done: false, message: "Missing required fields" };
+      return { done: false, error: "Missing required fields" };
     }
 
     const collections = getTenantCollections(companyId);
@@ -179,7 +213,7 @@ export const updateDepartment = async (companyId, hrId, payload) => {
       _id: departmentId,
     });
     if (!currentDepartment) {
-      return { done: false, message: "Department not found" };
+      return { done: false, error: "Department not found" };
     }
 
     if (
@@ -202,27 +236,24 @@ export const updateDepartment = async (companyId, hrId, payload) => {
       if (activeEmployees > 0) {
         return {
           done: false,
-          message: "Cannot inactivate department with active employees",
+          error: "Cannot inactivate department with active employees",
           detail: `${activeEmployees} active employees found`,
         };
       }
     }
 
     if (payload.department !== currentDepartment.department) {
-      const pipeline = [
-        {
-          $match: {
-            department: payload.department,
-            _id: { $ne: departmentId },
-          },
-        },
-        { $count: "count" },
-      ];
-      const [dupDep] = await collections.departments
-        .aggregate(pipeline)
-        .toArray();
-      if (dupDep && dupDep.count > 0) {
-        return { done: false, message: "Department name already exists" };
+      // Check for duplicate department name (case-insensitive)
+      const departmentName = payload.department.trim();
+      const escapedName = departmentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      const duplicateExists = await collections.departments.countDocuments({
+        department: { $regex: new RegExp(`^${escapedName}$`, "i") },
+        _id: { $ne: departmentId },
+      });
+      
+      if (duplicateExists > 0) {
+        return { done: false, error: "Department already exists" };
       }
 
       await collections.employees.updateMany(
@@ -244,7 +275,7 @@ export const updateDepartment = async (companyId, hrId, payload) => {
     );
 
     if (result.matchedCount === 0) {
-      return { done: false, message: "Department not found" };
+      return { done: false, error: "Department not found" };
     }
 
     return {

@@ -219,6 +219,21 @@ export interface Employee {
     clientId: string;
 }
 
+interface DepartmentDesignationMapping {
+    departmentId: string;
+    departmentName: string;
+    designationIds: string[];
+}
+
+interface Policy {
+    _id: string;
+    policyName: string;
+    policyDescription: string;
+    effectiveDate: string;
+    applyToAll?: boolean;  // When true, policy applies to all employees
+    assignTo?: DepartmentDesignationMapping[];
+}
+
 const EmployeeDetails = () => {
     const [permissions, setPermissions] = useState<PermissionsState>(initialPermissionsState);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -868,6 +883,9 @@ const EmployeeDetails = () => {
         password: false,
         confirmPassword: false,
     });
+    const [policies, setPolicies] = useState<Policy[]>([]);
+    const [policiesLoading, setPoliciesLoading] = useState(false);
+    const [viewingPolicy, setViewingPolicy] = useState<Policy | null>(null);
 
     // Initialize edit form data when employee data is loaded
     useEffect(() => {
@@ -1060,6 +1078,10 @@ const EmployeeDetails = () => {
         }
         socket.emit("hrm/employees/get-details", payload);
 
+        // Fetch policies
+        setPoliciesLoading(true);
+        socket.emit("hr/policy/get");
+
         const handleDetailsResponse = (response: any) => {
             if (!isMounted) return;
 
@@ -1220,6 +1242,17 @@ const EmployeeDetails = () => {
             }
         };
 
+        const handleGetPolicyResponse = (response: any) => {
+            setPoliciesLoading(false);
+            if (!isMounted) return;
+
+            if (response.done) {
+                setPolicies(response.data || []);
+            } else {
+                console.error("Failed to fetch policies:", response.error);
+                setPolicies([]);
+            }
+        };
 
         socket.on("hrm/employees/get-details-response", handleDetailsResponse);
         socket.on("hrm/employees/update-response", handleUpdateEmployeeResponse);
@@ -1230,6 +1263,7 @@ const EmployeeDetails = () => {
         socket.on("hrm/employees/update-emergency-response", handleEmergencyUpdateResponse);
         socket.on("hrm/employees/update-experience-response", handleExperienceResponse);
         socket.on("hrm/employees/update-about-response", handleAboutResponse);
+        socket.on("hr/policy/get-response", handleGetPolicyResponse);
 
         return () => {
             socket.off("hrm/employees/get-details-response", handleDetailsResponse);
@@ -1241,11 +1275,36 @@ const EmployeeDetails = () => {
             socket.off("hrm/employees/update-emergency-response", handleEmergencyUpdateResponse);
             socket.off("hrm/employees/update-experience-response", handleExperienceResponse);
             socket.off("hrm/employees/update-about-response", handleAboutResponse);
+            socket.off("hr/policy/get-response", handleGetPolicyResponse);
             isMounted = false;
             clearTimeout(timeoutId);
         };
        
     }, [socket, employeeId]);
+
+    // Filter policies that apply to the current employee
+    const getApplicablePolicies = (): Policy[] => {
+        if (!employee || !policies.length) return [];
+
+        return policies.filter(policy => {
+            // If applyToAll is true, this policy applies to ALL employees (current and future)
+            if (policy.applyToAll === true) return true;
+
+            // If no assignTo mappings and not applyToAll, the policy doesn't apply to anyone
+            if (!policy.assignTo || policy.assignTo.length === 0) return false;
+
+            // Check if any department-designation mapping matches the employee
+            return policy.assignTo.some(mapping => {
+                // Check if the department matches
+                if (mapping.departmentId !== employee.departmentId) return false;
+
+                // Check if the employee's designation is included
+                return mapping.designationIds.includes(employee.designationId);
+            });
+        });
+    };
+
+    const applicablePolicies = getApplicablePolicies();
 
     if (!employeeId) {
         return (
@@ -1506,8 +1565,22 @@ const EmployeeDetails = () => {
                                                             alt="Img"
                                                         />
                                                     </span> */}
-                                                    <p className="text-gray-9 mb-0">{employee?.reportOffice}</p>
+                                                    <p className="text-gray-9 mb-0">{employee?.reportOffice || '—'}</p>
                                                 </div>
+                                            </div>
+                                            <div className="d-flex align-items-center justify-content-between mt-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-building me-2" />
+                                                    Department
+                                                </span>
+                                                <p className="text-dark">{employee?.department || '—'}</p>
+                                            </div>
+                                            <div className="d-flex align-items-center justify-content-between mt-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-briefcase me-2" />
+                                                    Designation
+                                                </span>
+                                                <p className="text-dark">{employee?.designation || '—'}</p>
                                             </div>
                                             <div className="row gx-2 mt-3">
                                                 <div className="col-6">
@@ -2103,6 +2176,19 @@ const EmployeeDetails = () => {
                                                             </li> */}
                                                             <li className="nav-item" role="presentation">
                                                                 <button
+                                                                    className="nav-link active"
+                                                                    id="policy-tab2"
+                                                                    data-bs-toggle="tab"
+                                                                    data-bs-target="#policy2"
+                                                                    type="button"
+                                                                    role="tab"
+                                                                    aria-selected="true"
+                                                                >
+                                                                    Policy
+                                                                </button>
+                                                            </li>
+                                                            <li className="nav-item" role="presentation">
+                                                                <button
                                                                     className="nav-link"
                                                                     id="address-tab2"
                                                                     data-bs-toggle="tab"
@@ -2253,8 +2339,80 @@ const EmployeeDetails = () => {
                                                                 </div>
                                                             </div>
                                                         </div> */}
+                                                        {/* Policy Tab Pane */}
                                                         <div
                                                             className="tab-pane fade show active"
+                                                            id="policy2"
+                                                            role="tabpanel"
+                                                            aria-labelledby="policy-tab2"
+                                                            tabIndex={0}
+                                                        >
+                                                            <div className="row">
+                                                                {policiesLoading ? (
+                                                                    <div className="col-12 text-center py-4">
+                                                                        <div className="spinner-border text-primary" role="status">
+                                                                            <span className="visually-hidden">Loading policies...</span>
+                                                                        </div>
+                                                                        <p className="mt-2 text-muted">Loading policies...</p>
+                                                                    </div>
+                                                                ) : applicablePolicies.length > 0 ? (
+                                                                    applicablePolicies.map((policy, idx) => (
+                                                                        <div key={policy._id} className="col-md-12 d-flex mb-3">
+                                                                            <div className="card flex-fill">
+                                                                                <div className="card-body">
+                                                                                    <div className="d-flex align-items-start justify-content-between">
+                                                                                        <div className="flex-grow-1">
+                                                                                            <h5 
+                                                                                                className="mb-2" 
+                                                                                                style={{ cursor: 'pointer' }}
+                                                                                                onClick={() => setViewingPolicy(policy)}
+                                                                                                data-bs-toggle="modal"
+                                                                                                data-bs-target="#view_policy_employee"
+                                                                                            >
+                                                                                                <i className="ti ti-file-text me-2 text-primary"></i>
+                                                                                                {policy.policyName}
+                                                                                            </h5>
+                                                                                            <p className="text-muted mb-2">
+                                                                                                {policy.policyDescription || 'No description provided'}
+                                                                                            </p>
+                                                                                            <div className="d-flex align-items-center gap-3 mt-3">
+                                                                                                <span className="badge bg-light text-dark">
+                                                                                                    <i className="ti ti-calendar me-1"></i>
+                                                                                                    Effective: {new Date(policy.effectiveDate).toLocaleDateString('en-US', { 
+                                                                                                        year: 'numeric', 
+                                                                                                        month: 'short', 
+                                                                                                        day: 'numeric' 
+                                                                                                    })}
+                                                                                                </span>
+                                                                                                <span className="badge bg-success-transparent">
+                                                                                                    <i className="ti ti-check me-1"></i>
+                                                                                                    Active
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="col-12">
+                                                                        <div className="card">
+                                                                            <div className="card-body text-center py-5">
+                                                                                <i className="ti ti-file-off fs-1 text-muted mb-3 d-block"></i>
+                                                                                <h5 className="text-muted">No Policies Assigned</h5>
+                                                                                <p className="text-muted mb-0">
+                                                                                    There are currently no policies assigned to your department and designation.
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {/* Assets Tab Pane */}
+                                                        <div
+                                                            className="tab-pane fade"
                                                             id="address2"
                                                             role="tabpanel"
                                                             aria-labelledby="address-tab2"
@@ -3999,6 +4157,84 @@ const EmployeeDetails = () => {
                 </div>
             </div>
             {/* /Refuse */}
+
+            {/* View Policy Modal */}
+            <div className="modal fade" id="view_policy_employee">
+                <div className="modal-dialog modal-dialog-centered modal-lg">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h4 className="modal-title">Policy Details</h4>
+                            <button
+                                type="button"
+                                className="btn-close custom-btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"
+                            >
+                                <i className="ti ti-x" />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            {viewingPolicy && (
+                                <div className="policy-details-container">
+                                    {/* Policy Name */}
+                                    <div className="mb-4">
+                                        <div className="d-flex align-items-center mb-2">
+                                            <i className="ti ti-file-text text-primary me-2 fs-20"></i>
+                                            <h5 className="mb-0 text-muted">Policy Name</h5>
+                                        </div>
+                                        <div className="ps-4">
+                                            <p className="fs-16 mb-0">{viewingPolicy.policyName}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* In-effect Date */}
+                                    <div className="mb-4">
+                                        <div className="d-flex align-items-center mb-2">
+                                            <i className="ti ti-calendar text-primary me-2 fs-20"></i>
+                                            <h5 className="mb-0 text-muted">In-effect Date</h5>
+                                        </div>
+                                        <div className="ps-4">
+                                            <p className="fs-16 mb-0">
+                                                {new Date(viewingPolicy.effectiveDate).toLocaleDateString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'long',
+                                                    day: 'numeric'
+                                                })}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Policy Description */}
+                                    <div className="mb-3">
+                                        <div className="d-flex align-items-center mb-2">
+                                            <i className="ti ti-file-description text-primary me-2 fs-20"></i>
+                                            <h5 className="mb-0 text-muted">Description</h5>
+                                        </div>
+                                        <div className="ps-4">
+                                            <div className="border rounded p-3 bg-light">
+                                                <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>
+                                                    {viewingPolicy.policyDescription || 'No description provided'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                type="button"
+                                className="btn btn-light"
+                                data-bs-dismiss="modal"
+                            >
+                                <i className="ti ti-x me-1"></i>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {/* /View Policy Modal */}
         </>
     )
 }

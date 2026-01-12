@@ -33,7 +33,7 @@ const companiesController = (socket, io) => {
       console.log(data);
       try {
         const companyDoc = new Company(data);
-        await companyDoc.validate(); // throws if in
+        await companyDoc.validate(); // throws if invalid
         console.log("Adding to db");
 
         let res = await companiesService.addCompany(data, socket.user.sub);
@@ -41,13 +41,17 @@ const companiesController = (socket, io) => {
         if (res.done) {
           await Broadcast(io);
         }
-      } catch (error) {
-        console.log("Error in super.admin/company/addcompany schema issue");
+      } catch (validationError) {
+        console.log("Error in super.admin/company/addcompany schema issue:", validationError.message);
+        socket.emit("superadmin/companies/add-company-response", {
+          done: false,
+          error: validationError.message || "Validation failed",
+        });
       }
     } catch (error) {
       socket.emit("superadmin/companies/add-company-response", {
         done: false,
-        error: error,
+        error: error.message || error,
       });
     }
   });

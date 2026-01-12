@@ -45,6 +45,7 @@ export const hideModal = (modalId: string) => {
   const modal = document.getElementById(modalId);
   if (!modal) {
     console.error(`Modal with ID '${modalId}' not found`);
+    cleanupModalBackdrops(); // Still cleanup even if modal not found
     return;
   }
 
@@ -55,6 +56,8 @@ export const hideModal = (modalId: string) => {
       const modalInstance = bootstrap.Modal.getInstance(modal);
       if (modalInstance) {
         modalInstance.hide();
+        // Cleanup after Bootstrap animation completes (typically 300ms)
+        setTimeout(() => cleanupModalBackdrops(), 350);
         return;
       }
     }
@@ -62,24 +65,51 @@ export const hideModal = (modalId: string) => {
     // Method 2: Try jQuery Bootstrap (if available)
     if ((window as any).$ && (window as any).$.fn.modal) {
       (window as any).$(modal).modal('hide');
+      setTimeout(() => cleanupModalBackdrops(), 350);
       return;
     }
     
     // Method 3: Fallback - hide modal manually
     modal.style.display = 'none';
     modal.classList.remove('show');
-    document.body.classList.remove('modal-open');
+    modal.setAttribute('aria-hidden', 'true');
+    modal.removeAttribute('aria-modal');
+    modal.removeAttribute('role');
     
-    // Remove backdrop
-    const backdrop = document.getElementById('modal-backdrop');
-    if (backdrop) {
-      backdrop.remove();
-    }
+    // Remove all backdrops immediately for manual close
+    cleanupModalBackdrops();
     
   } catch (error) {
     console.error('Error hiding modal:', error);
-    // Fallback - just hide the modal element
+    // Fallback - just hide the modal element and cleanup
     modal.style.display = 'none';
     modal.classList.remove('show');
+    cleanupModalBackdrops();
   }
 };
+
+// Helper function to remove all modal backdrops
+const cleanupModalBackdrops = () => {
+  // Remove all modal-backdrop elements
+  const backdrops = document.querySelectorAll('.modal-backdrop');
+  backdrops.forEach(backdrop => backdrop.remove());
+  
+  // Also check for any backdrop by ID
+  const backdropById = document.getElementById('modal-backdrop');
+  if (backdropById) {
+    backdropById.remove();
+  }
+  
+  // Ensure body styles are cleaned up if no other modals are open
+  const openModals = document.querySelectorAll('.modal.show');
+  if (openModals.length === 0) {
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }
+};
+
+// Export cleanup function for manual use if needed
+export { cleanupModalBackdrops };

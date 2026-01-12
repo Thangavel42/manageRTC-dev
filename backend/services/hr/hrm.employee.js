@@ -2155,9 +2155,64 @@ export const getEmployeeDetails = async (companyId, hrId, employeeId) => {
     //   return { done: false, message: "HR not authorized" };
     // }
 
-    const employee = await collections.employees.findOne({
-      _id: employeeObjId,
-    });
+    // Use aggregation to lookup department and designation names
+    const pipeline = [
+      { $match: { _id: employeeObjId } },
+      {
+        $addFields: {
+          // Convert departmentId string to ObjectId for lookup
+          departmentObjId: {
+            $cond: {
+              if: { $and: [{ $ne: ["$departmentId", null] }, { $ne: ["$departmentId", ""] }] },
+              then: { $toObjectId: "$departmentId" },
+              else: null
+            }
+          },
+          // Convert designationId string to ObjectId for lookup
+          designationObjId: {
+            $cond: {
+              if: { $and: [{ $ne: ["$designationId", null] }, { $ne: ["$designationId", ""] }] },
+              then: { $toObjectId: "$designationId" },
+              else: null
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "departments",
+          localField: "departmentObjId",
+          foreignField: "_id",
+          as: "departmentInfo"
+        }
+      },
+      {
+        $lookup: {
+          from: "designations",
+          localField: "designationObjId",
+          foreignField: "_id",
+          as: "designationInfo"
+        }
+      },
+      {
+        $addFields: {
+          department: { $ifNull: [{ $arrayElemAt: ["$departmentInfo.department", 0] }, ""] },
+          designation: { $ifNull: [{ $arrayElemAt: ["$designationInfo.designation", 0] }, ""] }
+        }
+      },
+      {
+        $project: {
+          departmentObjId: 0,
+          designationObjId: 0,
+          departmentInfo: 0,
+          designationInfo: 0
+        }
+      }
+    ];
+
+    const results = await collections.employees.aggregate(pipeline).toArray();
+    const employee = results[0];
+    
     console.log(employee);
 
     if (!employee) {
@@ -2169,6 +2224,7 @@ export const getEmployeeDetails = async (companyId, hrId, employeeId) => {
       data: employee,
     };
   } catch (error) {
+    console.error("Error in getEmployeeDetails:", error);
     return {
       done: false,
       message: "Internal server error",

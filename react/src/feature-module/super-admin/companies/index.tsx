@@ -305,6 +305,62 @@ const Companies = () => {
     currency: "",
   });
 
+  // Form Validation Errors State
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Validate form fields
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = "Company name is required";
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = "Email address is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = "Please enter a valid email address";
+    }
+    
+    if (!formData.domain.trim()) {
+      errors.domain = "Sub domain URL is required";
+    }
+    
+    if (!formData.phone.trim()) {
+      errors.phone = "Phone number is required";
+    }
+    
+    if (!formData.website.trim()) {
+      errors.website = "Website is required";
+    }
+    
+    if (!formData.address.trim()) {
+      errors.address = "Address is required";
+    }
+    
+    if (!formData.plan_id) {
+      errors.plan_id = "Please select a plan";
+    }
+    
+    if (!logo) {
+      errors.logo = "Company logo is required";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Clear specific error when user types
+  const clearFieldError = (fieldName: string) => {
+    if (formErrors[fieldName]) {
+      setFormErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldName];
+        return newErrors;
+      });
+    }
+  };
+
   // Helper functions
 
   useEffect(() => {
@@ -370,6 +426,7 @@ const Companies = () => {
       setimageupload(true);
       const uploadedUrl = await uploadImage(file);
       setLogo(uploadedUrl);
+      clearFieldError("logo"); // Clear logo error when image is uploaded
       console.log(uploadedUrl);
       setimageupload(false);
     } else {
@@ -396,12 +453,20 @@ const Companies = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    const processedValue = type === "number" ? parseFloat(value) : value;
+    let processedValue: string | number | boolean = type === "number" ? parseFloat(value) : value;
+
+    // Convert domain and website to lowercase
+    if (name === "domain" || name === "website") {
+      processedValue = value.toLowerCase();
+    }
 
     setFormData((prevState) => ({
       ...prevState,
       [name]: type === "checkbox" ? checked : processedValue,
     }));
+    
+    // Clear error when user starts typing
+    clearFieldError(name);
   };
 
   // Common Select Change
@@ -420,6 +485,9 @@ const Companies = () => {
       ...prevState,
       [name]: selectedOption.value,
     }));
+    
+    // Clear error when user selects an option
+    clearFieldError(name);
   };
 
   // Socket Requests
@@ -635,45 +703,23 @@ const Companies = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Validate required fields
-    const requiredFields = [
-      { field: "plan_name", label: "Plan Name" },
-      // { field: "plan_type", label: "Plan Type" },
-      // { field: "currency", label: "Currency" },
-      // { field: "plan_id", label: "Plan Name" },
-    ];
-
-    let hasError = false;
-    const formRecord = formData as Record<string, any>;
-    console.log("form record", formRecord);
-    requiredFields.forEach(({ field, label }) => {
-      const value = formRecord[field];
-      if (value === null || value === undefined || value === "") {
-        toast.error(`Please select a value for ${label}.`, {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: true,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-        hasError = true;
-      }
-    });
-
-    // Stop submission if there are errors
-    if (hasError) {
-      setIsLoading(false); // Disable loading state
-      console.log("Error");
+    
+    // Validate form using the new validation function
+    if (!validateForm()) {
+      toast.error("Please fill in all required fields.", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
       return;
     }
 
     setIsLoading(true); // Enable loading state
 
     // Prepare the data to be submitted
-
-    // Emit the data via socket
-
     const formDataWithLogo = {
       ...formData,
       logo: logo,
@@ -750,6 +796,7 @@ const Companies = () => {
       plan_id: "",
       currency: "",
     });
+    setFormErrors({}); // Clear all validation errors
     RemoveLogo();
     const elements = document.querySelectorAll('[id="close-add-company"]');
 
@@ -1613,14 +1660,13 @@ const Companies = () => {
                         </div>
                         <div className="profile-upload">
                           <div className="mb-2">
-                            <h6 className="mb-1">Upload Profile Image</h6>
+                            <h6 className="mb-1">Upload Profile Image <span className="text-danger">*</span></h6>
                             <p className="fs-12">Image should be below 4 mb</p>
                           </div>
                           <div className="profile-uploader d-flex align-items-center">
                             <div className="drag-upload-btn btn btn-sm btn-primary me-2">
                               {logo ? "Change" : "Upload"}
                               <input
-                                required
                                 type="file"
                                 className="form-control image-sign"
                                 accept=".png,.jpeg,.jpg,.ico"
@@ -1639,6 +1685,9 @@ const Companies = () => {
                               </Link>
                             )}
                           </div>
+                          {formErrors.logo && (
+                            <div className="text-danger fs-12 mt-1">{formErrors.logo}</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1649,14 +1698,16 @@ const Companies = () => {
                         </label>
                         <input
                           type="text"
-                          required
-                          className="form-control"
+                          className={`form-control ${formErrors.name ? "is-invalid" : ""}`}
                           name="name"
                           placeholder="Enter company name"
                           value={formData.name}
                           onChange={handleInputChange}
                           maxLength={100}
                         />
+                        {formErrors.name && (
+                          <div className="invalid-feedback">{formErrors.name}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-6">
@@ -1666,14 +1717,16 @@ const Companies = () => {
                         </label>
                         <input
                           type="email"
-                          className="form-control"
+                          className={`form-control ${formErrors.email ? "is-invalid" : ""}`}
                           name="email"
                           placeholder="company@example.com"
                           value={formData.email}
                           onChange={handleInputChange}
                           maxLength={100}
-                          required
                         />
+                        {formErrors.email && (
+                          <div className="invalid-feedback">{formErrors.email}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-12">
@@ -1684,13 +1737,12 @@ const Companies = () => {
                         <div style={{ display: "flex", alignItems: "center" }}>
                           <input
                             type="text"
-                            className="form-control"
+                            className={`form-control ${formErrors.domain ? "is-invalid" : ""}`}
                             name="domain"
                             placeholder="Subdomain"
                             value={formData.domain}
                             onChange={handleInputChange}
                             maxLength={100}
-                            required
                             style={{
                               borderTopRightRadius: 0,
                               borderBottomRightRadius: 0,
@@ -1715,6 +1767,9 @@ const Companies = () => {
                             {hostSuffix}
                           </span>
                         </div>
+                        {formErrors.domain && (
+                          <div className="text-danger fs-12 mt-1">{formErrors.domain}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-6">
@@ -1724,28 +1779,33 @@ const Companies = () => {
                         </label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${formErrors.phone ? "is-invalid" : ""}`}
                           name="phone"
                           placeholder="Mobile Number"
                           value={formData.phone}
                           onChange={handleInputChange}
                           maxLength={100}
-                          required
                         />
+                        {formErrors.phone && (
+                          <div className="invalid-feedback">{formErrors.phone}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Website</label>
+                        <label className="form-label">Website <span className="text-danger">*</span></label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${formErrors.website ? "is-invalid" : ""}`}
                           name="website"
                           placeholder="Enter company website"
                           value={formData.website}
                           onChange={handleInputChange}
                           maxLength={100}
                         />
+                        {formErrors.website && (
+                          <div className="invalid-feedback">{formErrors.website}</div>
+                        )}
                       </div>
                     </div>
                     {/* <div className="col-md-6">
@@ -1800,16 +1860,19 @@ const Companies = () => {
                   </div> */}
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Address</label>
+                        <label className="form-label">Address <span className="text-danger">*</span></label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${formErrors.address ? "is-invalid" : ""}`}
                           name="address"
                           placeholder="Enter company address"
                           value={formData.address}
                           onChange={handleInputChange}
                           maxLength={100}
                         />
+                        {formErrors.address && (
+                          <div className="invalid-feedback">{formErrors.address}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-6">
@@ -1818,13 +1881,16 @@ const Companies = () => {
                           Plan Name <span className="text-danger"> *</span>
                         </label>
                         <CommonSelect
-                          className="select"
+                          className={`select ${formErrors.plan_id ? "is-invalid" : ""}`}
                           options={planName}
                           defaultValue={formData.plan_name}
                           onChange={(selectedOption) =>
                             handleSelectChange("plan_id", selectedOption)
                           }
                         />
+                        {formErrors.plan_id && (
+                          <div className="text-danger fs-12 mt-1">{formErrors.plan_id}</div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-6">

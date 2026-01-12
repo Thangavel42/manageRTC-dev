@@ -15,16 +15,22 @@ export const addPolicy = async (companyId, hrId, policyData) => {
     // const hrExists = await collections.hr.countDocuments({ userId: hrId });
     // if (!hrExists) return { done: false, error: "HR not found" };
 
+    // Validate required fields
+    // applyToAll=true means policy applies to all employees (current and future)
+    // applyToAll=false or undefined requires assignTo with department/designation mappings
+    const isApplyToAll = policyData.applyToAll === true;
+    
     if (
       !policyData.policyName ||
-      !policyData.department ||
+      (!isApplyToAll && (!policyData.assignTo || policyData.assignTo.length === 0)) ||
       !policyData.effectiveDate ||
       !policyData.policyDescription
     ) {
       return {
         done: false,
-        error:
-          "Policy name, department, description and effective date are required",
+        error: isApplyToAll 
+          ? "Policy name, description and effective date are required"
+          : "Policy name, assign to (departments/designations), description and effective date are required",
       };
     }
     if (new Date(policyData.effectiveDate) < new Date()) {
@@ -33,7 +39,8 @@ export const addPolicy = async (companyId, hrId, policyData) => {
 
     const result = await collections.policy.insertOne({
       policyName: policyData.policyName,
-      department: policyData.department,
+      applyToAll: isApplyToAll,  // Store the flag for global policy application
+      assignTo: isApplyToAll ? [] : (policyData.assignTo || []),  // Empty array means applies to all future employees
       policyDescription: policyData.policyDescription,
       effectiveDate: new Date(policyData.effectiveDate),
       createdBy: hrId,
@@ -45,6 +52,7 @@ export const addPolicy = async (companyId, hrId, policyData) => {
       data: {
         _id: result.insertedId,
         ...policyData,
+        applyToAll: isApplyToAll,
       },
       message: "Policy created successfully",
     };
@@ -117,16 +125,22 @@ export const updatePolicy = async (companyId, hrId = 1, payload) => {
     if (!payload.policyId) {
       return { done: false, error: "Policy ID not found" };
     }
+    
+    // Validate required fields
+    // applyToAll=true means policy applies to all employees (current and future)
+    const isApplyToAll = payload.applyToAll === true;
+    
     if (
       !payload.policyName ||
-      !payload.department ||
+      (!isApplyToAll && (!payload.assignTo || payload.assignTo.length === 0)) ||
       !payload.effectiveDate ||
       !payload.policyDescription
     ) {
       return {
         done: false,
-        error:
-          "Policy name, department, description and effective date are required",
+        error: isApplyToAll
+          ? "Policy name, description and effective date are required"
+          : "Policy name, assign to (departments/designations), description and effective date are required",
       };
     }
 
@@ -135,7 +149,8 @@ export const updatePolicy = async (companyId, hrId = 1, payload) => {
       {
         $set: {
           policyName: payload.policyName,
-          department: payload.department,
+          applyToAll: isApplyToAll,  // Store the flag for global policy application
+          assignTo: isApplyToAll ? [] : (payload.assignTo || []),  // Empty array means applies to all future employees
           effectiveDate: payload.effectiveDate,
           policyDescription: payload.policyDescription,
           updatedBy: hrId,

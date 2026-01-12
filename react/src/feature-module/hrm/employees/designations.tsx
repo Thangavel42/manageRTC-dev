@@ -12,6 +12,7 @@ import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { departmentSelect } from '../../../core/common/selectoption/selectoption';
 import Footer from "../../../core/common/footer";
+import { hideModal, cleanupModalBackdrops } from '../../../utils/modalUtils';
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -57,6 +58,10 @@ const Designations = () => {
   const [editingDesignation, setEditingDesignation] = useState<Designations | null>(null);
   const [designationToDelete, setDesignationToDelete] = useState<Designations | null>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [designationNameError, setDesignationNameError] = useState<string | null>(null);
+  const [departmentIdError, setDepartmentIdError] = useState<string | null>(null);
+  const [editDesignationNameError, setEditDesignationNameError] = useState<string | null>(null);
+  const [editDepartmentIdError, setEditDepartmentIdError] = useState<string | null>(null);
 
   const socket = useSocket() as Socket | null;
 
@@ -120,13 +125,17 @@ const Designations = () => {
 
     const handleUpdateResponse = (response: any) => {
       if (!isMounted) return;
+      setUpdateLoading(false);
       if (response.done) {
         setError(null);
-        setUpdateLoading(false);
+        resetEditDesignationForm();
+        // Close modal only on success
+        hideModal('edit_designation');
+        setTimeout(() => cleanupModalBackdrops(), 500);
         socket?.emit("hrm/designations/get");
       } else {
-        setError(response.error || "Failed to update designation");
-        setUpdateLoading(false);
+        // Show backend error inline - keep modal open
+        setEditDesignationNameError(response.error || "Failed to update designation");
       }
     };
 
@@ -257,19 +266,23 @@ const Designations = () => {
     setSelectedDepartmentId("");
     setStatus(statusChoose[0]?.value || "");
     setError(null);
+    setDesignationNameError(null);
+    setDepartmentIdError(null);
   };
 
   const handleSubmit = () => {
     try {
       setError(null);
+      setDesignationNameError(null);
+      setDepartmentIdError(null);
 
       if (!designationName.trim()) {
-        setError("Designation Name is required");
+        setDesignationNameError("Designation Name is required");
         return;
       }
 
       if (!selectedDepartmentId) {
-        setError("Department is required");
+        setDepartmentIdError("Department is required");
         return;
       }
 
@@ -288,6 +301,15 @@ const Designations = () => {
 
       if (socket) {
         socket.emit("hrm/designations/add", data);
+        
+        // Close modal programmatically after successful validation and submission
+        const modalElement = document.getElementById('add_designation');
+        if (modalElement) {
+          const modal = window.bootstrap?.Modal?.getInstance(modalElement);
+          if (modal) {
+            modal.hide();
+          }
+        }
       } else {
         setError("Socket connection is not available.");
         setLoading(false);
@@ -359,27 +381,33 @@ const Designations = () => {
       }
 
       setError(null);
+      setEditDesignationNameError(null);
+      setEditDepartmentIdError(null);
       setUpdateLoading(true);
 
       const { _id, designation, departmentId, status } = editingDesignation;
 
       if (!_id) {
         setError("Designation ID is required.");
+        setUpdateLoading(false);
         return;
       }
 
       if (!designation || designation.trim() === "") {
-        setError("Designation name is required.");
+        setEditDesignationNameError("Designation name is required.");
+        setUpdateLoading(false);
         return;
       }
 
       if (!departmentId) {
-        setError("Department ID is required.");
+        setEditDepartmentIdError("Department ID is required.");
+        setUpdateLoading(false);
         return;
       }
 
       if (!status) {
         setError("Status is required.");
+        setUpdateLoading(false);
         return;
       }
 
@@ -392,16 +420,17 @@ const Designations = () => {
 
       if (socket) {
         socket.emit("hrm/designations/update", payload);
+        // Modal will be closed by handleUpdateResponse on success
       } else {
-        setError("Socket connection is not available.");
+        setEditDesignationNameError("Socket connection is not available.");
         setUpdateLoading(false);
       }
     } catch (error) {
       setUpdateLoading(false);
       if (error instanceof Error) {
-        setError(error.message);
+        setEditDesignationNameError(error.message);
       } else {
-        setError("An unexpected error occurred");
+        setEditDesignationNameError("An unexpected error occurred");
       }
     }
   };
@@ -430,6 +459,13 @@ const Designations = () => {
         setError("An unexpected error occurred");
       }
     }
+  };
+
+  // Reset Edit Designation validation errors
+  const resetEditDesignationForm = () => {
+    setError(null);
+    setEditDesignationNameError(null);
+    setEditDepartmentIdError(null);
   };
 
   if (loading) {
@@ -683,18 +719,33 @@ const Designations = () => {
                 <div className="row">
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Designation Name</label>
+                      <label className="form-label">
+                        Designation Name <span className="text-danger">*</span>
+                      </label>
                       <input 
                         type="text" 
-                        className="form-control"
+                        className={`form-control ${designationNameError ? 'is-invalid' : ''}`}
                         value={designationName} 
-                        onChange={(e) => setDesignationName(e.target.value)} 
+                        onChange={(e) => {
+                          setDesignationName(e.target.value);
+                          // Clear error when user starts typing
+                          if (designationNameError) {
+                            setDesignationNameError(null);
+                          }
+                        }} 
                       />
+                      {designationNameError && (
+                        <div className="invalid-feedback d-block">
+                          {designationNameError}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Department Name</label>
+                      <label className="form-label">
+                        Department Name <span className="text-danger">*</span>
+                      </label>
                       {loading ? (
                         <div className="form-control">
                           <small>Loading departments...</small>
@@ -704,15 +755,26 @@ const Designations = () => {
                           {error} <button onClick={() => socket?.emit("hr/departments/get")}>Retry</button>
                         </div>
                       ) : (
-                        <CommonSelect
-                          options={departmentOptions}
-                          defaultValue={selectedDepartmentOption}
-                          onChange={(selected) => {
-                            setSelectedDepartmentId(selected?.value || "");
-                          }}
-                          isSearchable={true}
-                          disabled={loading || !!error}
-                        />
+                        <>
+                          <CommonSelect
+                            options={departmentOptions}
+                            defaultValue={selectedDepartmentOption}
+                            onChange={(selected) => {
+                              setSelectedDepartmentId(selected?.value || "");
+                              // Clear error when user selects a department
+                              if (departmentIdError) {
+                                setDepartmentIdError(null);
+                              }
+                            }}
+                            isSearchable={true}
+                            disabled={loading || !!error}
+                          />
+                          {departmentIdError && (
+                            <div className="invalid-feedback d-block">
+                              {departmentIdError}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -746,7 +808,6 @@ const Designations = () => {
                 </button>
                 <button 
                   type="button" 
-                  data-bs-dismiss="modal" 
                   className="btn btn-primary"
                   disabled={loading} 
                   onClick={handleSubmit}
@@ -770,6 +831,7 @@ const Designations = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={resetEditDesignationForm}
               >
                 <i className="ti ti-x" />
               </button>
@@ -782,12 +844,22 @@ const Designations = () => {
                       <label className="form-label">Designation Name</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${editDesignationNameError ? 'is-invalid' : ''}`}
                         value={editingDesignation?.designation || ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setEditingDesignation(prev =>
-                            prev ? { ...prev, designation: e.target.value } : prev)}
+                            prev ? { ...prev, designation: e.target.value } : prev);
+                          // Clear error when user starts typing
+                          if (editDesignationNameError) {
+                            setEditDesignationNameError(null);
+                          }
+                        }}
                       />
+                      {editDesignationNameError && (
+                        <div className="invalid-feedback d-block">
+                          {editDesignationNameError}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -799,12 +871,21 @@ const Designations = () => {
                         defaultValue={departmentOptions.find(opt =>
                           opt.value === editingDesignation?.departmentId
                         )}
-                        onChange={(selectedOption) =>
+                        onChange={(selectedOption) => {
                           setEditingDesignation(prev =>
                             prev ? { ...prev, departmentId: selectedOption?.value || "" } : prev
-                          )
-                        }
+                          );
+                          // Clear error when user selects a department
+                          if (editDepartmentIdError) {
+                            setEditDepartmentIdError(null);
+                          }
+                        }}
                       />
+                      {editDepartmentIdError && (
+                        <div className="invalid-feedback d-block">
+                          {editDepartmentIdError}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -830,6 +911,7 @@ const Designations = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  onClick={resetEditDesignationForm}
                 >
                   Cancel
                 </button>
@@ -838,9 +920,8 @@ const Designations = () => {
                   className="btn btn-primary"
                   disabled={!editingDesignation || updateLoading}
                   onClick={handleUpdateSubmit}
-                  data-bs-dismiss="modal"
                 >
-                  {updateLoading ? 'Saving...' : 'Save Changes'}
+                  {updateLoading ? 'Updating...' : 'Save Changes'}
                 </button>
               </div>
             </form>

@@ -15,7 +15,7 @@ const initialState = {
   dataTheme: localStorage.getItem("dataTheme") || "light",
   dataSidebarBg: localStorage.getItem("dataSidebarBg") || "",
   dataTopbarBg: localStorage.getItem("dataTopbarBg") || "",
-  dataLoader: localStorage.getItem("dataLoader") || "enable",
+  dataLoader: localStorage.getItem("dataLoader") || "disable",
   isRtl: localStorage.getItem("rtl") || false,
   headerCollapse: false,
 };
@@ -120,7 +120,7 @@ const themeSettingSlice = createSlice({
   state.dataTheme = "light";
   state.dataSidebarBg = "";
   state.dataTopbarBg = "";
-  state.dataLoader = "enable";
+  state.dataLoader = "disable";
   state.isRtl = "";
   state.headerCollapse = false;
 
@@ -138,7 +138,7 @@ const themeSettingSlice = createSlice({
   localStorage.setItem("dataTheme", "light");
   localStorage.setItem("dataSidebarBg", "");
   localStorage.setItem("dataTopbarBg", "");
-  localStorage.setItem("dataLoader", "enable");
+  localStorage.setItem("dataLoader", "disable");
   localStorage.setItem("rtl", "");
 },
 

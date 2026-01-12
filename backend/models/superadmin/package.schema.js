@@ -30,7 +30,7 @@ const companySchema = new mongoose.Schema({
   phone: { type: String, required: true },
   website: { type: String, required: true },
   address: { type: String, required: true },
-  status: { type: String, default: true },
+  status: { type: String, default: "Active" },
 
   // Plan details
   plan_id: { type: String, required: true },

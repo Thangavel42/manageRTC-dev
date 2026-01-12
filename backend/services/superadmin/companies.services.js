@@ -1,10 +1,14 @@
-import { format } from "date-fns";
+import { format, startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { getsuperadminCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 import sendCredentialsEmail from "../../utils/emailer.js";
 import generateRandomPassword from "../../utils/generatePassword.js";
 import { initializeCompanyDatabase } from "../../utils/initializeCompanyDatabase.js";
+import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const fetchPackages = async () => {
   try {
@@ -89,13 +93,43 @@ const addCompany = async (data, user) => {
     // Step 5.5: Initialize company database with collections and default data
     console.log(`🔧 Initializing database for company: ${companyId}`);
     const dbInitResult = await initializeCompanyDatabase(companyId);
-    
+
     if (!dbInitResult.done) {
-      console.error(`⚠️ Database initialization failed for ${companyId}:`, dbInitResult.error);
+      console.error(
+        `⚠️ Database initialization failed for ${companyId}:`,
+        dbInitResult.error
+      );
       // Note: We don't fail the whole operation, but log the error
       // The company is still created, but might need manual DB setup
     } else {
-      console.log(`✅ Database initialized successfully for company: ${companyId}`);
+      console.log(
+        `✅ Database initialized successfully for company: ${companyId}`
+      );
+    }
+
+    // Provision - Create DNS subdomain pointing to VPS
+
+    try {
+      await axios.post(
+        `https://api.cloudflare.com/client/v4/zones/${process.env.ZONE_ID}/dns_records`,
+        {
+          type: "A",
+          name: `${data.domain}`,  // Cloudflare automatically appends the zone domain
+          content: process.env.VPS_IP || "31.97.229.42",  // Use VPS_IP from env or fallback
+          ttl: 120,
+          proxied: true,  // Enable Cloudflare proxy for SSL/security
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.CLOUDFLARE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      console.log(`✅ Subdomain created: ${data.domain}.${process.env.DOMAIN}`);
+    } catch (dnsError) {
+      console.error("⚠️ DNS creation failed:", dnsError.response?.data || dnsError.message);
+      // Don't fail the whole operation if DNS fails - company is still created
     }
 
     // Step 6: Send credentials email
@@ -103,7 +137,7 @@ const addCompany = async (data, user) => {
       to: data.email,
       companyName: data.name,
       password: tempPassword,
-      loginLink: "https://devhrms-pm.amasqis.ai/login", // Login URL for every company should change
+      loginLink: `https://${process.env.DOMAIN}/login`, // Login URL for every company should change
     });
 
     return {

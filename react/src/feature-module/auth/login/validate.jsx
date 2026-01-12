@@ -12,8 +12,12 @@ const Validate = () => {
   useEffect(() => {
     if (!isSignedIn || !user) {
       navigate(routes.login);
+      return;
     }
-    setRole(user?.publicMetadata?.role || "");
+    
+    // Get the role directly from the user object (not from state, as setState is async)
+    const userRole = user?.publicMetadata?.role || "";
+    setRole(userRole);
     setUserId(user?.id || "");
 
     console.log("Hihihi");
@@ -26,27 +30,27 @@ const Validate = () => {
     //   window.location.href = `http://localhost:3000/employee-dashboard`;
     // }
 
-    switch (role) {
+    switch (userRole) {
       case "public":
         console.log("public");
-        return navigate(routes.login);
+        navigate(routes.login);
         break;
       case "superadmin":
-        return navigate(routes.superAdminDashboard);
+        navigate(routes.superAdminDashboard);
         break;
       case "admin":
-        return navigate(routes.adminDashboard);
+        navigate(routes.adminDashboard);
         break;
       case "employee":
-        return navigate(routes.employeeDashboard);
+        navigate(routes.employeeDashboard);
         break;
       default:
-        return navigate(routes.adminDashboard);
+        navigate(routes.adminDashboard);
         break;
     }
 
     // Logics for multitenancy system
-  }, [isSignedIn, user]);
+  }, [isSignedIn, user, navigate, routes]);
 
   return (
     <div

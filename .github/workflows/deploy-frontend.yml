@@ -29,7 +29,7 @@ jobs:
         run: |
           cat > .env.production << 'EOF'
           CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY_PUBLIC }}
-          REACT_APP_BACKEND_URL=https://api.devmanagertc.amasqis.ai
+          REACT_APP_BACKEND_URL=https://apidev.manage-rtc.com
           EOF
 
       - name: Install & build
@@ -49,7 +49,7 @@ jobs:
           target: "/home/${{ secrets.VPS_USER }}/frontend_release/"
           strip_components: 1
 
-      - name: Activate on VPS (/srv/devmanagertc/frontend)
+      - name: Activate on VPS (/var/www/dev.manage-rtc.com/frontend)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -57,9 +57,9 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            mkdir -p /srv/devmanagertc/frontend
-            rm -rf /srv/devmanagertc/frontend/*
-            cp -r ~/frontend_release/build/* /srv/devmanagertc/frontend/
-            find /srv/devmanagertc/frontend -type f -name "*.map" -delete
+            mkdir -p /var/www/dev.manage-rtc.com/frontend
+            rm -rf /var/www/dev.manage-rtc.com/frontend/*
+            # copy the CONTENTS of build/ so index.html is at the root
+            cp -r ~/frontend_release/build/* /var/www/dev.manage-rtc.com/frontend/
+            find /var/www/dev.manage-rtc.com/frontend -type f -name "*.map" -delete
             sudo systemctl reload nginx
-

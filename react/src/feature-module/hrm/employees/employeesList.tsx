@@ -256,8 +256,6 @@ const EmployeeList = () => {
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(
     null
   );
-  const [phoneCheckLoading, setPhoneCheckLoading] = useState(false);
-  const [phoneExists, setPhoneExists] = useState<boolean | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [newlyAddedEmployee, setNewlyAddedEmployee] = useState<Employee | null>(null);
   const [filters, setFilters] = useState({
@@ -869,10 +867,9 @@ const EmployeeList = () => {
   };
 
   const onSelectStatus = (status: string) => {
-    // Handle "all" as clearing the status filter
-    const filterValue = status === "all" ? "" : status;
-    setSelectedStatus(filterValue);
-    applyFilters({ status: filterValue });
+    if (!status) return;
+    setSelectedStatus(status);
+    applyFilters({ status });
   };
 
   const onSelectDepartment = (id: string) => {
@@ -1424,100 +1421,6 @@ const EmployeeList = () => {
       return false;
     }
 
-    if (formData.account.password.length < 6) {
-      toast.error("Password must be at least 6 characters long.", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-
-    if (!formData.departmentId) {
-      toast.error("Please select a department", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-
-    if (!formData.designationId) {
-      toast.error("Please select a designation", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-
-    if (!formData.dateOfJoining) {
-      toast.error("Please select date of joining", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.avatarUrl) {
-      toast.error("Please upload an image", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.companyName) {
-      toast.error("Please fill in company name", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.about) {
-      toast.error("Please fill in about section", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.status) {
-      toast.error("Please select status", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.lastName) {
-      toast.error("Please fill in last name", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.employeeId) {
-      toast.error("Employee ID is missing", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    if (!formData.contact.phone) {
-      toast.error("Please fill in phone number", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-
-    // Check if phone number already exists
-    // const phoneAvailable = await checkPhoneExists(formData.contact.phone);
-    // if (!phoneAvailable) {
-    //   return false;
-    // }
-    if (!formData.account.userName) {
-      toast.error("Please fill in username", {
-        position: "top-right",
-        autoClose: 3000,
-      });
-      return false;
-    }
-    
     return true;
   };
 
@@ -1770,7 +1673,6 @@ const EmployeeList = () => {
   // Handle "Save and Next" - validate with backend before going to permissions tab
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Validating form before moving to permissions tab");
 
     // Clear previous errors
     setFieldErrors({});
@@ -2116,7 +2018,7 @@ const EmployeeList = () => {
                       <span className="avatar avatar-lg bg-info rounded-circle">
                         <i className="ti ti-user-plus" />
                       </span>
-                    </div>
+                    </div> 
                     <div className="ms-2 overflow-hidden">
                       <p className="fs-12 fw-medium mb-1 text-truncate">
                         New Joiners
@@ -2149,14 +2051,13 @@ const EmployeeList = () => {
                     </span>
                   </div>
                 </div>
-                
-                {/* Department Filter - Dropdown */}
                 <div className="dropdown me-3">
                   <a
                     href="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
-                    onClick={(e) => e.preventDefault()}
+                    role="button"
+                    aria-expanded="false"
                   >
                     Department
                     {selectedDepartment
@@ -2165,24 +2066,9 @@ const EmployeeList = () => {
                             (dep) => dep.value === selectedDepartment
                           )?.label || "None"
                         }`
-                      : ": All"}
+                      : ": None"}
                   </a>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className={`dropdown-item rounded-1${
-                          !selectedDepartment ? " bg-primary text-white" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setSelectedDepartment("");
-                          onSelectDepartment("");
-                        }}
-                      >
-                        All Departments
-                      </Link>
-                    </li>
                     {department
                       .filter((dep) => dep.value)
                       .map((dep) => (
@@ -2204,8 +2090,6 @@ const EmployeeList = () => {
                       ))}
                   </ul>
                 </div>
-
-                {/* Status Filter - Dropdown */}
                 <div className="dropdown me-3">
                   <a
                     href="#"
@@ -2213,25 +2097,20 @@ const EmployeeList = () => {
                     data-bs-toggle="dropdown"
                     onClick={(e) => e.preventDefault()}
                   >
-                    Status
+                    Select status{" "}
                     {selectedStatus
                       ? `: ${
                           selectedStatus.charAt(0).toUpperCase() +
                           selectedStatus.slice(1)
                         }`
-                      : ": All"}
+                      : ": None"}
                   </a>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
-                        className={`dropdown-item rounded-1${
-                          !selectedStatus ? " bg-primary text-white" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          onSelectStatus("all");
-                        }}
+                        className="dropdown-item rounded-1"
+                        onClick={() => onSelectStatus("all")}
                       >
                         All
                       </Link>
@@ -2256,8 +2135,6 @@ const EmployeeList = () => {
                     </li>
                   </ul>
                 </div>
-
-                {/* Sort Filter - Dropdown */}
                 <div className="dropdown me-3">
                   <a
                     href="#"
@@ -2270,54 +2147,38 @@ const EmployeeList = () => {
                       ? `: ${
                           sortOrder.charAt(0).toUpperCase() + sortOrder.slice(1)
                         }`
-                      : ": Default"}
+                      : ": None"}
                   </a>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
-                      <Link
-                        to="#"
-                        className={`dropdown-item rounded-1${
-                          sortOrder === "ascending" ? " bg-primary text-white" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleSort("ascending");
-                        }}
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleSort("ascending")}
                       >
                         Ascending
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link
-                        to="#"
-                        className={`dropdown-item rounded-1${
-                          sortOrder === "descending" ? " bg-primary text-white" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleSort("descending");
-                        }}
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleSort("descending")}
                       >
                         Descending
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link
-                        to="#"
-                        className={`dropdown-item rounded-1${
-                          !sortOrder ? " bg-primary text-white" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleSort("");
-                        }}
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => handleSort("")}
                       >
                         None
-                      </Link>
+                      </button>
                     </li>
                   </ul>
                 </div>
-
                 <button
                   type="button"
                   className="btn btn-light d-inline-flex align-items-center"
@@ -3204,7 +3065,6 @@ const EmployeeList = () => {
                             name="about"
                             value={formData.about}
                             onChange={handleChange}
-                            required
                           />
                         </div>
                       </div>
