@@ -1,4 +1,10 @@
-import { format, startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
+import {
+  format,
+  startOfToday,
+  subDays,
+  startOfMonth,
+  subMonths,
+} from "date-fns";
 import { getsuperadminCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 import { clerkClient } from "@clerk/clerk-sdk-node";
@@ -63,21 +69,31 @@ const addCompany = async (data, user) => {
     const result = await companiesCollection.insertOne(newCompany);
     const companyId = result.insertedId.toString();
 
+    // Create A Flag
+    const flag = false; // init false -> Assume Failed
+
     // Step 3: Generate a random temporary password
     const tempPassword = generateRandomPassword();
+    const clerkUserId = createdUser.id;
+
+    if (!flag) {
+      // Skip User Creation
+      flag = !flag; // Flag reset
+      const createdUser = await clerkClient.users.createUser({
+        emailAddress: [data.email],
+        password: tempPassword,
+        publicMetadata: {
+          role: "admin",
+          company: companyId,
+          subdomain: data.domain,
+          flag: flag,
+        },
+      });
+    }
 
     // Step 4: Create Clerk user
-    const createdUser = await clerkClient.users.createUser({
-      emailAddress: [data.email],
-      password: tempPassword,
-      publicMetadata: {
-        role: "admin",
-        company: companyId,
-        subdomain: data.domain,
-      },
-    });
 
-    const clerkUserId = createdUser.id;
+    flag = true; // Flag passed -> User creation done
 
     // Step 5: Update the company document with clerkUserId
     await companiesCollection.updateOne(
@@ -114,10 +130,10 @@ const addCompany = async (data, user) => {
         `https://api.cloudflare.com/client/v4/zones/${process.env.ZONE_ID}/dns_records`,
         {
           type: "A",
-          name: `${data.domain}`,  // Cloudflare automatically appends the zone domain
-          content: process.env.VPS_IP || "31.97.229.42",  // Use VPS_IP from env or fallback
+          name: `${data.domain}`, // Cloudflare automatically appends the zone domain
+          content: process.env.VPS_IP || "31.97.229.42", // Use VPS_IP from env or fallback
           ttl: 120,
-          proxied: true,  // Enable Cloudflare proxy for SSL/security
+          proxied: true, // Enable Cloudflare proxy for SSL/security
         },
         {
           headers: {
@@ -128,7 +144,10 @@ const addCompany = async (data, user) => {
       );
       console.log(`✅ Subdomain created: ${data.domain}.${process.env.DOMAIN}`);
     } catch (dnsError) {
-      console.error("⚠️ DNS creation failed:", dnsError.response?.data || dnsError.message);
+      console.error(
+        "⚠️ DNS creation failed:",
+        dnsError.response?.data || dnsError.message
+      );
       // Don't fail the whole operation if DNS fails - company is still created
     }
 
