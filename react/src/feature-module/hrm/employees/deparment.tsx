@@ -11,7 +11,7 @@ import { departmentName } from '../../../core/common/selectoption/selectoption';
 import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import Footer from "../../../core/common/footer";
-import { hideModal, cleanupModalBackdrops } from '../../../utils/modalUtils';
+import { showModal, hideModal, cleanupModalBackdrops } from '../../../utils/modalUtils';
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -20,7 +20,8 @@ interface Departments {
   _id: string;
   department: string;
   employeeCount: number;
-  designationCount?: number;  // NEW: Count of designations in this department
+  designationCount?: number;  // Count of designations in this department
+  policyCount?: number;       // Count of policies assigned to this department
   status: string;
 }
 
@@ -32,16 +33,15 @@ interface Designation {
 }
 
 const statusChoose = [
-  { value: "none", label: "None" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
+  { value: "Active", label: "Active" },
+  { value: "Inactive", label: "Inactive" },
 ];
 
 const Department = () => {
   const [departments, setDepartments] = useState<Departments[]>([]);
   const [sortedDepartments, setSortedDepartments] = useState<Departments[]>([]);
   const [departmentName, setDepartmentName] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState(statusChoose[0].value);
+  const [selectedStatus, setSelectedStatus] = useState("Active");
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +53,9 @@ const Department = () => {
   const [editDepartmentNameError, setEditDepartmentNameError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [targetDepartmentId, setTargetDepartmentId] = useState<string>("");
+  const [isReassigning, setIsReassigning] = useState(false);
   const socket = useSocket() as Socket | null;
 
   useEffect(() => {
@@ -137,8 +140,32 @@ const Department = () => {
           socket.emit("hr/departmentsStats/get");
         }
       } else {
-        setError(response.error || "Failed to add policy");
+        setError(response.error || "Failed to delete department");
         setLoading(false);
+      }
+    }
+
+    const handleReassignAndDeleteResponse = (response: any) => {
+      if (!isMounted) return;
+      setIsReassigning(false);
+
+      if (response.done) {
+        setResponseData(response.data);
+        setError(null);
+        // Close reassign modal using hideModal utility
+        hideModal('reassign_delete_modal');
+        setTimeout(() => {
+          cleanupModalBackdrops();
+          setShowReassignModal(false);
+          setTargetDepartmentId("");
+          setDepartmentToDelete(null);
+        }, 500);
+        // Refresh departments list
+        if (socket) {
+          socket.emit("hr/departmentsStats/get");
+        }
+      } else {
+        setError(response.error || "Failed to reassign and delete department");
       }
     }
 
@@ -146,6 +173,7 @@ const Department = () => {
     socket.on("hr/departmentsStats/get-response", handleDepartmentStatsResponse);
     socket.on("hrm/departments/update-response", handleUpdateDepartmentResponse);
     socket.on("hrm/departments/delete-response", handleDeleteDepartmentResponse);
+    socket.on("hrm/departments/reassign-delete-response", handleReassignAndDeleteResponse);
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
@@ -153,11 +181,18 @@ const Department = () => {
       socket.off("hr/departmentsStats/get-response", handleDepartmentStatsResponse);
       socket.off("hrm/departments/update-response", handleUpdateDepartmentResponse);
       socket.off("hrm/departments/delete-response", handleDeleteDepartmentResponse);
+      socket.off("hrm/departments/reassign-delete-response", handleReassignAndDeleteResponse);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   //  constants
+
+  // Helper function to normalize status display (capitalize first letter)
+  const normalizeStatus = (status: string): string => {
+    if (!status) return '';
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  };
 
   const columns = [
     {
@@ -169,22 +204,6 @@ const Department = () => {
         </h6>
       ),
       sorter: (a: any, b: any) => a.department.localeCompare(b.department),
-    },
-    {
-      title: "No of Employees",
-      dataIndex: "employeeCount",
-      render: (count: number, record: any) => (
-        <span className="fw-medium">
-          {count > 0 ? (
-            <Link to={`${all_routes.employeeList}?department=${encodeURIComponent(record._id)}`}>
-              {count}
-            </Link>
-          ) : (
-            <span className="text-muted">0</span>
-          )}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.employeeCount - b.employeeCount,
     },
     {
       title: "No of Designations",
@@ -203,43 +222,77 @@ const Department = () => {
       sorter: (a: any, b: any) => (a.designationCount || 0) - (b.designationCount || 0),
     },
     {
-      title: "Status",
-      dataIndex: "status",
-      render: (text: string, record: any) => (
-        <span className={`badge ${text === 'active' ? 'badge-success' : 'badge-danger'} d-inline-flex align-items-center badge-xs`}>
-          <i className="ti ti-point-filled me-1" />
-          {text}
+      title: "No of Employees",
+      dataIndex: "employeeCount",
+      render: (count: number, record: any) => (
+        <span className="fw-medium">
+          {count > 0 ? (
+            <Link to={`${all_routes.employeeList}?department=${encodeURIComponent(record._id)}`}>
+              {count}
+            </Link>
+          ) : (
+            <span className="text-muted">0</span>
+          )}
         </span>
       ),
+      sorter: (a: any, b: any) => a.employeeCount - b.employeeCount,
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (text: string, record: any) => {
+        const normalizedStatus = normalizeStatus(text);
+        const isActive = normalizedStatus.toLowerCase() === 'active';
+        return (
+          <span className={`badge ${isActive ? 'badge-success' : 'badge-danger'} d-inline-flex align-items-center badge-xs`}>
+            <i className="ti ti-point-filled me-1" />
+            {normalizedStatus}
+          </span>
+        );
+      },
       sorter: (a: any, b: any) => a.status.length - b.status.length,
     },
     {
       title: "",
       dataIndex: "actions",
-      render: (_test: any, department: Departments) => (
-        <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_department"
-            onClick={() => { setEditingDept(department) }}
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-           to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={() => { setDepartmentToDelete(department); }}
-          >
-            <i className="ti ti-trash" />
-          </Link>
-        </div>
-      ),
+      render: (_test: any, department: Departments) => {
+        const hasEmployees = (department.employeeCount || 0) > 0;
+        const hasDesignations = (department.designationCount || 0) > 0;
+        const hasPolicies = (department.policyCount || 0) > 0;
+        const needsReassignment = hasEmployees || hasDesignations || hasPolicies;
+
+        return (
+          <div className="action-icon d-inline-flex">
+            <Link
+              to="#"
+              className="me-2"
+              data-bs-toggle="modal"
+              data-inert={true}
+              data-bs-target="#edit_department"
+              onClick={() => { setEditingDept(department) }}
+            >
+              <i className="ti ti-edit" />
+            </Link>
+            <Link
+              to="#"
+              className="me-2"
+              {...(needsReassignment ? {} : {
+                'data-bs-toggle': 'modal',
+                'data-bs-target': '#delete_modal',
+                'data-inert': true
+              })}
+              onClick={(e) => {
+                if (needsReassignment) {
+                  e.preventDefault();
+                }
+                handleDeleteClick(department);
+              }}
+            >
+              <i className="ti ti-trash" />
+            </Link>
+          </div>
+        );
+      },
     },
   ]
 
@@ -253,7 +306,7 @@ const Department = () => {
   // Reset Add Department form fields to default values
   const resetAddDepartmentForm = () => {
     setDepartmentName("");
-    setSelectedStatus(statusChoose[0].value);
+    setSelectedStatus("Active");
     setError(null);
     setDepartmentNameError(null);
   };
@@ -366,9 +419,12 @@ const Department = () => {
 
       setIsUpdating(true);
 
+      // Ensure status is stored with proper capitalization
+      const normalizedStatus = normalizeStatus(status);
+
       const payload = {
         _id,
-        status,
+        status: normalizedStatus,
         department,
       };
 
@@ -415,6 +471,61 @@ const Department = () => {
       setLoading(false);
     }
   };
+
+  const handleReassignAndDelete = () => {
+    if (!departmentToDelete || !targetDepartmentId) {
+      setError("Please select a target department");
+      return;
+    }
+
+    try {
+      setIsReassigning(true);
+      setError(null);
+
+      const payload = {
+        sourceDepartmentId: departmentToDelete._id,
+        targetDepartmentId: targetDepartmentId,
+      };
+
+      if (socket) {
+        socket.emit("hrm/departments/reassign-delete", payload);
+      } else {
+        setError("Socket connection is not available");
+        setIsReassigning(false);
+      }
+    } catch (error) {
+      setError("Failed to initiate reassignment");
+      setIsReassigning(false);
+    }
+  };
+
+  const handleDeleteClick = (department: Departments) => {
+    const hasEmployees = (department.employeeCount || 0) > 0;
+    const hasDesignations = (department.designationCount || 0) > 0;
+    const hasPolicies = (department.policyCount || 0) > 0;
+
+    setDepartmentToDelete(department);
+
+    if (hasEmployees || hasDesignations || hasPolicies) {
+      // Show reassignment modal programmatically
+      setShowReassignModal(true);
+      setTargetDepartmentId("");
+      // Use utility function to show modal safely
+      setTimeout(() => {
+        showModal('reassign_delete_modal');
+      }, 100);
+    }
+    // If no employees/designations/policies, the Bootstrap data-bs-target will handle showing delete_modal
+  };
+
+  // Get available departments for reassignment (exclude the one being deleted)
+  const availableDepartments = departments.filter(
+    dept => dept._id !== departmentToDelete?._id
+  ).map(dept => ({
+    value: dept._id,
+    label: dept.department
+  }));
+
   if (loading) {
     return (
       <div className="page-wrapper">
@@ -525,7 +636,7 @@ const Department = () => {
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
                   >
-                    Status{filters.status ? `: ${filters.status.charAt(0).toUpperCase() + filters.status.slice(1)}` : ": None"}
+                    Status{filters.status ? `: ${normalizeStatus(filters.status)}` : ": None"}
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     {statusChoose.map((st) => (
@@ -635,12 +746,14 @@ const Department = () => {
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Status</label>
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         options={statusChoose}
                         defaultValue={statusChoose.find(opt => opt.value === selectedStatus)}
                         onChange={(selectedOption) =>
-                          setSelectedStatus(selectedOption ? selectedOption.value : statusChoose[0].value)
+                          setSelectedStatus(selectedOption ? selectedOption.value : "Active")
                         }
                       />
                     </div>
@@ -691,7 +804,7 @@ const Department = () => {
                 <div className="row">
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Department Name</label>
+                      <label className="form-label">Department Name <span className="text-danger">*</span></label>
                       <input
                         type="text"
                         className={`form-control ${editDepartmentNameError ? 'is-invalid' : ''}`}
@@ -714,14 +827,16 @@ const Department = () => {
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Status</label>
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={statusChoose}
-                        defaultValue={statusChoose.find(d => d.value === editingDept?.status) || statusChoose[0].value}
+                        defaultValue={statusChoose.find(d => d.value.toLowerCase() === editingDept?.status.toLowerCase()) || statusChoose[0]}
                         onChange={(selectedOption) =>
                           setEditingDept(prev =>
-                            prev ? { ...prev, status: selectedOption?.value || "" } : prev
+                            prev ? { ...prev, status: selectedOption?.value || "Active" } : prev
                           )
                         }
                       />
@@ -798,6 +913,98 @@ const Department = () => {
         </div>
       </div>
       {/*delete policy*/}
+      {/* Reassign and Delete Department */}
+      <div className="modal fade" id="reassign_delete_modal">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Reassign Before Deletion</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setTargetDepartmentId("");
+                  setDepartmentToDelete(null);
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="alert alert-warning d-flex align-items-start mb-3">
+                <i className="ti ti-alert-triangle me-2 mt-1" style={{ fontSize: "20px" }}></i>
+                <div>
+                  <strong>Department "{departmentToDelete?.department}" cannot be deleted directly</strong>
+                  <p className="mb-0 mt-1">
+                    This department has{" "}
+                    {departmentToDelete && (
+                      <>
+                        {departmentToDelete.employeeCount > 0 && (
+                          <strong>{departmentToDelete.employeeCount} employee{departmentToDelete.employeeCount > 1 ? 's' : ''}</strong>
+                        )}
+                        {departmentToDelete.employeeCount > 0 && (departmentToDelete.designationCount > 0 || departmentToDelete.policyCount > 0) && ", "}
+                        {departmentToDelete.designationCount > 0 && (
+                          <strong>{departmentToDelete.designationCount} designation{departmentToDelete.designationCount > 1 ? 's' : ''}</strong>
+                        )}
+                        {departmentToDelete.designationCount > 0 && departmentToDelete.policyCount > 0 && ", and "}
+                        {departmentToDelete.employeeCount === 0 && departmentToDelete.designationCount === 0 && departmentToDelete.policyCount > 0 && ""}
+                        {departmentToDelete.employeeCount > 0 && departmentToDelete.designationCount === 0 && departmentToDelete.policyCount > 0 && " and "}
+                        {departmentToDelete.policyCount > 0 && (
+                          <strong>{departmentToDelete.policyCount} polic{departmentToDelete.policyCount > 1 ? 'ies' : 'y'}</strong>
+                        )}
+                      </>
+                    )}
+                    . Please reassign them to another department before deletion.
+                  </p>
+                </div>
+              </div>
+              <div className="row">
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Reassign to Department <span className="text-danger">*</span>
+                    </label>
+                    <CommonSelect
+                      className="select"
+                      options={availableDepartments}
+                      onChange={(selectedOption) =>
+                        setTargetDepartmentId(selectedOption ? selectedOption.value : "")
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light me-2"
+                data-bs-dismiss="modal"
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setTargetDepartmentId("");
+                  setDepartmentToDelete(null);
+                }}
+                disabled={isReassigning}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleReassignAndDelete}
+                disabled={isReassigning || !targetDepartmentId}
+              >
+                {isReassigning ? 'Reassigning...' : 'Reassign & Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Reassign and Delete Department */}
     </>
 
 

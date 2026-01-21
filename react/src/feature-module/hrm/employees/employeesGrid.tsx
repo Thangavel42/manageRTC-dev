@@ -112,6 +112,23 @@ const generateId = (prefix: string): string => {
   return `${prefix}-${paddedNum}`;
 };
 
+// Normalize status to ensure correct case for all possible statuses
+const normalizeStatus = (status: string | undefined): "Active" | "Inactive" | "On Notice" | "Resigned" | "Terminated" | "On Leave" => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  
+  // Map all possible status values with case-insensitive matching
+  if (normalized === "active") return "Active";
+  if (normalized === "inactive") return "Inactive";
+  if (normalized === "on notice") return "On Notice";
+  if (normalized === "resigned") return "Resigned";
+  if (normalized === "terminated") return "Terminated";
+  if (normalized === "on leave") return "On Leave";
+  
+  // Default to Active for unknown statuses
+  return "Active";
+};
+
 const initialState = {
   enabledModules: {
     holidays: false,
@@ -246,7 +263,7 @@ const EmployeesGrid = () => {
           socket.emit("hrm/employees/get-employee-grid-stats");
         }
       } else {
-        setError(response.error || "Failed to add policy");
+        setError(response.error || "Failed to add employee");
         setLoading(false);
       }
     };
@@ -319,7 +336,7 @@ const EmployeesGrid = () => {
           socket.emit("hrm/employees/get-employee-grid-stats");
         }
       } else {
-        setError(response.error || "Failed to add policy");
+        setError(response.error || "Failed to delete employee");
         setLoading(false);
       }
     }
@@ -810,7 +827,7 @@ const EmployeesGrid = () => {
       dateOfJoining: editingEmployee.dateOfJoining,
       about: editingEmployee.about,
       avatarUrl: editingEmployee.avatarUrl,
-      status: editingEmployee.status,
+      status: normalizeStatus(editingEmployee.status),
     };
     console.log("update payload", payload);
 

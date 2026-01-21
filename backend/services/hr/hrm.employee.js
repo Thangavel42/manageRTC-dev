@@ -4,6 +4,23 @@ import { generateId } from "../../utils/generateId.js";
 import { getTenantCollections, client } from "../../config/db.js";
 import { maskAccountNumber } from "../../utils/maskAccNo.js";
 
+// Normalize status to ensure correct case for all possible statuses
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  
+  // Map all possible status values with case-insensitive matching
+  if (normalized === "active") return "Active";
+  if (normalized === "inactive") return "Inactive";
+  if (normalized === "on notice") return "On Notice";
+  if (normalized === "resigned") return "Resigned";
+  if (normalized === "terminated") return "Terminated";
+  if (normalized === "on leave") return "On Leave";
+  
+  // Default to Active for unknown statuses
+  return "Active";
+};
+
 /**
  * Check if employee has active lifecycle records (resignation/termination)
  * that should control their status
@@ -267,8 +284,8 @@ export const getEmployeeGridsStats = async (companyId, hrId, filters) => {
 
     // Query match construction
     const baseMatch = {};
-    if (filters.status && ["active", "inactive"].includes(filters.status)) {
-      baseMatch.status = filters.status;
+    if (filters.status && ["active", "inactive", "Active", "Inactive"].includes(filters.status)) {
+      baseMatch.status = { $regex: `^${filters.status}$`, $options: "i" };
     }
     if (filters.designationId && typeof filters.designationId === "string") {
       baseMatch.designationId = filters.designationId;
@@ -583,7 +600,9 @@ export const updateEmployeeDetails = async (companyId, hrId, payload) => {
 
       // If trying to set status to anything other than Active/Inactive, validate
       const allowedManualStatuses = ["Active", "Inactive", "active", "inactive"];
-      if (!allowedManualStatuses.includes(updateData.status)) {
+      // Normalize to check
+      const statusToCheck = updateData.status?.toLowerCase();
+      if (!statusToCheck || !["active", "inactive"].includes(statusToCheck)) {
         return {
           done: false,
           error: `Status '${updateData.status}' can only be set through HR lifecycle workflows`,
@@ -591,6 +610,9 @@ export const updateEmployeeDetails = async (companyId, hrId, payload) => {
           message: "Only 'Active' or 'Inactive' status can be set manually. Other statuses are managed by resignation/termination workflows."
         };
       }
+
+      // Normalize status to proper case before storing
+      updateData.status = normalizeStatus(updateData.status);
     }
 
     // Optionally, add updatedAt field
@@ -1135,7 +1157,7 @@ export const addEmployee = async (
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy: hrId,
-      status: "active",
+      status: normalizeStatus(employeeData.status || "Active"),
     };
 
     const employeeResult = await collections.employees.insertOne(

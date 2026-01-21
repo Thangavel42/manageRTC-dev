@@ -37,10 +37,41 @@ export const addPolicy = async (companyId, hrId, policyData) => {
       return { done: false, error: "Effective date must be in the future" };
     }
 
+    // VALIDATION: assignTo cannot have data when applyToAll is true
+    if (isApplyToAll && policyData.assignTo && policyData.assignTo.length > 0) {
+      return { done: false, error: "Cannot assign to specific departments when 'Apply to All' is enabled" };
+    }
+
+    // Convert assignTo to proper ObjectId structure
+    let normalizedAssignTo = [];
+    if (!isApplyToAll && policyData.assignTo && policyData.assignTo.length > 0) {
+      try {
+        normalizedAssignTo = policyData.assignTo.map(item => {
+          if (!item.departmentId) {
+            throw new Error("Each assignment must have a departmentId");
+          }
+          
+          const normalized = {
+            departmentId: new ObjectId(item.departmentId),
+            designationIds: []
+          };
+          
+          // If designationIds provided, convert to ObjectId array
+          if (item.designationIds && Array.isArray(item.designationIds) && item.designationIds.length > 0) {
+            normalized.designationIds = item.designationIds.map(id => new ObjectId(id));
+          }
+          
+          return normalized;
+        });
+      } catch (error) {
+        return { done: false, error: `Invalid ID format in assignTo: ${error.message}` };
+      }
+    }
+
     const result = await collections.policy.insertOne({
       policyName: policyData.policyName,
-      applyToAll: isApplyToAll,  // Store the flag for global policy application
-      assignTo: isApplyToAll ? [] : (policyData.assignTo || []),  // Empty array means applies to all future employees
+      applyToAll: isApplyToAll,
+      assignTo: normalizedAssignTo,  // ONLY ObjectIds, no names
       policyDescription: policyData.policyDescription,
       effectiveDate: new Date(policyData.effectiveDate),
       createdBy: hrId,
@@ -71,30 +102,134 @@ export const displayPolicy = async (companyId, hrId = 1, filters = {}) => {
     }
 
     const collections = getTenantCollections(companyId);
-    // const hrExists = await collections.hr.countDocuments({
-    //   userId: hrId,
-    // });
-    // if (hrExists !== 1) {
-    //   return { done: false, error: "HR not found" };
-    // }
 
-    const query = {};
+    const matchQuery = {};
 
+    // Filter by department if provided
     if (filters.department) {
-      query.department = filters.department;
+      try {
+        matchQuery["assignTo.departmentId"] = new ObjectId(filters.department);
+      } catch (err) {
+        return { done: false, error: "Invalid department ID format" };
+      }
     }
 
+    // Filter by date range if provided
     if (filters.startDate && filters.endDate) {
-      query.createdAt = {
+      matchQuery.createdAt = {
         $gte: new Date(filters.startDate),
         $lte: new Date(filters.endDate),
       };
     }
 
-    const policies = await collections.policy
-      .find(query)
-      .sort({ effectiveDate: -1 })
-      .toArray();
+    // Use aggregation to populate department names for frontend display
+    const pipeline = [
+      { $match: matchQuery },
+      { $sort: { effectiveDate: -1 } },
+      {
+        $addFields: {
+          // Convert assignTo for lookup - keep structure intact
+          assignToWithLookup: {
+            $map: {
+              input: "$assignTo",
+              as: "assignment",
+              in: {
+                departmentId: "$$assignment.departmentId",
+                designationIds: "$$assignment.designationIds",
+                departmentIdStr: { $toString: "$$assignment.departmentId" }
+              }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "departments",
+          let: { assignments: "$assignToWithLookup" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: [
+                    "$_id",
+                    {
+                      $map: {
+                        input: "$$assignments",
+                        as: "a",
+                        in: "$$a.departmentId"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                department: 1
+              }
+            }
+          ],
+          as: "departmentDetails"
+        }
+      },
+      {
+        $addFields: {
+          // Add department names to assignTo for frontend display only
+          assignToWithNames: {
+            $map: {
+              input: "$assignTo",
+              as: "assignment",
+              in: {
+                departmentId: { $toString: "$$assignment.departmentId" },
+                departmentName: {
+                  $let: {
+                    vars: {
+                      dept: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: "$departmentDetails",
+                              as: "d",
+                              cond: { $eq: ["$$d._id", "$$assignment.departmentId"] }
+                            }
+                          },
+                          0
+                        ]
+                      }
+                    },
+                    in: { $ifNull: ["$$dept.department", "Unknown"] }
+                  }
+                },
+                designationIds: {
+                  $map: {
+                    input: "$$assignment.designationIds",
+                    as: "desigId",
+                    in: { $toString: "$$desigId" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          policyName: 1,
+          applyToAll: 1,
+          assignTo: "$assignToWithNames",  // Return with names for frontend
+          policyDescription: 1,
+          effectiveDate: 1,
+          createdBy: 1,
+          createdAt: 1,
+          updatedBy: 1,
+          updatedAt: 1
+        }
+      }
+    ];
+
+    const policies = await collections.policy.aggregate(pipeline).toArray();
 
     return {
       done: true,
@@ -105,6 +240,7 @@ export const displayPolicy = async (companyId, hrId = 1, filters = {}) => {
         : "No policies found matching criteria",
     };
   } catch (error) {
+    console.error("Error in displayPolicy:", error);
     return {
       done: false,
       error: `Failed to fetch policies: ${error.message}`,
@@ -144,13 +280,44 @@ export const updatePolicy = async (companyId, hrId = 1, payload) => {
       };
     }
 
+    // VALIDATION: assignTo cannot have data when applyToAll is true
+    if (isApplyToAll && payload.assignTo && payload.assignTo.length > 0) {
+      return { done: false, error: "Cannot assign to specific departments when 'Apply to All' is enabled" };
+    }
+
+    // Convert assignTo to proper ObjectId structure
+    let normalizedAssignTo = [];
+    if (!isApplyToAll && payload.assignTo && payload.assignTo.length > 0) {
+      try {
+        normalizedAssignTo = payload.assignTo.map(item => {
+          if (!item.departmentId) {
+            throw new Error("Each assignment must have a departmentId");
+          }
+          
+          const normalized = {
+            departmentId: new ObjectId(item.departmentId),
+            designationIds: []
+          };
+          
+          // If designationIds provided, convert to ObjectId array
+          if (item.designationIds && Array.isArray(item.designationIds) && item.designationIds.length > 0) {
+            normalized.designationIds = item.designationIds.map(id => new ObjectId(id));
+          }
+          
+          return normalized;
+        });
+      } catch (error) {
+        return { done: false, error: `Invalid ID format in assignTo: ${error.message}` };
+      }
+    }
+
     const result = await collections.policy.updateOne(
       { _id: new ObjectId(payload.policyId) },
       {
         $set: {
           policyName: payload.policyName,
-          applyToAll: isApplyToAll,  // Store the flag for global policy application
-          assignTo: isApplyToAll ? [] : (payload.assignTo || []),  // Empty array means applies to all future employees
+          applyToAll: isApplyToAll,
+          assignTo: normalizedAssignTo,  // ONLY ObjectIds, no names
           effectiveDate: payload.effectiveDate,
           policyDescription: payload.policyDescription,
           updatedBy: hrId,

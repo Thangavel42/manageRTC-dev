@@ -3,6 +3,12 @@ import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
 import { validateEmployeeLifecycle } from "../../utils/employeeLifecycleValidator.js";
 
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  return normalized === "inactive" ? "Inactive" : "Active";
+};
+
 const toYMDStr = (input) => {
   const d = new Date(input);
   const y = d.getUTCFullYear();

@@ -3,6 +3,12 @@ import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
 import { validateEmployeeLifecycle } from "../../utils/employeeLifecycleValidator.js";
 
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  return normalized === "inactive" ? "Inactive" : "Active";
+};
+
 
 const toYMDStr = (input) => {
   const d = new Date(input);
@@ -537,7 +543,7 @@ const getEmployeesByDepartment = async (companyId, departmentId) => {
     const collection = getTenantCollections(companyId);
     // Query employees by department ObjectId (employees store department as ObjectId reference)
     const query = {
-      status: { $in: ["Active", "active"] },
+      status: { $regex: "^Active$", $options: "i" },
       departmentId: departmentId,
     };
     console.log("MongoDB query to run in console:");
@@ -565,7 +571,7 @@ const getEmployeesByDepartment = async (companyId, departmentId) => {
       // Debug: check what departments employees have
       const departmentCounts = await collection.employees
         .aggregate([
-          { $match: { status: { $in: ["Active", "active"] } } },
+          { $match: { status: { $regex: "^Active$", $options: "i" } } },
           { $group: { _id: "$department", count: { $sum: 1 } } },
         ])
         .toArray();

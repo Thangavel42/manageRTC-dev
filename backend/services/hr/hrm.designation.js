@@ -2,6 +2,18 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
 
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  if (normalized === "active") return "Active";
+  if (normalized === "inactive") return "Inactive";
+  if (normalized === "on notice") return "On Notice";
+  if (normalized === "resigned") return "Resigned";
+  if (normalized === "terminated") return "Terminated";
+  if (normalized === "on leave") return "On Leave";
+  return "Active";
+};
+
 export const addDesignation = async (companyId, hrId, payload) => {
   try {
     if (!companyId || !hrId || !payload) {
@@ -15,9 +27,12 @@ export const addDesignation = async (companyId, hrId, payload) => {
     if (!payload.designation || !payload.departmentId) {
       return { done: false, error: "Designation and department are required" };
     }
+    // Convert departmentId to ObjectId for proper storage
+    const departmentObjId = new ObjectId(payload.departmentId);
+
     const existingDesignation = await collections.designations.findOne({
       designation: { $regex: `^${payload.designation}$`, $options: "i" },
-      departmentId: payload.departmentId,
+      departmentId: departmentObjId,
     });
 
     if (existingDesignation) {
@@ -30,8 +45,9 @@ export const addDesignation = async (companyId, hrId, payload) => {
     }
 
     const result = await collections.designations.insertOne({
-      ...payload,
-      status: payload.status || "active",
+      designation: payload.designation,
+      departmentId: departmentObjId,
+      status: normalizeStatus(payload.status || "Active"),
       createdBy: hrId,
       createdAt: new Date(),
     });
@@ -108,6 +124,98 @@ export const deleteDesignation = async (companyId, hrId, designationId) => {
   }
 };
 
+export const reassignAndDeleteDesignation = async (companyId, hrId, payload) => {
+  try {
+    if (!companyId || !payload || !payload.sourceDesignationId || !payload.targetDesignationId) {
+      return { done: false, error: "Missing required fields" };
+    }
+
+    const collections = getTenantCollections(companyId);
+    const sourceId = new ObjectId(payload.sourceDesignationId);
+    const targetId = new ObjectId(payload.targetDesignationId);
+
+    // Verify source designation exists
+    const sourceDesignation = await collections.designations.findOne({
+      _id: sourceId,
+    });
+    if (!sourceDesignation) {
+      return { done: false, error: "Source designation not found" };
+    }
+
+    // Verify target designation exists
+    const targetDesignation = await collections.designations.findOne({
+      _id: targetId,
+    });
+    if (!targetDesignation) {
+      return { done: false, error: "Target designation not found" };
+    }
+
+    // Verify both designations are in the same department
+    if (!sourceDesignation.departmentId.equals(targetDesignation.departmentId)) {
+      return { done: false, error: "Target designation must be in the same department" };
+    }
+
+    // Reassign employees from source to target designation
+    // Employees store designationId as string of ObjectId
+    const employeeUpdateResult = await collections.employees.updateMany(
+      { designationId: sourceId.toString() },
+      { 
+        $set: { 
+          designationId: targetId.toString(),
+          designation: targetDesignation.designation
+        } 
+      }
+    );
+
+    // Reassign policies from source to target designation
+    // Policies have assignTo: [{departmentId: ObjectId, designationIds: [ObjectId]}]
+    // We need to replace sourceId with targetId in designationIds arrays
+    const policyUpdateResult = await collections.policy.updateMany(
+      { 
+        "assignTo.designationIds": sourceId,  // Find policies containing source designation
+        applyToAll: false  // Only update policies that are not applied to all
+      },
+      { 
+        $set: { 
+          "assignTo.$[dept].designationIds.$[desig]": targetId  // Replace designation ObjectId
+        }
+      },
+      { 
+        arrayFilters: [
+          { "dept.departmentId": sourceDesignation.departmentId },  // Match the department
+          { "desig": sourceId }  // Match the specific designation to replace
+        ]
+      }
+    );
+
+    // Delete source designation
+    const deleteResult = await collections.designations.deleteOne({
+      _id: sourceId,
+    });
+
+    if (deleteResult.deletedCount === 0) {
+      return { done: false, error: "Failed to delete designation" };
+    }
+
+    return {
+      done: true,
+      message: "Designation deleted and all employees and policies reassigned successfully",
+      data: {
+        employeesReassigned: employeeUpdateResult.modifiedCount,
+        policiesReassigned: policyUpdateResult.modifiedCount,
+        deletedDesignation: sourceDesignation.designation,
+        targetDesignation: targetDesignation.designation,
+      },
+    };
+  } catch (error) {
+    console.error("Reassign and delete designation failed:", error);
+    return {
+      done: false,
+      error: `Internal server error: ${error.message}`,
+    };
+  }
+};
+
 export const displayDesignations = async (companyId, hrId, filters) => {
   try {
     // if (!companyId || !hrId) {
@@ -125,9 +233,14 @@ export const displayDesignations = async (companyId, hrId, filters) => {
     if (filters.status && filters.status !== "all")
       query.status = filters.status;
 
-    // Handle departmentId filtering - works whether stored as String or ObjectId
+    // Handle departmentId filtering - convert string to ObjectId for matching
     if (filters.departmentId) {
-      query.departmentId = filters.departmentId;
+      try {
+        query.departmentId = new ObjectId(filters.departmentId);
+      } catch (err) {
+        console.error("Invalid departmentId format:", filters.departmentId);
+        return { done: false, error: "Invalid department ID format" };
+      }
     }
 
     console.log("Query from desingation", query);
@@ -227,7 +340,7 @@ export const displayDesignations = async (companyId, hrId, filters) => {
           _id: 1,
           designation: 1,
           status: 1,
-          departmentId: 1,
+          departmentId: { $toString: "$departmentId" },  // Convert ObjectId to string for frontend
           department: 1,
           employeeCount: 1,
           createdAt: 1,
@@ -333,7 +446,7 @@ export const updateDesignation = async (companyId, hrId, payload) => {
           departmentId: payload.departmentId
             ? new ObjectId(payload.departmentId)
             : designationExists.departmentId,
-          status: payload.status || designationExists.status,
+          status: normalizeStatus(payload.status || designationExists.status),
           updatedBy: hrId,
           updatedAt: new Date(),
         },

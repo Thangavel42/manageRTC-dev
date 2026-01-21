@@ -2,6 +2,12 @@ import { getTenantCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 import { validateEmployeeLifecycle } from "../../utils/employeeLifecycleValidator.js";
 
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  return normalized === "inactive" ? "Inactive" : "Active";
+};
+
 /**
  * Apply a pending promotion to employee record
  * @param {string} companyId - Company/tenant ID
@@ -938,7 +944,7 @@ export const getEmployeesForPromotion = async (companyId) => {
     const employees = await collections.employees
       .find({ 
         isDeleted: { $ne: true },
-        status: { $in: ["Active", "active"] }
+        status: { $regex: "^Active$", $options: "i" }
       })
       .project({
         _id: 1,
@@ -1053,7 +1059,7 @@ export const getEmployeesByDepartment = async (companyId, departmentId) => {
     
     // Query employees by department
     const query = {
-      status: { $in: ["Active", "active"] },
+      status: { $regex: "^Active$", $options: "i" },
       departmentId: departmentId,
       isDeleted: { $ne: true }
     };

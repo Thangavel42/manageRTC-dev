@@ -8,10 +8,15 @@ export const showModal = (modalId: string) => {
   }
 
   try {
-    // Method 1: Try Bootstrap 5
+    // Method 1: Try Bootstrap 5 with getOrCreateInstance (recommended approach)
     const bootstrap = (window as any).bootstrap;
     if (bootstrap && bootstrap.Modal) {
-      const modalInstance = new bootstrap.Modal(modal);
+      // Use getOrCreateInstance with proper configuration to prevent errors
+      const modalInstance = bootstrap.Modal.getOrCreateInstance(modal, {
+        backdrop: true,
+        keyboard: true,
+        focus: true
+      });
       modalInstance.show();
       return;
     }

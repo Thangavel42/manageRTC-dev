@@ -9,8 +9,18 @@ import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { DateTime } from 'luxon';
 import Footer from "../../../core/common/footer";
-import DepartmentDesignationSelector, { DepartmentDesignationMapping } from '../../../components/DepartmentDesignationSelector';
 import { hideModal } from '../../../utils/modalUtils';
+
+// Policy Assignment Structure (ONLY ObjectIds)
+interface PolicyAssignment {
+  departmentId: string;  // Department ObjectId as string
+  designationIds: string[];  // Array of Designation ObjectIds as strings (empty = all designations)
+}
+
+// Display structure with names (for frontend display only)
+interface PolicyAssignmentWithNames extends PolicyAssignment {
+  departmentName: string;  // Populated by backend for display
+}
 
 interface Policy {
   _id: string,
@@ -18,7 +28,7 @@ interface Policy {
   policyDescription: string;
   effectiveDate: string;
   applyToAll?: boolean;  // When true, policy applies to all current and future employees
-  assignTo?: DepartmentDesignationMapping[];  // Department-Designation mappings (used when applyToAll is false)
+  assignTo?: PolicyAssignmentWithNames[];  // Backend populates with names for display
 }
 
 interface Department {
@@ -60,9 +70,11 @@ const Policy = () => {
   const [departmentLoading, setDepartmentLoading] = useState(false);
   const [selectedFilterDepartment, setSelectedFilterDepartment] = useState<string>("");
   
-  // NEW: State for Apply To mappings
-  const [applyToMappings, setApplyToMappings] = useState<DepartmentDesignationMapping[]>([]);
+  // Policy Assignment State - Hierarchical toggle-based structure
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);  // Array of department IDs where toggle is ON
+  const [selectedDesignations, setSelectedDesignations] = useState<{[departmentId: string]: string[]}>({});  // Map: deptId -> designationIds[]
   const [applyToAll, setApplyToAll] = useState<boolean>(false);
+  const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());  // Track which departments are expanded
   
   // State for viewing policy details
   const [viewingPolicy, setViewingPolicy] = useState<Policy | null>(null);
@@ -198,6 +210,7 @@ const Policy = () => {
 
       if (response.done) {
         setDesignations(response.data);
+        console.log(`Loaded ${response.data.length} designations from database`);
         setLoading(false);
       } else {
         setError(response.error || "Failed to fetch designations");
@@ -265,7 +278,7 @@ const Policy = () => {
     {
       title: "Assign To",
       dataIndex: "assignTo",
-      render: (assignTo: DepartmentDesignationMapping[], record: Policy) => {
+      render: (assignTo: PolicyAssignmentWithNames[], record: Policy) => {
         // Check if policy applies to all employees
         if (record.applyToAll) {
           return (
@@ -278,10 +291,19 @@ const Policy = () => {
         if (!assignTo || assignTo.length === 0) {
           return <span className="text-muted">Not assigned</span>;
         }
-        const deptNames = assignTo.map(a => a.departmentName).join(", ");
+        
+        // Display departments
+        const deptDisplay = assignTo.map(a => {
+          const deptName = a.departmentName || "Unknown";
+          const hasDesignations = a.designationIds && a.designationIds.length > 0;
+          return hasDesignations 
+            ? `${deptName} (${a.designationIds.length} designations)` 
+            : `${deptName} (All designations)`;
+        }).join(", ");
+        
         return (
-          <h6 className="fw-normal fs-14 text-dark">
-            {deptNames.length > 50 ? `${deptNames.substring(0, 50)}...` : deptNames}
+          <h6 className="fw-normal fs-14 text-dark" title={deptDisplay}>
+            {deptDisplay.length > 50 ? `${deptDisplay.substring(0, 50)}...` : deptDisplay}
           </h6>
         );
       },
@@ -343,14 +365,33 @@ const Policy = () => {
             data-bs-target="#edit_policy"
             onClick={() => { 
               setEditingPolicy(policy);
-              // Set applyToAll state from policy
               setApplyToAll(policy.applyToAll || false);
-              // Initialize mappings from policy data
-              if (policy.assignTo && policy.assignTo.length > 0) {
-                setApplyToMappings(policy.assignTo);
+              
+              // Initialize from policy assignTo with hierarchical logic
+              if (!policy.applyToAll && policy.assignTo && policy.assignTo.length > 0) {
+                const toggledDepts: string[] = [];
+                const desigMap: {[key: string]: string[]} = {};
+                const expandedSet = new Set<string>();
+                
+                policy.assignTo.forEach(a => {
+                  // Empty designationIds = department toggle is ON (all designations)
+                  if (!a.designationIds || a.designationIds.length === 0) {
+                    toggledDepts.push(a.departmentId);
+                  } 
+                  // Non-empty designationIds = specific designations selected
+                  else {
+                    desigMap[a.departmentId] = a.designationIds;
+                    expandedSet.add(a.departmentId);  // Auto-expand if has specific designations
+                  }
+                });
+                
+                setSelectedDepartments(toggledDepts);
+                setSelectedDesignations(desigMap);
+                setExpandedDepartments(expandedSet);
               } else {
-                // Fallback for backward compatibility - if no assignTo, create empty mappings
-                setApplyToMappings([]);
+                setSelectedDepartments([]);
+                setSelectedDesignations({});
+                setExpandedDepartments(new Set());
               }
             }}
           >
@@ -451,8 +492,10 @@ const Policy = () => {
     setEffectiveDate("");
     setDescription("");
     setSelectedDepartment(staticOptions[0].value);
-    setApplyToMappings([]);
+    setSelectedDepartments([]);
+    setSelectedDesignations({});
     setApplyToAll(false);
+    setExpandedDepartments(new Set());
     setError(null);
     setPolicyNameError(null);
     setEffectiveDateError(null);
@@ -467,6 +510,120 @@ const Policy = () => {
     setEditEffectiveDateError(null);
     setEditApplyToError(null);
     setEditDescriptionError(null);
+  };
+
+  // Helper: Toggle department expand/collapse
+  const toggleDepartmentExpand = (deptId: string) => {
+    setExpandedDepartments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(deptId)) {
+        newSet.delete(deptId);
+      } else {
+        newSet.add(deptId);
+      }
+      return newSet;
+    });
+  };
+
+  // Helper: Handle department toggle change with auto-sync
+  const handleDepartmentToggle = (deptId: string, isChecked: boolean) => {
+    setSelectedDepartments(prev => {
+      let newDepts: string[];
+      if (isChecked) {
+        newDepts = [...prev, deptId];
+      } else {
+        newDepts = prev.filter(id => id !== deptId);
+      }
+      
+      const activeDepts = departments.filter(d => d.status === 'Active');
+      
+      // Auto-sync: If all departments are now toggled ON, turn on "Apply to All"
+      if (newDepts.length === activeDepts.length && activeDepts.length > 0) {
+        setApplyToAll(true);
+      }
+      // Auto-sync: If any department is turned OFF while "Apply to All" is ON, turn OFF "Apply to All"
+      else if (!isChecked && applyToAll) {
+        setApplyToAll(false);
+      }
+      
+      return newDepts;
+    });
+    
+    // Clear designation selections for this department when toggling ON
+    if (isChecked) {
+      setSelectedDesignations(prev => {
+        const updated = { ...prev };
+        delete updated[deptId];
+        return updated;
+      });
+    }
+    
+    // Clear apply to error if any
+    if (applyToError) setApplyToError(null);
+    if (editApplyToError) setEditApplyToError(null);
+  };
+
+  // Helper: Handle designation selection with auto-sync
+  const handleDesignationToggle = (deptId: string, desigId: string, isChecked: boolean) => {
+    setSelectedDesignations(prev => {
+      const updated = { ...prev };
+      const currentDesigs = updated[deptId] || [];
+      
+      if (isChecked) {
+        updated[deptId] = [...currentDesigs, desigId];
+      } else {
+        updated[deptId] = currentDesigs.filter(id => id !== desigId);
+        // Clean up empty arrays
+        if (updated[deptId].length === 0) {
+          delete updated[deptId];
+        }
+      }
+      
+      // Auto-sync: If ALL designations in this department are now selected, toggle department ON
+      const allDeptDesignations = designations.filter(
+        d => d.departmentId === deptId && d.status?.toLowerCase() === 'active'
+      );
+      if (updated[deptId] && updated[deptId].length === allDeptDesignations.length && allDeptDesignations.length > 0) {
+        setSelectedDepartments(prevDepts => {
+          if (!prevDepts.includes(deptId)) {
+            const newDepts = [...prevDepts, deptId];
+            
+            // Check if all departments are now toggled
+            const activeDepts = departments.filter(d => d.status === 'Active');
+            if (newDepts.length === activeDepts.length && activeDepts.length > 0) {
+              setApplyToAll(true);
+            }
+            
+            return newDepts;
+          }
+          return prevDepts;
+        });
+        // Clear designation selections since department is now fully selected
+        const finalUpdated = { ...updated };
+        delete finalUpdated[deptId];
+        return finalUpdated;
+      }
+      
+      return updated;
+    });
+    
+    // Clear apply to error if any
+    if (applyToError) setApplyToError(null);
+    if (editApplyToError) setEditApplyToError(null);
+  };
+
+  // Helper: Handle "Apply to All Employees" toggle
+  const handleApplyToAllToggle = (isChecked: boolean) => {
+    setApplyToAll(isChecked);
+    
+    // Always clear department and designation selections when toggling
+    // This ensures clean state whether turning on or off
+    setSelectedDepartments([]);
+    setSelectedDesignations({});
+    
+    // Clear apply to error if any
+    if (applyToError) setApplyToError(null);
+    if (editApplyToError) setEditApplyToError(null);
   };
 
   const handleSubmit = () => {
@@ -494,9 +651,15 @@ const Policy = () => {
         hasError = true;
       }
 
-      if (!applyToAll && (!applyToMappings || applyToMappings.length === 0)) {
-        setApplyToError("Please select at least one department or enable 'All Employees'");
-        hasError = true;
+      if (!applyToAll) {
+        // Check if at least one department toggle is ON OR at least one designation is selected
+        const hasDepartmentToggled = selectedDepartments.length > 0;
+        const hasDesignationSelected = Object.values(selectedDesignations).some(desigs => desigs.length > 0);
+        
+        if (!hasDepartmentToggled && !hasDesignationSelected) {
+          setApplyToError("Please select at least one department or designation, or enable 'Apply to All Employees'");
+          hasError = true;
+        }
       }
 
       if (!description || !description.trim()) {
@@ -511,19 +674,43 @@ const Policy = () => {
 
       setLoading(true);
 
+      // Build assignTo array with hierarchical logic
+      const assignTo: PolicyAssignment[] = [];
+      
+      // Get all active departments
+      const activeDepartments = departments.filter(d => d.status === 'Active');
+      
+      activeDepartments.forEach(dept => {
+        const deptId = dept._id;
+        const isDeptToggled = selectedDepartments.includes(deptId);
+        const deptDesignations = selectedDesignations[deptId] || [];
+        
+        // If department toggle is ON, include with empty designationIds (= all designations)
+        if (isDeptToggled) {
+          assignTo.push({
+            departmentId: deptId,
+            designationIds: []  // Empty = all current and future designations
+          });
+        } 
+        // If department toggle is OFF but some designations are selected
+        else if (deptDesignations.length > 0) {
+          assignTo.push({
+            departmentId: deptId,
+            designationIds: deptDesignations  // Only selected designations
+          });
+        }
+      });
+
       const payload = {
         policyName,
         applyToAll,
-        assignTo: applyToAll ? [] : applyToMappings,  // Empty array means applies to all current and future employees
+        assignTo: applyToAll ? [] : assignTo,  // Empty when applyToAll is true
         policyDescription: description,
         effectiveDate,
       };
       
       if (socket) {
         socket.emit("hr/policy/add", payload);
-        
-        // Note: Modal will only close after successful backend response
-        // The handleAddPolicyResponse will close the modal if response.done is true
       } else {
         setError("Socket connection is not available.");
         setLoading(false);
@@ -637,9 +824,15 @@ const Policy = () => {
         hasError = true;
       }
 
-      if (!applyToAll && (!applyToMappings || applyToMappings.length === 0)) {
-        setEditApplyToError("Please select at least one department or enable 'All Employees'");
-        hasError = true;
+      if (!applyToAll) {
+        // Check if at least one department toggle is ON OR at least one designation is selected
+        const hasDepartmentToggled = selectedDepartments.length > 0;
+        const hasDesignationSelected = Object.values(selectedDesignations).some(desigs => desigs.length > 0);
+        
+        if (!hasDepartmentToggled && !hasDesignationSelected) {
+          setEditApplyToError("Please select at least one department or designation, or enable 'Apply to All Employees'");
+          hasError = true;
+        }
       }
 
       if (!policyDescription || !policyDescription.trim()) {
@@ -654,20 +847,44 @@ const Policy = () => {
 
       setLoading(true);
 
+      // Build assignTo array with hierarchical logic
+      const assignTo: PolicyAssignment[] = [];
+      
+      // Get all active departments
+      const activeDepartments = departments.filter(d => d.status === 'Active');
+      
+      activeDepartments.forEach(dept => {
+        const deptId = dept._id;
+        const isDeptToggled = selectedDepartments.includes(deptId);
+        const deptDesignations = selectedDesignations[deptId] || [];
+        
+        // If department toggle is ON, include with empty designationIds (= all designations)
+        if (isDeptToggled) {
+          assignTo.push({
+            departmentId: deptId,
+            designationIds: []  // Empty = all current and future designations
+          });
+        } 
+        // If department toggle is OFF but some designations are selected
+        else if (deptDesignations.length > 0) {
+          assignTo.push({
+            departmentId: deptId,
+            designationIds: deptDesignations  // Only selected designations
+          });
+        }
+      });
+
       const payload = {
         _id,
         policyName: policyName.trim(),
         policyDescription: policyDescription.trim(),
         applyToAll,
-        assignTo: applyToAll ? [] : applyToMappings,  // Empty array means applies to all current and future employees
+        assignTo: applyToAll ? [] : assignTo,  // Empty when applyToAll is true
         effectiveDate,
       };
 
       if (socket) {
         socket.emit("hr/policy/update", payload);
-        
-        // Note: Modal will only close after successful backend response
-        // The handleUpdatePolicyResponse will close the modal if response.done is true
       } else {
         setError("Socket connection is not available.");
         setLoading(false);
@@ -739,6 +956,33 @@ const Policy = () => {
 
   return (
     <>
+      {/* CSS for smooth animations */}
+      <style>{`
+        .designation-collapse {
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+          opacity: 0;
+        }
+        
+        .designation-collapse.show {
+          max-height: 1000px;
+          opacity: 1;
+        }
+        
+        .department-list-container {
+          transition: opacity 0.3s ease-in-out;
+        }
+        
+        .chevron-icon {
+          transition: transform 0.2s ease-in-out;
+        }
+        
+        .chevron-icon.expanded {
+          transform: rotate(90deg);
+        }
+      `}</style>
+      
       {/* Page Wrapper */}
       <div className="page-wrapper">
         <div className="content">
@@ -794,15 +1038,7 @@ const Policy = () => {
                   data-inert={true}
                   data-bs-target="#add_policy"
                   className="btn btn-primary d-flex align-items-center"
-                  onClick={() => {
-                    setPolicyName("");
-                    setEffectiveDate("");
-                    setDescription("");
-                    setSelectedDepartment(staticOptions[0].value);
-                    setApplyToMappings([]);
-                    setApplyToAll(false);
-                    setError(null);
-                  }}
+                  onClick={resetAddPolicyForm}
                 >
                   <i className="ti ti-circle-plus me-2" />
                   Add Policy
@@ -922,15 +1158,7 @@ const Policy = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
-                onClick={() => {
-                  setPolicyName("");
-                  setEffectiveDate("");
-                  setDescription("");
-                  setSelectedDepartment(staticOptions[0].value);
-                  setApplyToMappings([]);
-                  setApplyToAll(false);
-                  setError(null);
-                }}
+                onClick={resetAddPolicyForm}
               >
                 <i className="ti ti-x" />
               </button>
@@ -987,28 +1215,163 @@ const Policy = () => {
                     </div>
                   </div>
                   <div className="col-md-12">
-                    <DepartmentDesignationSelector
-                      departments={departments}
-                      designations={designations}
-                      selectedMappings={applyToMappings}
-                      applyToAll={applyToAll}
-                      onChange={(mappings, isApplyToAll) => {
-                        setApplyToMappings(mappings);
-                        setApplyToAll(isApplyToAll);
-                        // Clear error when user changes selection
-                        if (applyToError) {
-                          setApplyToError(null);
-                        }
-                      }}
-                      label="Apply To"
-                      required={true}
-                      helpText="Use 'All Employees' toggle to apply to everyone (includes future employees), or select specific departments and designations"
-                    />
-                    {applyToError && (
-                      <div className="invalid-feedback d-block mt-2">
-                        {applyToError}
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Apply To <span className="text-danger">*</span>
+                      </label>
+                      
+                      {/* Apply to All Employees toggle */}
+                      <div className="mb-3">
+                        <div className="form-check form-switch">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="applyToAllAdd"
+                            checked={applyToAll}
+                            onChange={(e) => handleApplyToAllToggle(e.target.checked)}
+                          />
+                          <label className="form-check-label" htmlFor="applyToAllAdd">
+                            <i className="ti ti-users me-2"></i>
+                            Apply to All Employees (current and future)
+                          </label>
+                        </div>
                       </div>
-                    )}
+
+                      {/* Hierarchical Department & Designation List */}
+                      {!applyToAll && (
+                        <div className="border rounded bg-white department-list-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          <div className="p-3 border-bottom bg-light">
+                            <small className="text-muted d-block mb-0">
+                              <i className="ti ti-info-circle me-1"></i>
+                              Toggle departments to include all designations, or expand to select specific ones
+                            </small>
+                          </div>
+                          
+                          <div className="p-2">
+                            {departments.filter(d => d.status === 'Active').map(dept => {
+                              const deptDesignations = designations.filter(
+                                d => d.departmentId === dept._id && d.status?.toLowerCase() === 'active'
+                              );
+                              const isDeptToggled = selectedDepartments.includes(dept._id);
+                              const isExpanded = expandedDepartments.has(dept._id);
+                              const selectedDesigs = selectedDesignations[dept._id] || [];
+                              
+                              return (
+                                <div key={dept._id} className="mb-2 border rounded">
+                                  {/* Department Row */}
+                                  <div className="d-flex align-items-center justify-content-between p-2 bg-light">
+                                    {/* Department Toggle */}
+                                    <div className="form-check form-switch mb-0">
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        role="switch"
+                                        id={`dept-${dept._id}`}
+                                        checked={isDeptToggled}
+                                        onChange={(e) => handleDepartmentToggle(dept._id, e.target.checked)}
+                                      />
+                                      <label className="form-check-label" htmlFor={`dept-${dept._id}`}>
+                                        <i className="ti ti-building me-2"></i>
+                                        {dept.department}
+                                        {isDeptToggled && (
+                                          <span className="badge bg-success ms-2 badge-xs">
+                                            All Designations
+                                          </span>
+                                        )}
+                                        {!isDeptToggled && selectedDesigs.length > 0 && (
+                                          <span className="badge bg-primary ms-2 badge-xs">
+                                            {selectedDesigs.length} Selected
+                                          </span>
+                                        )}
+                                      </label>
+                                    </div>
+                                    
+                                    {/* Expand/Collapse Icon - Always Visible on Right */}
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-link p-0 text-dark"
+                                      onClick={() => toggleDepartmentExpand(dept._id)}
+                                      style={{ minWidth: '24px' }}
+                                    >
+                                      <i className={`ti ti-chevron-${isExpanded ? 'down' : 'right'}`}></i>
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Designation List - Expandable with Animation */}
+                                  {deptDesignations.length > 0 && (
+                                    <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
+                                      <div className="p-3 bg-white border-top">
+                                      <small className="text-muted d-block mb-2">
+                                        {isDeptToggled ? (
+                                          <span className="text-success">
+                                            <i className="ti ti-check me-1"></i>
+                                            Department toggle is ON - all designations included
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <i className="ti ti-info-circle me-1"></i>
+                                            Select specific designations (or toggle department for all)
+                                          </>
+                                        )}
+                                      </small>
+                                      <div className="row">
+                                        {deptDesignations.map(desig => (
+                                          <div key={desig._id} className="col-md-6 mb-2">
+                                            <div className="form-check">
+                                              <input
+                                                className="form-check-input"
+                                                type="checkbox"
+                                                id={`desig-${desig._id}`}
+                                                checked={isDeptToggled || selectedDesigs.includes(desig._id)}
+                                                onChange={(e) => {
+                                                  if (!isDeptToggled) {
+                                                    handleDesignationToggle(dept._id, desig._id, e.target.checked);
+                                                  }
+                                                }}
+                                                disabled={isDeptToggled}
+                                              />
+                                              <label 
+                                                className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`} 
+                                                htmlFor={`desig-${desig._id}`}
+                                              >
+                                                {desig.designation}
+                                              </label>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    </div>
+                                  )}
+                                  
+                                  {deptDesignations.length === 0 && (
+                                    <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
+                                      <div className="p-3 bg-white border-top text-muted small">
+                                        <i className="ti ti-alert-circle me-1"></i>
+                                        No designations found in this department
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            
+                            {departments.filter(d => d.status === 'Active').length === 0 && (
+                              <div className="text-center text-muted py-4">
+                                <i className="ti ti-info-circle me-1"></i>
+                                No active departments available
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {applyToError && (
+                        <div className="invalid-feedback d-block">
+                          {applyToError}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
@@ -1079,6 +1442,7 @@ const Policy = () => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={resetEditPolicyForm}
               >
                 <i className="ti ti-x" />
               </button>
@@ -1137,28 +1501,163 @@ const Policy = () => {
                     </div>
                   </div>
                   <div className="col-md-12">
-                    <DepartmentDesignationSelector
-                      departments={departments}
-                      designations={designations}
-                      selectedMappings={applyToMappings}
-                      applyToAll={applyToAll}
-                      onChange={(mappings, isApplyToAll) => {
-                        setApplyToMappings(mappings);
-                        setApplyToAll(isApplyToAll);
-                        // Clear error when user changes selection
-                        if (editApplyToError) {
-                          setEditApplyToError(null);
-                        }
-                      }}
-                      label="Apply To"
-                      required={true}
-                      helpText="Use 'All Employees' toggle to apply to everyone (includes future employees), or select specific departments and designations"
-                    />
-                    {editApplyToError && (
-                      <div className="invalid-feedback d-block mt-2">
-                        {editApplyToError}
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Apply To <span className="text-danger">*</span>
+                      </label>
+                      
+                      {/* Apply to All Employees toggle */}
+                      <div className="mb-3">
+                        <div className="form-check form-switch">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="applyToAllEdit"
+                            checked={applyToAll}
+                            onChange={(e) => handleApplyToAllToggle(e.target.checked)}
+                          />
+                          <label className="form-check-label" htmlFor="applyToAllEdit">
+                            <i className="ti ti-users me-2"></i>
+                            Apply to All Employees (current and future)
+                          </label>
+                        </div>
                       </div>
-                    )}
+
+                      {/* Hierarchical Department & Designation List */}
+                      {!applyToAll && (
+                        <div className="border rounded bg-white" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          <div className="p-3 border-bottom bg-light">
+                            <small className="text-muted d-block mb-0">
+                              <i className="ti ti-info-circle me-1"></i>
+                              Toggle departments to include all designations, or expand to select specific ones
+                            </small>
+                          </div>
+                          
+                          <div className="p-2">
+                            {departments.filter(d => d.status === 'Active').map(dept => {
+                              const deptDesignations = designations.filter(
+                                d => d.departmentId === dept._id && d.status?.toLowerCase() === 'active'
+                              );
+                              const isDeptToggled = selectedDepartments.includes(dept._id);
+                              const isExpanded = expandedDepartments.has(dept._id);
+                              const selectedDesigs = selectedDesignations[dept._id] || [];
+                              
+                              return (
+                                <div key={dept._id} className="mb-2 border rounded">
+                                  {/* Department Row */}
+                                  <div className="d-flex align-items-center justify-content-between p-2 bg-light">
+                                    {/* Department Toggle */}
+                                    <div className="form-check form-switch mb-0">
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        role="switch"
+                                        id={`dept-edit-${dept._id}`}
+                                        checked={isDeptToggled}
+                                        onChange={(e) => handleDepartmentToggle(dept._id, e.target.checked)}
+                                      />
+                                      <label className="form-check-label" htmlFor={`dept-edit-${dept._id}`}>
+                                        <i className="ti ti-building me-2"></i>
+                                        {dept.department}
+                                        {isDeptToggled && (
+                                          <span className="badge bg-success ms-2 badge-xs">
+                                            All Designations
+                                          </span>
+                                        )}
+                                        {!isDeptToggled && selectedDesigs.length > 0 && (
+                                          <span className="badge bg-primary ms-2 badge-xs">
+                                            {selectedDesigs.length} Selected
+                                          </span>
+                                        )}
+                                      </label>
+                                    </div>
+                                    
+                                    {/* Expand/Collapse Icon - Always Visible on Right */}
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-link p-0 text-dark"
+                                      onClick={() => toggleDepartmentExpand(dept._id)}
+                                      style={{ minWidth: '24px' }}
+                                    >
+                                      <i className={`ti ti-chevron-${isExpanded ? 'down' : 'right'}`}></i>
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Designation List - Expandable with Animation */}
+                                  {deptDesignations.length > 0 && (
+                                    <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
+                                      <div className="p-3 bg-white border-top">
+                                      <small className="text-muted d-block mb-2">
+                                        {isDeptToggled ? (
+                                          <span className="text-success">
+                                            <i className="ti ti-check me-1"></i>
+                                            Department toggle is ON - all designations included
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <i className="ti ti-info-circle me-1"></i>
+                                            Select specific designations (or toggle department for all)
+                                          </>
+                                        )}
+                                      </small>
+                                      <div className="row">
+                                        {deptDesignations.map(desig => (
+                                          <div key={desig._id} className="col-md-6 mb-2">
+                                            <div className="form-check">
+                                              <input
+                                                className="form-check-input"
+                                                type="checkbox"
+                                                id={`desig-edit-${desig._id}`}
+                                                checked={isDeptToggled || selectedDesigs.includes(desig._id)}
+                                                onChange={(e) => {
+                                                  if (!isDeptToggled) {
+                                                    handleDesignationToggle(dept._id, desig._id, e.target.checked);
+                                                  }
+                                                }}
+                                                disabled={isDeptToggled}
+                                              />
+                                              <label 
+                                                className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`} 
+                                                htmlFor={`desig-edit-${desig._id}`}
+                                              >
+                                                {desig.designation}
+                                              </label>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    </div>
+                                  )}
+                                  
+                                  {deptDesignations.length === 0 && (
+                                    <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
+                                      <div className="p-3 bg-white border-top text-muted small">
+                                        <i className="ti ti-alert-circle me-1"></i>
+                                        No designations found in this department
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            
+                            {departments.filter(d => d.status === 'Active').length === 0 && (
+                              <div className="text-center text-muted py-4">
+                                <i className="ti ti-info-circle me-1"></i>
+                                No active departments available
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {editApplyToError && (
+                        <div className="invalid-feedback d-block">
+                          {editApplyToError}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
@@ -1329,19 +1828,28 @@ const Policy = () => {
                       ) : viewingPolicy.assignTo && viewingPolicy.assignTo.length > 0 ? (
                         <div className="departments-list">
                           {viewingPolicy.assignTo.map((mapping, index) => {
-                            const deptDesignations = designations.filter(
-                              d => mapping.designationIds.includes(d._id)
-                            );
+                            const hasSpecificDesignations = mapping.designationIds && mapping.designationIds.length > 0;
+                            const deptDesignations = hasSpecificDesignations 
+                              ? designations.filter(d => mapping.designationIds.includes(d._id))
+                              : [];
+                            
                             return (
                               <div key={index} className="mb-3 border rounded p-3 bg-light">
                                 <div className="d-flex align-items-center mb-2">
                                   <i className="ti ti-building text-success me-2"></i>
                                   <strong className="text-dark">{mapping.departmentName}</strong>
-                                  <span className="badge bg-primary ms-2">
-                                    {mapping.designationIds.length} designation{mapping.designationIds.length !== 1 ? 's' : ''}
-                                  </span>
+                                  {hasSpecificDesignations ? (
+                                    <span className="badge bg-primary ms-2">
+                                      {mapping.designationIds.length} designation{mapping.designationIds.length !== 1 ? 's' : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="badge bg-success ms-2">
+                                      <i className="ti ti-check me-1"></i>
+                                      All Designations
+                                    </span>
+                                  )}
                                 </div>
-                                {deptDesignations.length > 0 && (
+                                {hasSpecificDesignations && deptDesignations.length > 0 && (
                                   <div className="ms-4 mt-2">
                                     <div className="d-flex flex-wrap gap-2">
                                       {deptDesignations.map(designation => (

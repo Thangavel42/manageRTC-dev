@@ -59,9 +59,16 @@ const Holidays = () => {
   const [editingHoliday, setEditingHoliday] = useState<Holidays | null>(null);
   const [deleteHoliday, setDeleteHoliday] = useState<Holidays | null>(null);
 
+  // Normalize status to ensure correct case
+  const normalizeStatus = (status: string | undefined): "Active" | "Inactive" => {
+    if (!status) return "Active";
+    const normalized = status.toLowerCase();
+    return normalized === "inactive" ? "Inactive" : "Active";
+  };
+
   // State for multiple holiday entries
   const [holidayEntries, setHolidayEntries] = useState<HolidayEntry[]>([
-    { id: "1", title: "", date: "", description: "", status: "active", repeatsEveryYear: false, holidayTypeId: "" }
+    { id: "1", title: "", date: "", description: "", status: "Active", repeatsEveryYear: false, holidayTypeId: "" }
   ]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
@@ -443,7 +450,7 @@ const Holidays = () => {
     const newId = (parseInt(holidayEntries[holidayEntries.length - 1].id) + 1).toString();
     setHolidayEntries([
       ...holidayEntries,
-      { id: newId, title: "", date: "", description: "", status: "active", repeatsEveryYear: false, holidayTypeId: "" }
+      { id: newId, title: "", date: "", description: "", status: "Active", repeatsEveryYear: false, holidayTypeId: "" }
     ]);
   };
 
@@ -539,7 +546,7 @@ const Holidays = () => {
         title: entry.title.trim(),
         date: entry.date,
         description: entry.description.trim(),
-        status: entry.status,
+        status: normalizeStatus(entry.status),
         holidayTypeId: entry.holidayTypeId,
         repeatsEveryYear: entry.repeatsEveryYear
       };
@@ -559,7 +566,7 @@ const Holidays = () => {
 
   // Reset add form
   const resetAddForm = () => {
-    setHolidayEntries([{ id: "1", title: "", date: "", description: "", status: "active", repeatsEveryYear: false, holidayTypeId: "" }]);
+    setHolidayEntries([{ id: "1", title: "", date: "", description: "", status: "Active", repeatsEveryYear: false, holidayTypeId: "" }]);
     setValidationErrors({});
   };
 
@@ -619,7 +626,7 @@ const Holidays = () => {
       title: editTitle.trim(),
       date: editDate,
       description: editDescription.trim(),
-      status: editStatus,
+      status: normalizeStatus(editStatus),
       holidayTypeId: editHolidayTypeId,
       repeatsEveryYear: editRepeatsEveryYear
     };
@@ -671,13 +678,13 @@ const Holidays = () => {
     
     console.log("[Holiday Types] Emitting hrm/holidayType/add event with data:", {
       name: trimmedName,
-      status: "active"
+      status: normalizeStatus("Active")
     });
 
     // Send to backend
     socket.emit("hrm/holidayType/add", {
       name: trimmedName,
-      status: "active"
+      status: normalizeStatus("Active")
     });
   };
 
@@ -718,7 +725,7 @@ const Holidays = () => {
     socket.emit("hrm/holidayType/update", {
       _id: editingTypeId,
       name: trimmedName,
-      status: "active"
+      status: normalizeStatus("Active")
     });
   };
 

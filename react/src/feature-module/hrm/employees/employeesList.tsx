@@ -1,5 +1,5 @@
 import React from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { all_routes } from "../../router/all_routes";
 import { Link, useNavigate } from "react-router-dom";
 import Table from "../../../core/common/dataTable/index";
@@ -688,6 +688,23 @@ const EmployeeList = () => {
     }
   }, [editingEmployee]);
 
+  // Dynamically compute available status filters based on actual employee data
+  const availableStatusFilters = useMemo(() => {
+    // Get unique statuses from employees
+    const uniqueStatuses = new Set<string>();
+    employees.forEach(emp => {
+      if (emp.status) {
+        uniqueStatuses.add(normalizeStatus(emp.status));
+      }
+    });
+    
+    // Convert to filter format and sort
+    const statusOrder = ["Active", "Inactive", "On Notice", "On Leave", "Resigned", "Terminated"];
+    return Array.from(uniqueStatuses)
+      .sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b))
+      .map(status => ({ text: status, value: status }));
+  }, [employees]);
+
   // Clean up modal backdrops on component unmount or when activeTab changes
   useEffect(() => {
     return () => {
@@ -808,15 +825,8 @@ const EmployeeList = () => {
         );
       },
       sorter: (a: any, b: any) => (a.status || "").localeCompare(b.status || ""),
-      filters: [
-        { text: "Active", value: "Active" },
-        { text: "On Notice", value: "On Notice" },
-        { text: "Resigned", value: "Resigned" },
-        { text: "Terminated", value: "Terminated" },
-        { text: "Inactive", value: "Inactive" },
-        { text: "On Leave", value: "On Leave" },
-      ],
-      onFilter: (value: any, record: any) => record.status === value,
+      filters: availableStatusFilters,
+      onFilter: (value: any, record: any) => normalizeStatus(record.status) === value,
     },
     {
       title: "",
@@ -1545,7 +1555,7 @@ const EmployeeList = () => {
         departmentId,
         designationId,
         about,
-        status,
+        status: normalizeStatus(status),
       };
 
       // Prepare full submission data
@@ -2182,10 +2192,7 @@ const EmployeeList = () => {
                   >
                     Select status{" "}
                     {selectedStatus
-                      ? `: ${
-                          selectedStatus.charAt(0).toUpperCase() +
-                          selectedStatus.slice(1)
-                        }`
+                      ? `: ${normalizeStatus(selectedStatus)}`
                       : ": None"}
                   </a>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
@@ -2198,24 +2205,17 @@ const EmployeeList = () => {
                         All
                       </Link>
                     </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => onSelectStatus("Active")}
-                      >
-                        Active
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => onSelectStatus("Inactive")}
-                      >
-                        Inactive
-                      </Link>
-                    </li>
+                    {availableStatusFilters.map((statusOption) => (
+                      <li key={statusOption.value}>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => onSelectStatus(statusOption.value)}
+                        >
+                          {statusOption.text}
+                        </Link>
+                      </li>
+                    ))}
                   </ul>
                 </div>
                 <div className="dropdown me-3">

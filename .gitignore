@@ -1,3 +1,13 @@
 node_modules
 z-docs
 react-org
+
+# Build outputs
+dist/
+build/
+*.js.map
+
+# TypeScript compiled files in src
+**/src/**/dist/
+**/src/**/*.js
+!**/src/**/*.config.js

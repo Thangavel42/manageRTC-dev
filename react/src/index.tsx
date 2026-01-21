@@ -20,7 +20,7 @@ import ALLRoutes from "./feature-module/router/router";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { SocketProvider } from "./SocketContext";
 
-// Expose Bootstrap globally so that data-bs-toggle="dropdown" works
+// Expose Bootstrap globally so that data-bs-toggle="dropdown" and modal work
 (window as any).bootstrap = bootstrap;
 
 const root = ReactDOM.createRoot(

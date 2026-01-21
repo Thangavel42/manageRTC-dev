@@ -1,6 +1,12 @@
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
 
+const normalizeStatus = (status) => {
+  if (!status) return "Active";
+  const normalized = status.toLowerCase();
+  return normalized === "inactive" ? "Inactive" : "Active";
+};
+
 /**
  * Get all holiday types for a company
  */
@@ -88,7 +94,7 @@ export const addHolidayType = async (companyId, hrId, holidayTypeData) => {
     // Prepare holiday type document
     const holidayTypeDocument = {
       name: normalizedName,
-      status: holidayTypeData.status || "active",
+      status: normalizeStatus(holidayTypeData.status || "Active"),
       createdBy: hrId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -172,7 +178,7 @@ export const updateHolidayType = async (companyId, hrId, payload) => {
     // Prepare update document
     const updateDoc = {
       name: normalizedName,
-      status: payload.status || "active",
+      status: normalizeStatus(payload.status || "Active"),
       updatedBy: hrId,
       updatedAt: new Date(),
     };

@@ -12,7 +12,7 @@ import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { departmentSelect } from '../../../core/common/selectoption/selectoption';
 import Footer from "../../../core/common/footer";
-import { hideModal, cleanupModalBackdrops } from '../../../utils/modalUtils';
+import { showModal, hideModal, cleanupModalBackdrops } from '../../../utils/modalUtils';
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -32,9 +32,8 @@ interface Departments {
 }
 
 const statusChoose = [
-  { value: "Select", label: "Select" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
+  { value: "Active", label: "Active" },
+  { value: "Inactive", label: "Inactive" },
 ];
 
 const staticOptions = [
@@ -46,7 +45,7 @@ const Designations = () => {
   const [error, setError] = useState<string | null>(null);
   const [designationName, setDesignationName] = useState("");
   const [departmentId, setDepartmentId] = useState(staticOptions[0]?.value || "");
-  const [status, setStatus] = useState(statusChoose[0]?.value || "");
+  const [status, setStatus] = useState("Active");
   const [responseData, setResponseData] = useState<Designations[]>([]);
   const [departments, setDepartments] = useState<Departments[]>([]);
   const [designations, setDesignations] = useState<Designations[]>([]);
@@ -62,6 +61,9 @@ const Designations = () => {
   const [departmentIdError, setDepartmentIdError] = useState<string | null>(null);
   const [editDesignationNameError, setEditDesignationNameError] = useState<string | null>(null);
   const [editDepartmentIdError, setEditDepartmentIdError] = useState<string | null>(null);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [targetDesignationId, setTargetDesignationId] = useState("");
+  const [isReassigning, setIsReassigning] = useState(false);
 
   const socket = useSocket() as Socket | null;
 
@@ -151,11 +153,30 @@ const Designations = () => {
       }
     };
 
+    const handleReassignDeleteResponse = (response: any) => {
+      setIsReassigning(false);
+      if (!isMounted) return;
+      if (response.done) {
+        setError(null);
+        setShowReassignModal(false);
+        setTargetDesignationId("");
+        setDesignationToDelete(null);
+        // Close modal and refresh data
+        hideModal('reassign_delete_designation_modal');
+        if (socket) {
+          socket.emit("hrm/designations/get");
+        }
+      } else {
+        setError(response.error || "Failed to reassign and delete designation");
+      }
+    };
+
     // Register all listeners
     socket.on("hrm/designations/add-response", handleAddDesignationsResponse);
     socket.on("hrm/designations/get-response", handleDisplayResponse);
     socket.on("hrm/designations/update-response", handleUpdateResponse);
     socket.on("hrm/designations/delete-response", handleDeleteResponse);
+    socket.on("hrm/designations/reassign-delete-response", handleReassignDeleteResponse);
     socket.on("hr/departments/get-response", handleDepartmentsResponse);
 
     return () => {
@@ -165,9 +186,16 @@ const Designations = () => {
       socket.off("hrm/designations/get-response", handleDisplayResponse);
       socket.off("hrm/designations/update-response", handleUpdateResponse);
       socket.off("hrm/designations/delete-response", handleDeleteResponse);
+      socket.off("hrm/designations/reassign-delete-response", handleReassignDeleteResponse);
       socket.off("hr/departments/get-response", handleDepartmentsResponse);
     };
   }, [socket]);
+
+  // Helper function to normalize status display (capitalize first letter)
+  const normalizeStatus = (status: string): string => {
+    if (!status) return '';
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  };
 
   const columns = [
     {
@@ -206,13 +234,17 @@ const Designations = () => {
     {
       title: "Status",
       dataIndex: "status",
-      render: (text: string, record: any) => (
-        <span className={`badge ${text === 'active' ? 'badge-success' : 'badge-danger'} d-inline-flex align-items-center badge-xs`}>
-          <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+      render: (text: string, record: any) => {
+        const normalizedStatus = normalizeStatus(text);
+        const isActive = normalizedStatus.toLowerCase() === 'active';
+        return (
+          <span className={`badge ${isActive ? 'badge-success' : 'badge-danger'} d-inline-flex align-items-center badge-xs`}>
+            <i className="ti ti-point-filled me-1" />
+            {normalizedStatus}
+          </span>
+        );
+      },
+      sorter: (a: any, b: any) => a.status.length - b.status.length,
     },
     {
       title: "",
@@ -232,10 +264,12 @@ const Designations = () => {
           <Link
             to="#"
             className="me-2"
-            data-bs-toggle="modal"
+            {...(designation.employeeCount > 0 ? {} : {
+              'data-bs-toggle': 'modal',
+              'data-bs-target': '#delete_modal'
+            })}
             data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={() => { setDesignationToDelete(designation); }}
+            onClick={() => handleDeleteClick(designation)}
           >
             <i className="ti ti-trash" />
           </Link>
@@ -264,7 +298,7 @@ const Designations = () => {
   const resetAddDesignationForm = () => {
     setDesignationName("");
     setSelectedDepartmentId("");
-    setStatus(statusChoose[0]?.value || "");
+    setStatus("Active");
     setError(null);
     setDesignationNameError(null);
     setDepartmentIdError(null);
@@ -411,11 +445,14 @@ const Designations = () => {
         return;
       }
 
+      // Ensure status is stored with proper capitalization
+      const normalizedStatus = normalizeStatus(status);
+
       const payload = {
         designationId: _id,
         designation: designation.trim(),
         departmentId: departmentId.trim(),
-        status: status.trim().toLowerCase(),
+        status: normalizedStatus,
       };
 
       if (socket) {
@@ -435,30 +472,76 @@ const Designations = () => {
     }
   };
 
-  const handleDelete = () => {
+  const deleteDesignation = (designationId: string) => {
     try {
-      if (!designationToDelete) {
-        setError("No designation selected for deletion");
-        return;
-      }
-
       setLoading(true);
       setError(null);
 
-      if (socket) {
-        socket.emit("hrm/designations/delete", { _id: designationToDelete._id });
-      } else {
-        setError("Socket connection is not available.");
+      if (!socket) {
+        setError("Socket connection is not available");
         setLoading(false);
+        return;
+      }
+
+      if (!designationId) {
+        setError("Designation ID is required");
+        setLoading(false);
+        return;
+      }
+
+      const data = {
+        _id: designationId,
+      };
+
+      socket.emit("hrm/designations/delete", data);
+    } catch (error) {
+      setError("Failed to initiate designation deletion");
+      setLoading(false);
+    }
+  };
+
+  const handleReassignAndDelete = () => {
+    if (!designationToDelete || !targetDesignationId) {
+      setError("Please select a target designation");
+      return;
+    }
+
+    try {
+      setIsReassigning(true);
+      setError(null);
+
+      const payload = {
+        sourceDesignationId: designationToDelete._id,
+        targetDesignationId: targetDesignationId,
+      };
+
+      if (socket) {
+        socket.emit("hrm/designations/reassign-delete", payload);
+      } else {
+        setError("Socket connection is not available");
+        setIsReassigning(false);
       }
     } catch (error) {
-      setLoading(false);
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError("An unexpected error occurred");
-      }
+      setError("Failed to initiate reassignment");
+      setIsReassigning(false);
     }
+  };
+
+  const handleDeleteClick = (designation: Designations) => {
+    const hasEmployees = (designation.employeeCount || 0) > 0;
+
+    setDesignationToDelete(designation);
+
+    if (hasEmployees) {
+      // Show reassignment modal programmatically
+      setShowReassignModal(true);
+      setTargetDesignationId("");
+      // Use the utility function to show modal safely
+      setTimeout(() => {
+        showModal('reassign_delete_designation_modal');
+      }, 100);
+    }
+    // If no employees, the Bootstrap data-bs-target will handle showing delete_modal
   };
 
   // Reset Edit Designation validation errors
@@ -467,6 +550,15 @@ const Designations = () => {
     setEditDesignationNameError(null);
     setEditDepartmentIdError(null);
   };
+
+  // Get available designations for reassignment (exclude the one being deleted, same department only)
+  const availableDesignations = designations.filter(
+    desig => desig._id !== designationToDelete?._id && 
+             desig.departmentId === designationToDelete?.departmentId
+  ).map(desig => ({
+    value: desig._id,
+    label: desig.designation
+  }));
 
   if (loading) {
     return (
@@ -617,7 +709,7 @@ const Designations = () => {
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
                   >
-                    Select status {selectedStatus ? `: ${selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1)}` : ": None"}
+                    Select status {selectedStatus ? `: ${normalizeStatus(selectedStatus)}` : ": None"}
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
@@ -633,7 +725,7 @@ const Designations = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => onSelectStatus("active")}
+                        onClick={() => onSelectStatus("Active")}
                       >
                         Active
                       </Link>
@@ -642,7 +734,7 @@ const Designations = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
-                        onClick={() => onSelectStatus("inactive")}
+                        onClick={() => onSelectStatus("Inactive")}
                       >
                         Inactive
                       </Link>
@@ -699,7 +791,14 @@ const Designations = () => {
       </div>
       {/* /Page Wrapper */}
       {/* Add Designation */}
-      <div className="modal fade" id="add_designation">
+      <div 
+        className="modal fade" 
+        id="add_designation"
+        data-bs-backdrop="true"
+        data-bs-keyboard="true"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         <div className="modal-dialog modal-dialog-centered modal-md">
           <div className="modal-content">
             <div className="modal-header">
@@ -780,16 +879,18 @@ const Designations = () => {
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Status</label>
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
                         options={statusChoose}
-                        defaultValue={statusChoose[0]}
+                        defaultValue={statusChoose.find(opt => opt.value === "Active")}
                         onChange={(selectedValue) => {
                           setStatus(
                             typeof selectedValue === 'string'
                               ? selectedValue
-                              : selectedValue?.value || statusChoose[0].value
+                              : selectedValue?.value || "Active"
                           )
                         }}
                       />
@@ -821,7 +922,14 @@ const Designations = () => {
       </div>
       {/* /Add Designation */}
       {/* Edit Designation */}
-      <div className="modal fade" id="edit_designation">
+      <div 
+        className="modal fade" 
+        id="edit_designation"
+        data-bs-backdrop="true"
+        data-bs-keyboard="true"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         <div className="modal-dialog modal-dialog-centered modal-md">
           <div className="modal-content">
             <div className="modal-header">
@@ -890,16 +998,18 @@ const Designations = () => {
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Status</label>
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
-                        options={statusChoose.filter(opt => opt.value !== "Select")}
+                        options={statusChoose}
                         defaultValue={statusChoose.find(opt =>
-                          opt.value === (editingDesignation?.status || 'active')
+                          opt.value.toLowerCase() === (editingDesignation?.status || 'Active').toLowerCase()
                         )}
                         onChange={(selectedOption) =>
                           setEditingDesignation(prev =>
-                            prev ? { ...prev, status: selectedOption?.value || "" } : prev
+                            prev ? { ...prev, status: selectedOption?.value || "Active" } : prev
                           )}
                       />
                     </div>
@@ -930,7 +1040,14 @@ const Designations = () => {
       </div>
       {/* /Edit Department */}
       {/* Delete Designation */}
-      <div className="modal fade" id="delete_modal">
+      <div 
+        className="modal fade" 
+        id="delete_modal"
+        data-bs-backdrop="true"
+        data-bs-keyboard="true"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-body text-center">
@@ -956,7 +1073,9 @@ const Designations = () => {
                   className="btn btn-danger"
                   data-bs-dismiss="modal"
                   onClick={() => {
-                    handleDelete();
+                    if (designationToDelete) {
+                      deleteDesignation(designationToDelete._id);
+                    }
                     setDesignationToDelete(null);
                   }}
                   disabled={loading}
@@ -969,6 +1088,95 @@ const Designations = () => {
         </div>
       </div>
       {/* /Delete Designation */}
+      {/* Reassign and Delete Designation */}
+      <div 
+        className="modal fade" 
+        id="reassign_delete_designation_modal"
+        data-bs-backdrop="true"
+        data-bs-keyboard="true"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Reassign Before Deletion</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setTargetDesignationId("");
+                  setDesignationToDelete(null);
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="alert alert-warning d-flex align-items-start mb-3">
+                <i className="ti ti-alert-triangle me-2 mt-1" style={{ fontSize: "20px" }}></i>
+                <div>
+                  <strong>Designation "{designationToDelete?.designation}" cannot be deleted directly</strong>
+                  <p className="mb-0 mt-1">
+                    This designation has{" "}
+                    <strong>{designationToDelete?.employeeCount || 0} employee{(designationToDelete?.employeeCount || 0) > 1 ? 's' : ''}</strong>.
+                    Please reassign {(designationToDelete?.employeeCount || 0) > 1 ? 'them' : 'the employee'} to another designation before deletion.
+                  </p>
+                </div>
+              </div>
+              <div className="row">
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Reassign to Designation (in same department) <span className="text-danger">*</span>
+                    </label>
+                    <CommonSelect
+                      className="select"
+                      options={availableDesignations}
+                      onChange={(selectedOption) =>
+                        setTargetDesignationId(selectedOption ? selectedOption.value : "")
+                      }
+                    />
+                    {availableDesignations.length === 0 && (
+                      <small className="text-danger d-block mt-2">
+                        <i className="ti ti-alert-circle me-1"></i>
+                        No other designations available in this department. Please create a new designation first.
+                      </small>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light me-2"
+                data-bs-dismiss="modal"
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setTargetDesignationId("");
+                  setDesignationToDelete(null);
+                }}
+                disabled={isReassigning}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleReassignAndDelete}
+                disabled={isReassigning || !targetDesignationId || availableDesignations.length === 0}
+              >
+                {isReassigning ? 'Reassigning...' : 'Reassign & Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Reassign and Delete Designation */}
     </>
   )
 }

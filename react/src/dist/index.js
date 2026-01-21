@@ -21,7 +21,7 @@ var router_1 = require("./feature-module/router/router");
 // Clerk
 var clerk_react_1 = require("@clerk/clerk-react");
 var SocketContext_1 = require("./SocketContext");
-// Expose Bootstrap globally so that data-bs-toggle="dropdown" works
+// Expose Bootstrap globally so that data-bs-toggle="dropdown" and modal work
 window.bootstrap = bootstrap;
 var root = client_1["default"].createRoot(document.getElementById("root"));
 root.render(
