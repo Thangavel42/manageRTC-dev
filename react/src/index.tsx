@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { base_path } from "./environment";
+import * as bootstrap from "bootstrap";
 import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import "../src/style/css/feather.css";
 import "../src/index.scss";
@@ -15,11 +16,12 @@ import "../node_modules/@fortawesome/fontawesome-free/css/all.min.css";
 import "../src/style/icon/ionic/ionicons.css";
 import "../src/style/icon/tabler-icons/webfont/tabler-icons.css";
 import ALLRoutes from "./feature-module/router/router";
-import "../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js";
 // Clerk
-
-import { ClerkProvider, SignIn } from "@clerk/clerk-react";
+import { ClerkProvider } from "@clerk/clerk-react";
 import { SocketProvider } from "./SocketContext";
+
+// Expose Bootstrap globally so that data-bs-toggle="dropdown" works
+(window as any).bootstrap = bootstrap;
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

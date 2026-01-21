@@ -1709,7 +1709,7 @@ var EmployeeList = function () {
                                             onSelectDepartment(dep.value);
                                         } }, dep.label))); }))),
                             react_1["default"].createElement("div", { className: "dropdown me-3" },
-                                react_1["default"].createElement("a", { href: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown", onClick: function (e) { return e.preventDefault(); } },
+                                react_1["default"].createElement("a", { href: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
                                     "Select status",
                                     " ",
                                     selectedStatus
@@ -1724,7 +1724,7 @@ var EmployeeList = function () {
                                     react_1["default"].createElement("li", null,
                                         react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function () { return onSelectStatus("Inactive"); } }, "Inactive")))),
                             react_1["default"].createElement("div", { className: "dropdown me-3" },
-                                react_1["default"].createElement("a", { href: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown", onClick: function (e) { return e.preventDefault(); } },
+                                react_1["default"].createElement("a", { href: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
                                     "Sort By",
                                     sortOrder
                                         ? ": " + (sortOrder.charAt(0).toUpperCase() + sortOrder.slice(1))
