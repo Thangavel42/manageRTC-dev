@@ -75,7 +75,7 @@ export const addHoliday = async (companyId, hrId, holidaydata) => {
       description: holidaydata.description || "", // Optional field
       status: normalizeStatus(holidaydata.status),
       holidayTypeId: new ObjectId(holidaydata.holidayTypeId),
-      holidayTypeName: holidayType.name, // Denormalized for easier display
+      // holidayTypeName removed - will be resolved via lookup in GET
       repeatsEveryYear: holidaydata.repeatsEveryYear || false, // Default to false
       createdBy: hrId,
       createdAt: new Date(),
@@ -107,9 +107,36 @@ export const displayHoliday = async (companyId) => {
 
     const collections = getTenantCollections(companyId);
 
+    // Use aggregation pipeline to resolve holidayTypeName via lookup
     const holidays = await collections.holidays
-      .find({})
-      .sort({ date: -1 })
+      .aggregate([
+        {
+          $lookup: {
+            from: "holidayTypes",
+            localField: "holidayTypeId",
+            foreignField: "_id",
+            as: "holidayTypeData"
+          }
+        },
+        {
+          $addFields: {
+            holidayTypeName: {
+              $ifNull: [
+                { $arrayElemAt: ["$holidayTypeData.name", 0] },
+                "Unknown" // Fallback for missing/deleted types
+              ]
+            }
+          }
+        },
+        {
+          $project: {
+            holidayTypeData: 0 // Remove temporary join field
+          }
+        },
+        {
+          $sort: { date: -1 }
+        }
+      ])
       .toArray();
 
     return {
@@ -195,7 +222,7 @@ export const updateHoliday = async (companyId, hrId, payload) => {
       description: payload.description || "", // Optional field
       status: normalizeStatus(payload.status),
       holidayTypeId: new ObjectId(payload.holidayTypeId),
-      holidayTypeName: holidayType.name, // Denormalized for easier display
+      // holidayTypeName removed - will be resolved via lookup in GET
       updatedBy: hrId,
       updatedAt: new Date(),
     };

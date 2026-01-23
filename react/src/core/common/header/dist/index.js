@@ -84,6 +84,15 @@ var Header = function () {
             return "Guest";
         return ((_a = user.publicMetadata) === null || _a === void 0 ? void 0 : _a.role) || "Employee";
     };
+    // Check if user has access to menu item based on roles
+    var hasAccess = function (roles) {
+        if (!roles || roles.length === 0)
+            return true;
+        if (roles.includes("public"))
+            return true;
+        var userRole = (getUserRole() || "").toLowerCase();
+        return roles.includes(userRole);
+    };
     // Handle signout
     var handleSignOut = function () { return __awaiter(void 0, void 0, void 0, function () {
         var error_1;
@@ -193,7 +202,7 @@ var Header = function () {
                                 react_1["default"].createElement("span", { className: "input-group-text" },
                                     react_1["default"].createElement("kbd", null, "CTRL + / "))),
                             react_1["default"].createElement("div", { className: "dropdown crm-dropdown" },
-                                react_1["default"].createElement("a", { href: "#", className: "btn btn-menubar me-1", "data-bs-toggle": "dropdown" },
+                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-menubar me-1", "data-bs-toggle": "dropdown" },
                                     react_1["default"].createElement("i", { className: "ti ti-layout-grid" })),
                                 react_1["default"].createElement("div", { className: "dropdown-menu dropdown-lg dropdown-menu-start" },
                                     react_1["default"].createElement("div", { className: "card mb-0 border-0 shadow-none" },
@@ -244,14 +253,14 @@ var Header = function () {
                                         horizontalSidebar_1.HorizontalSidebarData.map(function (mainMenu, index) {
                                             var _a;
                                             return (react_1["default"].createElement(react_1["default"].Fragment, { key: "main-" + index }, (_a = mainMenu === null || mainMenu === void 0 ? void 0 : mainMenu.menu) === null || _a === void 0 ? void 0 : _a.map(function (data, i) {
-                                                var _a, _b;
+                                                var _a;
                                                 return (react_1["default"].createElement("li", { className: "submenu", key: "menu-" + i },
                                                     react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t" + (((_a = data === null || data === void 0 ? void 0 : data.subMenus) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) ? "active"
                                                             : "") + " " + (subOpen === data.menuValue ? "subdrop" : ""), onClick: function () { return toggleSidebar(data.menuValue); } },
                                                         react_1["default"].createElement("i", { className: "ti ti-" + data.icon }),
                                                         react_1["default"].createElement("span", null, data.menuValue),
                                                         react_1["default"].createElement("span", { className: "menu-arrow" })),
-                                                    react_1["default"].createElement("ul", { style: { display: subOpen === data.menuValue ? "block" : "none" } }, (_b = data === null || data === void 0 ? void 0 : data.subMenus) === null || _b === void 0 ? void 0 : _b.map(function (subMenu, j) {
+                                                    react_1["default"].createElement("ul", { style: { display: subOpen === data.menuValue ? "block" : "none" } }, ((data === null || data === void 0 ? void 0 : data.subMenus) || []).filter(function (subMenu) { return hasAccess(subMenu === null || subMenu === void 0 ? void 0 : subMenu.roles); }).map(function (subMenu, j) {
                                                         var _a;
                                                         return (react_1["default"].createElement("li", { key: "submenu-" + j, className: (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) ? "submenu" : "" },
                                                             react_1["default"].createElement(react_router_dom_1.Link, { to: (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) || "#", className: (((_a = subMenu === null || subMenu === void 0 ? void 0 : subMenu.subMenusTwo) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) || (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) === Location.pathname
@@ -269,7 +278,7 @@ var Header = function () {
                                 react_1["default"].createElement(react_router_dom_1.Link, { to: "#", onClick: toggleFullscreen, className: "btn btn-menubar btnFullscreen" },
                                     react_1["default"].createElement("i", { className: "ti ti-maximize" }))),
                             react_1["default"].createElement("div", { className: "dropdown me-1" },
-                                react_1["default"].createElement("a", { href: "#", className: "btn btn-menubar", "data-bs-toggle": "dropdown" },
+                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-menubar", "data-bs-toggle": "dropdown" },
                                     react_1["default"].createElement("i", { className: "ti ti-layout-grid-remove" })),
                                 react_1["default"].createElement("div", { className: "dropdown-menu dropdown-menu-end" },
                                     react_1["default"].createElement("div", { className: "card mb-0 border-0 shadow-none" },
@@ -308,7 +317,7 @@ var Header = function () {
                                 react_1["default"].createElement(react_router_dom_1.Link, { to: routes.email, className: "btn btn-menubar" },
                                     react_1["default"].createElement("i", { className: "ti ti-mail" }))),
                             react_1["default"].createElement("div", { className: "me-1 notification_item" },
-                                react_1["default"].createElement("a", { href: "#", className: "btn btn-menubar position-relative me-1", id: "notification_popup", "data-bs-toggle": "dropdown" },
+                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-menubar position-relative me-1", id: "notification_popup", "data-bs-toggle": "dropdown" },
                                     react_1["default"].createElement("i", { className: "ti ti-bell" }),
                                     react_1["default"].createElement("span", { className: "notification-status-dot" })),
                                 react_1["default"].createElement("div", { className: "dropdown-menu dropdown-menu-end notification-dropdown p-4" },
@@ -317,7 +326,7 @@ var Header = function () {
                                         react_1["default"].createElement("div", { className: "d-flex align-items-center" },
                                             react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "text-primary fs-15 me-3 lh-1" }, "Mark all as read"),
                                             react_1["default"].createElement("div", { className: "dropdown" },
-                                                react_1["default"].createElement("a", { href: "#", className: "bg-white dropdown-toggle", "data-bs-toggle": "dropdown" },
+                                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "bg-white dropdown-toggle", "data-bs-toggle": "dropdown" },
                                                     react_1["default"].createElement("i", { className: "ti ti-calendar-due me-1" }),
                                                     "Today"),
                                                 react_1["default"].createElement("ul", { className: "dropdown-menu mt-2 p-3" },
@@ -379,7 +388,7 @@ var Header = function () {
                                         react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-light w-100 me-2" }, "Cancel"),
                                         react_1["default"].createElement(react_router_dom_1.Link, { to: routes.activity, className: "btn btn-primary w-100" }, "View All")))),
                             react_1["default"].createElement("div", { className: "dropdown profile-dropdown" },
-                                react_1["default"].createElement("a", { href: "#", className: "dropdown-toggle d-flex align-items-center", "data-bs-toggle": "dropdown" },
+                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle d-flex align-items-center", "data-bs-toggle": "dropdown" },
                                     react_1["default"].createElement("span", { className: "avatar avatar-sm online" }, isSignedIn && user ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
                                             // Fallback to default image if user image fails to load
                                             e.target.src = "assets/img/profiles/avatar-12.jpg";
@@ -423,7 +432,7 @@ var Header = function () {
                                                 react_1["default"].createElement("i", { className: "ti ti-login me-2" }),
                                                 "Logout")))))))),
                 react_1["default"].createElement("div", { className: "dropdown mobile-user-menu" },
-                    react_1["default"].createElement("a", { href: "#", className: "nav-link dropdown-toggle", "data-bs-toggle": "dropdown", "aria-expanded": "false" },
+                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "nav-link dropdown-toggle", "data-bs-toggle": "dropdown", "aria-expanded": "false" },
                         react_1["default"].createElement("i", { className: "fa fa-ellipsis-v" })),
                     react_1["default"].createElement("div", { className: "dropdown-menu dropdown-menu-end" },
                         react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: routes.profile }, "My Profile"),

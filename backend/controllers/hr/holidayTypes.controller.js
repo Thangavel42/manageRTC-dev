@@ -75,13 +75,7 @@ const holidayTypeController = (socket, io) => {
             errors.name = "Holiday type name must be a non-empty string";
         }
 
-        // Validate status (optional)
-        if (data.status !== undefined) {
-            const allowedStatuses = ["active", "inactive"];
-            if (!allowedStatuses.includes(data.status.toLowerCase())) {
-                errors.status = "Status must be either 'active' or 'inactive'";
-            }
-        }
+        // Status field removed - not needed for holiday types
 
         if (Object.keys(errors).length > 0) {
             return { done: false, errors };

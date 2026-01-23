@@ -10,6 +10,8 @@ import { Socket } from "socket.io-client";
 import { DateTime } from 'luxon';
 import Footer from "../../../core/common/footer";
 import { hideModal } from '../../../utils/modalUtils';
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
 
 // Policy Assignment Structure (ONLY ObjectIds)
 interface PolicyAssignment {
@@ -92,6 +94,12 @@ const Policy = () => {
   const [editDescriptionError, setEditDescriptionError] = useState<string | null>(null);
 
   const socket = useSocket() as Socket | null;
+
+  // Modal container helper (for DatePicker positioning)
+  const getModalContainer = (): HTMLElement => {
+    const modalElement = document.getElementById("modal-datepicker");
+    return modalElement ? modalElement : document.body;
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -1195,18 +1203,26 @@ const Policy = () => {
                       <label className="form-label">
                         In-effect Date <span className="text-danger">*</span>
                       </label>
-                      <input 
-                        type="date" 
-                        className={`form-control ${effectiveDateError ? 'is-invalid' : ''}`}
-                        value={effectiveDate} 
-                        onChange={(e) => {
-                          setEffectiveDate(e.target.value);
-                          // Clear error when user selects a date
-                          if (effectiveDateError) {
-                            setEffectiveDateError(null);
-                          }
-                        }} 
-                      />
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className={`form-control datetimepicker ${effectiveDateError ? 'is-invalid' : ''}`}
+                          format="DD-MM-YYYY"
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={effectiveDate ? dayjs(effectiveDate) : null}
+                          onChange={(date) => {
+                            const isoDate = date ? date.toDate().toISOString() : "";
+                            setEffectiveDate(isoDate);
+                            // Clear error when user selects a date
+                            if (effectiveDateError) {
+                              setEffectiveDateError(null);
+                            }
+                          }}
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
                       {effectiveDateError && (
                         <div className="invalid-feedback d-block">
                           {effectiveDateError}
@@ -1480,19 +1496,27 @@ const Policy = () => {
                       <label className="form-label">
                         In-effect Date <span className="text-danger">*</span>
                       </label>
-                      <input
-                        type="date"
-                        className={`form-control ${editEffectiveDateError ? 'is-invalid' : ''}`}
-                        value={editingPolicy?.effectiveDate?.slice(0, 10) || ""}
-                        onChange={(e) => {
-                          setEditingPolicy(prev =>
-                            prev ? { ...prev, effectiveDate: e.target.value } : prev);
-                          // Clear error when user selects a date
-                          if (editEffectiveDateError) {
-                            setEditEffectiveDateError(null);
-                          }
-                        }}
-                      />
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className={`form-control datetimepicker ${editEffectiveDateError ? 'is-invalid' : ''}`}
+                          format="DD-MM-YYYY"
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={editingPolicy?.effectiveDate ? dayjs(editingPolicy.effectiveDate) : null}
+                          onChange={(date) => {
+                            const isoDate = date ? date.toDate().toISOString() : "";
+                            setEditingPolicy(prev =>
+                              prev ? { ...prev, effectiveDate: isoDate } : prev);
+                            // Clear error when user selects a date
+                            if (editEffectiveDateError) {
+                              setEditEffectiveDateError(null);
+                            }
+                          }}
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
                       {editEffectiveDateError && (
                         <div className="invalid-feedback d-block">
                           {editEffectiveDateError}

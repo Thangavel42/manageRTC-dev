@@ -4,13 +4,31 @@ import { TowColData } from "../../data/json/twoColData";
 import ImageWithBasePath from "../imageWithBasePath";
 import { all_routes } from "../../../feature-module/router/all_routes";
 import Scrollbars from "react-custom-scrollbars-2";
+import { useUser } from "@clerk/clerk-react";
+
 const TwoColumnSidebar = () => {
   const routes = all_routes;
   const Location = useLocation();
+  const { user } = useUser();
   const [showSubMenusTab, SetShowSubMenusTab] = useState(true);
   const [isActive, SetIsActive] = useState<any>();
   const [subOpen, setSubopen] = useState<any>("");
   const savedMenuValue = sessionStorage.getItem("menuValue2") || "";
+
+  // Get current user role
+  const getUserRole = (): string => {
+    if (!user) return "guest";
+    return (user.publicMetadata?.role as string)?.toLowerCase() || "employee";
+  };
+
+  // Check if user has access to menu item
+  const hasAccess = (roles?: string[]): boolean => {
+    if (!roles || roles.length === 0) return true;
+    if (roles.includes("public")) return true;
+    const userRole = getUserRole();
+    return roles.includes(userRole);
+  };
+
   const showTabs = (res: any) => {
     sessionStorage.setItem("menuValue2", res.menuValue);
     TowColData.forEach((menus: any) => {
@@ -127,7 +145,7 @@ const TwoColumnSidebar = () => {
                               <li className="menu-title">
                                 <span>{title.menuValue}</span>
                               </li>
-                              {title.subMenus.map(
+                              {title.subMenus.filter((subMenu: any) => hasAccess(subMenu?.roles)).map(
                                 (subMenus: any, j: number) => (
                                   <React.Fragment key={`submenu-${j}`}>
                                     {title.hasSubRoute && (

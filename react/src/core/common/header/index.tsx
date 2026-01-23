@@ -52,6 +52,14 @@ const Header = (): JSX.Element => {
     return user.publicMetadata?.role as string || "Employee";
   };
 
+  // Check if user has access to menu item based on roles
+  const hasAccess = (roles?: string[]): boolean => {
+    if (!roles || roles.length === 0) return true;
+    if (roles.includes("public")) return true;
+    const userRole = (getUserRole() || "").toLowerCase();
+    return roles.includes(userRole);
+  };
+
   // Handle signout
   const handleSignOut = async () => {
     try {
@@ -271,7 +279,7 @@ const Header = (): JSX.Element => {
 
 													{/* First-level Submenus */}
 													<ul style={{ display: subOpen === data.menuValue ? "block" : "none" }}>
-													{data?.subMenus?.map((subMenu:any, j) => (
+															{((data?.subMenus || []) as any[]).filter((subMenu: any) => hasAccess(subMenu?.roles)).map((subMenu:any, j) => (
 														<li
 														key={`submenu-${j}`}
 														className={subMenu?.customSubmenuTwo ? "submenu" : ""}

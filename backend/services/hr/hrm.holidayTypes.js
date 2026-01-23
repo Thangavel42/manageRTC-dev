@@ -94,7 +94,7 @@ export const addHolidayType = async (companyId, hrId, holidayTypeData) => {
     // Prepare holiday type document
     const holidayTypeDocument = {
       name: normalizedName,
-      status: normalizeStatus(holidayTypeData.status || "Active"),
+      // status field removed - not needed for holiday types
       createdBy: hrId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -178,7 +178,7 @@ export const updateHolidayType = async (companyId, hrId, payload) => {
     // Prepare update document
     const updateDoc = {
       name: normalizedName,
-      status: normalizeStatus(payload.status || "Active"),
+      // status field removed - not needed for holiday types
       updatedBy: hrId,
       updatedAt: new Date(),
     };
@@ -290,7 +290,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
     const now = new Date();
     const defaultTypeDocuments = defaultTypes.map((name) => ({
       name,
-      status: "active",
+      // status field removed - not needed for holiday types
       createdBy: hrId || "system",
       createdAt: now,
       updatedAt: now,

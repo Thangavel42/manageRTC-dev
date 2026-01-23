@@ -3,12 +3,29 @@ import { Link, useLocation } from "react-router-dom";
 import { TowColData } from "../../data/json/twoColData";
 import ImageWithBasePath from "../imageWithBasePath";
 import { all_routes } from "../../../feature-module/router/all_routes";
+import { useUser } from "@clerk/clerk-react";
 
 const StackedSidebar = () => {
   const routes = all_routes;
   const Location = useLocation();
+  const { user } = useUser();
   const [showSubMenusTab, SetShowSubMenusTab] = useState(false);
   const [subOpen, setSubopen] = useState<any>("");
+
+  // Get current user role
+  const getUserRole = (): string => {
+    if (!user) return "guest";
+    return (user.publicMetadata?.role as string)?.toLowerCase() || "employee";
+  };
+
+  // Check if user has access to menu item
+  const hasAccess = (roles?: string[]): boolean => {
+    if (!roles || roles.length === 0) return true;
+    if (roles.includes("public")) return true;
+    const userRole = getUserRole();
+    return roles.includes(userRole);
+  };
+
   const showTabs = (res: any) => {
     TowColData.forEach((menus: any) => {
       menus.menu.forEach((mainMenus: any) => {
@@ -150,7 +167,7 @@ const StackedSidebar = () => {
                           <React.Fragment key={`title-${i}`}>
                             {title.showMyTab === true && (
                               <>
-                                {title.subMenus.map(
+                                {title.subMenus.filter((subMenu: any) => hasAccess(subMenu?.roles)).map(
                                   (subMenus: any, j: number) => (
                                     <React.Fragment key={`submenu-${j}`}>
                                       {title.hasSubRoute && (

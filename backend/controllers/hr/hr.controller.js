@@ -5,6 +5,7 @@ import * as hrPolicy from "../../services/hr/hrm.policy.js";
 import * as hrmDesignation from "../../services/hr/hrm.designation.js";
 import * as hrmDepartment from "../../services/hr/hrm.department.js";
 import * as hrmEmployee from "../../services/hr/hrm.employee.js";
+import * as hrDashboard from "../../services/hr/hrm.dashboard.js";
 import terminationController from "./termination.controller.js";
 import resignationController from "./resignation.controller.js";
 import holidayController from "./holidays.controller.js";
@@ -1801,6 +1802,41 @@ const hrDashboardController = (socket, io) => {
         socket.emit("hrm/employees/update-about-response", {
           done: false,
           error: error.message || "Unexpected error updating about info",
+        });
+      }
+    })
+  );
+
+  // HR Dashboard - Get All Data
+  socket.on(
+    "hr/dashboard/get-all-data",
+    withRateLimit(async (data = {}) => {
+      try {
+        console.log("[HR Dashboard] Received dashboard request", data);
+        const { companyId } = validateHrAccess(socket);
+        const year = data.year || new Date().getFullYear();
+
+        console.log(`[HR Dashboard] Fetching for companyId=${companyId}, year=${year}`);
+        
+        const dashboardData = await hrDashboard.getDashboardStats(companyId, year);
+        
+        console.log("[HR Dashboard] Service returned data:", dashboardData.done);
+        
+        if (!dashboardData.done) {
+          socket.emit("hr/dashboard/get-all-data-response", {
+            done: false,
+            error: dashboardData.error || "Failed to fetch dashboard data",
+          });
+          return;
+        }
+
+        socket.emit("hr/dashboard/get-all-data-response", dashboardData);
+        console.log("[HR Dashboard] Response emitted successfully");
+      } catch (error) {
+        console.error("[HR Dashboard] Controller error:", error);
+        socket.emit("hr/dashboard/get-all-data-response", {
+          done: false,
+          error: error.message || "Unexpected error fetching dashboard data",
         });
       }
     })

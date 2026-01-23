@@ -143,6 +143,7 @@ import EmailVerification3 from "../auth/emailVerification/emailVerification-3";
 import EmployeeDashboard from "../mainMenu/employeeDashboard/employee-dashboard";
 import LeadsDasboard from "../mainMenu/leadsDashboard";
 import DealsDashboard from "../mainMenu/dealsDashboard";
+import HRDashboard from "../mainMenu/hrDashboard";
 import Leaflet from "../uiInterface/map/leaflet";
 import BootstrapIcons from "../uiInterface/icons/bootstrapicons";
 import RemixIcons from "../uiInterface/icons/remixIcons";
@@ -311,7 +312,7 @@ export const publicRoutes = [
     path: routes.adminDashboard,
     element: <AdminDashboard />,
     route: Route,
-    roles: ["public"],
+    roles: ["admin"],
   },
   {
     path: routes.employeeDashboard,
@@ -330,6 +331,12 @@ export const publicRoutes = [
     element: <DealsDashboard />,
     route: Route,
     roles: ["deal"],
+  },
+  {
+    path: routes.hrDashboard,
+    element: <HRDashboard />,
+    route: Route,
+    roles: ["hr"],
   },
   {
     path: routes.validate,

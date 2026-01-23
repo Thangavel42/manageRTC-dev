@@ -2021,7 +2021,8 @@ const useSidebarData = () => {
               materialicons: "start",
               dot: true,
               submenuItems: [
-                { label: "Admin Dashboard", link: routes.adminDashboard },
+                { label: "Admin Dashboard", link: routes.adminDashboard, roles: ["admin"] },
+                { label: "HR Dashboard", link: routes.hrDashboard, roles: ["hr"] },
               ],
             },
             {
@@ -2923,10 +2924,11 @@ const useSidebarData = () => {
               materialicons: "start",
               dot: true,
               submenuItems: [
-                { label: "Admin Dashboard", link: routes.adminDashboard },
-                { label: "Employee Dashboard", link: routes.employeeDashboard },
-                { label: "Deals Dashboard", link: routes.dealsDashboard },
-                { label: "Leads Dashboard", link: routes.leadsDashboard },
+                { label: "Admin Dashboard", link: routes.adminDashboard, roles: ["admin"] },
+                { label: "Employee Dashboard", link: routes.employeeDashboard, roles: ["public"] },
+                { label: "Deals Dashboard", link: routes.dealsDashboard, roles: ["public"] },
+                { label: "Leads Dashboard", link: routes.leadsDashboard, roles: ["public"] },
+                { label: "HR Dashboard", link: routes.hrDashboard, roles: ["hr"] },
               ],
             },
             {

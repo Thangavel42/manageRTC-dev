@@ -41,6 +41,9 @@ const Validate = () => {
       case "admin":
         navigate(routes.adminDashboard);
         break;
+      case "hr":
+        navigate(routes.hrDashboard);
+        break;
       case "employee":
         navigate(routes.employeeDashboard);
         break;

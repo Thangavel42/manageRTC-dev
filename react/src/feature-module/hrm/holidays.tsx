@@ -12,22 +12,26 @@ import { log } from "console";
 import { LogIn } from "react-feather";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import CommonSelect from "../../core/common/commonSelect";
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
+import HolidayDetailsModal from "../../core/modals/HolidayDetailsModal";
 
 interface Holidays {
   _id: string;
   title: string;
   date: string;
   description: string;
-  status: "active" | "inactive";
+  status: "Active" | "Inactive"; // Strict typing for normalized status
   holidayTypeId?: string;
-  holidayTypeName?: string;
+  holidayTypeName?: string; // Only present in API response from lookup
   repeatsEveryYear?: boolean;
 }
 
 interface HolidayType {
   _id: string;
   name: string;
-  status: string;
+  // status field removed - not needed for holiday types
 }
 
 interface HolidayEntry {
@@ -58,6 +62,14 @@ const Holidays = () => {
   const [holiday, setHoliday] = useState<Holidays[]>([]);
   const [editingHoliday, setEditingHoliday] = useState<Holidays | null>(null);
   const [deleteHoliday, setDeleteHoliday] = useState<Holidays | null>(null);
+  const [viewingHoliday, setViewingHoliday] = useState<Holidays | null>(null);
+
+  // Dropdown options (matching employeesList.tsx pattern)
+  const statusOptions = [
+    { value: "", label: "Select Status" },
+    { value: "Active", label: "Active" },
+    { value: "Inactive", label: "Inactive" }
+  ];
 
   // Normalize status to ensure correct case
   const normalizeStatus = (status: string | undefined): "Active" | "Inactive" => {
@@ -102,6 +114,12 @@ const Holidays = () => {
   
   // Use modal cleanup hook for automatic cleanup on unmount
   useModalCleanup();
+
+  // Modal container helper (for DatePicker positioning)
+  const getModalContainer = (): HTMLElement => {
+    const modalElement = document.getElementById("modal-datepicker");
+    return modalElement ? modalElement : document.body;
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -868,12 +886,16 @@ const Holidays = () => {
     {
       title: "Status",
       dataIndex: "status",
-      render: (text: string) => (
-        <span className={`badge ${((text === 'active') || (text === 'Active')) ? 'badge-success' : 'badge-danger'}   d-inline-flex align-items-center badge-sm`}>
-          <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
+      render: (text: string) => {
+        // Normalize status for display - handle any case variations
+        const isActive = text?.toLowerCase() === 'active';
+        return (
+          <span className={`badge ${isActive ? 'badge-success' : 'badge-danger'} d-inline-flex align-items-center badge-sm`}>
+            <i className="ti ti-point-filled me-1" />
+            {isActive ? 'Active' : 'Inactive'}
+          </span>
+        );
+      },
       sorter: (a: any, b: any) => a.Status.length - b.Status.length,
     },
     {
@@ -881,6 +903,16 @@ const Holidays = () => {
       dataIndex: "actions",
       render: (_test: any, holiday: Holidays) => (
         <div className="action-icon d-inline-flex">
+          <Link
+            to="#"
+            className="me-2"
+            data-bs-toggle="modal"
+            data-inert={true}
+            data-bs-target="#view_holiday"
+            onClick={() => setViewingHoliday(holiday)}
+          >
+            <i className="ti ti-eye" />
+          </Link>
           <Link
             to="#"
             className="me-2"
@@ -988,31 +1020,42 @@ const Holidays = () => {
               {/* Filters Section */}
               <div className="d-flex align-items-center flex-wrap gap-2">
                 {/* Type Filter */}
-                <div className="input-icon-end position-relative">
-                  <select
-                    className="form-select form-select-sm"
-                    style={{ minWidth: "150px" }}
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                  >
-                    <option value="">All Types</option>
-                    {holidayTypes.map((type) => (
-                      <option key={type._id} value={type._id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
+                <div style={{ minWidth: "150px" }}>
+                  <CommonSelect
+                    className="select-sm"
+                    options={[
+                      { value: "", label: "All Types" },
+                      ...holidayTypes.map((type) => ({
+                        value: type._id,
+                        label: type.name
+                      }))
+                    ]}
+                    defaultValue={
+                      filterType
+                        ? { value: filterType, label: holidayTypes.find(t => t._id === filterType)?.name || "" }
+                        : { value: "", label: "All Types" }
+                    }
+                    onChange={(option: any) => {
+                      if (option) {
+                        setFilterType(option.value);
+                      }
+                    }}
+                  />
                 </div>
 
                 {/* Date Range Filter - From */}
                 <div className="input-icon-end position-relative">
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
+                  <DatePicker
+                    className="form-control datetimepicker form-control-sm"
+                    format="DD-MM-YYYY"
+                    getPopupContainer={getModalContainer}
+                    placeholder="From Date"
                     style={{ minWidth: "150px" }}
-                    placeholder="From"
-                    value={filterFromDate}
-                    onChange={(e) => setFilterFromDate(e.target.value)}
+                    value={filterFromDate ? dayjs(filterFromDate) : null}
+                    onChange={(date) => {
+                      const isoDate = date ? date.toDate().toISOString() : "";
+                      setFilterFromDate(isoDate);
+                    }}
                   />
                   <span className="input-icon-addon">
                     <i className="ti ti-calendar text-gray-7" />
@@ -1024,13 +1067,17 @@ const Holidays = () => {
 
                 {/* Date Range Filter - To */}
                 <div className="input-icon-end position-relative">
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
+                  <DatePicker
+                    className="form-control datetimepicker form-control-sm"
+                    format="DD-MM-YYYY"
+                    getPopupContainer={getModalContainer}
+                    placeholder="To Date"
                     style={{ minWidth: "150px" }}
-                    placeholder="To"
-                    value={filterToDate}
-                    onChange={(e) => setFilterToDate(e.target.value)}
+                    value={filterToDate ? dayjs(filterToDate) : null}
+                    onChange={(date) => {
+                      const isoDate = date ? date.toDate().toISOString() : "";
+                      setFilterToDate(isoDate);
+                    }}
                   />
                   <span className="input-icon-addon">
                     <i className="ti ti-calendar text-gray-7" />
@@ -1140,16 +1187,24 @@ const Holidays = () => {
                             <label className="form-label">
                               Date <span className="text-danger">*</span>
                             </label>
-                            <input
-                              type="date"
-                              className={`form-control ${
-                                validationErrors[entry.id]?.date ? "is-invalid" : ""
-                              }`}
-                              value={entry.date}
-                              onChange={(e) =>
-                                updateHolidayEntry(entry.id, "date", e.target.value)
-                              }
-                            />
+                            <div className="input-icon-end position-relative">
+                              <DatePicker
+                                className={`form-control datetimepicker ${
+                                  validationErrors[entry.id]?.date ? "is-invalid" : ""
+                                }`}
+                                format="DD-MM-YYYY"
+                                getPopupContainer={getModalContainer}
+                                placeholder="DD-MM-YYYY"
+                                value={entry.date ? dayjs(entry.date) : null}
+                                onChange={(date) => {
+                                  const isoDate = date ? date.toDate().toISOString() : "";
+                                  updateHolidayEntry(entry.id, "date", isoDate);
+                                }}
+                              />
+                              <span className="input-icon-addon">
+                                <i className="ti ti-calendar text-gray-7" />
+                              </span>
+                            </div>
                             {validationErrors[entry.id]?.date && (
                               <div className="invalid-feedback d-block">
                                 {validationErrors[entry.id].date}
@@ -1163,19 +1218,18 @@ const Holidays = () => {
                             <label className="form-label">
                               Status <span className="text-danger">*</span>
                             </label>
-                            <select
-                              className={`form-select ${
+                            <CommonSelect
+                              className={`select ${
                                 validationErrors[entry.id]?.status ? "is-invalid" : ""
                               }`}
-                              value={entry.status}
-                              onChange={(e) =>
-                                updateHolidayEntry(entry.id, "status", e.target.value)
-                              }
-                            >
-                              <option value="">Select Status</option>
-                              <option value="active">Active</option>
-                              <option value="inactive">Inactive</option>
-                            </select>
+                              options={statusOptions}
+                              defaultValue={statusOptions.find(opt => opt.value === entry.status)}
+                              onChange={(option: any) => {
+                                if (option) {
+                                  updateHolidayEntry(entry.id, "status", option.value);
+                                }
+                              }}
+                            />
                             {validationErrors[entry.id]?.status && (
                               <div className="invalid-feedback d-block">
                                 {validationErrors[entry.id].status}
@@ -1189,22 +1243,28 @@ const Holidays = () => {
                             <label className="form-label">
                               Type <span className="text-danger">*</span>
                             </label>
-                            <select
-                              className={`form-select ${
+                            <CommonSelect
+                              className={`select ${
                                 validationErrors[entry.id]?.holidayTypeId ? "is-invalid" : ""
                               }`}
-                              value={entry.holidayTypeId}
-                              onChange={(e) =>
-                                updateHolidayEntry(entry.id, "holidayTypeId", e.target.value)
+                              options={[
+                                { value: "", label: "Select Type" },
+                                ...holidayTypes.map((type) => ({
+                                  value: type._id,
+                                  label: type.name
+                                }))
+                              ]}
+                              defaultValue={
+                                entry.holidayTypeId
+                                  ? { value: entry.holidayTypeId, label: holidayTypes.find(t => t._id === entry.holidayTypeId)?.name || "" }
+                                  : { value: "", label: "Select Type" }
                               }
-                            >
-                              <option value="">Select Type</option>
-                              {holidayTypes.map((type) => (
-                                <option key={type._id} value={type._id}>
-                                  {type.name}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(option: any) => {
+                                if (option) {
+                                  updateHolidayEntry(entry.id, "holidayTypeId", option.value);
+                                }
+                              }}
+                            />
                             {validationErrors[entry.id]?.holidayTypeId && (
                               <div className="invalid-feedback d-block">
                                 {validationErrors[entry.id].holidayTypeId}
@@ -1326,17 +1386,25 @@ const Holidays = () => {
                     <label className="form-label">
                       Date <span className="text-danger">*</span>
                     </label>
-                    <input
-                      type="date"
-                      className={`form-control ${
-                        editValidationErrors.date ? "is-invalid" : ""
-                      }`}
-                      value={editDate}
-                      onChange={(e) => {
-                        setEditDate(e.target.value);
-                        clearEditError("date");
-                      }}
-                    />
+                    <div className="input-icon-end position-relative">
+                      <DatePicker
+                        className={`form-control datetimepicker ${
+                          editValidationErrors.date ? "is-invalid" : ""
+                        }`}
+                        format="DD-MM-YYYY"
+                        getPopupContainer={getModalContainer}
+                        placeholder="DD-MM-YYYY"
+                        value={editDate ? dayjs(editDate) : null}
+                        onChange={(date) => {
+                          const isoDate = date ? date.toDate().toISOString() : "";
+                          setEditDate(isoDate);
+                          clearEditError("date");
+                        }}
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-calendar text-gray-7" />
+                      </span>
+                    </div>
                     {editValidationErrors.date && (
                       <div className="invalid-feedback d-block">
                         {editValidationErrors.date}
@@ -1350,20 +1418,19 @@ const Holidays = () => {
                     <label className="form-label">
                       Status <span className="text-danger">*</span>
                     </label>
-                    <select
-                      className={`form-select ${
+                    <CommonSelect
+                      className={`select ${
                         editValidationErrors.status ? "is-invalid" : ""
                       }`}
-                      value={editStatus}
-                      onChange={(e) => {
-                        setEditStatus(e.target.value);
-                        clearEditError("status");
+                      options={statusOptions}
+                      defaultValue={statusOptions.find(opt => opt.value === editStatus)}
+                      onChange={(option: any) => {
+                        if (option) {
+                          setEditStatus(option.value);
+                          clearEditError("status");
+                        }
                       }}
-                    >
-                      <option value="">Select Status</option>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
+                    />
                     {editValidationErrors.status && (
                       <div className="invalid-feedback d-block">
                         {editValidationErrors.status}
@@ -1377,23 +1444,29 @@ const Holidays = () => {
                     <label className="form-label">
                       Type <span className="text-danger">*</span>
                     </label>
-                    <select
-                      className={`form-select ${
+                    <CommonSelect
+                      className={`select ${
                         editValidationErrors.holidayTypeId ? "is-invalid" : ""
                       }`}
-                      value={editHolidayTypeId}
-                      onChange={(e) => {
-                        setEditHolidayTypeId(e.target.value);
-                        clearEditError("holidayTypeId");
+                      options={[
+                        { value: "", label: "Select Type" },
+                        ...holidayTypes.map((type) => ({
+                          value: type._id,
+                          label: type.name
+                        }))
+                      ]}
+                      defaultValue={
+                        editHolidayTypeId
+                          ? { value: editHolidayTypeId, label: holidayTypes.find(t => t._id === editHolidayTypeId)?.name || "" }
+                          : { value: "", label: "Select Type" }
+                      }
+                      onChange={(option: any) => {
+                        if (option) {
+                          setEditHolidayTypeId(option.value);
+                          clearEditError("holidayTypeId");
+                        }
                       }}
-                    >
-                      <option value="">Select Type</option>
-                      {holidayTypes.map((type) => (
-                        <option key={type._id} value={type._id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {editValidationErrors.holidayTypeId && (
                       <div className="invalid-feedback d-block">
                         {editValidationErrors.holidayTypeId}
@@ -1717,6 +1790,10 @@ const Holidays = () => {
         </div>
       )}
       {/* /Holiday Types Modal */}
+
+      {/* View Holiday Detail Modal */}
+      <HolidayDetailsModal holiday={viewingHoliday} modalId="view_holiday" />
+      {/* /View Holiday Detail Modal */}
     </>
   );
 };

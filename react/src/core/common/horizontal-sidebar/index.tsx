@@ -2,13 +2,29 @@ import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { HorizontalSidebarData } from '../../data/json/horizontalSidebar'
 import ImageWithBasePath from '../imageWithBasePath';
+import { useUser } from '@clerk/clerk-react';
 
 const HorizontalSidebar = () => {
     const Location = useLocation();
+    const { user } = useUser();
 
     const [subOpen, setSubopen] = useState<any>("");
     const [subsidebar, setSubsidebar] = useState("");
   
+    // Get current user role
+    const getUserRole = (): string => {
+      if (!user) return "guest";
+      return (user.publicMetadata?.role as string)?.toLowerCase() || "employee";
+    };
+
+    // Check if user has access to menu item
+    const hasAccess = (roles?: string[]): boolean => {
+      if (!roles || roles.length === 0) return true;
+      if (roles.includes("public")) return true;
+      const userRole = getUserRole();
+      return roles.includes(userRole);
+    };
+
     const toggleSidebar = (title: any) => {
       localStorage.setItem("menuOpened", title);
       if (title === subOpen) {
@@ -53,7 +69,7 @@ const HorizontalSidebar = () => {
 
                         {/* First-level Submenus */}
                         <ul style={{ display: subOpen === data.menuValue ? "block" : "none" }}>
-                        {data?.subMenus?.map((subMenu:any, j) => (
+                        {((data?.subMenus || []) as any[]).filter((subMenu: any) => hasAccess(subMenu?.roles)).map((subMenu:any, j) => (
                             <li
                             key={`submenu-${j}`}
                             className={subMenu?.customSubmenuTwo ? "submenu" : ""}
