@@ -45,6 +45,7 @@ var imageWithBasePath_1 = require("../imageWithBasePath");
 var sidebarSlice_1 = require("../../data/redux/sidebarSlice");
 var all_routes_1 = require("../../../feature-module/router/all_routes");
 var horizontalSidebar_1 = require("../../data/json/horizontalSidebar");
+require("./customclerk.css");
 var Header = function () {
     var routes = all_routes_1.all_routes;
     var dispatch = react_redux_1.useDispatch();
@@ -59,13 +60,16 @@ var Header = function () {
     var getUserName = function () {
         if (!user)
             return "Guest User";
-        return user.fullName || ((user.firstName || '') + " " + (user.lastName || '')).trim() || "User";
+        return (user.fullName ||
+            ((user.firstName || "") + " " + (user.lastName || "")).trim() ||
+            "User");
     };
     var getUserEmail = function () {
         var _a, _b, _c;
         if (!user)
             return "guest@example.com";
-        return ((_a = user.primaryEmailAddress) === null || _a === void 0 ? void 0 : _a.emailAddress) || ((_c = (_b = user.emailAddresses) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.emailAddress) || "No email";
+        return (((_a = user.primaryEmailAddress) === null || _a === void 0 ? void 0 : _a.emailAddress) || ((_c = (_b = user.emailAddresses) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.emailAddress) ||
+            "No email");
     };
     var getCompanyId = function () {
         var _a;
@@ -146,16 +150,14 @@ var Header = function () {
     var toggleFullscreen = function () {
         if (!isFullscreen) {
             if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen()["catch"](function (err) {
-                });
+                document.documentElement.requestFullscreen()["catch"](function (err) { });
                 setIsFullscreen(true);
             }
         }
         else {
             if (document.exitFullscreen) {
                 if (document.fullscreenElement) {
-                    document.exitFullscreen()["catch"](function (err) {
-                    });
+                    document.exitFullscreen()["catch"](function (err) { });
                 }
                 setIsFullscreen(false);
             }
@@ -198,7 +200,7 @@ var Header = function () {
                             react_1["default"].createElement("div", { className: "input-group input-group-flat d-inline-flex me-1" },
                                 react_1["default"].createElement("span", { className: "input-icon-addon" },
                                     react_1["default"].createElement("i", { className: "ti ti-search" })),
-                                react_1["default"].createElement("input", { type: "text", className: "form-control", placeholder: "Search in ManageRTC" }),
+                                react_1["default"].createElement("input", { type: "text", className: "form-control", placeholder: "Search in HRMS" }),
                                 react_1["default"].createElement("span", { className: "input-group-text" },
                                     react_1["default"].createElement("kbd", null, "CTRL + / "))),
                             react_1["default"].createElement("div", { className: "dropdown crm-dropdown" },
@@ -253,23 +255,39 @@ var Header = function () {
                                         horizontalSidebar_1.HorizontalSidebarData.map(function (mainMenu, index) {
                                             var _a;
                                             return (react_1["default"].createElement(react_1["default"].Fragment, { key: "main-" + index }, (_a = mainMenu === null || mainMenu === void 0 ? void 0 : mainMenu.menu) === null || _a === void 0 ? void 0 : _a.map(function (data, i) {
-                                                var _a;
+                                                var _a, _b;
                                                 return (react_1["default"].createElement("li", { className: "submenu", key: "menu-" + i },
-                                                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t" + (((_a = data === null || data === void 0 ? void 0 : data.subMenus) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) ? "active"
+                                                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "\n                                  " + (((_a = data === null || data === void 0 ? void 0 : data.subMenus) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) ? "active"
                                                             : "") + " " + (subOpen === data.menuValue ? "subdrop" : ""), onClick: function () { return toggleSidebar(data.menuValue); } },
                                                         react_1["default"].createElement("i", { className: "ti ti-" + data.icon }),
                                                         react_1["default"].createElement("span", null, data.menuValue),
                                                         react_1["default"].createElement("span", { className: "menu-arrow" })),
-                                                    react_1["default"].createElement("ul", { style: { display: subOpen === data.menuValue ? "block" : "none" } }, ((data === null || data === void 0 ? void 0 : data.subMenus) || []).filter(function (subMenu) { return hasAccess(subMenu === null || subMenu === void 0 ? void 0 : subMenu.roles); }).map(function (subMenu, j) {
+                                                    react_1["default"].createElement("ul", { style: {
+                                                            display: subOpen === data.menuValue
+                                                                ? "block"
+                                                                : "none"
+                                                        } }, (_b = data === null || data === void 0 ? void 0 : data.subMenus) === null || _b === void 0 ? void 0 : _b.map(function (subMenu, j) {
                                                         var _a;
                                                         return (react_1["default"].createElement("li", { key: "submenu-" + j, className: (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) ? "submenu" : "" },
-                                                            react_1["default"].createElement(react_router_dom_1.Link, { to: (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) || "#", className: (((_a = subMenu === null || subMenu === void 0 ? void 0 : subMenu.subMenusTwo) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) || (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) === Location.pathname
+                                                            react_1["default"].createElement(react_router_dom_1.Link, { to: (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) || "#", className: (((_a = subMenu === null || subMenu === void 0 ? void 0 : subMenu.subMenusTwo) === null || _a === void 0 ? void 0 : _a.map(function (link) { return link === null || link === void 0 ? void 0 : link.route; }).includes(Location.pathname)) ||
+                                                                    (subMenu === null || subMenu === void 0 ? void 0 : subMenu.route) === Location.pathname
                                                                     ? "active"
-                                                                    : "") + " " + (subsidebar === subMenu.menuValue ? "subdrop" : ""), onClick: function () { return toggleSubsidebar(subMenu.menuValue); } },
+                                                                    : "") + " " + (subsidebar === subMenu.menuValue
+                                                                    ? "subdrop"
+                                                                    : ""), onClick: function () {
+                                                                    return toggleSubsidebar(subMenu.menuValue);
+                                                                } },
                                                                 react_1["default"].createElement("span", null, subMenu === null || subMenu === void 0 ? void 0 : subMenu.menuValue),
-                                                                (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) && react_1["default"].createElement("span", { className: "menu-arrow" })),
-                                                            (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) && (subMenu === null || subMenu === void 0 ? void 0 : subMenu.subMenusTwo) && (react_1["default"].createElement("ul", { style: { display: subsidebar === subMenu.menuValue ? "block" : "none" } }, subMenu.subMenusTwo.map(function (subMenuTwo, k) { return (react_1["default"].createElement("li", { key: "submenu-two-" + k },
-                                                                react_1["default"].createElement(react_router_dom_1.Link, { className: subMenuTwo.route === Location.pathname ? 'active' : '', to: subMenuTwo.route }, subMenuTwo.menuValue))); })))));
+                                                                (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) && (react_1["default"].createElement("span", { className: "menu-arrow" }))),
+                                                            (subMenu === null || subMenu === void 0 ? void 0 : subMenu.customSubmenuTwo) && (subMenu === null || subMenu === void 0 ? void 0 : subMenu.subMenusTwo) && (react_1["default"].createElement("ul", { style: {
+                                                                    display: subsidebar === subMenu.menuValue
+                                                                        ? "block"
+                                                                        : "none"
+                                                                } }, subMenu.subMenusTwo.map(function (subMenuTwo, k) { return (react_1["default"].createElement("li", { key: "submenu-two-" + k },
+                                                                react_1["default"].createElement(react_router_dom_1.Link, { className: subMenuTwo.route ===
+                                                                        Location.pathname
+                                                                        ? "active"
+                                                                        : "", to: subMenuTwo.route }, subMenuTwo.menuValue))); })))));
                                                     }))));
                                             })));
                                         }))))),
@@ -356,7 +374,8 @@ var Header = function () {
                                                         react_1["default"].createElement("div", { className: "flex-grow-1" },
                                                             react_1["default"].createElement("p", { className: "mb-1" },
                                                                 react_1["default"].createElement("span", { className: "text-dark fw-semibold" }, "Sylvia"),
-                                                                " added appointment on 02:00 PM"),
+                                                                " ",
+                                                                "added appointment on 02:00 PM"),
                                                             react_1["default"].createElement("span", null, "10 mins ago"),
                                                             react_1["default"].createElement("div", { className: "d-flex justify-content-start align-items-center mt-1" },
                                                                 react_1["default"].createElement("span", { className: "btn btn-light btn-sm me-2" }, "Deny"),
@@ -368,9 +387,13 @@ var Header = function () {
                                                             react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-25.jpg", alt: "Profile" })),
                                                         react_1["default"].createElement("div", { className: "flex-grow-1" },
                                                             react_1["default"].createElement("p", { className: "mb-1" },
-                                                                "New student record ",
-                                                                react_1["default"].createElement("span", { className: "text-dark fw-semibold" }, " George"),
-                                                                "is created by ",
+                                                                "New student record",
+                                                                " ",
+                                                                react_1["default"].createElement("span", { className: "text-dark fw-semibold" },
+                                                                    " ",
+                                                                    "George"),
+                                                                "is created by",
+                                                                " ",
                                                                 react_1["default"].createElement("span", { className: "text-dark fw-semibold" }, "Teressa")),
                                                             react_1["default"].createElement("span", null, "2 hrs ago"))))),
                                             react_1["default"].createElement("div", { className: "border-0 mb-3 pb-0" },
@@ -380,7 +403,8 @@ var Header = function () {
                                                             react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-01.jpg", alt: "Profile" })),
                                                         react_1["default"].createElement("div", { className: "flex-grow-1" },
                                                             react_1["default"].createElement("p", { className: "mb-1" },
-                                                                "A new teacher record for ",
+                                                                "A new teacher record for",
+                                                                " ",
                                                                 react_1["default"].createElement("span", { className: "text-dark fw-semibold" }, "Elisa"),
                                                                 " "),
                                                             react_1["default"].createElement("span", null, "09:45 AM"))))))),
@@ -389,17 +413,15 @@ var Header = function () {
                                         react_1["default"].createElement(react_router_dom_1.Link, { to: routes.activity, className: "btn btn-primary w-100" }, "View All")))),
                             react_1["default"].createElement("div", { className: "dropdown profile-dropdown" },
                                 react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle d-flex align-items-center", "data-bs-toggle": "dropdown" },
-                                    react_1["default"].createElement("span", { className: "avatar avatar-sm online" }, isSignedIn && user ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
-                                            // Fallback to default image if user image fails to load
-                                            e.target.src = "assets/img/profiles/avatar-12.jpg";
-                                        } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-12.jpg", alt: "Img", className: "img-fluid rounded-circle" })))),
+                                    react_1["default"].createElement("span", { className: "avatar avatar-sm online" }, isSignedIn ? react_1["default"].createElement(clerk_react_1.UserButton, null) : react_1["default"].createElement(react_1["default"].Fragment, null))),
                                 react_1["default"].createElement("div", { className: "dropdown-menu shadow-none" },
                                     react_1["default"].createElement("div", { className: "card mb-0" },
                                         react_1["default"].createElement("div", { className: "card-header" },
                                             react_1["default"].createElement("div", { className: "d-flex align-items-center" },
                                                 react_1["default"].createElement("span", { className: "avatar avatar-lg me-2 avatar-rounded" }, isSignedIn && user ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", onError: function (e) {
                                                         // Fallback to default image if user image fails to load
-                                                        e.target.src = "assets/img/profiles/avatar-12.jpg";
+                                                        e.target.src =
+                                                            "assets/img/profiles/avatar-12.jpg";
                                                     } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-12.jpg", alt: "img" }))),
                                                 react_1["default"].createElement("div", null,
                                                     react_1["default"].createElement("h5", { className: "mb-0" }, getUserName()),
@@ -428,7 +450,11 @@ var Header = function () {
                                                 react_1["default"].createElement("i", { className: "ti ti-question-mark me-1" }),
                                                 "Knowledge Base")),
                                         react_1["default"].createElement("div", { className: "card-footer" },
-                                            react_1["default"].createElement("button", { className: "dropdown-item d-inline-flex align-items-center p-0 py-2 btn btn-link text-start", onClick: handleSignOut, style: { border: 'none', background: 'none', width: '100%' } },
+                                            react_1["default"].createElement("button", { className: "dropdown-item d-inline-flex align-items-center p-0 py-2 btn btn-link text-start", onClick: handleSignOut, style: {
+                                                    border: "none",
+                                                    background: "none",
+                                                    width: "100%"
+                                                } },
                                                 react_1["default"].createElement("i", { className: "ti ti-login me-2" }),
                                                 "Logout")))))))),
                 react_1["default"].createElement("div", { className: "dropdown mobile-user-menu" },
@@ -437,6 +463,6 @@ var Header = function () {
                     react_1["default"].createElement("div", { className: "dropdown-menu dropdown-menu-end" },
                         react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: routes.profile }, "My Profile"),
                         react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: routes.profilesettings }, "Settings"),
-                        react_1["default"].createElement("button", { className: "dropdown-item btn btn-link text-start", onClick: handleSignOut, style: { border: 'none', background: 'none', width: '100%' } }, "Logout")))))));
+                        react_1["default"].createElement("button", { className: "dropdown-item btn btn-link text-start", onClick: handleSignOut, style: { border: "none", background: "none", width: "100%" } }, "Logout")))))));
 };
 exports["default"] = Header;

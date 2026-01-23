@@ -304,102 +304,27 @@ const Header = (): JSX.Element => {
                 </Link>
               </div>
 
-				<div className="header-user">
-					<div className="nav user-menu nav-list">
-
-						<div className="me-auto d-flex align-items-center" id="header-search">
-							<Link id="toggle_btn" to="#" onClick={handleToggleMiniSidebar} className="btn btn-menubar me-1">
-								<i className="ti ti-arrow-bar-to-left"></i>
-							</Link>
-							<div className="input-group input-group-flat d-inline-flex me-1">
-								<span className="input-icon-addon">
-									<i className="ti ti-search"></i>
-								</span>
-								<input type="text" className="form-control" placeholder="Search in ManageRTC" />
-								<span className="input-group-text">
-									<kbd>CTRL + / </kbd>
-								</span>
-							</div>
-							<div className="dropdown crm-dropdown">
-								<Link to="#" className="btn btn-menubar me-1" data-bs-toggle="dropdown">
-									<i className="ti ti-layout-grid"></i>
-								</Link>
-								<div className="dropdown-menu dropdown-lg dropdown-menu-start">
-									<div className="card mb-0 border-0 shadow-none">
-										<div className="card-header">
-											<h4>CRM</h4>
-										</div>
-										<div className="card-body pb-1">
-											<div className="row">
-												<div className="col-sm-6">
-													<Link to={routes.contactList} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-user-shield text-default me-2"></i>Contacts
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-													<Link to={routes.dealsGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-heart-handshake text-default me-2"></i>Deals
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-													<Link to={routes.pipeline} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-timeline-event-text text-default me-2"></i>Pipeline
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-												</div>
-												<div className="col-sm-6">
-													<Link to={routes.companiesGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-building text-default me-2"></i>Companies
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-													<Link to={routes.leadsGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-user-check text-default me-2"></i>Leads
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-													<Link to={routes.activity} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
-														<span className="d-flex align-items-center me-3">
-															<i className="ti ti-activity text-default me-2"></i>Activities
-														</span>
-														<i className="ti ti-arrow-right"></i>
-													</Link>
-												</div>
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-							<Link to={routes.profilesettings} className="btn btn-menubar">
-								<i className="ti ti-settings-cog"></i>
-							</Link>
-						</div>
-
-						<div className="sidebar sidebar-horizontal" id="horizontal-single">
-							<div className="sidebar-menu">
-								<div className="main-menu">
-									<ul className="nav-menu">
-										<li className="menu-title">
-											<span>Main</span>
-										</li>
-										{HorizontalSidebarData?.map((mainMenu, index) => (
-											<React.Fragment key={`main-${index}`}>
-												{mainMenu?.menu?.map((data, i) => (
-												<li className="submenu" key={`menu-${i}`}>
-													<Link to="#" className={`
-														${
-                              data?.subMenus
-                                ?.map((link: any) => link?.route)
-                                .includes(Location.pathname)
-                                ? "active"
-                                : ""
-                            } ${subOpen === data.menuValue ? "subdrop" : ""}`}
+              <div className="sidebar sidebar-horizontal" id="horizontal-single">
+                <div className="sidebar-menu">
+                  <div className="main-menu">
+                    <ul className="nav-menu">
+                      <li className="menu-title">
+                        <span>Main</span>
+                      </li>
+                      {HorizontalSidebarData?.map((mainMenu, index) => (
+                        <React.Fragment key={`main-${index}`}>
+                          {mainMenu?.menu?.map((data, i) => (
+                            <li className="submenu" key={`menu-${i}`}>
+                              <Link
+                                to="#"
+                                className={`
+                                  ${
+                                    data?.subMenus
+                                      ?.map((link: any) => link?.route)
+                                      .includes(Location.pathname)
+                                      ? "active"
+                                      : ""
+                                  } ${subOpen === data.menuValue ? "subdrop" : ""}`}
                                 onClick={() => toggleSidebar(data.menuValue)}
                               >
                                 <i className={`ti ti-${data.icon}`}></i>

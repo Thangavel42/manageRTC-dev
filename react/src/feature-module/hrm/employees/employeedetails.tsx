@@ -117,6 +117,7 @@ interface ContactInfo {
 interface AccountInfo {
     userName: string;
     password: string;
+    role: string;
 }
 
 interface EmergencyContact {
@@ -305,6 +306,13 @@ interface Termination {
 }
 
 const EmployeeDetails = () => {
+    // Dropdown options
+    const roleOptions = [
+        { value: "", label: "Select Role" },
+        { value: "HR", label: "HR" },
+        { value: "Employee", label: "Employee" }
+    ];
+
     const [permissions, setPermissions] = useState<PermissionsState>(initialPermissionsState);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [imageUpload, setImageUpload] = useState(false);
@@ -1910,6 +1918,13 @@ const EmployeeDetails = () => {
                                             </div>
                                             <div className="d-flex align-items-center justify-content-between mb-2">
                                                 <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-user-shield me-2" />
+                                                    Role
+                                                </span>
+                                                <p className="text-dark">{employee?.account?.role || '-'}</p>
+                                            </div>
+                                            <div className="d-flex align-items-center justify-content-between mb-2">
+                                                <span className="d-inline-flex align-items-center">
                                                     <i className="ti ti-calendar-check me-2" />
                                                     Date Of Join
                                                 </span>
@@ -3104,6 +3119,29 @@ const EmployeeDetails = () => {
                                                             name="employeeId"
                                                             value={editFormData.employeeId || ""}
                                                             readOnly
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <div className="mb-3">
+                                                        <label className="form-label">
+                                                            Role <span className="text-danger">*</span>
+                                                        </label>
+                                                        <CommonSelect
+                                                            className="select"
+                                                            options={roleOptions}
+                                                            defaultValue={roleOptions.find(opt => opt.value === editFormData.account?.role)}
+                                                            onChange={(option: any) => {
+                                                                if (option) {
+                                                                    setEditFormData((prev) => ({
+                                                                        ...prev,
+                                                                        account: {
+                                                                            ...prev.account,
+                                                                            role: option.value,
+                                                                        },
+                                                                    }));
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
                                                 </div>
