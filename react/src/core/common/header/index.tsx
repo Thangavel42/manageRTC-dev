@@ -677,7 +677,7 @@ const Header = (): JSX.Element => {
 											<ImageWithBasePath src="assets/img/profiles/avatar-12.jpg" alt="Img" className="img-fluid rounded-circle"/>
 										)} */}
 
-                      {isSignedIn ? <UserButton /> : <></>}
+            
                     </span>
                   </Link>
                   <div className="dropdown-menu shadow-none">
