@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
@@ -10,6 +10,8 @@ import CrmsModal from "../../../core/modals/crms_modal";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import Footer from "../../../core/common/footer";
+import dragula, { Drake } from "dragula";
+import "dragula/dist/dragula.css";
 
 interface DateRange {
   start: string;
@@ -25,12 +27,71 @@ interface LeadFilters {
   limit?: number;
 }
 
+interface Lead {
+  _id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  value: number;
+  address: string | any;
+  source: string;
+  country: string;
+  createdAt: string;
+  owner: string;
+  stage?: string;
+  // For list view compatibility
+  LeadName?: string;
+  CompanyName?: string;
+  Email?: string;
+  Phone?: string;
+  Tags?: string;
+  CreatedDate?: string;
+  LeadOwner?: string;
+  Image?: string;
+}
+
+interface StageData {
+  [key: string]: Lead[];
+}
+
+interface StageTotals {
+  [key: string]: {
+    count: number;
+    value: number;
+  };
+}
+
 const LeadsList = () => {
   const routes = all_routes;
   const socket = useSocket();
-  
-  // State management
+
+  // View Mode State
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // State management for LIST view
   const [leadsData, setLeadsData] = useState<any[]>([]);
+  const [pagination, setPagination] = useState({
+    totalCount: 0,
+    totalPages: 0,
+    currentPage: 1
+  });
+
+  // State management for GRID view
+  const [stages, setStages] = useState<StageData>({
+    'Contacted': [],
+    'Not Contacted': [],
+    'Closed': [],
+    'Lost': []
+  });
+  const [stageTotals, setStageTotals] = useState<StageTotals>({
+    'Contacted': { count: 0, value: 0 },
+    'Not Contacted': { count: 0, value: 0 },
+    'Closed': { count: 0, value: 0 },
+    'Lost': { count: 0, value: 0 }
+  });
+
+  // Shared state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<LeadFilters>({
@@ -42,11 +103,6 @@ const LeadsList = () => {
   const [dateRange, setDateRange] = useState<DateRange>({
     start: new Date(1970, 0, 1).toISOString(),
     end: new Date().toISOString(),
-  });
-  const [pagination, setPagination] = useState({
-    totalCount: 0,
-    totalPages: 0,
-    currentPage: 1
   });
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -66,7 +122,14 @@ const LeadsList = () => {
   });
   const [submitLoading, setSubmitLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
-  // Fetch leads data from backend
+
+  // Refs for drag and drop (grid view)
+  const container1Ref = useRef<HTMLDivElement>(null);
+  const container2Ref = useRef<HTMLDivElement>(null);
+  const container3Ref = useRef<HTMLDivElement>(null);
+  const container4Ref = useRef<HTMLDivElement>(null);
+
+  // Fetch leads data for LIST view
   const fetchLeadsData = async () => {
     if (!socket) {
       console.log("[LeadsList] Socket not available yet");
@@ -78,7 +141,7 @@ const LeadsList = () => {
 
     try {
       console.log("[LeadsList] Fetching leads data with filters:", filters);
-      
+
       const requestData = {
         filters: {
           ...filters,
@@ -134,10 +197,145 @@ const LeadsList = () => {
     }
   };
 
-  // Effect to fetch data when component mounts or filters change
+  // Fetch leads grid data for GRID view
+  const fetchLeadsGridData = async () => {
+    if (!socket) {
+      console.log("[LeadsGrid] Socket not available yet");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log("[LeadsGrid] Fetching leads grid data with filters:", filters);
+
+      const requestData = {
+        filters: {
+          ...filters,
+          dateRange: dateRange
+        }
+      };
+
+      // Set up response handler
+      const handleResponse = (response: any) => {
+        console.log("[LeadsGrid] Received response:", response);
+        setLoading(false);
+
+        if (response.done) {
+          const data = response.data || {};
+          console.log("[LeadsGrid] Received data from backend:", data);
+
+          const stagesData = data.stages || {
+            'Contacted': [],
+            'Not Contacted': [],
+            'Closed': [],
+            'Lost': []
+          };
+
+          const stageTotalsData = data.stageTotals || {
+            'Contacted': { count: 0, value: 0 },
+            'Not Contacted': { count: 0, value: 0 },
+            'Closed': { count: 0, value: 0 },
+            'Lost': { count: 0, value: 0 }
+          };
+
+          console.log("[LeadsGrid] Setting stages:", {
+            'Contacted': stagesData['Contacted'].length,
+            'Not Contacted': stagesData['Not Contacted'].length,
+            'Closed': stagesData['Closed'].length,
+            'Lost': stagesData['Lost'].length
+          });
+
+          console.log("[LeadsGrid] Setting stage totals:", stageTotalsData);
+
+          setStages(stagesData);
+          setStageTotals(stageTotalsData);
+          setError(null);
+        } else {
+          setError(response.error || "Failed to load leads grid data");
+          setStages({
+            'Contacted': [],
+            'Not Contacted': [],
+            'Closed': [],
+            'Lost': []
+          });
+          setStageTotals({
+            'Contacted': { count: 0, value: 0 },
+            'Not Contacted': { count: 0, value: 0 },
+            'Closed': { count: 0, value: 0 },
+            'Lost': { count: 0, value: 0 }
+          });
+        }
+      };
+
+      // Listen for response
+      socket.on('lead/grid/get-data-response', handleResponse);
+
+      // Emit request
+      socket.emit('lead/grid/get-data', requestData);
+
+      // Clean up listener after response
+      const timeout = setTimeout(() => {
+        socket.off('lead/grid/get-data-response', handleResponse);
+        if (loading) {
+          setLoading(false);
+          setError("Request timed out");
+        }
+      }, 10000);
+
+      // Clean up on successful response
+      socket.once('lead/grid/get-data-response', () => {
+        clearTimeout(timeout);
+        socket.off('lead/grid/get-data-response', handleResponse);
+      });
+
+    } catch (error) {
+      console.error("[LeadsGrid] Error fetching leads grid data:", error);
+      setLoading(false);
+      setError("Failed to fetch leads grid data");
+    }
+  };
+
+  // Effect to fetch data based on view mode
   useEffect(() => {
-    fetchLeadsData();
-  }, [socket, filters, dateRange]);
+    if (viewMode === 'list') {
+      fetchLeadsData();
+    } else {
+      fetchLeadsGridData();
+    }
+  }, [socket, filters, dateRange, viewMode]);
+
+  // Dragula setup for grid view
+  useEffect(() => {
+    if (viewMode !== 'grid') return;
+
+    const containers = [
+      container1Ref.current as HTMLDivElement,
+      container2Ref.current as HTMLDivElement,
+      container3Ref.current as HTMLDivElement,
+      container4Ref.current as HTMLDivElement,
+    ].filter((container) => container !== null);
+
+    if (containers.length > 0) {
+      const drake: Drake = dragula(containers, {
+        moves: function (el: any, source: any, handle: any, sibling: any) {
+          return true;
+        },
+        accepts: function (el: any, target: any, source: any, sibling: any) {
+          return true;
+        }
+      });
+
+      drake.on('drop', function (el: any, target: any, source: any, sibling: any) {
+        console.log('Lead moved from', source.className, 'to', target.className);
+      });
+
+      return () => {
+        drake.destroy();
+      };
+    }
+  }, [stages, viewMode]);
 
   // Handle filter changes
   const handleStageFilter = (stage: string) => {
@@ -163,16 +361,16 @@ const LeadsList = () => {
   // Handle add new lead
   const handleAddLead = async () => {
     if (!socket) {
-      console.log("[LeadsList] Socket not available");
+      console.log("[Leads] Socket not available");
       return;
     }
 
     setSubmitLoading(true);
     try {
-      console.log("[LeadsList] Creating new lead:", formData);
+      console.log("[Leads] Creating new lead:", formData);
 
       const handleResponse = (response: any) => {
-        console.log("[LeadsList] Received create response:", response);
+        console.log("[Leads] Received create response:", response);
         setSubmitLoading(false);
         if (response.done) {
           setAddModalVisible(false);
@@ -189,11 +387,14 @@ const LeadsList = () => {
             owner: 'Unknown',
             priority: 'Medium'
           });
-          // Refresh the leads data immediately and then again after a delay to ensure consistency
-          fetchLeadsData();
-          setTimeout(() => {
+          // Refresh the leads data
+          if (viewMode === 'list') {
             fetchLeadsData();
-          }, 1000);
+            setTimeout(() => fetchLeadsData(), 1000);
+          } else {
+            fetchLeadsGridData();
+            setTimeout(() => fetchLeadsGridData(), 1000);
+          }
           console.log("Lead created successfully");
         } else {
           console.error("Failed to create lead:", response.error);
@@ -203,7 +404,6 @@ const LeadsList = () => {
       socket.on('lead/create-response', handleResponse);
       socket.emit('lead/create', formData);
 
-      // Clean up listener
       setTimeout(() => {
         socket.off('lead/create-response', handleResponse);
       }, 5000);
@@ -215,19 +415,21 @@ const LeadsList = () => {
 
   // Handle edit lead
   const handleEditLead = (lead: any) => {
-    console.log("[LeadsList] Opening edit modal for lead:", lead);
+    console.log("[Leads] Opening edit modal for lead:", lead);
     setEditingLead(lead);
+
+    // Support both list and grid data formats
     setFormData({
-      name: lead.LeadName || '',
-      company: lead.CompanyName || '',
-      email: lead.Email || '',
-      phone: lead.Phone || '',
+      name: lead.name || lead.LeadName || '',
+      company: lead.company || lead.CompanyName || '',
+      email: lead.email || lead.Email || '',
+      phone: lead.phone || lead.Phone || '',
       value: lead.value || 0,
-      stage: lead.Tags || 'Not Contacted',
+      stage: lead.stage || lead.Tags || 'Not Contacted',
       source: lead.source || 'Unknown',
       country: lead.country || 'Unknown',
       address: lead.address || '',
-      owner: lead.LeadOwner || 'Unknown',
+      owner: lead.owner || lead.LeadOwner || 'Unknown',
       priority: 'Medium'
     });
     setEditModalVisible(true);
@@ -236,13 +438,12 @@ const LeadsList = () => {
   // Handle update lead
   const handleUpdateLead = async () => {
     if (!socket || !editingLead) {
-      console.log("[LeadsList] Cannot update lead - socket or editingLead missing");
+      console.log("[Leads] Cannot update lead - socket or editingLead missing");
       return;
     }
 
     setSubmitLoading(true);
     try {
-      // Map form data to backend expected format
       const updateData = {
         name: formData.name,
         company: formData.company,
@@ -262,10 +463,10 @@ const LeadsList = () => {
         updateData: updateData
       };
 
-      console.log("[LeadsList] Sending update request:", requestData);
+      console.log("[Leads] Sending update request:", requestData);
 
       const handleResponse = (response: any) => {
-        console.log("[LeadsList] Received update response:", response);
+        console.log("[Leads] Received update response:", response);
         setSubmitLoading(false);
         if (response.done) {
           setEditModalVisible(false);
@@ -283,9 +484,13 @@ const LeadsList = () => {
             owner: 'Unknown',
             priority: 'Medium'
           });
-          // Refresh the leads data with a small delay to ensure database is updated
+          // Refresh based on view mode
           setTimeout(() => {
-            fetchLeadsData();
+            if (viewMode === 'list') {
+              fetchLeadsData();
+            } else {
+              fetchLeadsGridData();
+            }
           }, 500);
           console.log("Lead updated successfully");
         } else {
@@ -296,7 +501,6 @@ const LeadsList = () => {
       socket.on('lead/update-response', handleResponse);
       socket.emit('lead/update', requestData);
 
-      // Clean up listener
       setTimeout(() => {
         socket.off('lead/update-response', handleResponse);
       }, 5000);
@@ -309,7 +513,7 @@ const LeadsList = () => {
   // Handle delete lead
   const handleDeleteLead = async (leadId: string) => {
     if (!socket) {
-      console.log("[LeadsList] Socket not available");
+      console.log("[Leads] Socket not available");
       return;
     }
 
@@ -318,16 +522,19 @@ const LeadsList = () => {
     }
 
     try {
-      console.log("[LeadsList] Deleting lead:", leadId);
+      console.log("[Leads] Deleting lead:", leadId);
 
       const handleResponse = (response: any) => {
-        console.log("[LeadsList] Received delete response:", response);
+        console.log("[Leads] Received delete response:", response);
         if (response.done) {
-          // Refresh the leads data immediately and then again after a delay to ensure consistency
-          fetchLeadsData();
-          setTimeout(() => {
+          // Refresh based on view mode
+          if (viewMode === 'list') {
             fetchLeadsData();
-          }, 1000);
+            setTimeout(() => fetchLeadsData(), 1000);
+          } else {
+            fetchLeadsGridData();
+            setTimeout(() => fetchLeadsGridData(), 1000);
+          }
           console.log("Lead deleted successfully");
         } else {
           console.error("Failed to delete lead:", response.error);
@@ -337,13 +544,30 @@ const LeadsList = () => {
       socket.on('lead/delete-response', handleResponse);
       socket.emit('lead/delete', { leadId });
 
-      // Clean up listener
       setTimeout(() => {
         socket.off('lead/delete-response', handleResponse);
       }, 5000);
     } catch (error) {
       console.error("Error deleting lead:", error);
     }
+  };
+
+  // Handle add lead from grid column
+  const handleAddLeadFromColumn = (stage: string) => {
+    setFormData({
+      name: '',
+      company: '',
+      email: '',
+      phone: '',
+      value: 0,
+      stage: stage,
+      source: 'Unknown',
+      country: 'Unknown',
+      address: '',
+      owner: 'Unknown',
+      priority: 'Medium'
+    });
+    setAddModalVisible(true);
   };
 
   // Handle cancel operations
@@ -389,272 +613,90 @@ const LeadsList = () => {
       const doc = new jsPDF();
       const currentDate = new Date().toLocaleDateString();
       const currentTime = new Date().toLocaleTimeString();
-      const currentYear = new Date().getFullYear();
 
-      // Company colors (based on website theme)
-      const primaryColor = [242, 101, 34]; // Orange - primary brand color
-      const secondaryColor = [59, 112, 128]; // Blue-gray - secondary color
-      const textColor = [33, 37, 41]; // Dark gray - main text
-      const lightGray = [248, 249, 250]; // Light background
-      const borderColor = [222, 226, 230]; // Border color
-
-      // Add company logo with multiple fallback options
-      const addCompanyLogo = async () => {
-        console.log('🎯 Starting logo loading process...');
-        
-        // Try to load the new manage RTC logo first
-        const logoPaths = [
-          '/assets/img/logo.svg',           // New manage RTC logo (priority)
-          '/assets/img/logo-white.svg',     // White version of manage RTC logo
-          '/assets/img/logo-small.svg',     // Small version of manage RTC logo
-        ];
-
-        for (const logoPath of logoPaths) {
-          try {
-            console.log(`🔄 Loading NEW logo: ${logoPath}`);
-            
-            // Try multiple approaches to load the logo
-            const approaches = [
-              // Approach 1: Direct fetch with cache busting
-              `${logoPath}?v=${Date.now()}&bust=${Math.random()}`,
-              // Approach 2: Simple cache busting
-              `${logoPath}?t=${Date.now()}`,
-              // Approach 3: No cache busting
-              logoPath
-            ];
-            
-            for (const url of approaches) {
-              try {
-                console.log(`🔄 Trying URL: ${url}`);
-                const response = await fetch(url, {
-                  method: 'GET',
-                  cache: 'no-store',
-                  headers: {
-                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    'Pragma': 'no-cache',
-                    'Expires': '0'
-                  }
-                });
-                
-                if (response.ok) {
-                  console.log(`✅ Logo response OK: ${response.status}`);
-                  
-                  // Get the SVG content as text
-                  const svgText = await response.text();
-                  console.log(`📄 SVG content length: ${svgText.length} characters`);
-                  
-                  // Check if this is a valid SVG
-                  if (svgText.includes('<svg') && svgText.length > 100) {
-                    console.log('🎉 Found valid SVG logo!');
-                  } else {
-                    console.log('⚠️ Invalid SVG content, trying next approach...');
-                    continue;
-                  }
-                  
-                  // Try to convert SVG to canvas for better PDF compatibility
-                  try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const img = new Image();
-                    
-                    // Set canvas size to maintain aspect ratio (logo.svg is 115x40)
-                    canvas.width = 115;
-                    canvas.height = 40;
-                    
-                    // Create a promise to handle image loading
-                    const imagePromise = new Promise((resolve, reject) => {
-                      img.onload = () => {
-                        try {
-                          // Draw the SVG image to canvas maintaining aspect ratio
-                          ctx?.drawImage(img, 0, 0, 115, 40);
-                          
-                          // Convert canvas to PNG data URL
-                          const pngDataUrl = canvas.toDataURL('image/png');
-                          console.log(`✅ Successfully converted SVG to PNG: ${logoPath}`);
-                          resolve(pngDataUrl);
-                        } catch (error) {
-                          reject(error);
-                        }
-                      };
-                      img.onerror = reject;
-                      
-                      // Set the SVG as image source
-                      const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
-                      img.src = svgDataUrl;
-                    });
-                    
-                    // Wait for image conversion
-                    const pngDataUrl = await imagePromise;
-                    
-                    // Add PNG to PDF with proper dimensions (maintain aspect ratio)
-                    doc.addImage(pngDataUrl as string, 'PNG', 20, 15, 30, 10.4);
-                    console.log(`✅ Successfully added logo to PDF: ${logoPath}`);
-                    return true;
-                    
-                  } catch (canvasError) {
-                    console.log(`❌ Canvas conversion failed:`, canvasError);
-                    
-                    // Fallback: Try direct SVG
-                    try {
-                      const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
-                      doc.addImage(svgDataUrl, 'SVG', 20, 15, 30, 10.4);
-                      console.log(`✅ Successfully added logo as SVG: ${logoPath}`);
-                      return true;
-                    } catch (svgError) {
-                      console.log(`❌ SVG format also failed:`, svgError);
-                    }
-                  }
-                } else {
-                  console.log(`❌ Logo fetch failed: ${response.status} ${response.statusText}`);
-                }
-              } catch (fetchError) {
-                console.log(`❌ Fetch error for ${url}:`, fetchError);
-              }
-            }
-          } catch (error) {
-            console.log(`❌ Error loading ${logoPath}:`, error);
-          }
-        }
-        
-        console.log('❌ All logo loading attempts failed');
-        return false;
-      };
-
-      // Try to add logo - NO FALLBACK TEXT, ONLY USE YOUR NEW LOGOS
-      const logoAdded = await addCompanyLogo();
-      if (!logoAdded) {
-        console.log("❌ CRITICAL: New logo loading failed!");
-        console.log("🔍 Check if logo files exist: /assets/img/logo.svg, /assets/img/logo-white.svg, /assets/img/logo-small.svg");
-        console.log("📁 Make sure React dev server is running and files are accessible");
-        // NO FALLBACK TEXT - just leave space for logo
-        console.log("⚠️ No logo added to PDF - using empty space instead of fallback text");
+      // Get leads based on view mode
+      let allLeads: any[] = [];
+      if (viewMode === 'list') {
+        allLeads = leadsData;
       } else {
-        console.log("✅ Logo successfully added to PDF!");
+        allLeads = [
+          ...stages['Contacted'].map((lead: Lead) => ({ ...lead, stage: 'Contacted' })),
+          ...stages['Not Contacted'].map((lead: Lead) => ({ ...lead, stage: 'Not Contacted' })),
+          ...stages['Closed'].map((lead: Lead) => ({ ...lead, stage: 'Closed' })),
+          ...stages['Lost'].map((lead: Lead) => ({ ...lead, stage: 'Lost' }))
+        ];
       }
+
+      const primaryColor = [242, 101, 34];
+      const secondaryColor = [59, 112, 128];
+      const textColor = [33, 37, 41];
+      const lightGray = [248, 249, 250];
+      const borderColor = [222, 226, 230];
 
       // Company name and report title
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFontSize(16);
       doc.setFont(undefined, 'bold');
-      doc.text("Amasqis HRMS", 60, 20);
-      
+      doc.text("Amasqis HRMS", 20, 20);
+
       doc.setFontSize(14);
       doc.setFont(undefined, 'normal');
-      doc.text("Leads Management Report", 60, 28);
+      doc.text(`Leads ${viewMode === 'grid' ? 'Grid' : 'Management'} Report`, 20, 28);
 
-      // Report info section (right side)
+      // Report info
       doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
       doc.text(`Generated: ${currentDate}`, 150, 20);
       doc.text(`Time: ${currentTime}`, 150, 26);
-      doc.text(`Total Leads: ${leadsData.length}`, 150, 32);
+      doc.text(`Total Leads: ${allLeads.length}`, 150, 32);
 
       let yPosition = 50;
 
-      // Summary section with two columns
-      if (leadsData.length > 0) {
-        const totalValue = leadsData.reduce((sum: number, lead: any) => sum + (lead.value || 0), 0);
-        const stageCounts = leadsData.reduce((acc: any, lead: any) => {
-          const stage = lead.Tags || 'Unknown';
-          acc[stage] = (acc[stage] || 0) + 1;
-          return acc;
-        }, {});
-
-        // Left column - Financial Summary
-        doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
-        doc.rect(20, yPosition, 85, 40, 'F');
-        doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-        doc.rect(20, yPosition, 85, 40, 'S');
-
-        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text("FINANCIAL SUMMARY", 25, yPosition + 8);
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        doc.text(`Total Value: $${totalValue.toLocaleString()}`, 25, yPosition + 16);
-        doc.text(`Average Value: $${Math.round(totalValue / leadsData.length).toLocaleString()}`, 25, yPosition + 24);
-
-        // Right column - Stage Breakdown (wider column for full text)
-        doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
-        doc.rect(110, yPosition, 90, 40, 'F');
-        doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-        doc.rect(110, yPosition, 90, 40, 'S');
-
-        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text("STAGE BREAKDOWN", 115, yPosition + 8);
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        let stageY = yPosition + 16;
-        Object.entries(stageCounts).forEach(([stage, count]: [string, any]) => {
-          if (stageY < yPosition + 35) {
-            // Use same font size as Financial Summary for consistency
-            doc.text(`${stage}: ${count}`, 115, stageY);
-            stageY += 5;
-          }
-        });
-
-        yPosition += 50;
-      }
-
-      // Table section
-      if (yPosition > 200) {
-        doc.addPage();
-        yPosition = 20;
-      }
-
-      // Table header with styling (wider table for full stage names)
+      // Table header
       doc.setFillColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-      doc.rect(20, yPosition, 180, 12, 'F');
-      
+      doc.rect(20, yPosition, 170, 10, 'F');
+
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
-      doc.text("LEAD NAME", 22, yPosition + 8);
-      doc.text("COMPANY", 60, yPosition + 8);
-      doc.text("EMAIL", 100, yPosition + 8);
-      doc.text("PHONE", 140, yPosition + 8);
-      doc.text("STAGE", 175, yPosition + 8);
-      yPosition += 15;
+      doc.text("LEAD NAME", 22, yPosition + 7);
+      doc.text("COMPANY", 60, yPosition + 7);
+      doc.text("EMAIL", 100, yPosition + 7);
+      doc.text("PHONE", 140, yPosition + 7);
+      doc.text("STAGE", 170, yPosition + 7);
+      yPosition += 12;
 
-      // Table data with alternating rows
+      // Table data
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFont(undefined, 'normal');
       doc.setFontSize(8);
-      
-      leadsData.forEach((lead: any, index: number) => {
+
+      allLeads.forEach((lead: any, index: number) => {
         if (yPosition > 280) {
           doc.addPage();
           yPosition = 20;
         }
 
-        // Alternate row background (wider for full stage names)
         if (index % 2 === 0) {
           doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
-          doc.rect(20, yPosition - 2, 180, 8, 'F');
+          doc.rect(20, yPosition - 2, 170, 8, 'F');
         }
 
-        // Truncate long text to fit columns (allow more space for stage)
-        const leadName = (lead.LeadName || "N/A").substring(0, 18);
-        const company = (lead.CompanyName || "N/A").substring(0, 18);
-        const email = (lead.Email || "N/A").substring(0, 20);
-        const phone = (lead.Phone || "N/A").substring(0, 12);
-        const stage = (lead.Tags || "N/A").substring(0, 15); // Increased from 8 to 15
+        const leadName = (lead.name || lead.LeadName || "N/A").substring(0, 18);
+        const company = (lead.company || lead.CompanyName || "N/A").substring(0, 18);
+        const email = (lead.email || lead.Email || "N/A").substring(0, 20);
+        const phone = (lead.phone || lead.Phone || "N/A").substring(0, 12);
+        const stage = (lead.stage || lead.Tags || "N/A").substring(0, 12);
 
         doc.text(leadName, 22, yPosition + 4);
         doc.text(company, 60, yPosition + 4);
         doc.text(email, 100, yPosition + 4);
         doc.text(phone, 140, yPosition + 4);
-        doc.text(stage, 175, yPosition + 4); // Moved to position 175
+        doc.text(stage, 170, yPosition + 4);
 
         yPosition += 8;
       });
 
-      // Footer with company branding
+      // Footer
       const pageCount = (doc as any).internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
@@ -664,7 +706,6 @@ const LeadsList = () => {
         doc.text(`Generated by Amasqis HRMS`, 150, 290);
       }
 
-      // Save the PDF
       doc.save(`leads_report_${Date.now()}.pdf`);
       setExportLoading(false);
       console.log("PDF exported successfully");
@@ -679,47 +720,45 @@ const LeadsList = () => {
   const handleExportExcel = () => {
     try {
       setExportLoading(true);
-      const currentDate = new Date().toLocaleDateString();
       const wb = XLSX.utils.book_new();
 
-      // Prepare leads data for Excel
-      const leadsDataForExcel = leadsData.map((lead: any) => ({
-        "Lead Name": lead.LeadName || "",
-        "Company": lead.CompanyName || "",
-        "Email": lead.Email || "",
-        "Phone": lead.Phone || "",
-        "Stage": lead.Tags || "",
+      // Get leads based on view mode
+      let allLeads: any[] = [];
+      if (viewMode === 'list') {
+        allLeads = leadsData;
+      } else {
+        allLeads = [
+          ...stages['Contacted'].map((lead: Lead) => ({ ...lead, stage: 'Contacted' })),
+          ...stages['Not Contacted'].map((lead: Lead) => ({ ...lead, stage: 'Not Contacted' })),
+          ...stages['Closed'].map((lead: Lead) => ({ ...lead, stage: 'Closed' })),
+          ...stages['Lost'].map((lead: Lead) => ({ ...lead, stage: 'Lost' }))
+        ];
+      }
+
+      const leadsDataForExcel = allLeads.map((lead: any) => ({
+        "Lead Name": lead.name || lead.LeadName || "",
+        "Company": lead.company || lead.CompanyName || "",
+        "Email": lead.email || lead.Email || "",
+        "Phone": lead.phone || lead.Phone || "",
+        "Stage": lead.stage || lead.Tags || "",
         "Value": lead.value || 0,
         "Source": lead.source || "",
         "Country": lead.country || "",
         "Address": lead.address || "",
-        "Owner": lead.LeadOwner || "",
-        "Created Date": lead.CreatedDate || ""
+        "Owner": lead.owner || lead.LeadOwner || "",
+        "Created Date": lead.createdAt || lead.CreatedDate || ""
       }));
 
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(leadsDataForExcel);
-      
-      // Set column widths
+
       const colWidths = [
-        { wch: 20 }, // Lead Name
-        { wch: 25 }, // Company
-        { wch: 30 }, // Email
-        { wch: 15 }, // Phone
-        { wch: 15 }, // Stage
-        { wch: 15 }, // Value
-        { wch: 15 }, // Source
-        { wch: 15 }, // Country
-        { wch: 40 }, // Address
-        { wch: 20 }, // Owner
-        { wch: 20 }  // Created Date
+        { wch: 20 }, { wch: 25 }, { wch: 30 }, { wch: 15 },
+        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+        { wch: 40 }, { wch: 20 }, { wch: 20 }
       ];
       ws['!cols'] = colWidths;
 
-      // Add worksheet to workbook
       XLSX.utils.book_append_sheet(wb, ws, "Leads");
-
-      // Save the Excel file
       XLSX.writeFile(wb, `leads_report_${Date.now()}.xlsx`);
       setExportLoading(false);
       console.log("Excel exported successfully");
@@ -730,6 +769,7 @@ const LeadsList = () => {
     }
   };
 
+  // Table columns for list view
   const columns = [
     {
       title: "Lead Name",
@@ -817,8 +857,8 @@ const LeadsList = () => {
           >
             <i className="ti ti-edit" />
           </Link>
-          <Link 
-            to="#" 
+          <Link
+            to="#"
             onClick={() => handleDeleteLead(record._id)}
           >
             <i className="ti ti-trash" />
@@ -827,6 +867,113 @@ const LeadsList = () => {
       ),
     },
   ];
+
+  // Helper function to render lead card for grid view
+  const renderLeadCard = (lead: Lead) => {
+    const initials = (lead.name || '')
+      .split(' ')
+      .map((n: string) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+    return (
+      <div key={lead._id} className="card kanban-card">
+        <div className="card-body">
+          <div className="d-block">
+            <div className="border-warning border border-2 mb-3" />
+            <div className="d-flex align-items-center mb-3">
+              <Link
+                to={`${routes.leadsDetails}?id=${lead._id}`}
+                className="avatar avatar-lg bg-gray flex-shrink-0 me-2"
+              >
+                <span className="avatar-title text-dark">{initials}</span>
+              </Link>
+              <h6 className="fw-medium">
+                <Link to={`${routes.leadsDetails}?id=${lead._id}`}>{lead.name}</Link>
+              </h6>
+            </div>
+          </div>
+          <div className="mb-3 d-flex flex-column">
+            <p className="text-default d-inline-flex align-items-center mb-2">
+              <i className="ti ti-report-money text-dark me-1" />
+              ${lead.value.toLocaleString()}
+            </p>
+            <p className="text-default d-inline-flex align-items-center mb-2">
+              <i className="ti ti-mail text-dark me-1" />
+              {lead.email}
+            </p>
+            <p className="text-default d-inline-flex align-items-center mb-2">
+              <i className="ti ti-phone text-dark me-1" />
+              {lead.phone}
+            </p>
+            <p className="text-default d-inline-flex align-items-center">
+              <i className="ti ti-map-pin-pin text-dark me-1" />
+              {(() => {
+                if (typeof lead.address === 'object' && lead.address !== null) {
+                  const addr = lead.address as any;
+                  const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
+                  return parts.length > 0 ? parts.join(', ') : '-';
+                }
+                return lead.address || '-';
+              })()}
+            </p>
+          </div>
+          <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+            <Link
+              to="#"
+              className="avatar avatar-sm avatar-rounded flex-shrink-0 me-2"
+            >
+              <ImageWithBasePath
+                src={`assets/img/company/company-${String(Math.floor(Math.random() * 20) + 1).padStart(2, '0')}.svg`}
+                alt="image"
+              />
+            </Link>
+            <div className="icons-social d-flex align-items-center">
+              <Link
+                to="#"
+                className="d-flex align-items-center justify-content-center me-2"
+                onClick={() => handleEditLead(lead)}
+                title="Edit Lead"
+              >
+                <i className="ti ti-edit" />
+              </Link>
+              <Link
+                to="#"
+                className="d-flex align-items-center justify-content-center me-2"
+                onClick={() => handleDeleteLead(lead._id)}
+                title="Delete Lead"
+              >
+                <i className="ti ti-trash" />
+              </Link>
+              <Link
+                to="#"
+                className="d-flex align-items-center justify-content-center me-2"
+                title="Call"
+              >
+                <i className="ti ti-phone-call" />
+              </Link>
+              <Link
+                to="#"
+                className="d-flex align-items-center justify-content-center me-2"
+                title="Chat"
+              >
+                <i className="ti ti-brand-hipchat" />
+              </Link>
+              <Link
+                to="#"
+                className="d-flex align-items-center justify-content-center"
+                title="More Options"
+              >
+                <i className="ti ti-color-swatch" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Page Wrapper */}
@@ -845,7 +992,7 @@ const LeadsList = () => {
                   </li>
                   <li className="breadcrumb-item">CRM</li>
                   <li className="breadcrumb-item active" aria-current="page">
-                    Contacts List
+                    {viewMode === 'list' ? 'Leads List' : 'Leads Grid'}
                   </li>
                 </ol>
               </nav>
@@ -853,15 +1000,22 @@ const LeadsList = () => {
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={routes.leadsList}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "list" ? "active bg-primary text-white" : ""
+                    } me-1`}
                   >
                     <i className="ti ti-list-tree" />
-                  </Link>
-                  <Link to={routes.leadsGrid} className="btn btn-icon btn-sm">
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "grid" ? "active bg-primary text-white" : ""
+                    }`}
+                  >
                     <i className="ti ti-layout-grid" />
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="me-2 mb-2">
@@ -876,8 +1030,8 @@ const LeadsList = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -890,8 +1044,8 @@ const LeadsList = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -922,204 +1076,426 @@ const LeadsList = () => {
             </div>
           </div>
           {/* /Breadcrumb */}
-          {/* Leads List */}
-          <div className="card">
-            <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-              <h5>Leads List</h5>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                <div className="me-3">
-                  <div className="input-icon-end position-relative">
-                <PredefinedDateRanges 
-                  onChange={handleDateRangeChange}
-                  value={dateRange}
-                />
-                    <span className="input-icon-addon">
-                      <i className="ti ti-chevron-down" />
-                    </span>
+
+          {/* LIST VIEW */}
+          {viewMode === 'list' && (
+            <div className="card">
+              <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <h5>Leads List</h5>
+                <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                  <div className="me-3">
+                    <div className="input-icon-end position-relative">
+                      <PredefinedDateRanges
+                        onChange={handleDateRangeChange}
+                        value={dateRange}
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-chevron-down" />
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    {filters.stage === 'all' ? 'All Stages' : filters.stage}
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.stage === 'all' ? 'active' : ''}`}
-                        onClick={() => handleStageFilter('all')}
-                      >
-                        All Stages
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.stage === 'Closed' ? 'active' : ''}`}
-                        onClick={() => handleStageFilter('Closed')}
-                      >
-                        Closed
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.stage === 'Contacted' ? 'active' : ''}`}
-                        onClick={() => handleStageFilter('Contacted')}
-                      >
-                        Contacted
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.stage === 'Lost' ? 'active' : ''}`}
-                        onClick={() => handleStageFilter('Lost')}
-                      >
-                        Lost
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.stage === 'Not Contacted' ? 'active' : ''}`}
-                        onClick={() => handleStageFilter('Not Contacted')}
-                      >
-                        Not Contacted
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-                <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    Sort By: {filters.sortBy === 'createdDate' ? 'Recently Added' : 
-                              filters.sortBy === 'name' ? 'Name' :
-                              filters.sortBy === 'company' ? 'Company' :
-                              filters.sortBy === 'stage' ? 'Stage' : 'Recently Added'}
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.sortBy === 'createdDate' ? 'active' : ''}`}
-                        onClick={() => handleSortChange('createdDate')}
-                      >
-                        Recently Added
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.sortBy === 'name' ? 'active' : ''}`}
-                        onClick={() => handleSortChange('name')}
-                      >
-                        Name (A-Z)
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.sortBy === 'company' ? 'active' : ''}`}
-                        onClick={() => handleSortChange('company')}
-                      >
-                        Company (A-Z)
-                      </Link>
-                    </li>
-                    <li>
-                      <Link 
-                        to="#" 
-                        className={`dropdown-item rounded-1 ${filters.sortBy === 'stage' ? 'active' : ''}`}
-                        onClick={() => handleSortChange('stage')}
-                      >
-                        Stage
-                      </Link>
-                    </li>
-                  </ul>
+                  <div className="dropdown me-3">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      {filters.stage === 'all' ? 'All Stages' : filters.stage}
+                    </Link>
+                    <ul className="dropdown-menu  dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.stage === 'all' ? 'active' : ''}`}
+                          onClick={() => handleStageFilter('all')}
+                        >
+                          All Stages
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.stage === 'Closed' ? 'active' : ''}`}
+                          onClick={() => handleStageFilter('Closed')}
+                        >
+                          Closed
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.stage === 'Contacted' ? 'active' : ''}`}
+                          onClick={() => handleStageFilter('Contacted')}
+                        >
+                          Contacted
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.stage === 'Lost' ? 'active' : ''}`}
+                          onClick={() => handleStageFilter('Lost')}
+                        >
+                          Lost
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.stage === 'Not Contacted' ? 'active' : ''}`}
+                          onClick={() => handleStageFilter('Not Contacted')}
+                        >
+                          Not Contacted
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="dropdown">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      Sort By: {filters.sortBy === 'createdDate' ? 'Recently Added' :
+                                filters.sortBy === 'name' ? 'Name' :
+                                filters.sortBy === 'company' ? 'Company' :
+                                filters.sortBy === 'stage' ? 'Stage' : 'Recently Added'}
+                    </Link>
+                    <ul className="dropdown-menu  dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'createdDate' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('createdDate')}
+                        >
+                          Recently Added
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'name' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('name')}
+                        >
+                          Name (A-Z)
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'company' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('company')}
+                        >
+                          Company (A-Z)
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'stage' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('stage')}
+                        >
+                          Stage
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="card-body p-0">
-              {loading ? (
-                <div className="d-flex align-items-center justify-content-center py-5">
-                  <div className="text-center">
-                    <div className="spinner-border text-primary" role="status">
-                      <span className="visually-hidden">Loading...</span>
+              <div className="card-body p-0">
+                {loading ? (
+                  <div className="d-flex align-items-center justify-content-center py-5">
+                    <div className="text-center">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                      <p className="mt-2 text-muted">Loading leads...</p>
                     </div>
-                    <p className="mt-2 text-muted">Loading leads...</p>
                   </div>
-                </div>
-              ) : error ? (
-                <div className="d-flex align-items-center justify-content-center py-5">
-                  <div className="text-center">
-                    <div className="text-danger mb-2">
-                      <i className="ti ti-alert-circle fs-24"></i>
+                ) : error ? (
+                  <div className="d-flex align-items-center justify-content-center py-5">
+                    <div className="text-center">
+                      <div className="text-danger mb-2">
+                        <i className="ti ti-alert-circle fs-24"></i>
+                      </div>
+                      <p className="text-muted">{error}</p>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={fetchLeadsData}
+                      >
+                        Retry
+                      </button>
                     </div>
-                    <p className="text-muted">{error}</p>
-                    <button 
-                      className="btn btn-primary btn-sm" 
-                      onClick={fetchLeadsData}
+                  </div>
+                ) : leadsData.length === 0 ? (
+                  <div className="d-flex align-items-center justify-content-center py-5">
+                    <div className="text-center">
+                      <div className="text-muted mb-2">
+                        <i className="ti ti-inbox fs-24"></i>
+                      </div>
+                      <p className="text-muted">No leads found</p>
+                      <p className="text-muted small">Try adjusting your filters or add a new lead</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <Table dataSource={leadsData} columns={columns} Selection={true} />
+                    {pagination.totalPages > 1 && (
+                      <div className="d-flex justify-content-between align-items-center p-3 border-top">
+                        <div className="text-muted">
+                          Showing {((pagination.currentPage - 1) * (filters.limit || 50)) + 1} to {Math.min(pagination.currentPage * (filters.limit || 50), pagination.totalCount)} of {pagination.totalCount} leads
+                        </div>
+                        <div className="d-flex gap-2">
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            disabled={pagination.currentPage === 1}
+                            onClick={() => setFilters(prev => ({ ...prev, page: prev.page! - 1 }))}
+                          >
+                            Previous
+                          </button>
+                          <span className="btn btn-sm btn-outline-secondary disabled">
+                            {pagination.currentPage} of {pagination.totalPages}
+                          </span>
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            disabled={pagination.currentPage === pagination.totalPages}
+                            onClick={() => setFilters(prev => ({ ...prev, page: prev.page! + 1 }))}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* GRID VIEW */}
+          {viewMode === 'grid' && (
+            <div className="card">
+              <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <h5>Leads Grid</h5>
+                <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                  <div className="dropdown">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
                     >
-                      Retry
-                    </button>
+                      Sort By: {filters.sortBy === 'recentlyAdded' ? 'Recently Added' :
+                                filters.sortBy === 'ascending' ? 'Ascending' :
+                                filters.sortBy === 'descending' ? 'Descending' :
+                                filters.sortBy === 'lastMonth' ? 'Last Month' :
+                                filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'}
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'recentlyAdded' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('recentlyAdded')}
+                        >
+                          Recently Added
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'ascending' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('ascending')}
+                        >
+                          Ascending
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'descending' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('descending')}
+                        >
+                          Descending
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'lastMonth' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('lastMonth')}
+                        >
+                          Last Month
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className={`dropdown-item rounded-1 ${filters.sortBy === 'last7Days' ? 'active' : ''}`}
+                          onClick={() => handleSortChange('last7Days')}
+                        >
+                          Last 7 Days
+                        </Link>
+                      </li>
+                    </ul>
                   </div>
                 </div>
-              ) : leadsData.length === 0 ? (
-                <div className="d-flex align-items-center justify-content-center py-5">
-                  <div className="text-center">
-                    <div className="text-muted mb-2">
-                      <i className="ti ti-inbox fs-24"></i>
+              </div>
+              <div className="card-body">
+                {loading ? (
+                  <div className="d-flex align-items-center justify-content-center py-5">
+                    <div className="text-center">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                      <p className="mt-2 text-muted">Loading leads...</p>
                     </div>
-                    <p className="text-muted">No leads found</p>
-                    <p className="text-muted small">Try adjusting your filters or add a new lead</p>
                   </div>
-                </div>
-              ) : (
-                <>
-                  <Table dataSource={leadsData} columns={columns} Selection={true} />
-                  {pagination.totalPages > 1 && (
-                    <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                      <div className="text-muted">
-                        Showing {((pagination.currentPage - 1) * (filters.limit || 50)) + 1} to {Math.min(pagination.currentPage * (filters.limit || 50), pagination.totalCount)} of {pagination.totalCount} leads
+                ) : error ? (
+                  <div className="d-flex align-items-center justify-content-center py-5">
+                    <div className="text-center">
+                      <div className="text-danger mb-2">
+                        <i className="ti ti-alert-circle fs-24"></i>
                       </div>
-                      <div className="d-flex gap-2">
-                        <button 
-                          className="btn btn-sm btn-outline-primary"
-                          disabled={pagination.currentPage === 1}
-                          onClick={() => setFilters(prev => ({ ...prev, page: prev.page! - 1 }))}
-                        >
-                          Previous
-                        </button>
-                        <span className="btn btn-sm btn-outline-secondary disabled">
-                          {pagination.currentPage} of {pagination.totalPages}
-                        </span>
-                        <button 
-                          className="btn btn-sm btn-outline-primary"
-                          disabled={pagination.currentPage === pagination.totalPages}
-                          onClick={() => setFilters(prev => ({ ...prev, page: prev.page! + 1 }))}
-                        >
-                          Next
-                        </button>
+                      <p className="text-muted">{error}</p>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={fetchLeadsGridData}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="row">
+                    {/* Contacted Column */}
+                    <div className="col-xxl-3 col-xl-6">
+                      <div className="card mb-4">
+                        <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                          <h5 className="d-flex align-items-center">
+                            <span className="badge badge-success badge-xs me-2" />
+                            Contacted
+                          </h5>
+                          <div className="d-flex align-items-center">
+                            <span className="badge badge-light me-2">
+                              {stageTotals['Contacted'].count} Leads
+                            </span>
+                            <span className="badge badge-light">
+                              ${stageTotals['Contacted'].value.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="card-body kanban-container" ref={container1Ref}>
+                          {stages['Contacted'].map((lead: Lead) => renderLeadCard(lead))}
+                          <button
+                            className="btn btn-outline-primary w-100 mt-2"
+                            onClick={() => handleAddLeadFromColumn('Contacted')}
+                          >
+                            <i className="ti ti-plus me-1" />
+                            Add Lead
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  )}
-                </>
-              )}
+
+                    {/* Not Contacted Column */}
+                    <div className="col-xxl-3 col-xl-6">
+                      <div className="card mb-4">
+                        <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                          <h5 className="d-flex align-items-center">
+                            <span className="badge badge-warning badge-xs me-2" />
+                            Not Contacted
+                          </h5>
+                          <div className="d-flex align-items-center">
+                            <span className="badge badge-light me-2">
+                              {stageTotals['Not Contacted'].count} Leads
+                            </span>
+                            <span className="badge badge-light">
+                              ${stageTotals['Not Contacted'].value.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="card-body kanban-container" ref={container2Ref}>
+                          {stages['Not Contacted'].map((lead: Lead) => renderLeadCard(lead))}
+                          <button
+                            className="btn btn-outline-primary w-100 mt-2"
+                            onClick={() => handleAddLeadFromColumn('Not Contacted')}
+                          >
+                            <i className="ti ti-plus me-1" />
+                            Add Lead
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Closed Column */}
+                    <div className="col-xxl-3 col-xl-6">
+                      <div className="card mb-4">
+                        <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                          <h5 className="d-flex align-items-center">
+                            <span className="badge badge-info badge-xs me-2" />
+                            Closed
+                          </h5>
+                          <div className="d-flex align-items-center">
+                            <span className="badge badge-light me-2">
+                              {stageTotals['Closed'].count} Leads
+                            </span>
+                            <span className="badge badge-light">
+                              ${stageTotals['Closed'].value.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="card-body kanban-container" ref={container3Ref}>
+                          {stages['Closed'].map((lead: Lead) => renderLeadCard(lead))}
+                          <button
+                            className="btn btn-outline-primary w-100 mt-2"
+                            onClick={() => handleAddLeadFromColumn('Closed')}
+                          >
+                            <i className="ti ti-plus me-1" />
+                            Add Lead
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lost Column */}
+                    <div className="col-xxl-3 col-xl-6">
+                      <div className="card mb-4">
+                        <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                          <h5 className="d-flex align-items-center">
+                            <span className="badge badge-danger badge-xs me-2" />
+                            Lost
+                          </h5>
+                          <div className="d-flex align-items-center">
+                            <span className="badge badge-light me-2">
+                              {stageTotals['Lost'].count} Leads
+                            </span>
+                            <span className="badge badge-light">
+                              ${stageTotals['Lost'].value.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="card-body kanban-container" ref={container4Ref}>
+                          {stages['Lost'].map((lead: Lead) => renderLeadCard(lead))}
+                          <button
+                            className="btn btn-outline-primary w-100 mt-2"
+                            onClick={() => handleAddLeadFromColumn('Lost')}
+                          >
+                            <i className="ti ti-plus me-1" />
+                            Add Lead
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          {/* /Leads List */}
+          )}
         </div>
         <Footer />
       </div>
       {/* /Page Wrapper */}
-      
+
       {/* Add Lead Modal */}
       {addModalVisible && (
         <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -1127,9 +1503,9 @@ const LeadsList = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Add New Lead</h5>
-                <button 
-                  type="button" 
-                  className="btn-close" 
+                <button
+                  type="button"
+                  className="btn-close"
                   onClick={handleCancelAdd}
                 ></button>
               </div>
@@ -1167,7 +1543,7 @@ const LeadsList = () => {
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Phone</label>
                     <input
-                      type="text"
+                      type="tel"
                       className="form-control"
                       value={formData.phone}
                       onChange={(e) => handleFormChange('phone', e.target.value)}
@@ -1178,12 +1554,8 @@ const LeadsList = () => {
                     <input
                       type="number"
                       className="form-control"
-                      min="0"
                       value={formData.value}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 0;
-                        handleFormChange('value', val < 0 ? 0 : val);
-                      }}
+                      onChange={(e) => handleFormChange('value', Number(e.target.value))}
                     />
                   </div>
                   <div className="col-md-6 mb-3">
@@ -1195,7 +1567,6 @@ const LeadsList = () => {
                     >
                       <option value="Not Contacted">Not Contacted</option>
                       <option value="Contacted">Contacted</option>
-                      <option value="Opportunity">Opportunity</option>
                       <option value="Closed">Closed</option>
                       <option value="Lost">Lost</option>
                     </select>
@@ -1236,42 +1607,23 @@ const LeadsList = () => {
                       onChange={(e) => handleFormChange('owner', e.target.value)}
                     />
                   </div>
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">Priority</label>
-                    <select
-                      className="form-control"
-                      value={formData.priority}
-                      onChange={(e) => handleFormChange('priority', e.target.value)}
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={handleCancelAdd}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={handleAddLead}
-                  disabled={submitLoading || !formData.name || !formData.company}
+                  disabled={submitLoading}
                 >
-                  {submitLoading ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Creating...
-                    </>
-                  ) : (
-                    'Create Lead'
-                  )}
+                  {submitLoading ? 'Creating...' : 'Create Lead'}
                 </button>
               </div>
             </div>
@@ -1286,9 +1638,9 @@ const LeadsList = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Edit Lead</h5>
-                <button 
-                  type="button" 
-                  className="btn-close" 
+                <button
+                  type="button"
+                  className="btn-close"
                   onClick={handleCancelEdit}
                 ></button>
               </div>
@@ -1326,7 +1678,7 @@ const LeadsList = () => {
                   <div className="col-md-6 mb-3">
                     <label className="form-label">Phone</label>
                     <input
-                      type="text"
+                      type="tel"
                       className="form-control"
                       value={formData.phone}
                       onChange={(e) => handleFormChange('phone', e.target.value)}
@@ -1337,12 +1689,8 @@ const LeadsList = () => {
                     <input
                       type="number"
                       className="form-control"
-                      min="0"
                       value={formData.value}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 0;
-                        handleFormChange('value', val < 0 ? 0 : val);
-                      }}
+                      onChange={(e) => handleFormChange('value', Number(e.target.value))}
                     />
                   </div>
                   <div className="col-md-6 mb-3">
@@ -1354,7 +1702,6 @@ const LeadsList = () => {
                     >
                       <option value="Not Contacted">Not Contacted</option>
                       <option value="Contacted">Contacted</option>
-                      <option value="Opportunity">Opportunity</option>
                       <option value="Closed">Closed</option>
                       <option value="Lost">Lost</option>
                     </select>
@@ -1395,50 +1742,29 @@ const LeadsList = () => {
                       onChange={(e) => handleFormChange('owner', e.target.value)}
                     />
                   </div>
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">Priority</label>
-                    <select
-                      className="form-control"
-                      value={formData.priority}
-                      onChange={(e) => handleFormChange('priority', e.target.value)}
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={handleCancelEdit}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={handleUpdateLead}
-                  disabled={submitLoading || !formData.name || !formData.company}
+                  disabled={submitLoading}
                 >
-                  {submitLoading ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Updating...
-                    </>
-                  ) : (
-                    'Update Lead'
-                  )}
+                  {submitLoading ? 'Updating...' : 'Update Lead'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      
-      <CrmsModal />
     </>
   );
 };

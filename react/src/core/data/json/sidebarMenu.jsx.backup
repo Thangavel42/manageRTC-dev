@@ -626,7 +626,7 @@ const useSidebarData = () => {
           submenuItems: [
             {
               label: "Contacts",
-              link: routes.contactList,
+              link: routes.contactGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-shield",
@@ -636,7 +636,7 @@ const useSidebarData = () => {
             },
             {
               label: "Companies",
-              link: routes.companiesList,
+              link: routes.companiesGrid,
               submenu: false,
               showSubRoute: false,
               icon: "building",
@@ -646,7 +646,7 @@ const useSidebarData = () => {
             },
             {
               label: "Deals",
-              link: routes.dealsList,
+              link: routes.dealsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "heart-handshake",
@@ -656,7 +656,7 @@ const useSidebarData = () => {
             },
             {
               label: "Leads",
-              link: routes.leadsList,
+              link: routes.leadsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-check",
@@ -2587,7 +2587,7 @@ const useSidebarData = () => {
           submenuItems: [
             {
               label: "Contacts",
-              link: routes.contactList,
+              link: routes.contactGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-shield",
@@ -2597,7 +2597,7 @@ const useSidebarData = () => {
             },
             {
               label: "Companies",
-              link: routes.companiesList,
+              link: routes.companiesGrid,
               submenu: false,
               showSubRoute: false,
               icon: "building",
@@ -2607,7 +2607,7 @@ const useSidebarData = () => {
             },
             {
               label: "Deals",
-              link: routes.dealsList,
+              link: routes.dealsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "heart-handshake",
@@ -2617,7 +2617,7 @@ const useSidebarData = () => {
             },
             {
               label: "Leads",
-              link: routes.leadsList,
+              link: routes.leadsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-check",
@@ -3548,7 +3548,7 @@ const useSidebarData = () => {
           submenuItems: [
             {
               label: "Contacts",
-              link: routes.contactList,
+              link: routes.contactGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-shield",
@@ -3558,7 +3558,7 @@ const useSidebarData = () => {
             },
             {
               label: "Companies",
-              link: routes.companiesList,
+              link: routes.companiesGrid,
               submenu: false,
               showSubRoute: false,
               icon: "building",
@@ -3568,7 +3568,7 @@ const useSidebarData = () => {
             },
             {
               label: "Deals",
-              link: routes.dealsList,
+              link: routes.dealsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "heart-handshake",
@@ -3578,7 +3578,7 @@ const useSidebarData = () => {
             },
             {
               label: "Leads",
-              link: routes.leadsList,
+              link: routes.leadsGrid,
               submenu: false,
               showSubRoute: false,
               icon: "user-check",

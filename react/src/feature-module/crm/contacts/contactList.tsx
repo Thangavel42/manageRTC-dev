@@ -13,12 +13,18 @@ const ContactList = () => {
   const routes = all_routes;
   const { contacts, fetchContacts, loading, error } = useContacts();
   const { getToken } = useAuth();
-  const [sortBy, setSortBy] = useState("name");
-  const [sortOrder, setSortOrder] = useState("asc");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
   const backendurl = process.env.REACT_APP_BACKEND_URL;
 
+  // View Mode State
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Shared state
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Filtered and sorted data
   const data = useMemo(() => {
     let filteredContacts = contacts;
 
@@ -40,7 +46,7 @@ const ContactList = () => {
     }
 
     // Sorting
-    filteredContacts.sort((a: any, b: any) => {
+    filteredContacts = [...filteredContacts].sort((a: any, b: any) => {
       let aValue = a[sortBy] || "";
       let bValue = b[sortBy] || "";
       if (typeof aValue === "string") {
@@ -66,6 +72,8 @@ const ContactList = () => {
       Status: c.status || "Active",
       _id: c._id,
       role: c.role,
+      // Keep original object for grid view
+      originalContact: c,
     }));
   }, [contacts, searchTerm, statusFilter, sortBy, sortOrder]);
 
@@ -94,7 +102,7 @@ const ContactList = () => {
       const token = await getToken();
       const backendurl = process.env.REACT_APP_BACKEND_URL;
       const urllink = backendurl + `/api/contacts/export?format=${format}`;
-      console.log("Backend Contact LIST -> ", urllink);
+      console.log("Backend Contact Export -> ", urllink);
       const response = await fetch(urllink, {
         method: "GET",
         headers: {
@@ -120,6 +128,32 @@ const ContactList = () => {
     }
   };
 
+  const handleDeleteContact = async (contactId: string) => {
+    if (!window.confirm("Are you sure you want to delete this contact?")) {
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `${backendurl}/api/contacts/${contactId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (response.ok) {
+        window.dispatchEvent(new CustomEvent("contacts:changed"));
+        alert("Contact deleted successfully!");
+      } else {
+        alert("Failed to delete contact. Please try again.");
+      }
+    } catch (err) {
+      alert("Error deleting contact. Please try again.");
+    }
+  };
+
+  // Table columns for list view
   const columns = [
     {
       title: (
@@ -385,30 +419,7 @@ const ContactList = () => {
           </Link>
           <Link
             to="#"
-            onClick={async () => {
-              if (
-                window.confirm("Are you sure you want to delete this contact?")
-              ) {
-                try {
-                  const token = await getToken();
-                  const response = await fetch(
-                    `${backendurl}/api/contacts/${record._id}`,
-                    {
-                      method: "DELETE",
-                      headers: { Authorization: `Bearer ${token}` },
-                    }
-                  );
-                  if (response.ok) {
-                    window.dispatchEvent(new CustomEvent("contacts:changed"));
-                    alert("Contact deleted successfully!");
-                  } else {
-                    alert("Failed to delete contact. Please try again.");
-                  }
-                } catch (err) {
-                  alert("Error deleting contact. Please try again.");
-                }
-              }
-            }}
+            onClick={() => handleDeleteContact(record._id)}
             title="Delete Contact"
           >
             <i className="ti ti-trash" />
@@ -435,7 +446,7 @@ const ContactList = () => {
                   </li>
                   <li className="breadcrumb-item">CRM</li>
                   <li className="breadcrumb-item active" aria-current="page">
-                    Contacts List
+                    {viewMode === 'list' ? 'Contacts List' : 'Contacts Grid'}
                   </li>
                 </ol>
               </nav>
@@ -443,15 +454,22 @@ const ContactList = () => {
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={routes.contactList}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "list" ? "active bg-primary text-white" : ""
+                    } me-1`}
                   >
                     <i className="ti ti-list-tree" />
-                  </Link>
-                  <Link to={routes.contactGrid} className="btn btn-icon btn-sm">
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "grid" ? "active bg-primary text-white" : ""
+                    }`}
+                  >
                     <i className="ti ti-layout-grid" />
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="me-2 mb-2">
@@ -505,140 +523,186 @@ const ContactList = () => {
             </div>
           </div>
           {/* /Breadcrumb */}
-          <div className="card">
-            <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-              <h5>Contacts List ({data.length} contacts)</h5>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                {/* Search Input */}
-                <div className="me-3">
-                  <div className="input-icon-end position-relative">
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search contacts..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <span className="input-icon-addon">
-                      <i className="ti ti-search" />
-                    </span>
+
+          {/* LIST VIEW */}
+          {viewMode === 'list' && (
+            <div className="card">
+              <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <h5>Contacts List ({data.length} contacts)</h5>
+                <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                  {/* Search Input */}
+                  <div className="me-3">
+                    <div className="input-icon-end position-relative">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Search contacts..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-search" />
+                      </span>
+                    </div>
                   </div>
-                </div>
-                {/* Status Filter */}
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    {statusFilter === "all" ? "All Status" : statusFilter}
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("all")}
-                      >
-                        All Status
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("Active")}
-                      >
-                        Active
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("Inactive")}
-                      >
-                        Inactive
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-                {/* Export Dropdown */}
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    <i className="ti ti-file-export me-1" />
-                    Export
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleExport("pdf")}
-                      >
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleExport("excel")}
-                      >
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel
-                      </Link>
-                    </li>
-                  </ul>
+                  {/* Status Filter */}
+                  <div className="dropdown me-3">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      {statusFilter === "all" ? "All Status" : statusFilter}
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("all")}
+                        >
+                          All Status
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("Active")}
+                        >
+                          Active
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("Inactive")}
+                        >
+                          Inactive
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
+              <div className="card-body p-0">
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <span className="ms-2">Loading contacts...</span>
+                  </div>
+                ) : error ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="text-center">
+                      <i className="ti ti-alert-circle fs-48 text-danger mb-3"></i>
+                      <h5>Error Loading Contacts</h5>
+                      <p className="text-muted">{error}</p>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => fetchContacts({ limit: 100 })}
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  </div>
+                ) : data.length === 0 ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="text-center">
+                      <i className="ti ti-users fs-48 text-muted mb-3"></i>
+                      <h5>No Contacts Found</h5>
+                      <p className="text-muted">
+                        {searchTerm || statusFilter !== "all"
+                          ? "No contacts match your current filters."
+                          : "Get started by adding your first contact."}
+                      </p>
+                      {searchTerm || statusFilter !== "all" ? (
+                        <button
+                          className="btn btn-outline-primary"
+                          onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                          }}
+                        >
+                          Clear Filters
+                        </button>
+                      ) : (
+                        <Link
+                          to="#"
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_contact"
+                          className="btn btn-primary"
+                        >
+                          <i className="ti ti-circle-plus me-2" />
+                          Add Contact
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Table dataSource={data} columns={columns} Selection={true} />
+                )}
+              </div>
             </div>
-            <div className="card-body p-0">
-              {loading ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
+          )}
+
+          {/* GRID VIEW */}
+          {viewMode === 'grid' && (
+            <>
+              {/* Search/Sort Controls */}
+              <div className="d-flex flex-wrap gap-2 mb-3">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search contacts..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ maxWidth: 300 }}
+                />
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => handleSort("name")}
+                >
+                  Sort by Name{" "}
+                  {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                </button>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => handleSort("rating")}
+                >
+                  Sort by Rating{" "}
+                  {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                </button>
+              </div>
+
+              {/* Grid */}
+              <div className="row">
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center p-5 w-100">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <span className="ms-2">Loading contacts...</span>
                   </div>
-                  <span className="ms-2">Loading contacts...</span>
-                </div>
-              ) : error ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="text-center">
-                    <i className="ti ti-alert-circle fs-48 text-danger mb-3"></i>
-                    <h5>Error Loading Contacts</h5>
-                    <p className="text-muted">{error}</p>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => fetchContacts({ limit: 100 })}
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                </div>
-              ) : data.length === 0 ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="text-center">
+                ) : error ? (
+                  <div className="alert alert-danger w-100">{error}</div>
+                ) : data.length === 0 ? (
+                  <div className="text-center p-5 w-100">
                     <i className="ti ti-users fs-48 text-muted mb-3"></i>
                     <h5>No Contacts Found</h5>
                     <p className="text-muted">
-                      {searchTerm || statusFilter !== "all"
-                        ? "No contacts match your current filters."
+                      {searchTerm
+                        ? "Try adjusting your search or add a new contact."
                         : "Get started by adding your first contact."}
                     </p>
-                    {searchTerm || statusFilter !== "all" ? (
+                    {searchTerm ? (
                       <button
                         className="btn btn-outline-primary"
-                        onClick={() => {
-                          setSearchTerm("");
-                          setStatusFilter("all");
-                        }}
+                        onClick={() => setSearchTerm("")}
                       >
-                        Clear Filters
+                        Clear Search
                       </button>
                     ) : (
                       <Link
@@ -652,17 +716,151 @@ const ContactList = () => {
                       </Link>
                     )}
                   </div>
-                </div>
-              ) : (
-                <Table dataSource={data} columns={columns} Selection={true} />
-              )}
-            </div>
-          </div>
-        </div>
+                ) : (
+                  data.map((record: any) => {
+                    const c = record.originalContact;
+                    return (
+                      <div className="col-xl-3 col-lg-4 col-md-6" key={c._id}>
+                        <div className="card">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <div className="form-check form-check-md">
+                                <input className="form-check-input" type="checkbox" />
+                              </div>
+                              <div>
+                                <Link
+                                  to={routes.contactDetails.replace(
+                                    ":contactId",
+                                    c._id
+                                  )}
+                                  className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
+                                >
+                                  <ImageWithBasePath
+                                    src={`assets/img/users/${
+                                      c.image || "user-01.jpg"
+                                    }`}
+                                    className="img-fluid h-auto w-auto"
+                                    alt="img"
+                                  />
+                                </Link>
+                              </div>
+                              <div className="dropdown">
+                                <button
+                                  className="btn btn-icon btn-sm rounded-circle"
+                                  type="button"
+                                  data-bs-toggle="dropdown"
+                                  aria-expanded="false"
+                                >
+                                  <i className="ti ti-dots-vertical" />
+                                </button>
+                                <ul className="dropdown-menu dropdown-menu-end p-3">
+                                  <li>
+                                    <Link
+                                      className="dropdown-item rounded-1"
+                                      to="#"
+                                      onClick={() => handleDeleteContact(c._id)}
+                                    >
+                                      <i className="ti ti-trash me-1" />
+                                      Delete
+                                    </Link>
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+                            <div className="text-center mb-3">
+                              <h6 className="mb-1">
+                                <Link
+                                  to={routes.contactDetails.replace(
+                                    ":contactId",
+                                    c._id
+                                  )}
+                                >
+                                  {c.name && c.name !== "-"
+                                    ? c.name
+                                    : (
+                                        (c.firstName || "") +
+                                        (c.lastName ? " " + c.lastName : "")
+                                      ).trim() || "-"}
+                                </Link>
+                              </h6>
+                              <span className="badge bg-pink-transparent fs-10 fw-medium">
+                                {c.role || "-"}
+                              </span>
+                            </div>
+                            <div className="d-flex flex-column">
+                              <p className="text-dark d-inline-flex align-items-center mb-2">
+                                <i className="ti ti-mail-forward text-gray-5 me-2" />
+                                {c.email || "-"}
+                              </p>
+                              <p className="text-dark d-inline-flex align-items-center mb-2">
+                                <i className="ti ti-phone text-gray-5 me-2" />
+                                {c.phone || "-"}
+                              </p>
+                              <p className="text-dark d-inline-flex align-items-center">
+                                <i className="ti ti-map-pin text-gray-5 me-2" />
+                                {typeof c.location === 'object' && c.location !== null
+                                  ? `${c.location.city || ''}${c.location.state ? ', ' + c.location.state : ''}${c.location.country ? ', ' + c.location.country : ''}`.replace(/^,\s*/, '') || '-'
+                                  : c.location || "-"}
+                              </p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+                              <div className="icons-social d-flex align-items-center">
+                                <Link
+                                  to="#"
+                                  className="avatar avatar-rounded avatar-sm me-1"
+                                >
+                                  <i className="ti ti-mail" />
+                                </Link>
+                                <Link
+                                  to="#"
+                                  className="avatar avatar-rounded avatar-sm me-1"
+                                >
+                                  <i className="ti ti-phone-call" />
+                                </Link>
+                                <Link
+                                  to="#"
+                                  className="avatar avatar-rounded avatar-sm me-1"
+                                >
+                                  <i className="ti ti-message-2" />
+                                </Link>
+                                <Link
+                                  to="#"
+                                  className="avatar avatar-rounded avatar-sm me-1"
+                                >
+                                  <i className="ti ti-brand-skype" />
+                                </Link>
+                                <Link
+                                  to="#"
+                                  className="avatar avatar-rounded avatar-sm"
+                                >
+                                  <i className="ti ti-brand-facebook" />
+                                </Link>
+                              </div>
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-star-filled text-warning me-1" />
+                                {c.rating ?? 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-        {/* Footer */}
+              {data.length > 0 && (
+                <div className="text-center mb-4">
+                  <Link to="#" className="btn btn-white border">
+                    <i className="ti ti-loader-3 text-primary me-2" />
+                    Load More
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </div>
         <Footer />
-        {/* /Footer */}
       </div>
       <CrmsModal />
     </>

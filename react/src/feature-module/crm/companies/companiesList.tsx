@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
 import { useCompanies } from "../../../hooks/useCompanies";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import PredefinedDateRanges from "../../../core/common/datePicker";
 import Table from "../../../core/common/dataTable/index";
 import CrmsModal from "../../../core/modals/crms_modal";
 import { useAuth } from "@clerk/clerk-react";
@@ -15,13 +13,19 @@ const CompaniesList = () => {
   const routes = all_routes;
   const { companies, fetchCompanies, loading, error } = useCompanies();
   const { getToken } = useAuth();
+  const backendurl = process.env.REACT_APP_BACKEND_URL;
+
+  // View Mode State
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Shared state
   const [sortBy, setSortBy] = useState("name");
-  const [sortOrder, setSortOrder] = useState("asc");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [statusFilter, setStatusFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const backendurl = process.env.REACT_APP_BACKEND_URL;
 
+  // Filtered and sorted data
   const data = useMemo(() => {
     let filteredCompanies = companies;
 
@@ -50,7 +54,7 @@ const CompaniesList = () => {
     }
 
     // Apply sorting
-    filteredCompanies.sort((a: any, b: any) => {
+    filteredCompanies = [...filteredCompanies].sort((a: any, b: any) => {
       let aValue = a[sortBy] || "";
       let bValue = b[sortBy] || "";
 
@@ -80,6 +84,8 @@ const CompaniesList = () => {
       createdAt: c.createdAt,
       industry: c.industry,
       source: c.source,
+      // Keep original object for grid view
+      originalCompany: c,
     }));
   }, [companies, searchTerm, statusFilter, companyFilter, sortBy, sortOrder]);
 
@@ -137,6 +143,31 @@ const CompaniesList = () => {
     }
   };
 
+  const handleDeleteCompany = async (companyId: string) => {
+    if (!window.confirm("Are you sure you want to delete this company?")) {
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`${backendurl}/api/companies/${companyId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        window.dispatchEvent(new CustomEvent("companies:changed"));
+        alert("Company deleted successfully!");
+      } else {
+        alert("Failed to delete company. Please try again.");
+      }
+    } catch (err) {
+      console.error("delete company", err);
+      alert("Error deleting company. Please try again.");
+    }
+  };
+
+  // Table columns for list view
   const columns = [
     {
       title: (
@@ -377,34 +408,14 @@ const CompaniesList = () => {
       title: "Status",
       dataIndex: "Status",
       render: (text: string) => (
-        <>
-          <span
-            className={`badge d-inline-flex align-items-center badge-xs ${
-              text === "Active" ? "badge-success" : "badge-danger"
-            }`}
-          >
-            <i className="ti ti-point-filled me-1"></i>
-            {text}
-          </span>
-        </>
-      ),
-      sorter: (a: any, b: any) => a.status.length - b.status.length,
-    },
-
-    {
-      title: "Status",
-      dataIndex: "Status",
-      render: (text: string) => (
-        <>
-          <span
-            className={`badge d-inline-flex align-items-center badge-xs ${
-              text === "Active" ? "badge-success" : "badge-danger"
-            }`}
-          >
-            <i className="ti ti-point-filled me-1"></i>
-            {text}
-          </span>
-        </>
+        <span
+          className={`badge d-inline-flex align-items-center badge-xs ${
+            text === "Active" ? "badge-success" : "badge-danger"
+          }`}
+        >
+          <i className="ti ti-point-filled me-1"></i>
+          {text}
+        </span>
       ),
     },
     {
@@ -419,51 +430,9 @@ const CompaniesList = () => {
           >
             <i className="ti ti-eye" />
           </Link>
-          {/* <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-bs-target="#edit_company"
-            onClick={() => {
-              (window as any).CURRENT_COMPANY_ID = record._id;
-              // Pre-populate edit form with current company data
-              const company = companies.find((c: any) => c._id === record._id);
-              if (company) {
-                (window as any).CURRENT_COMPANY_DATA = company;
-              }
-            }}
-            title="Edit Company"
-          >
-            <i className="ti ti-edit" />
-          </Link> */}
           <Link
             to="#"
-            onClick={async () => {
-              if (
-                window.confirm("Are you sure you want to delete this company?")
-              ) {
-                try {
-                  const token = await getToken();
-                  const response = await fetch(
-                    `${backendurl}/api/companies/${record._id}`,
-                    {
-                      method: "DELETE",
-                      headers: { Authorization: `Bearer ${token}` },
-                    }
-                  );
-
-                  if (response.ok) {
-                    window.dispatchEvent(new CustomEvent("companies:changed"));
-                    alert("Company deleted successfully!");
-                  } else {
-                    alert("Failed to delete company. Please try again.");
-                  }
-                } catch (err) {
-                  console.error("delete company", err);
-                  alert("Error deleting company. Please try again.");
-                }
-              }
-            }}
+            onClick={() => handleDeleteCompany(record._id)}
             title="Delete Company"
           >
             <i className="ti ti-trash" />
@@ -490,7 +459,7 @@ const CompaniesList = () => {
                   </li>
                   <li className="breadcrumb-item">CRM</li>
                   <li className="breadcrumb-item active" aria-current="page">
-                    Companies List
+                    {viewMode === "list" ? "Companies List" : "Companies Grid"}
                   </li>
                 </ol>
               </nav>
@@ -498,161 +467,26 @@ const CompaniesList = () => {
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={routes.companiesList}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "list" ? "active bg-primary text-white" : ""
+                    } me-1`}
                   >
                     <i className="ti ti-list-tree" />
-                  </Link>
-                  <Link
-                    to={routes.companiesGrid}
-                    className="btn btn-icon btn-sm"
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`btn btn-icon btn-sm ${
+                      viewMode === "grid" ? "active bg-primary text-white" : ""
+                    }`}
                   >
                     <i className="ti ti-layout-grid" />
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="me-2 mb-2">
                 <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    <i className="ti ti-file-export me-1" />
-                    Export
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-bs-target="#add_company"
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Company
-                </Link>
-              </div>
-              <div className="ms-2 head-icons">
-                <CollapseHeader />
-              </div>
-            </div>
-          </div>
-          {/* /Breadcrumb */}
-          <div className="card">
-            <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-              <h5>Companies List ({data.length} companies)</h5>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                {/* Search Input */}
-                <div className="me-3">
-                  <div className="input-icon-end position-relative">
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search companies..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <span className="input-icon-addon">
-                      <i className="ti ti-search" />
-                    </span>
-                  </div>
-                </div>
-
-                {/* Company Filter */}
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    {companyFilter === "all"
-                      ? "All Companies"
-                      : companies.find((c: any) => c._id === companyFilter)
-                          ?.name || "Select Company"}
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setCompanyFilter("all")}
-                      >
-                        All Companies
-                      </Link>
-                    </li>
-                    {companies.map((company: any) => (
-                      <li key={company._id}>
-                        <Link
-                          to="#"
-                          className="dropdown-item rounded-1"
-                          onClick={() => setCompanyFilter(company._id)}
-                        >
-                          {company.name}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Status Filter */}
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    {statusFilter === "all" ? "All Status" : statusFilter}
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("all")}
-                      >
-                        All Status
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("Active")}
-                      >
-                        Active
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => setStatusFilter("Inactive")}
-                      >
-                        Inactive
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Export Dropdown */}
-                <div className="dropdown me-3">
                   <Link
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
@@ -685,39 +519,262 @@ const CompaniesList = () => {
                   </ul>
                 </div>
               </div>
+              <div className="mb-2">
+                <Link
+                  to="#"
+                  data-bs-toggle="modal"
+                  data-bs-target="#add_company"
+                  className="btn btn-primary d-flex align-items-center"
+                >
+                  <i className="ti ti-circle-plus me-2" />
+                  Add Company
+                </Link>
+              </div>
+              <div className="ms-2 head-icons">
+                <CollapseHeader />
+              </div>
             </div>
-            <div className="card-body p-0">
-              {loading ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
+          </div>
+          {/* /Breadcrumb */}
+
+          {/* LIST VIEW */}
+          {viewMode === "list" && (
+            <div className="card">
+              <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <h5>Companies List ({data.length} companies)</h5>
+                <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                  {/* Search Input */}
+                  <div className="me-3">
+                    <div className="input-icon-end position-relative">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Search companies..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-search" />
+                      </span>
+                    </div>
                   </div>
-                  <span className="ms-2">Loading companies...</span>
-                </div>
-              ) : error ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="text-center">
-                    <i className="ti ti-alert-circle fs-48 text-danger mb-3"></i>
-                    <h5>Error Loading Companies</h5>
-                    <p className="text-muted">{error}</p>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => fetchCompanies({ limit: 100 })}
+
+                  {/* Company Filter */}
+                  <div className="dropdown me-3">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
                     >
-                      Try Again
-                    </button>
+                      {companyFilter === "all"
+                        ? "All Companies"
+                        : companies.find((c: any) => c._id === companyFilter)
+                            ?.name || "Select Company"}
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setCompanyFilter("all")}
+                        >
+                          All Companies
+                        </Link>
+                      </li>
+                      {companies.map((company: any) => (
+                        <li key={company._id}>
+                          <Link
+                            to="#"
+                            className="dropdown-item rounded-1"
+                            onClick={() => setCompanyFilter(company._id)}
+                          >
+                            {company.name}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Status Filter */}
+                  <div className="dropdown me-3">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      {statusFilter === "all" ? "All Status" : statusFilter}
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("all")}
+                        >
+                          All Status
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("Active")}
+                        >
+                          Active
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => setStatusFilter("Inactive")}
+                        >
+                          Inactive
+                        </Link>
+                      </li>
+                    </ul>
                   </div>
                 </div>
-              ) : data.length === 0 ? (
-                <div className="d-flex justify-content-center align-items-center p-5">
-                  <div className="text-center">
+              </div>
+              <div className="card-body p-0">
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <span className="ms-2">Loading companies...</span>
+                  </div>
+                ) : error ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="text-center">
+                      <i className="ti ti-alert-circle fs-48 text-danger mb-3"></i>
+                      <h5>Error Loading Companies</h5>
+                      <p className="text-muted">{error}</p>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => fetchCompanies({ limit: 100 })}
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  </div>
+                ) : data.length === 0 ? (
+                  <div className="d-flex justify-content-center align-items-center p-5">
+                    <div className="text-center">
+                      <i className="ti ti-building fs-48 text-muted mb-3"></i>
+                      <h5>No Companies Found</h5>
+                      <p className="text-muted">
+                        {searchTerm ||
+                        statusFilter !== "all" ||
+                        companyFilter !== "all"
+                          ? "No companies match your current filters."
+                          : "Get started by adding your first company."}
+                      </p>
+                      {searchTerm ||
+                      statusFilter !== "all" ||
+                      companyFilter !== "all" ? (
+                        <button
+                          className="btn btn-outline-primary"
+                          onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                            setCompanyFilter("all");
+                          }}
+                        >
+                          Clear Filters
+                        </button>
+                      ) : (
+                        <Link
+                          to="#"
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_company"
+                          className="btn btn-primary"
+                        >
+                          <i className="ti ti-circle-plus me-2" />
+                          Add Company
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Table dataSource={data} columns={columns} Selection={true} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* GRID VIEW */}
+          {viewMode === "grid" && (
+            <>
+              {/* Search/Filter/Sort Controls */}
+              <div className="d-flex flex-wrap gap-2 mb-3">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search companies..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ maxWidth: 200 }}
+                />
+                <select
+                  className="form-select"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{ maxWidth: 150 }}
+                >
+                  <option value="all">All Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <select
+                  className="form-select"
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  style={{ maxWidth: 200 }}
+                >
+                  <option value="all">All Companies</option>
+                  {companies.map((c: any) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => handleSort("name")}
+                >
+                  Sort by Name{" "}
+                  {sortBy === "name" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                </button>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => handleSort("rating")}
+                >
+                  Sort by Rating{" "}
+                  {sortBy === "rating" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                </button>
+              </div>
+
+              {/* Grid */}
+              <div className="row">
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center p-5 w-100">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <span className="ms-2">Loading companies...</span>
+                  </div>
+                ) : error ? (
+                  <div className="alert alert-danger w-100">{error}</div>
+                ) : data.length === 0 ? (
+                  <div className="text-center p-5 w-100">
                     <i className="ti ti-building fs-48 text-muted mb-3"></i>
                     <h5>No Companies Found</h5>
                     <p className="text-muted">
                       {searchTerm ||
                       statusFilter !== "all" ||
                       companyFilter !== "all"
-                        ? "No companies match your current filters."
+                        ? "Try adjusting your filters or add a new company."
                         : "Get started by adding your first company."}
                     </p>
                     {searchTerm ||
@@ -745,12 +802,132 @@ const CompaniesList = () => {
                       </Link>
                     )}
                   </div>
+                ) : (
+                  data.map((record: any) => {
+                    const c = record.originalCompany;
+                    return (
+                      <div className="col-xl-3 col-lg-4 col-md-6" key={c._id}>
+                        <div className="card">
+                          <div className="card-body">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <div className="form-check form-check-md">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                />
+                              </div>
+                              <div>
+                                <Link
+                                  to={routes.companiesDetails.replace(
+                                    ":companyId",
+                                    c._id
+                                  )}
+                                  className="avatar avatar-xl avatar-rounded online border rounded-circle"
+                                >
+                                  <ImageWithBasePath
+                                    src={`assets/img/company/${
+                                      c.image || "company-01.svg"
+                                    }`}
+                                    className="img-fluid h-auto w-auto"
+                                    alt="img"
+                                  />
+                                </Link>
+                              </div>
+                              <div className="dropdown">
+                                <button
+                                  className="btn btn-icon btn-sm rounded-circle"
+                                  type="button"
+                                  data-bs-toggle="dropdown"
+                                  aria-expanded="false"
+                                >
+                                  <i className="ti ti-dots-vertical" />
+                                </button>
+                                <ul className="dropdown-menu dropdown-menu-end p-3">
+                                  <li>
+                                    <Link
+                                      className="dropdown-item rounded-1"
+                                      to="#"
+                                      onClick={() => handleDeleteCompany(c._id)}
+                                    >
+                                      <i className="ti ti-trash me-1" />
+                                      Delete
+                                    </Link>
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+                            <div className="text-center mb-3">
+                              <h6 className="mb-1">
+                                <Link
+                                  to={routes.companiesDetails.replace(
+                                    ":companyId",
+                                    c._id
+                                  )}
+                                >
+                                  {c.name}
+                                </Link>
+                              </h6>
+                            </div>
+                            <div className="d-flex flex-column">
+                              <p className="text-dark d-inline-flex align-items-center mb-2">
+                                <i className="ti ti-mail-forward text-gray-5 me-2" />
+                                {c.email || "-"}
+                              </p>
+                              <p className="text-dark d-inline-flex align-items-center mb-2">
+                                <i className="ti ti-phone text-gray-5 me-2" />
+                                {c.phone || "-"}
+                              </p>
+                              <p className="text-dark d-inline-flex align-items-center">
+                                <i className="ti ti-map-pin text-gray-5 me-2" />
+                                {c.address?.city ||
+                                  (typeof c.location === "object" &&
+                                  c.location !== null
+                                    ? `${c.location.city || ""}${
+                                        c.location.state
+                                          ? ", " + c.location.state
+                                          : ""
+                                      }${
+                                        c.location.country
+                                          ? ", " + c.location.country
+                                          : ""
+                                      }`.replace(/^,\s*/, "") || "-"
+                                    : c.location) ||
+                                  "-"}
+                              </p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-star-filled text-warning me-1" />
+                                {c.rating ?? 0}
+                              </span>
+                              <span
+                                className={`badge badge-xs ${
+                                  c.status === "Active"
+                                    ? "badge-success"
+                                    : "badge-danger"
+                                }`}
+                              >
+                                {c.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {data.length > 0 && (
+                <div className="text-center mb-4">
+                  <Link to="#" className="btn btn-white border">
+                    <i className="ti ti-loader-3 text-primary me-2" />
+                    Load More
+                  </Link>
                 </div>
-              ) : (
-                <Table dataSource={data} columns={columns} Selection={true} />
               )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         <Footer />
