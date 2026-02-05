@@ -7,6 +7,7 @@ import express from 'express';
 import {
     bulkUploadEmployees,
     checkDuplicates,
+    checkLifecycleStatus,
     createEmployee,
     deleteEmployee,
     getEmployeeById,
@@ -14,6 +15,7 @@ import {
     getEmployees,
     getEmployeeStatsByDepartment,
     getMyProfile,
+    reassignAndDeleteEmployee,
     searchEmployees,
     updateEmployee,
     updateMyProfile
@@ -77,6 +79,16 @@ router.post(
   checkDuplicates
 );
 
+// Check employee lifecycle status (resignation/termination)
+// IMPORTANT: Must be before /:id routes to avoid matching as :id parameter
+router.post(
+  '/check-lifecycle-status',
+  authenticate,
+  requireCompany,
+  requireRole('admin', 'hr', 'superadmin'),
+  checkLifecycleStatus
+);
+
 // Create new employee
 router.post(
   '/',
@@ -116,6 +128,7 @@ router.post(
 
 /**
  * Individual Employee Routes
+ * NOTE: These must come AFTER all non-parameterized routes
  */
 
 // Get single employee by ID
@@ -134,6 +147,16 @@ router.put(
   requireRole('admin', 'hr', 'superadmin'),
   validateBody(employeeSchemas.update),
   updateEmployee
+);
+
+// Reassign and delete employee (soft delete)
+router.post(
+  '/:id/reassign-delete',
+  authenticate,
+  requireCompany,
+  requireRole('admin', 'superadmin'),
+  validateBody(employeeSchemas.reassignDelete),
+  reassignAndDeleteEmployee
 );
 
 // Delete employee (soft delete)

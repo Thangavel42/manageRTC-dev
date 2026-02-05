@@ -7,6 +7,7 @@
  */
 
 import { ObjectId } from 'mongodb';
+import { getsuperadminCollections, getTenantCollections } from '../../config/db.js';
 import {
   asyncHandler,
   buildNotFoundError,
@@ -16,8 +17,6 @@ import {
   extractUser,
   sendSuccess
 } from '../../utils/apiResponse.js';
-import { getTenantCollections } from '../../config/db.js';
-import { getsuperadminCollections } from '../../config/db.js';
 
 /**
  * @desc    Get current user profile (role-based)
@@ -78,7 +77,11 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
 
     // Find employee by Clerk user ID (stored in clerkUserId field)
     const employee = await collections.employees.findOne({
-      clerkUserId: user.userId
+      isDeleted: { $ne: true },
+      $or: [
+        { clerkUserId: user.userId },
+        { 'account.userId': user.userId }
+      ]
     });
 
     if (!employee) {

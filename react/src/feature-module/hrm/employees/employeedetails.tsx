@@ -225,6 +225,7 @@ export interface Employee {
     updatedBy: string;
     designationId: string;
     avatarUrl: string;
+    profileImage?: string;
     clientId: string;
 }
 
@@ -397,7 +398,7 @@ const EmployeeDetails = () => {
             if (success) {
                 toast.success("Permissions updated successfully!");
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -432,40 +433,49 @@ const EmployeeDetails = () => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        const maxSize = 4 * 1024 * 1024; // 4MB
-        if (file.size > maxSize) {
-            toast.error("File size must be less than 4MB.", { position: "top-right", autoClose: 3000 });
+        // Validate file type
+        const allowedFormats = ['image/jpeg', 'image/png', 'image/jpg'];
+        if (!allowedFormats.includes(file.type)) {
+            toast.error("Please upload image file only (JPG, JPEG, PNG).", { position: "top-right", autoClose: 3000 });
             event.target.value = "";
             return;
         }
 
-        if (["image/jpeg", "image/png", "image/jpg", "image/ico"].includes(file.type)) {
-            setImageUpload(true);
-            try {
-                const formData = new FormData();
-                formData.append("file", file);
-                formData.append("upload_preset", "amasqis");
-                const res = await fetch(
-                    "https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload",
-                    { method: "POST", body: formData }
-                );
-                const data = await res.json();
-                setEditFormData(prev => ({ ...prev, avatarUrl: data.secure_url }));
-                setImageUpload(false);
-                toast.success("Image uploaded successfully!", { position: "top-right", autoClose: 3000 });
-            } catch (error) {
-                setImageUpload(false);
-                toast.error("Failed to upload image. Please try again.", { position: "top-right", autoClose: 3000 });
-                event.target.value = "";
+        // Validate file size - max 2MB
+        const maxSize = 2 * 1024 * 1024; // 2MB
+        if (file.size > maxSize) {
+            toast.error("File size must be less than 2MB.", { position: "top-right", autoClose: 3000 });
+            event.target.value = "";
+            return;
+        }
+
+        setImageUpload(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", "amasqis");
+            const res = await fetch(
+                "https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload",
+                { method: "POST", body: formData }
+            );
+
+            if (!res.ok) {
+                throw new Error('Image upload failed');
             }
-        } else {
-            toast.error("Please upload image file only.", { position: "top-right", autoClose: 3000 });
+
+            const data = await res.json();
+            setEditFormData(prev => ({ ...prev, avatarUrl: data.secure_url, profileImage: data.secure_url }));
+            setImageUpload(false);
+            toast.success("Image uploaded successfully!", { position: "top-right", autoClose: 3000 });
+        } catch (error) {
+            setImageUpload(false);
+            toast.error("Failed to upload image. Please try again.", { position: "top-right", autoClose: 3000 });
             event.target.value = "";
         }
     };
 
     const removeLogo = () => {
-        setEditFormData(prev => ({ ...prev, avatarUrl: "" }));
+        setEditFormData(prev => ({ ...prev, avatarUrl: "", profileImage: "" }));
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
@@ -507,7 +517,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -565,7 +575,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -624,7 +634,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -692,7 +702,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -762,7 +772,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -816,7 +826,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -867,7 +877,7 @@ const EmployeeDetails = () => {
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -1200,7 +1210,8 @@ const EmployeeDetails = () => {
             designationId: editFormData.designationId || "",
             dateOfJoining: editFormData.dateOfJoining || null,
             about: editFormData.about || "",
-            avatarUrl: editFormData.avatarUrl || "",
+            // Use profileImage for backend (or avatarUrl if provided)
+            profileImage: editFormData.avatarUrl || editFormData.profileImage || "",
         };
 
         // Only include status if it's NOT a lifecycle status
@@ -1210,14 +1221,15 @@ const EmployeeDetails = () => {
         }
 
         try {
-            const success = await employeesREST.updateEmployee(payload.employeeId, payload);
+            const employeeObjectId = editFormData._id || payload.employeeId;
+            const success = await employeesREST.updateEmployee(employeeObjectId, payload);
             if (success) {
                 toast.success("Employee updated successfully!", {
                     position: "top-right",
                     autoClose: 3000,
                 });
                 // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(payload.employeeId);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employeeObjectId);
                 if (updatedEmployee) {
                     setEmployee(updatedEmployee as any);
                 }
@@ -1826,9 +1838,9 @@ const EmployeeDetails = () => {
                             <div className="card card-bg-1">
                                 <div className="card-body p-0">
                                     <span className="avatar avatar-xl avatar-rounded border border-2 border-white m-auto d-flex mb-2">
-                                        {employee?.avatarUrl ? (
+                                        {employee?.avatarUrl || employee?.profileImage ? (
                                             <img
-                                                src={employee.avatarUrl}
+                                                src={employee.avatarUrl || employee.profileImage}
                                                 alt="Profile"
                                                 className="w-100 h-100 object-fit-cover"
                                             />
@@ -2978,9 +2990,15 @@ const EmployeeDetails = () => {
 
                                                 <div className="col-md-12">
                                                     <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                                                        {editFormData.avatarUrl ? (
+                                                        {editFormData.avatarUrl || editFormData.profileImage ? (
                                                             <img
-                                                                src={editFormData.avatarUrl}
+                                                                src={editFormData.avatarUrl || editFormData.profileImage}
+                                                                alt="Profile"
+                                                                className="avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0"
+                                                            />
+                                                        ) : employee?.avatarUrl || employee?.profileImage ? (
+                                                            <img
+                                                                src={employee.avatarUrl || employee.profileImage}
                                                                 alt="Profile"
                                                                 className="avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0"
                                                             />
@@ -2992,20 +3010,20 @@ const EmployeeDetails = () => {
                                                         <div className="profile-upload">
                                                             <div className="mb-2">
                                                                 <h6 className="mb-1">Edit Profile Image</h6>
-                                                                <p className="fs-12">Image should be below 4 mb</p>
+                                                                <p className="fs-12 text-muted mb-0">JPG, JPEG, PNG • Max 2MB</p>
                                                             </div>
                                                             <div className="profile-uploader d-flex align-items-center">
                                                                 <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                                                    {loading ? "Uploading..." : "Upload"}
+                                                                    {imageUpload ? "Uploading..." : "Upload"}
                                                                     <input
                                                                         type="file"
                                                                         className="form-control image-sign"
-                                                                        accept=".png,.jpeg,.jpg,.ico"
+                                                                        accept=".png,.jpeg,.jpg"
                                                                         ref={fileInputRef}
                                                                         onChange={handleImageUpload}
-                                                                        disabled={loading}
+                                                                        disabled={imageUpload}
                                                                         style={{
-                                                                            cursor: loading ? "not-allowed" : "pointer",
+                                                                            cursor: imageUpload ? "not-allowed" : "pointer",
                                                                             opacity: 0,
                                                                             position: "absolute",
                                                                             top: 0,
@@ -3019,9 +3037,9 @@ const EmployeeDetails = () => {
                                                                     type="button"
                                                                     className="btn btn-light btn-sm"
                                                                     onClick={removeLogo}
-                                                                    disabled={loading}
+                                                                    disabled={imageUpload}
                                                                 >
-                                                                    Cancel
+                                                                    Remove
                                                                 </button>
                                                             </div>
                                                         </div>

@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { all_routes } from '../../router/all_routes'
-import { Link } from 'react-router-dom'
-import ImageWithBasePath from '../../../core/common/imageWithBasePath';
-import CommonSelect from '../../../core/common/commonSelect';
-import { DatePicker } from 'antd';
-import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
-import { useSocket } from "../../../SocketContext";
-import { Socket } from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import dayjs from "dayjs";
 import { useUser } from "@clerk/clerk-react";
+import { DatePicker } from 'antd';
+import dayjs from "dayjs";
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { toast } from "react-toastify";
+import { Socket } from "socket.io-client";
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import CommonSelect from '../../../core/common/commonSelect';
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from '../../router/all_routes';
 // REST API Hooks for HRM operations
-import { useEmployeesREST } from "../../../hooks/useEmployeesREST";
 import { useDepartmentsREST } from "../../../hooks/useDepartmentsREST";
 import { useDesignationsREST } from "../../../hooks/useDesignationsREST";
+import { useEmployeesREST } from "../../../hooks/useEmployeesREST";
 
 type PasswordField = "password" | "confirmPassword";
 type PermissionAction = "read" | "write" | "create" | "delete" | "import" | "export";
@@ -120,7 +120,7 @@ const generateId = (prefix: string): string => {
 const normalizeStatus = (status: string | undefined): "Active" | "Inactive" | "On Notice" | "Resigned" | "Terminated" | "On Leave" => {
   if (!status) return "Active";
   const normalized = status.toLowerCase();
-  
+
   // Map all possible status values with case-insensitive matching
   if (normalized === "active") return "Active";
   if (normalized === "inactive") return "Inactive";
@@ -128,7 +128,7 @@ const normalizeStatus = (status: string | undefined): "Active" | "Inactive" | "O
   if (normalized === "resigned") return "Resigned";
   if (normalized === "terminated") return "Terminated";
   if (normalized === "on leave") return "On Leave";
-  
+
   // Default to Active for unknown statuses
   return "Active";
 };
@@ -169,6 +169,8 @@ const initialState = {
 const EmployeesGrid = () => {
    const {  isLoaded } = useUser();
   const [error, setError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("basic-info");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -187,6 +189,8 @@ const EmployeesGrid = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [reassignEmployeeId, setReassignEmployeeId] = useState('');
+  const [reassignError, setReassignError] = useState('');
   const socket = useSocket() as Socket | null;
 
   // REST API Hooks for HRM operations
@@ -198,7 +202,7 @@ const EmployeesGrid = () => {
     fetchEmployeesWithStats,
     createEmployee,
     updateEmployee,
-    deleteEmployee: deleteEmployeeREST,
+    reassignAndDeleteEmployee,
     updatePermissions,
     updatePersonalInfo,
     checkDuplicates: checkDuplicatesREST,
@@ -425,6 +429,19 @@ const EmployeesGrid = () => {
     confirmPassword: false,
   });
 
+  // Helper function to check if field has error
+  const getFieldError = (fieldName: string): string | undefined => {
+    return fieldErrors[fieldName]
+      || fieldErrors[`contact.${fieldName}`]
+      || fieldErrors[`account.${fieldName}`]
+      || fieldErrors[`personal.${fieldName}`];
+  };
+
+  // Helper function to get error class
+  const getFieldErrorClass = (fieldName: string): string => {
+    return getFieldError(fieldName) ? 'is-invalid' : '';
+  };
+
   const togglePasswordVisibility = (field: PasswordField) => {
     setPasswordVisibility((prevState) => ({
       ...prevState,
@@ -522,7 +539,9 @@ const EmployeesGrid = () => {
     try {
       e.preventDefault();
 
-      setError("null");
+      // Clear previous errors
+      setModalError(null);
+      setFieldErrors({});
 
       if (!validateForm()) {
         return;
@@ -530,7 +549,7 @@ const EmployeesGrid = () => {
 
       const anyModuleEnabled = Object.values(permissions.enabledModules).some(Boolean);
       if (!anyModuleEnabled) {
-        setError("Please enable at least one module before saving permissions.");
+        setModalError("Please enable at least one module before saving permissions.");
         return;
       }
       setLoading(true);
@@ -612,18 +631,49 @@ const EmployeesGrid = () => {
       if (result.success) {
         handleResetFormData();
         setActiveTab('basic-info');
-        setError(null);
+        setModalError(null);
+        setFieldErrors({});
+        // Close modal
+        const modalElement = document.getElementById('add_employee');
+        const modal = window.bootstrap?.Modal?.getInstance(modalElement);
+        if (modal) {
+          modal.hide();
+        }
       } else {
-        setError(result.error || "Failed to create employee");
+        // Handle validation errors
+        const errorData = result.error;
+
+        // Check for field-specific validation errors
+        if (errorData?.details && Array.isArray(errorData.details)) {
+          const newFieldErrors: Record<string, string> = {};
+          errorData.details.forEach((detail: any) => {
+            if (detail.field && detail.message) {
+              newFieldErrors[detail.field] = detail.message;
+            }
+          });
+          setFieldErrors(newFieldErrors);
+          setModalError('Request validation failed. Please check the highlighted fields below.');
+        } else if (errorData?.field && errorData?.message) {
+          // Single field error
+          setFieldErrors({ [errorData.field]: errorData.message });
+          setModalError(errorData.message);
+        } else {
+          // Generic error
+          setModalError(errorData?.message || 'Failed to create employee');
+        }
       }
 
     } catch (error) {
       console.error("Error submitting form and permissions:", error);
-      setError("An error occurred while submitting data.");
+      setModalError("An error occurred while submitting data.");
     }
     setLoading(false);
   };
   const handleResetFormData = () => {
+      // Clear all errors
+      setModalError(null);
+      setFieldErrors({});
+
     setFormData({
       employeeId: generateId("EMP"),
       avatarUrl: "",
@@ -661,6 +711,21 @@ const EmployeesGrid = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+
+        // Clear field-specific error when user starts typing
+        if (fieldErrors[name] || fieldErrors[`contact.${name}`] || fieldErrors[`account.${name}`]) {
+          const newErrors = { ...fieldErrors };
+          delete newErrors[name];
+          delete newErrors[`contact.${name}`];
+          delete newErrors[`account.${name}`];
+          setFieldErrors(newErrors);
+
+          // Clear modal error if all field errors are gone
+          if (Object.keys(newErrors).length === 0) {
+            setModalError(null);
+          }
+        }
+
     if (name === "email" || name === "phone") {
       setFormData(prev => ({
         ...prev,
@@ -683,10 +748,28 @@ const EmployeesGrid = () => {
   };
 
   const handleDateChange = (date: string) => {
+        // Clear dateOfJoining error
+        if (fieldErrors['dateOfJoining']) {
+          const newErrors = { ...fieldErrors };
+          delete newErrors['dateOfJoining'];
+          setFieldErrors(newErrors);
+          if (Object.keys(newErrors).length === 0) {
+            setModalError(null);
+          }
+        }
     setFormData(prev => ({ ...prev, dateOfJoining: date }));
   };
 
   const handleSelectChange = (field: string, value: string) => {
+        // Clear field error for department/designation
+        if (fieldErrors[field]) {
+          const newErrors = { ...fieldErrors };
+          delete newErrors[field];
+          setFieldErrors(newErrors);
+          if (Object.keys(newErrors).length === 0) {
+            setModalError(null);
+          }
+        }
     setFormData(prev => ({ ...prev, [field]: value }));
   };
   const handleNext = (e: React.FormEvent) => {
@@ -879,26 +962,73 @@ const EmployeesGrid = () => {
     }
   };
 
-  const deleteEmployee = async (id: string) => {
+  const deleteEmployee = async (id: string, reassignedTo: string): Promise<boolean> => {
     try {
       setLoading(true);
       setError(null);
 
-      if (!id) {
-        setError("Employee ID is required");
+      if (!id || !reassignedTo) {
+        setError("Employee ID and reassignment employee are required");
         setLoading(false);
-        return;
+        return false;
       }
 
-      // Use REST API to delete employee
-      const success = await deleteEmployeeREST(id);
+      // Use REST API to reassign and delete employee
+      const success = await reassignAndDeleteEmployee(id, reassignedTo);
       if (!success) {
         setError("Failed to delete employee");
+        return false;
       }
+      return true;
     } catch (error) {
       console.error("Delete error:", error);
       setError("Failed to delete employee");
       setLoading(false);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getEligibleEmployees = () => {
+    if (!employeeToDelete) return [];
+
+    return employees.filter(emp =>
+      emp.status === 'Active' &&
+      emp._id !== employeeToDelete._id &&
+      emp.departmentId === employeeToDelete.departmentId &&
+      emp.designationId === employeeToDelete.designationId
+    );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!employeeToDelete) return;
+
+    const eligibleEmployees = getEligibleEmployees();
+
+    if (eligibleEmployees.length === 0) {
+      setReassignError('No employee available with the same designation in this department for reassignment.');
+      return;
+    }
+
+    if (!reassignEmployeeId) {
+      setReassignError('Please select an employee to reassign data to.');
+      return;
+    }
+
+    if (reassignEmployeeId === employeeToDelete._id) {
+      setReassignError('You cannot reassign data to the same employee being deleted.');
+      return;
+    }
+
+    setReassignError('');
+    const success = await deleteEmployee(employeeToDelete._id, reassignEmployeeId);
+
+    if (success) {
+      const closeButton = document.querySelector('#delete_modal [data-bs-dismiss="modal"]') as HTMLButtonElement | null;
+      if (closeButton) closeButton.click();
+      setEmployeeToDelete(null);
+      setReassignEmployeeId('');
     }
   };
 
@@ -1272,7 +1402,11 @@ const EmployeesGrid = () => {
                                 data-bs-toggle="modal"
                                 data-inert={true}
                                 data-bs-target="#delete_modal"
-                                onClick={() => setEmployeeToDelete(emp)}
+                                onClick={() => {
+                                  setEmployeeToDelete(emp);
+                                  setReassignEmployeeId('');
+                                  setReassignError('');
+                                }}
                               >
                                 <i className="ti ti-trash me-1" /> Delete
                               </Link>
@@ -1388,6 +1522,19 @@ const EmployeesGrid = () => {
                   </li>
                 </ul>
               </div>
+              {/* Error Alert - Display inside modal */}
+              {modalError && (
+                <div className="alert alert-danger alert-dismissible fade show mx-3 mt-3 mb-0" role="alert">
+                  <i className="ti ti-alert-circle me-2"></i>
+                  <strong>Error!</strong> {modalError}
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setModalError(null)}
+                    aria-label="Close"
+                  ></button>
+                </div>
+              )}
               <div className="tab-content" id="myTabContent">
                 <div
                   className={`tab-pane fade ${activeTab === "basic-info" ? "show active" : ""}`}
@@ -1454,19 +1601,31 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             First Name <span className="text-danger"> *</span>
                           </label>
-                          <input type="text" className="form-control"
+                          <input
+                            type="text"
+                            className={`form-control ${getFieldErrorClass('firstName')}`}
                             name="firstName"
                             value={formData.firstName}
-                            onChange={handleChange} />
+                            onChange={handleChange}
+                          />
+                          {getFieldError('firstName') && (
+                            <div className="invalid-feedback d-block">{getFieldError('firstName')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Last Name</label>
-                          <input type="text" className="form-control"
+                          <input
+                            type="text"
+                            className={`form-control ${getFieldErrorClass('lastName')}`}
                             name="lastName"
                             value={formData.lastName}
-                            onChange={handleChange} />
+                            onChange={handleChange}
+                          />
+                          {getFieldError('lastName') && (
+                            <div className="invalid-feedback d-block">{getFieldError('lastName')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1484,9 +1643,9 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             Joining Date <span className="text-danger"> *</span>
                           </label>
-                          <div className="input-icon-end position-relative">
+                          <div className={`input-icon-end position-relative ${getFieldErrorClass('dateOfJoining')}`}>
                             <DatePicker
-                              className="form-control datetimepicker"
+                              className={`form-control datetimepicker ${getFieldErrorClass('dateOfJoining')}`}
                               format={{
                                 format: "DD-MM-YYYY",
                                 type: "mask",
@@ -1501,6 +1660,9 @@ const EmployeesGrid = () => {
                               <i className="ti ti-calendar text-gray-7" />
                             </span>
                           </div>
+                          {getFieldError('dateOfJoining') && (
+                            <div className="invalid-feedback d-block">{getFieldError('dateOfJoining')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1508,10 +1670,16 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             Username <span className="text-danger"> *</span>
                           </label>
-                          <input type="text" className="form-control"
+                          <input
+                            type="text"
+                            className={`form-control ${getFieldErrorClass('userName')}`}
                             name="userName"
                             value={formData.account.userName}
-                            onChange={handleChange} />
+                            onChange={handleChange}
+                          />
+                          {getFieldError('userName') && (
+                            <div className="invalid-feedback d-block">{getFieldError('userName')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1519,10 +1687,16 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             Email <span className="text-danger"> *</span>
                           </label>
-                          <input type="email" className="form-control"
+                          <input
+                            type="email"
+                            className={`form-control ${getFieldErrorClass('email')}`}
                             name="email"
                             value={formData.contact.email}
-                            onChange={handleChange} />
+                            onChange={handleChange}
+                          />
+                          {getFieldError('email') && (
+                            <div className="invalid-feedback d-block">{getFieldError('email')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1530,7 +1704,7 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             Gender <span className="text-danger"> *</span>
                           </label>
-                          <select 
+                          <select
                             className="form-control"
                             name="gender"
                             value={formData.personal?.gender || ""}
@@ -1579,8 +1753,8 @@ const EmployeesGrid = () => {
                       <div className="col-md-12">
                         <div className="mb-3">
                           <label className="form-label">Address</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="form-control"
                             placeholder="Street"
                             name="street"
@@ -1598,8 +1772,8 @@ const EmployeesGrid = () => {
                           />
                           <div className="row mt-3">
                             <div className="col-md-6">
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 className="form-control"
                                 placeholder="City"
                                 name="city"
@@ -1617,8 +1791,8 @@ const EmployeesGrid = () => {
                               />
                             </div>
                             <div className="col-md-6">
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 className="form-control"
                                 placeholder="State"
                                 name="state"
@@ -1638,8 +1812,8 @@ const EmployeesGrid = () => {
                           </div>
                           <div className="row mt-3">
                             <div className="col-md-6">
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 className="form-control"
                                 placeholder="Postal Code"
                                 name="postalCode"
@@ -1657,8 +1831,8 @@ const EmployeesGrid = () => {
                               />
                             </div>
                             <div className="col-md-6">
-                              <input 
-                                type="text" 
+                              <input
+                                type="text"
                                 className="form-control"
                                 placeholder="Country"
                                 name="country"
@@ -1690,7 +1864,7 @@ const EmployeesGrid = () => {
                                   ? "text"
                                   : "password"
                               }
-                              className="pass-input form-control"
+                              className={`pass-input form-control ${getFieldErrorClass('password')}`}
                               name="password"
                               value={formData.account.password}
                               onChange={handleChange}
@@ -1705,6 +1879,9 @@ const EmployeesGrid = () => {
                               }
                             ></span>
                           </div>
+                          {getFieldError('password') && (
+                            <div className="invalid-feedback d-block">{getFieldError('password')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1741,10 +1918,16 @@ const EmployeesGrid = () => {
                           <label className="form-label">
                             Phone Number <span className="text-danger"> *</span>
                           </label>
-                          <input type="text" className="form-control"
+                          <input
+                            type="text"
+                            className={`form-control ${getFieldErrorClass('phone')}`}
                             name="phone"
                             value={formData.contact.phone}
-                            onChange={handleChange} />
+                            onChange={handleChange}
+                          />
+                          {getFieldError('phone') && (
+                            <div className="invalid-feedback d-block">{getFieldError('phone')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -1762,7 +1945,7 @@ const EmployeesGrid = () => {
                         <div className="mb-3">
                           <label className="form-label">Department</label>
                           <CommonSelect
-                            className="select"
+                            className={`select ${getFieldErrorClass('departmentId')}`}
                             options={department}
                             defaultValue={EMPTY_OPTION}
                             onChange={option => {
@@ -1784,13 +1967,16 @@ const EmployeesGrid = () => {
                               }
                             }}
                           />
+                          {getFieldError('departmentId') && (
+                            <div className="invalid-feedback d-block">{getFieldError('departmentId')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Designation</label>
                           <CommonSelect
-                            className="select"
+                            className={`select ${getFieldErrorClass('designationId')}`}
                             options={designation}
                             defaultValue={EMPTY_OPTION}
                             onChange={option => {
@@ -1799,6 +1985,9 @@ const EmployeesGrid = () => {
                               }
                             }}
                           />
+                          {getFieldError('designationId') && (
+                            <div className="invalid-feedback d-block">{getFieldError('designationId')}</div>
+                          )}
                         </div>
                       </div>
                       <div className="col-md-12">
@@ -2466,30 +2655,67 @@ const EmployeesGrid = () => {
                 <i className="ti ti-trash-x fs-36" />
               </span>
               <h4 className="mb-1">Confirm Deletion</h4>
+              <p className="mb-1 text-warning fw-medium">
+                This employee has associated records. Please reassign them before deletion.
+              </p>
               <p className="mb-3">
                 {employeeToDelete
                   ? `Are you sure you want to delete employee "${employeeToDelete?.firstName}"? This cannot be undone.`
                   : "You want to delete all the marked items, this can't be undone once you delete."}
               </p>
+              <div className="text-start mb-3">
+                <label className="form-label">Reassign employee data to</label>
+                {(() => {
+                  const eligibleEmployees = getEligibleEmployees();
+
+                  if (eligibleEmployees.length === 0) {
+                    return (
+                      <div className="alert alert-warning py-2 mb-2">
+                        <i className="ti ti-alert-circle me-1"></i>
+                        No employee available with the same designation in this department for reassignment.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <select
+                      className="form-select"
+                      value={reassignEmployeeId}
+                      onChange={(e) => {
+                        setReassignEmployeeId(e.target.value);
+                        setReassignError('');
+                      }}
+                    >
+                      <option value="">Select an employee</option>
+                      {eligibleEmployees.map(emp => (
+                        <option key={emp._id} value={emp._id}>
+                          {emp.firstName} {emp.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
+                {reassignError && (
+                  <div className="text-danger mt-1">{reassignError}</div>
+                )}
+              </div>
               <div className="d-flex justify-content-center">
                 <button
                   className="btn btn-light me-3"
                   data-bs-dismiss="modal"
-                  onClick={() => setEmployeeToDelete(null)}
+                  onClick={() => {
+                    setEmployeeToDelete(null);
+                    setReassignEmployeeId('');
+                    setReassignError('');
+                  }}
                   disabled={loading}
                 >
                   Cancel
                 </button>
                 <button
                   className="btn btn-danger"
-                  data-bs-dismiss="modal"
-                  onClick={() => {
-                    if (employeeToDelete) {
-                      deleteEmployee(employeeToDelete._id);
-                    }
-                    setEmployeeToDelete(null);
-                  }}
-                  disabled={loading}
+                  onClick={handleConfirmDelete}
+                  disabled={loading || getEligibleEmployees().length === 0}
                 >
                   {loading ? 'Deleting...' : 'Yes, Delete'}
                 </button>

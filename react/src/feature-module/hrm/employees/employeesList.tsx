@@ -56,6 +56,7 @@ interface Employee {
   firstName: string;
   lastName: string;
   avatarUrl: string;
+  profileImage?: string;
   account?: {
     role: string;
     userName?: string;
@@ -345,6 +346,13 @@ const EmployeeList = () => {
     error: ''
   });
 
+  // Email validation state
+  const [emailValidation, setEmailValidation] = useState({
+    checking: false,
+    available: false,
+    error: ''
+  });
+
   // REST API Hooks for HRM operations
   const {
     employees: restEmployees,
@@ -359,6 +367,7 @@ const EmployeeList = () => {
     updatePersonalInfo,
     checkDuplicates: checkDuplicatesREST,
     checkUsernameAvailability: checkUsernameAvailabilityREST,
+    checkEmailAvailability: checkEmailAvailabilityREST,
     checkLifecycleStatus: checkLifecycleStatusREST
   } = useEmployeesREST();
 
@@ -530,7 +539,7 @@ const EmployeeList = () => {
           setUsernameValidation({
             checking: false,
             available: false,
-            error: 'Username is already taken'
+            error: 'Username already registered'
           });
           console.log('[EmployeeList] Username is taken:', userName);
         }
@@ -547,6 +556,71 @@ const EmployeeList = () => {
 
     return () => clearTimeout(timeoutId);
   }, [formData.account.userName, checkUsernameAvailabilityREST]);
+
+  // Email availability check with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(async () => {
+      const email = formData.contact.email;
+
+      // Reset validation if email is empty
+      if (!email || !email.trim()) {
+        setEmailValidation({
+          checking: false,
+          available: false,
+          error: ''
+        });
+        return;
+      }
+
+      // Only check if email is valid format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setEmailValidation({
+          checking: false,
+          available: false,
+          error: 'Enter a valid email'
+        });
+        return;
+      }
+
+      // Start checking
+      setEmailValidation({
+        checking: true,
+        available: false,
+        error: ''
+      });
+
+      try {
+        const isAvailable = await checkEmailAvailabilityREST(email);
+
+        if (isAvailable) {
+          setEmailValidation({
+            checking: false,
+            available: true,
+            error: ''
+          });
+          console.log('[EmployeeList] Email is available:', email);
+        } else {
+          setEmailValidation({
+            checking: false,
+            available: false,
+            error: 'Email already registered'
+          });
+          console.log('[EmployeeList] Email is taken:', email);
+        }
+      } catch (err) {
+        console.error('[EmployeeList] Email check failed:', err);
+        // Don't show error to user, just mark as not checking
+        setEmailValidation({
+          checking: false,
+          available: false,
+          error: ''
+        });
+      }
+    }, 800); // 800ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.contact.email, checkEmailAvailabilityREST]);
 
   // Socket.IO listeners for real-time broadcast notifications only
   useEffect(() => {
@@ -1442,9 +1516,13 @@ const EmployeeList = () => {
         if (!emailRegex.test(value)) return "Enter a valid email";
         break;
       case "role":
-        if (!value || !value.trim()) return "role is required";
+        if (!value || !value.trim()) return "Role is required";
         break;
-
+      case "userName":
+        if (!value || !value.trim()) return "Username is required";
+        if (value.length < 3) return "Username must be at least 3 characters";
+        if (!/^[a-zA-Z0-9_]+$/.test(value)) return "Username can only contain letters, numbers, and underscores";
+        break;
       case "phone":
         if (!value || !value.trim()) return "Phone number is required";
         if (!/^\d{10,15}$/.test(value.replace(/[\s\-\(\)]/g, "")))
@@ -1458,6 +1536,15 @@ const EmployeeList = () => {
         break;
       case "dateOfJoining":
         if (!value) return "Joining date is required";
+        break;
+      case "departmentId":
+        if (!value || !value.trim()) return "Department is required";
+        break;
+      case "designationId":
+        if (!value || !value.trim()) return "Designation is required";
+        break;
+      case "employmentType":
+        if (!value || !value.trim()) return "Employment type is required";
         break;
     }
     return "";
@@ -1565,8 +1652,17 @@ const EmployeeList = () => {
       console.error("Validation Error - employmentType:", errors.employmentType);
     }
 
-    // Optional frontend validations (nice to have but not backend required)
-    // Gender and Birthday are optional in backend but good UX to require
+    // Gender (required field)
+    if (!formData.personal?.gender || !formData.personal.gender.trim()) {
+      errors.gender = "Gender is required";
+      console.error("Validation Error - gender:", errors.gender);
+    }
+
+    // Birthday (required field)
+    if (!formData.personal?.birthday) {
+      errors.birthday = "Birthday is required";
+      console.error("Validation Error - birthday:", errors.birthday);
+    }
 
     // Set errors in state
     setFieldErrors(errors);
@@ -1653,6 +1749,26 @@ const EmployeeList = () => {
       errors.dateOfJoining = "Joining date is required";
     }
 
+    // Role (required field)
+    if (!editingEmployee.account?.role || !editingEmployee.account.role.trim()) {
+      errors.role = "Role is required";
+    }
+
+    // Employment type (required field)
+    if (!editingEmployee.employmentType || !editingEmployee.employmentType.trim()) {
+      errors.employmentType = "Employment type is required";
+    }
+
+    // Gender (required field)
+    if (!editingEmployee.personal?.gender || !editingEmployee.personal.gender.trim()) {
+      errors.gender = "Gender is required";
+    }
+
+    // Birthday (required field)
+    if (!editingEmployee.personal?.birthday) {
+      errors.birthday = "Birthday is required";
+    }
+
     // Set errors in state
     setFieldErrors(errors);
 
@@ -1685,14 +1801,26 @@ const EmployeeList = () => {
     setFieldErrors({});
     setError(null);
 
+    // Check if email or username validation is in progress or has errors
+    if (emailValidation.checking || usernameValidation.checking) {
+      setFieldErrors({ general: "Please wait for validation to complete" });
+      return;
+    }
+
+    if (emailValidation.error) {
+      setFieldErrors({ email: emailValidation.error });
+      return;
+    }
+
+    if (usernameValidation.error) {
+      setFieldErrors({ userName: usernameValidation.error });
+      return;
+    }
+
     // First run frontend validation (fast, synchronous)
     console.log("Running frontend validation...");
     if (!validateForm()) {
       console.error("Frontend validation failed - not proceeding to next step");
-      toast.error("Please fix the validation errors before proceeding", {
-        position: "top-right",
-        autoClose: 5000,
-      });
       return;
     }
 
@@ -1729,12 +1857,6 @@ const EmployeeList = () => {
             [errorInfo.field]: errorInfo.message
           }));
 
-          // Also show toast as backup
-          toast.error(errorInfo.message, {
-            position: "top-right",
-            autoClose: 5000,
-          });
-
           // Scroll to error field
           setTimeout(() => {
             const errorElement = document.querySelector(`[name="${errorInfo.field}"]`) ||
@@ -1748,10 +1870,6 @@ const EmployeeList = () => {
         } else {
           // General error
           setFieldErrors({ general: errorMessage });
-          toast.error(errorMessage, {
-            position: "top-right",
-            autoClose: 5000,
-          });
         }
 
         return; // Don't proceed to next tab
@@ -1765,10 +1883,6 @@ const EmployeeList = () => {
       setIsValidating(false);
       const errorMsg = "Unable to validate. Please try again.";
       setFieldErrors({ general: errorMsg });
-      toast.error(errorMsg, {
-        position: "top-right",
-        autoClose: 5000,
-      });
     }
   };
 
@@ -1776,6 +1890,18 @@ const EmployeeList = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     console.log("Submitting form and permissions");
     e.preventDefault();
+
+    // Double check email and username validation before final submission
+    if (emailValidation.error || usernameValidation.error) {
+      setFieldErrors({
+        ...(emailValidation.error ? { email: emailValidation.error } : {}),
+        ...(usernameValidation.error ? { userName: usernameValidation.error } : {})
+      });
+      setActiveTab("basic-info");
+      setIsBasicInfoValidated(false);
+      setLoading(false);
+      return;
+    }
 
     try {
       setError(null);
@@ -1956,11 +2082,7 @@ const EmployeeList = () => {
             }
           }, 100);
 
-          // Show error toast
-          toast.error(`Validation failed: ${result.error.details.length} error(s) found`, {
-            position: "top-right",
-            autoClose: 5000,
-          });
+          // Validation errors are shown inline - no toast needed
 
         } else {
           // Single error or general error
@@ -2016,10 +2138,7 @@ const EmployeeList = () => {
     } catch (error: any) {
       console.error("Error submitting form and permissions:", error);
       setError("An error occurred while submitting data.");
-      toast.error("An error occurred while submitting data.", {
-        position: "top-right",
-        autoClose: 3000,
-      });
+      setFieldErrors({ general: "An error occurred while submitting data." });
     } finally {
       setLoading(false);
     }
@@ -2076,6 +2195,7 @@ const EmployeeList = () => {
       dateOfJoining: editingEmployee.dateOfJoining || null,
       about: editingEmployee.about || "",
       avatarUrl: editingEmployee.avatarUrl || "",
+      profileImage: editingEmployee.avatarUrl || editingEmployee.profileImage || "",
     };
 
     // Only include status if it's NOT a lifecycle status
@@ -2088,7 +2208,7 @@ const EmployeeList = () => {
 
     try {
       setLoading(true);
-      const success = await updateEmployee(editingEmployee.employeeId || "", updateData);
+      const success = await updateEmployee(editingEmployee._id || "", updateData);
 
       if (success) {
         // Close the modal
@@ -3016,12 +3136,6 @@ const EmployeeList = () => {
                   tabIndex={0}
                 >
                   <div className="modal-body pb-0 ">
-                    {/* General error display */}
-                    {fieldErrors.general && (
-                      <div className="alert alert-danger mb-3" role="alert">
-                        {fieldErrors.general}
-                      </div>
-                    )}
                     <div className="row">
                       <div className="col-md-12">
                         <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
@@ -3263,20 +3377,48 @@ const EmployeeList = () => {
                           <label className="form-label">
                             Email <span className="text-danger"> *</span>
                           </label>
-                          <input
-                            type="email"
-                            className={`form-control ${fieldErrors.email ? "is-invalid" : ""}`}
-                            name="email"
-                            value={formData.contact.email}
-                            onChange={handleChange}
-                            onFocus={() => clearFieldError("email")}
-                            onBlur={(e) =>
-                              handleFieldBlur("email", e.target.value)
-                            }
-                          />
+                          <div className="position-relative">
+                            <input
+                              type="email"
+                              className={`form-control ${fieldErrors.email || emailValidation.error ? "is-invalid" : ""} ${emailValidation.available ? "is-valid" : ""}`}
+                              name="email"
+                              value={formData.contact.email}
+                              onChange={handleChange}
+                              onFocus={() => {
+                                clearFieldError("email");
+                                setEmailValidation({ checking: false, available: false, error: '' });
+                              }}
+                              onBlur={(e) =>
+                                handleFieldBlur("email", e.target.value)
+                              }
+                            />
+                            {/* Email availability status indicator */}
+                            {formData.contact.email && formData.contact.email.trim() && (
+                              <div className="position-absolute" style={{ right: '35px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                                {emailValidation.checking && (
+                                  <span className="spinner-border spinner-border-sm text-muted" role="status" aria-hidden="true"></span>
+                                )}
+                                {!emailValidation.checking && emailValidation.available && (
+                                  <i className="fas fa-check-circle text-success" title="Email available"></i>
+                                )}
+                                {!emailValidation.checking && !emailValidation.available && emailValidation.error && (
+                                  <i className="fas fa-times-circle text-danger" title={emailValidation.error}></i>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {/* Field error message */}
                           {fieldErrors.email && (
                             <div className="invalid-feedback d-block">
                               {fieldErrors.email}
+                            </div>
+                          )}
+                          {/* Email availability message (when no field error but validation state exists) */}
+                          {!fieldErrors.email && formData.contact.email && formData.contact.email.trim() && (
+                            <div className={`form-text ${emailValidation.available ? 'text-success' : emailValidation.error ? 'text-danger' : 'text-muted'}`}>
+                              {emailValidation.checking && 'Checking email availability...'}
+                              {!emailValidation.checking && emailValidation.available && 'Email is available'}
+                              {!emailValidation.checking && !emailValidation.available && emailValidation.error}
                             </div>
                           )}
                         </div>

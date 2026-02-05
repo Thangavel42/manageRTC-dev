@@ -4,7 +4,7 @@ import Scrollbars from "react-custom-scrollbars-2";
 import ImageWithBasePath from "../imageWithBasePath";
 import "../../../style/icon/tabler-icons/webfont/tabler-icons.css";
 import { setExpandMenu } from "../../data/redux/sidebarSlice";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import {
   resetAllMode,
   setDataLayout,
@@ -67,6 +67,9 @@ const Sidebar = () => {
   const location = useLocation();
   const dispatch = useDispatch();
   const previousLocation = usePreviousRoute();
+  const dataLayout = useSelector((state: any) => state.themeSetting.dataLayout);
+  const miniSidebar = useSelector((state: any) => state.sidebarSlice.miniSidebar);
+  const expandMenu = useSelector((state: any) => state.sidebarSlice.expandMenu);
 
   useEffect(() => {
     const layoutPages = [
@@ -112,6 +115,9 @@ const Sidebar = () => {
   const onMouseLeave = () => {
     dispatch(setExpandMenu(false));
   };
+  const isLayoutMini = dataLayout === "mini";
+  const isSidebarCollapsed = (isLayoutMini || miniSidebar) && !expandMenu;
+  const isSidebarExpanded = !isSidebarCollapsed;
   return (
     <>
       <div
@@ -121,15 +127,15 @@ const Sidebar = () => {
         onMouseLeave={onMouseLeave}
       >
         <div className="sidebar-logo text-center">
-          <Link to="routes.index" className="logo logo-normal">
-            <ImageWithBasePath src="assets/img/logo.svg" alt="Logo" />
-          </Link>
+
           <Link to="routes.index" className="logo-small">
-            <ImageWithBasePath src="assets/img/logo-small.svg" alt="Logo" />
+            <ImageWithBasePath src="assets\img\favicon.png" alt="Logo" />
           </Link>
-          <Link to="routes.index" className="dark-logo">
-            <ImageWithBasePath src="assets/img/logo-white.svg" alt="Logo" />
-          </Link>
+          {isSidebarExpanded && (
+            <Link to="routes.index" className="dark-logo">
+              <ImageWithBasePath src="assets/img/logo-white.svg" alt="Logo" />
+            </Link>
+          )}
         </div>
         <div className="modern-profile p-3 pb-0">
           <div className="text-center rounded bg-light p-3 mb-4 user-profile">
