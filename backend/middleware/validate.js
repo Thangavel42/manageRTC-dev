@@ -181,7 +181,10 @@ export const employeeSchemas = {
 
     // Support nested personal object structure
     personal: Joi.object({
-      gender: Joi.string().valid('Male', 'Female', 'Other', 'Prefer not to say', 'male', 'female', 'other', '').optional().allow(''),
+      gender: Joi.string()
+        .valid('Male', 'Female', 'Other', 'Prefer not to say', 'male', 'female', 'other', '')
+        .optional()
+        .allow(''),
       birthday: Joi.date().optional().allow(null),
       address: Joi.object({
         street: Joi.string().allow('').optional(),
@@ -362,12 +365,12 @@ export const taskSchemas = {
       'any.required': 'Project is required',
     }),
 
-    assignedTo: Joi.array().items(commonSchemas.objectId).min(1).required().messages({
+    assignee: Joi.array().items(commonSchemas.objectId).min(1).required().messages({
       'any.required': 'At least one assignee is required',
       'array.min': 'At least one assignee is required',
     }),
 
-    status: Joi.string().valid('Pending', 'Inprogress', 'Completed', 'Onhold').default('Pending'),
+    status: Joi.string().trim().optional(), // Dynamic statuses from taskstatus collection
 
     priority: Joi.string().valid('High', 'Medium', 'Low').default('Medium'),
 
@@ -380,7 +383,7 @@ export const taskSchemas = {
   update: Joi.object({
     title: Joi.string().min(3).max(200).trim().optional(),
     description: Joi.string().max(1000).allow('').optional(),
-    assignedTo: Joi.array().items(commonSchemas.objectId).min(1).optional(),
+    assignee: Joi.array().items(commonSchemas.objectId).min(1).optional(),
     status: Joi.string().valid('To Do', 'In Progress', 'Review', 'Completed').optional(),
     priority: Joi.string().valid('High', 'Medium', 'Low').optional(),
     startDate: commonSchemas.isoDate.optional(),

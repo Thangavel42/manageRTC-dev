@@ -68,9 +68,9 @@ export const getTasks = asyncHandler(async (req, res) => {
   // Get tenant-specific model
   const TaskModel = getTaskModel(user.companyId);
 
-  // Build filter
+  // Build filter - in tenant-specific database, handle missing fields
   let filter = {
-    isDeleted: false,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
   // Apply project filter
@@ -351,6 +351,8 @@ export const getTasksByProject = asyncHandler(async (req, res) => {
   const { status } = req.query;
   const user = extractUser(req);
 
+  console.log('[getTasksByProject] ProjectId:', projectId, 'CompanyId:', user.companyId);
+
   // Get tenant-specific model
   const TaskModel = getTaskModel(user.companyId);
 
@@ -359,19 +361,51 @@ export const getTasksByProject = asyncHandler(async (req, res) => {
     throw buildValidationError('projectId', 'Invalid project ID format');
   }
 
-  // Build filter
+  // Convert projectId to ObjectId for querying
+  const projectObjectId = new mongoose.Types.ObjectId(projectId);
+
+  // Build filter - in tenant-specific database, handle missing fields
   let filter = {
-    projectId,
-    isDeleted: false,
+    projectId: projectObjectId,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
   if (status) {
     filter.status = status;
   }
 
+  console.log('[getTasksByProject] Filter:', JSON.stringify(filter));
+
   const tasks = await TaskModel.find(filter)
     .populate('assignee', 'firstName lastName fullName employeeId')
     .sort({ createdAt: -1 });
+
+  console.log('[getTasksByProject] Found', tasks.length, 'tasks');
+
+  // Debug: If no tasks found, check without filters
+  if (tasks.length === 0) {
+    const totalInDb = await TaskModel.countDocuments({});
+    console.log('[getTasksByProject] Total tasks in DB (no filter):', totalInDb);
+
+    const withProjectId = await TaskModel.countDocuments({ projectId: projectObjectId });
+    console.log('[getTasksByProject] Tasks with matching projectId (ObjectId):', withProjectId);
+
+    const withProjectIdString = await TaskModel.countDocuments({ projectId: projectId });
+    console.log('[getTasksByProject] Tasks with matching projectId (string):', withProjectIdString);
+
+    const samples = await TaskModel.find({}).limit(3).lean();
+    console.log(
+      '[getTasksByProject] Sample documents:',
+      samples.map((t) => ({
+        _id: t._id,
+        title: t.title,
+        projectId: t.projectId,
+        projectIdType: typeof t.projectId,
+        isDeleted: t.isDeleted,
+        hasProjectId: t.hasOwnProperty('projectId'),
+      }))
+    );
+  }
 
   return sendSuccess(res, tasks, 'Project tasks retrieved successfully');
 });
@@ -502,10 +536,33 @@ export const getTaskStats = asyncHandler(async (req, res) => {
 export const getTaskStatuses = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
+  console.log('[getTaskStatuses] CompanyId:', user.companyId);
+
   // Get tenant-specific TaskStatus model
   const TaskStatusModel = getTaskStatusModel(user.companyId);
 
   const statuses = await TaskStatusModel.find().sort({ order: 1 }).lean();
+
+  console.log('[getTaskStatuses] Found', statuses.length, 'task statuses');
+
+  // If no statuses found, provide debug info
+  if (statuses.length === 0) {
+    console.warn(
+      '[getTaskStatuses] No task statuses found in database. Consider creating default statuses.'
+    );
+
+    // Check if collection exists
+    const collections = await TaskStatusModel.db.listCollections().toArray();
+    console.log(
+      '[getTaskStatuses] Available collections:',
+      collections.map((c) => c.name)
+    );
+  } else {
+    console.log(
+      '[getTaskStatuses] Status keys:',
+      statuses.map((s) => s.key)
+    );
+  }
 
   return sendSuccess(res, statuses, 'Task statuses retrieved successfully');
 });

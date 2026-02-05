@@ -1,22 +1,21 @@
-import React, { useState, useEffect, useCallback } from "react";
-import dayjs, { Dayjs } from "dayjs";
-import { DatePicker, message } from "antd";
-import { Link } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
-import Select from "react-select";
-import CommonSelect from "../../../core/common/commonSelect";
-import CommonTagsInput from "../../../core/common/Taginput";
-import CommonTextEditor from "../../../core/common/textEditor";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { all_routes } from "../../router/all_routes";
-import Footer from "../../../core/common/footer";
-import { useTasksREST } from "../../../hooks/useTasksREST";
-import { useProjectsREST } from "../../../hooks/useProjectsREST";
+import { useAuth } from '@clerk/clerk-react';
+import { DatePicker, message } from 'antd';
+import dayjs, { Dayjs } from 'dayjs';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import Select from 'react-select';
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import CommonSelect from '../../../core/common/commonSelect';
+import Footer from '../../../core/common/footer';
+import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import CommonTagsInput from '../../../core/common/Taginput';
+import { useProjectsREST } from '../../../hooks/useProjectsREST';
+import { useTasksREST } from '../../../hooks/useTasksREST';
+import { all_routes } from '../../router/all_routes';
 
 const Task = () => {
   const getModalContainer = () => {
-    const modalElement = document.getElementById("modal-datepicker");
+    const modalElement = document.getElementById('modal-datepicker');
     return modalElement ? modalElement : document.body;
   };
 
@@ -28,11 +27,13 @@ const Task = () => {
     createTask,
     updateTask,
     deleteTask,
-    getTasksByProject
+    getTasksByProject,
   } = useTasksREST();
   const {
     projects,
-    getProjectTeamMembers
+    loading: projectsLoading,
+    fetchProjects,
+    getProjectTeamMembers,
   } = useProjectsREST();
   const [employees, setEmployees] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -41,29 +42,29 @@ const Task = () => {
     priority: 'all',
     status: 'all',
     project: 'all',
-    search: ''
+    search: '',
   });
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [projectTeamMembers, setProjectTeamMembers] = useState<any[]>([]);
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(false);
   const [addForm, setAddForm] = useState({
-    title: "",
-    projectId: "",
+    title: '',
+    projectId: '',
     assignees: [] as string[],
     dueDate: null as Dayjs | null,
-    status: "To do",
-    priority: "Medium",
-    description: "",
+    status: 'To do',
+    priority: 'Medium',
+    description: '',
     tags: [] as string[],
   });
   const [editForm, setEditForm] = useState({
-    title: "",
-    projectId: "",
+    title: '',
+    projectId: '',
     assignees: [] as string[],
     dueDate: null as Dayjs | null,
-    status: "To do",
-    priority: "Medium",
-    description: "",
+    status: 'To do',
+    priority: 'Medium',
+    description: '',
     tags: [] as string[],
   });
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
@@ -76,64 +77,82 @@ const Task = () => {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
 
-  // Derived counts: total and completed tasks per project
+  // Derived counts: total and completed tasks per project (from project data or tasks)
   const projectTaskCounts = React.useMemo(() => {
     const counts: Record<string, { total: number; completed: number }> = {};
-    tasks.forEach((t: any) => {
-      const pid = t.projectId;
-      if (!pid) return;
-      if (!counts[pid]) counts[pid] = { total: 0, completed: 0 };
-      counts[pid].total += 1;
-      if ((t.status || "").toLowerCase() === "completed") counts[pid].completed += 1;
-    });
-    return counts;
-  }, [tasks]);
 
-  const getProjectCounts = React.useCallback((projectId: string) => {
-    const total = projectTaskCounts[projectId]?.total || 0;
-    const completed = projectTaskCounts[projectId]?.completed || 0;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percent };
-  }, [projectTaskCounts]);
+    // First, use task counts from project data if available
+    projects.forEach((project: any) => {
+      if (project._id) {
+        counts[project._id] = {
+          total: project.taskCount || 0,
+          completed: project.completedTaskCount || 0,
+        };
+      }
+    });
+
+    return counts;
+  }, [projects]);
+
+  const getProjectCounts = React.useCallback(
+    (projectId: string) => {
+      const total = projectTaskCounts[projectId]?.total || 0;
+      const completed = projectTaskCounts[projectId]?.completed || 0;
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return { total, completed, percent };
+    },
+    [projectTaskCounts]
+  );
 
   // Dynamic project options from loaded projects
-  const projectChoose = React.useMemo(() => [
-    { value: "Select", label: "Select" },
-    ...projects
-      .filter(project => project.status !== 'Completed')
-      .map(project => ({
-        value: project._id,
-        label: project.name || 'Untitled Project'
-      }))
-  ], [projects]);
+  const projectChoose = React.useMemo(
+    () => [
+      { value: 'Select', label: 'Select' },
+      ...projects
+        .filter((project) => project.status !== 'Completed')
+        .map((project) => ({
+          value: project._id,
+          label: project.name || 'Untitled Project',
+        })),
+    ],
+    [projects]
+  );
 
   // Dynamic employee options for team members (from selected project)
-  const employeeOptions = React.useMemo(() => 
-    (Array.isArray(projectTeamMembers) ? projectTeamMembers : []).map(emp => {
-      const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
-      return {
-        value: emp._id,
-        label: name ? `${emp.employeeId || ''} - ${name}` : emp.employeeId || 'Unknown'
-      };
-    })
-  , [projectTeamMembers]);
+  const employeeOptions = React.useMemo(
+    () =>
+      (Array.isArray(projectTeamMembers) ? projectTeamMembers : []).map((emp) => {
+        const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        return {
+          value: emp._id,
+          label: name ? `${emp.employeeId || ''} - ${name}` : emp.employeeId || 'Unknown',
+        };
+      }),
+    [projectTeamMembers]
+  );
 
   const statusChoose = [
-    { value: "To do", label: "To do" },
-    { value: "Pending", label: "Pending" },
-    { value: "Inprogress", label: "Inprogress" },
-    { value: "Completed", label: "Completed" },
-    { value: "Onhold", label: "Onhold" },
-    { value: "Review", label: "Review" },
-    { value: "Cancelled", label: "Cancelled" },
+    { value: 'To do', label: 'To do' },
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Inprogress', label: 'Inprogress' },
+    { value: 'Completed', label: 'Completed' },
+    { value: 'Onhold', label: 'Onhold' },
+    { value: 'Review', label: 'Review' },
+    { value: 'Cancelled', label: 'Cancelled' },
   ];
   const priorityChoose = [
-    { value: "Medium", label: "Medium" },
-    { value: "High", label: "High" },
-    { value: "Low", label: "Low" },
+    { value: 'Medium', label: 'Medium' },
+    { value: 'High', label: 'High' },
+    { value: 'Low', label: 'Low' },
   ];
 
   const loadTasks = useCallback(() => {
+    // Only load tasks if a project is selected
+    if (!filters.project || filters.project === 'all') {
+      console.log('[Task] No project selected, skipping task load');
+      return;
+    }
+
     setError(null);
     // Convert filters to REST format
     const restFilters: any = {};
@@ -149,95 +168,118 @@ const Task = () => {
     if (filters.search) {
       restFilters.search = filters.search;
     }
+
+    console.log('[Task] Loading tasks for project:', filters.project);
     fetchTasks(restFilters);
   }, [filters, fetchTasks]);
 
-  const loadProjects = useCallback(() => {
-    // Projects are already loaded by the hook on mount
-    // No need to reload
-  }, []);
-
-  const validateField = useCallback((field: string, value: any): string => {
-    switch (field) {
-      case "title":
-        if (!value || !value.trim()) return "Task title is required";
-        if (value.trim().length < 3) return "Task title must be at least 3 characters";
-        return "";
-      case "projectId":
-        if (!value || value === "Select") return "Please select a project";
-        return "";
-      case "assignees":
-        if (!Array.isArray(value) || value.length === 0) return "Please select at least one assignee";
-        return "";
-      case "dueDate":
-        if (!value) return "Due date is required";
-        const selectedProjectData = projects.find(p => p._id === addForm.projectId);
-        if (selectedProjectData?.dueDate && dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))) {
-          return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
-        }
-        return "";
-      case "priority":
-        if (!value || value === "Select") return "Please select a priority";
-        return "";
-      case "description":
-        if (!value || !value.trim()) return "Description is required";
-        if (value.trim().length < 10) return "Description must be at least 10 characters";
-        return "";
-      default:
-        return "";
+  const loadProjects = useCallback(async () => {
+    try {
+      setError(null);
+      await fetchProjects();
+      console.log('[Task] Projects loaded with task counts');
+    } catch (err) {
+      console.error('[Task] Failed to load projects:', err);
+      setError('Failed to load projects');
+      message.error('Failed to load projects');
     }
-  }, [projects, addForm.projectId]);
+  }, [fetchProjects]);
 
-  const validateEditField = useCallback((field: string, value: any): string => {
-    switch (field) {
-      case "title":
-        if (!value || !value.trim()) return "Task title is required";
-        if (value.trim().length < 3) return "Task title must be at least 3 characters";
-        return "";
-      case "dueDate":
-        if (!value) return "Due date is required";
-        const selectedProjectData = projects.find(p => p._id === editForm.projectId);
-        if (selectedProjectData?.dueDate && dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))) {
-          return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
-        }
-        return "";
-      case "priority":
-        if (!value || value === "Select") return "Please select a priority";
-        return "";
-      case "status":
-        if (!value || value === "Select") return "Please select a status";
-        return "";
-      case "description":
-        if (!value || !value.trim()) return "Description is required";
-        if (value.trim().length < 10) return "Description must be at least 10 characters";
-        return "";
-      case "assignees":
-        if (!Array.isArray(value) || value.length === 0) return "Please select at least one assignee";
-        return "";
-      default:
-        return "";
-    }
-  }, [projects, editForm.projectId]);
+  const validateField = useCallback(
+    (field: string, value: any): string => {
+      switch (field) {
+        case 'title':
+          if (!value || !value.trim()) return 'Task title is required';
+          if (value.trim().length < 3) return 'Task title must be at least 3 characters';
+          return '';
+        case 'projectId':
+          if (!value || value === 'Select') return 'Please select a project';
+          return '';
+        case 'assignees':
+          if (!Array.isArray(value) || value.length === 0)
+            return 'Please select at least one assignee';
+          return '';
+        case 'dueDate':
+          if (!value) return 'Due date is required';
+          const selectedProjectData = projects.find((p) => p._id === addForm.projectId);
+          if (
+            selectedProjectData?.dueDate &&
+            dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
+          ) {
+            return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+          }
+          return '';
+        case 'priority':
+          if (!value || value === 'Select') return 'Please select a priority';
+          return '';
+        case 'description':
+          if (!value || !value.trim()) return 'Description is required';
+          if (value.trim().length < 10) return 'Description must be at least 10 characters';
+          return '';
+        default:
+          return '';
+      }
+    },
+    [projects, addForm.projectId]
+  );
+
+  const validateEditField = useCallback(
+    (field: string, value: any): string => {
+      switch (field) {
+        case 'title':
+          if (!value || !value.trim()) return 'Task title is required';
+          if (value.trim().length < 3) return 'Task title must be at least 3 characters';
+          return '';
+        case 'dueDate':
+          if (!value) return 'Due date is required';
+          const selectedProjectData = projects.find((p) => p._id === editForm.projectId);
+          if (
+            selectedProjectData?.dueDate &&
+            dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
+          ) {
+            return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+          }
+          return '';
+        case 'priority':
+          if (!value || value === 'Select') return 'Please select a priority';
+          return '';
+        case 'status':
+          if (!value || value === 'Select') return 'Please select a status';
+          return '';
+        case 'description':
+          if (!value || !value.trim()) return 'Description is required';
+          if (value.trim().length < 10) return 'Description must be at least 10 characters';
+          return '';
+        case 'assignees':
+          if (!Array.isArray(value) || value.length === 0)
+            return 'Please select at least one assignee';
+          return '';
+        default:
+          return '';
+      }
+    },
+    [projects, editForm.projectId]
+  );
 
   const validateEditForm = useCallback((): boolean => {
     const errors: Record<string, string> = {};
 
-    const titleError = validateEditField("title", editForm.title);
+    const titleError = validateEditField('title', editForm.title);
     if (titleError) errors.title = titleError;
 
-    const dueDateError = validateEditField("dueDate", editForm.dueDate);
+    const dueDateError = validateEditField('dueDate', editForm.dueDate);
     if (dueDateError) errors.dueDate = dueDateError;
 
-    const priorityError = validateEditField("priority", editForm.priority);
+    const priorityError = validateEditField('priority', editForm.priority);
     if (priorityError) errors.priority = priorityError;
 
-    const statusError = validateEditField("status", editForm.status);
+    const statusError = validateEditField('status', editForm.status);
     if (statusError) errors.status = statusError;
 
-    const descriptionError = validateEditField("description", editForm.description);
+    const descriptionError = validateEditField('description', editForm.description);
     if (descriptionError) errors.description = descriptionError;
 
-    const assigneesError = validateEditField("assignees", editForm.assignees);
+    const assigneesError = validateEditField('assignees', editForm.assignees);
     if (assigneesError) errors.assignees = assigneesError;
 
     setEditFieldErrors(errors);
@@ -245,77 +287,83 @@ const Task = () => {
   }, [editForm, validateEditField]);
 
   const clearFieldError = useCallback((field: string) => {
-    setFieldErrors(prev => ({ ...prev, [field]: "" }));
+    setFieldErrors((prev) => ({ ...prev, [field]: '' }));
   }, []);
 
   const clearEditFieldError = useCallback((field: string) => {
-    setEditFieldErrors(prev => ({ ...prev, [field]: "" }));
+    setEditFieldErrors((prev) => ({ ...prev, [field]: '' }));
   }, []);
 
   const validateForm = useCallback((): boolean => {
     const errors: Record<string, string> = {};
 
-    const titleError = validateField("title", addForm.title);
+    const titleError = validateField('title', addForm.title);
     if (titleError) errors.title = titleError;
 
-    const projectError = validateField("projectId", addForm.projectId);
+    const projectError = validateField('projectId', addForm.projectId);
     if (projectError) errors.projectId = projectError;
 
-    const assigneesError = validateField("assignees", addForm.assignees);
+    const assigneesError = validateField('assignees', addForm.assignees);
     if (assigneesError) errors.assignees = assigneesError;
 
-    const dueDateError = validateField("dueDate", addForm.dueDate);
+    const dueDateError = validateField('dueDate', addForm.dueDate);
     if (dueDateError) errors.dueDate = dueDateError;
 
-    const priorityError = validateField("priority", addForm.priority);
+    const priorityError = validateField('priority', addForm.priority);
     if (priorityError) errors.priority = priorityError;
 
-    const descriptionError = validateField("description", addForm.description);
+    const descriptionError = validateField('description', addForm.description);
     if (descriptionError) errors.description = descriptionError;
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }, [addForm, validateField]);
 
-  const handleProjectSelection = useCallback(async (projectId: string) => {
-    console.log('Selected project ID:', projectId);
-    if (!projectId || projectId === "Select") {
-      setSelectedProject(null);
+  const handleProjectSelection = useCallback(
+    async (projectId: string) => {
+      console.log('Selected project ID:', projectId);
+      if (!projectId || projectId === 'Select') {
+        setSelectedProject(null);
+        setProjectTeamMembers([]);
+        setAddForm((prev) => ({ ...prev, projectId: '', assignees: [] }));
+        return;
+      }
+
+      setSelectedProject(projectId);
+      setAddForm((prev) => ({ ...prev, projectId, assignees: [] }));
+      clearFieldError('projectId');
+      setLoadingTeamMembers(true);
       setProjectTeamMembers([]);
-      setAddForm(prev => ({ ...prev, projectId: "", assignees: [] }));
-      return;
-    }
 
-    setSelectedProject(projectId);
-    setAddForm(prev => ({ ...prev, projectId, assignees: [] }));
-    clearFieldError("projectId");
-    setLoadingTeamMembers(true);
-    setProjectTeamMembers([]);
-
-    const teamMembers = await getProjectTeamMembers(projectId);
-    setProjectTeamMembers(teamMembers);
-    setLoadingTeamMembers(false);
-  }, [getProjectTeamMembers, clearFieldError]);
+      const teamMembers = await getProjectTeamMembers(projectId);
+      setProjectTeamMembers(teamMembers);
+      setLoadingTeamMembers(false);
+    },
+    [getProjectTeamMembers, clearFieldError]
+  );
 
   const handlePriorityFilter = useCallback((priority: string) => {
-    setFilters(prev => ({ ...prev, priority }));
+    setFilters((prev) => ({ ...prev, priority }));
   }, []);
 
-  const handleProjectTasksClick = useCallback((projectId) => {
-    console.log('Filtering tasks for project:', projectId);
-    if (!projectId) return;
-    getTasksByProject(projectId);
-  }, [getTasksByProject]);
+  const handleProjectTasksClick = useCallback(
+    (projectId) => {
+      console.log('Filtering tasks for project:', projectId);
+      if (!projectId) return;
+      getTasksByProject(projectId);
+    },
+    [getTasksByProject]
+  );
 
   const resetAddForm = useCallback(() => {
     setAddForm({
-      title: "",
-      projectId: "",
+      title: '',
+      projectId: '',
       assignees: [],
       dueDate: null,
-      status: "To do",
-      priority: "Medium",
-      description: "",
+      status: 'To do',
+      priority: 'Medium',
+      description: '',
       tags: [],
     });
     setSelectedProject(null);
@@ -326,83 +374,99 @@ const Task = () => {
   }, []);
 
   const closeAddModal = useCallback(() => {
-    const modalElement = document.getElementById("add_task");
+    const modalElement = document.getElementById('add_task');
     const bootstrapAny = (window as any)?.bootstrap;
     try {
-      const modalInstance = bootstrapAny?.Modal?.getInstance?.(modalElement)
-        || bootstrapAny?.Modal?.getOrCreateInstance?.(modalElement);
+      const modalInstance =
+        bootstrapAny?.Modal?.getInstance?.(modalElement) ||
+        bootstrapAny?.Modal?.getOrCreateInstance?.(modalElement);
       if (modalInstance) {
         modalInstance.hide();
         return;
       }
-      const closeBtn = modalElement?.querySelector('[data-bs-dismiss="modal"]') as HTMLElement | null;
+      const closeBtn = modalElement?.querySelector(
+        '[data-bs-dismiss="modal"]'
+      ) as HTMLElement | null;
       closeBtn?.click?.();
     } catch {
-      const closeBtn = modalElement?.querySelector('[data-bs-dismiss="modal"]') as HTMLElement | null;
+      const closeBtn = modalElement?.querySelector(
+        '[data-bs-dismiss="modal"]'
+      ) as HTMLElement | null;
       closeBtn?.click?.();
     }
   }, []);
 
-  const handleTaskCreateResponse = useCallback((success: boolean, errorMsg?: string) => {
-    setCreatingTask(false);
-    if (success) {
-      // Close modal first, then reset form state
-      closeAddModal();
-      resetAddForm();
-      // Reload tasks and projects to refresh all counts and lists
-      loadTasks();
-      loadProjects();
-      return;
-    }
+  const handleTaskCreateResponse = useCallback(
+    (success: boolean, errorMsg?: string) => {
+      setCreatingTask(false);
+      if (success) {
+        // Close modal first, then reset form state
+        closeAddModal();
+        resetAddForm();
+        // Reload tasks and projects to refresh all counts and lists
+        loadTasks();
+        loadProjects();
+        return;
+      }
 
-    setFormError(errorMsg || "Failed to create task");
-    if (errorMsg) message.error(errorMsg);
-  }, [closeAddModal, loadTasks, loadProjects, resetAddForm]);
+      setFormError(errorMsg || 'Failed to create task');
+      if (errorMsg) message.error(errorMsg);
+    },
+    [closeAddModal, loadTasks, loadProjects, resetAddForm]
+  );
 
   const closeEditModal = useCallback(() => {
-    const modalElement = document.getElementById("edit_task");
+    const modalElement = document.getElementById('edit_task');
     const bootstrapAny = (window as any)?.bootstrap;
     try {
-      const modalInstance = bootstrapAny?.Modal?.getInstance?.(modalElement)
-        || bootstrapAny?.Modal?.getOrCreateInstance?.(modalElement);
+      const modalInstance =
+        bootstrapAny?.Modal?.getInstance?.(modalElement) ||
+        bootstrapAny?.Modal?.getOrCreateInstance?.(modalElement);
       if (modalInstance) {
         modalInstance.hide();
         return;
       }
-      const closeBtn = modalElement?.querySelector('[data-bs-dismiss="modal"]') as HTMLElement | null;
+      const closeBtn = modalElement?.querySelector(
+        '[data-bs-dismiss="modal"]'
+      ) as HTMLElement | null;
       closeBtn?.click?.();
     } catch {
-      const closeBtn = modalElement?.querySelector('[data-bs-dismiss="modal"]') as HTMLElement | null;
+      const closeBtn = modalElement?.querySelector(
+        '[data-bs-dismiss="modal"]'
+      ) as HTMLElement | null;
       closeBtn?.click?.();
     }
   }, []);
 
-  const handleTaskUpdateResponse = useCallback((success: boolean, errorMsg?: string) => {
-    setSavingEditTask(false);
-    if (success) {
-      message.success("Task updated successfully");
-      closeEditModal();
-      setEditFieldErrors({});
-      setEditFormError(null);
-      loadTasks();
-      loadProjects();
-      return;
-    }
+  const handleTaskUpdateResponse = useCallback(
+    (success: boolean, errorMsg?: string) => {
+      setSavingEditTask(false);
+      if (success) {
+        message.success('Task updated successfully');
+        closeEditModal();
+        setEditFieldErrors({});
+        setEditFormError(null);
+        loadTasks();
+        loadProjects();
+        return;
+      }
 
-    setEditFormError(errorMsg || "Failed to update task");
-    if (errorMsg) message.error(errorMsg);
-  }, [closeEditModal, loadTasks, loadProjects]);
+      setEditFormError(errorMsg || 'Failed to update task');
+      if (errorMsg) message.error(errorMsg);
+    },
+    [closeEditModal, loadTasks, loadProjects]
+  );
 
   const handleDeleteTask = useCallback(async () => {
     if (!deleteTaskId) {
-      message.error("Task ID not found");
+      message.error('Task ID not found');
       return;
     }
 
     setDeletingTask(true);
     const success = await deleteTask(deleteTaskId);
     if (success) {
-      message.success("Task deleted successfully");
+      message.success('Task deleted successfully');
       setDeleteTaskId(null);
       loadTasks();
       loadProjects();
@@ -412,7 +476,7 @@ const Task = () => {
 
   const handleSaveEditTask = useCallback(async () => {
     if (!editTaskId) {
-      message.error("Task ID not found");
+      message.error('Task ID not found');
       return;
     }
 
@@ -441,7 +505,7 @@ const Task = () => {
 
     const success = await updateTask(editTaskId, updateData);
     if (success) {
-      message.success("Task updated successfully");
+      message.success('Task updated successfully');
       closeEditModal();
       setEditFieldErrors({});
       setEditFormError(null);
@@ -467,7 +531,7 @@ const Task = () => {
       priority,
       description,
       tags,
-      createdBy: userId || "unknown",
+      createdBy: userId || 'unknown',
     };
 
     if (dueDate) {
@@ -489,23 +553,34 @@ const Task = () => {
     } else {
       setCreatingTask(false);
     }
-  }, [addForm, userId, validateForm, createTask, closeAddModal, resetAddForm, loadTasks, loadProjects]);
+  }, [
+    addForm,
+    userId,
+    validateForm,
+    createTask,
+    closeAddModal,
+    resetAddForm,
+    loadTasks,
+    loadProjects,
+  ]);
 
-  const getEmployeeById = useCallback((employeeId: string) => {
-    if (!employeeId || !employees.length) return null;
-    const employee = employees.find(emp => emp._id === employeeId);
-    if (employee) {
-      return {
-        name: `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
-        employeeId: employee.employeeId || ''
-      };
-    }
-    return null;
-  }, [employees]);
+  const getEmployeeById = useCallback(
+    (employeeId: string) => {
+      if (!employeeId || !employees.length) return null;
+      const employee = employees.find((emp) => emp._id === employeeId);
+      if (employee) {
+        return {
+          name: `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
+          employeeId: employee.employeeId || '',
+        };
+      }
+      return null;
+    },
+    [employees]
+  );
 
-  // Initial load - load tasks and projects on mount
+  // Initial load - only load projects on mount (tasks loaded by filter changes)
   useEffect(() => {
-    loadTasks();
     loadProjects();
   }, []); // Only run once on mount
 
@@ -521,13 +596,13 @@ const Task = () => {
     const resetModalState = () => {
       resetAddForm();
       setEditForm({
-        title: "",
-        projectId: "",
+        title: '',
+        projectId: '',
         assignees: [],
         dueDate: null,
-        status: "To do",
-        priority: "Medium",
-        description: "",
+        status: 'To do',
+        priority: 'Medium',
+        description: '',
         tags: [],
       });
     };
@@ -617,8 +692,8 @@ const Task = () => {
                           <div>
                             <h6 className="mb-1">
                               <span
-                                className={`text-dark text-truncate d-inline-block ${hoveredProjectId === project._id ? "text-primary" : ""}`}
-                                style={{ cursor: "pointer" }}
+                                className={`text-dark text-truncate d-inline-block ${hoveredProjectId === project._id ? 'text-primary' : ''}`}
+                                style={{ cursor: 'pointer' }}
                                 onMouseEnter={() => setHoveredProjectId(project._id)}
                                 onMouseLeave={() => setHoveredProjectId(null)}
                                 onClick={() => handleProjectTasksClick(project._id)}
@@ -627,13 +702,8 @@ const Task = () => {
                               </span>
                             </h6>
                             <div className="d-flex align-items-center">
-                              <span
-                                className="mx-1"
-                                
-                                title="Show tasks for this project"
-                              >
-                               {project.taskCount} tasks
-                                
+                              <span className="mx-1" title="Show tasks for this project">
+                                {project.taskCount} tasks
                               </span>
                               <span className="mx-1">
                                 <i className="ti ti-point-filled text-primary" />
@@ -647,11 +717,13 @@ const Task = () => {
                             <div className="mb-3">
                               <span className="mb-1 d-block">Deadline</span>
                               <p className="text-dark">
-                                {project.dueDate ? new Date(project.dueDate).toLocaleDateString('en-GB', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric'
-                                }) : 'No deadline'}
+                                {project.dueDate
+                                  ? new Date(project.dueDate).toLocaleDateString('en-GB', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })
+                                  : 'No deadline'}
                               </p>
                             </div>
                           </div>
@@ -666,21 +738,28 @@ const Task = () => {
                               <span className="mb-1 d-block">Project Lead</span>
                               <h6 className="fw-normal d-flex align-items-center">
                                 {(() => {
-                                  const teamLead = Array.isArray(project.teamleadName) && project.teamleadName.length > 0
-                                    ? project.teamleadName[0]
-                                    : null;
-                                  
+                                  const teamLead =
+                                    Array.isArray(project.teamleadName) &&
+                                    project.teamleadName.length > 0
+                                      ? project.teamleadName[0]
+                                      : null;
+
                                   if (teamLead && teamLead.name) {
                                     return (
                                       <>
-                                        <span className="text-truncate" title={`${teamLead.name} (${teamLead.employeeId || "N/A"})`}>
+                                        <span
+                                          className="text-truncate"
+                                          title={`${teamLead.name} (${teamLead.employeeId || 'N/A'})`}
+                                        >
                                           {teamLead.name}
-                                          <small className="text-muted ms-1">({teamLead.employeeId || "N/A"})</small>
+                                          <small className="text-muted ms-1">
+                                            ({teamLead.employeeId || 'N/A'})
+                                          </small>
                                         </span>
                                       </>
                                     );
                                   }
-                                  
+
                                   return (
                                     <>
                                       <ImageWithBasePath
@@ -700,8 +779,9 @@ const Task = () => {
                           <div className="row align-items-center">
                             <div className="col-6">
                               <span className="fw-medium d-flex align-items-center">
-                                <i className="ti ti-clock text-primary me-2" />
-                                Total {project.totalHours || project.hoursOfWork || '0'} Hrs
+                                <i className="ti ti-checkbox text-info me-2" />
+                                {getProjectCounts(project._id).completed} /{' '}
+                                {getProjectCounts(project._id).total} Tasks
                               </span>
                             </div>
                             <div className="col-6">
@@ -719,8 +799,12 @@ const Task = () => {
                                       width: `${getProjectCounts(project._id).percent}%`,
                                       backgroundColor: (() => {
                                         const pc = getProjectCounts(project._id).percent;
-                                        return pc > 80 ? '#28a745' : pc > 50 ? '#17a2b8' : '#dc3545';
-                                      })()
+                                        return pc > 80
+                                          ? '#28a745'
+                                          : pc > 50
+                                            ? '#17a2b8'
+                                            : '#dc3545';
+                                      })(),
                                     }}
                                   />
                                 </div>
@@ -796,8 +880,8 @@ const Task = () => {
                       <DatePicker
                         className="form-control datetimepicker"
                         format={{
-                          format: "DD-MM-YYYY",
-                          type: "mask",
+                          format: 'DD-MM-YYYY',
+                          type: 'mask',
                         }}
                         getPopupContainer={getModalContainer}
                         placeholder="Due Date"
@@ -877,7 +961,10 @@ const Task = () => {
                 </div>
               </div>
               {/* Dynamic Task List */}
-              <div className="list-group list-group-flush mb-4" style={{ minHeight: '550px', maxHeight: '800px', overflowY: 'auto' }}>
+              <div
+                className="list-group list-group-flush mb-4"
+                style={{ minHeight: '550px', maxHeight: '800px', overflowY: 'auto' }}
+              >
                 {tasks.length === 0 ? (
                   <div className="text-center py-5">
                     <i className="ti ti-clipboard-x fs-1 text-muted mb-3"></i>
@@ -886,7 +973,10 @@ const Task = () => {
                   </div>
                 ) : (
                   tasks.map((task: any) => (
-                    <div key={task._id} className="list-group-item list-item-hover shadow-sm rounded mb-2 p-3">
+                    <div
+                      key={task._id}
+                      className="list-group-item list-item-hover shadow-sm rounded mb-2 p-3"
+                    >
                       <div className="row align-items-center row-gap-3">
                         <div className="col-lg-6 col-md-7">
                           <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
@@ -902,11 +992,15 @@ const Task = () => {
                               />
                             </div>
                             <span className="me-2 d-flex align-items-center rating-select">
-                              <i className={`ti ti-star${task.priority === 'High' ? '-filled filled' : ''}`} />
+                              <i
+                                className={`ti ti-star${task.priority === 'High' ? '-filled filled' : ''}`}
+                              />
                             </span>
                             <div className="strike-info">
                               <h4 className="fs-14 text-truncate">
-                                <Link to={`${all_routes.tasksdetails.replace(':taskId', task._id)}`}>
+                                <Link
+                                  to={`${all_routes.tasksdetails.replace(':taskId', task._id)}`}
+                                >
                                   {task.title}
                                 </Link>
                               </h4>
@@ -917,7 +1011,7 @@ const Task = () => {
                                 {new Date(task.dueDate).toLocaleDateString('en-GB', {
                                   day: 'numeric',
                                   month: 'short',
-                                  year: 'numeric'
+                                  year: 'numeric',
                                 })}
                               </span>
                             )}
@@ -927,30 +1021,49 @@ const Task = () => {
                           <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
                             {task.tags && task.tags.length > 0 && (
                               <span className="badge badge-skyblue me-3">
-                                {task.tags[0]}
+                                {typeof task.tags[0] === 'string'
+                                  ? task.tags[0]
+                                  : task.tags[0]?.name || 'Tag'}
                               </span>
                             )}
-                            <span className={`badge d-inline-flex align-items-center me-3 ${
-                              task.status === 'Completed' ? 'badge-soft-success' :
-                              task.status === 'Inprogress' ? 'badge-soft-purple' :
-                              task.status === 'Pending' ? 'badge-soft-warning' :
-                              task.status === 'Onhold' ? 'badge-soft-pink' :
-                              'badge-soft-secondary'
-                            }`}>
+                            <span
+                              className={`badge d-inline-flex align-items-center me-3 ${
+                                task.status === 'Completed'
+                                  ? 'badge-soft-success'
+                                  : task.status === 'Inprogress'
+                                    ? 'badge-soft-purple'
+                                    : task.status === 'Pending'
+                                      ? 'badge-soft-warning'
+                                      : task.status === 'Onhold'
+                                        ? 'badge-soft-pink'
+                                        : 'badge-soft-secondary'
+                              }`}
+                            >
                               <i className="fas fa-circle fs-6 me-1" />
                               {task.status || 'Pending'}
                             </span>
                             <div className="d-flex align-items-center">
                               <div className="avatar-list-stacked avatar-group-sm">
-                                {task.assignee && task.assignee.slice(0, 3).map((assignee: string, idx: number) => (
-                                  <span key={idx} className="avatar avatar-rounded">
-                                    <ImageWithBasePath
-                                      className="border border-white"
-                                      src={`assets/img/profiles/avatar-${(idx % 10) + 1}.jpg`}
-                                      alt="img"
-                                    />
-                                  </span>
-                                ))}
+                                {task.assignee &&
+                                  Array.isArray(task.assignee) &&
+                                  task.assignee.slice(0, 3).map((assignee: any, idx: number) => {
+                                    const assigneeId =
+                                      typeof assignee === 'string'
+                                        ? assignee
+                                        : assignee?._id || assignee?.id;
+                                    return (
+                                      <span
+                                        key={assigneeId || idx}
+                                        className="avatar avatar-rounded"
+                                      >
+                                        <ImageWithBasePath
+                                          className="border border-white"
+                                          src={`assets/img/profiles/avatar-${(idx % 10) + 1}.jpg`}
+                                          alt="img"
+                                        />
+                                      </span>
+                                    );
+                                  })}
                               </div>
                               <div className="dropdown ms-2">
                                 <Link
@@ -979,13 +1092,13 @@ const Task = () => {
                                       onClick={async () => {
                                         setEditTaskId(task._id);
                                         setEditForm({
-                                          title: task.title || "",
-                                          projectId: task.projectId || "",
+                                          title: task.title || '',
+                                          projectId: task.projectId || '',
                                           assignees: task.assignee || [],
                                           dueDate: task.dueDate ? dayjs(task.dueDate) : null,
-                                          status: task.status || "To do",
-                                          priority: task.priority || "Medium",
-                                          description: task.description || "",
+                                          status: task.status || 'To do',
+                                          priority: task.priority || 'Medium',
+                                          description: task.description || '',
                                           tags: task.tags || [],
                                         });
                                         setEditFieldErrors({});
@@ -993,7 +1106,9 @@ const Task = () => {
                                         // Load team members for the project
                                         if (task.projectId) {
                                           setLoadingTeamMembers(true);
-                                          const teamMembers = await getProjectTeamMembers(task.projectId);
+                                          const teamMembers = await getProjectTeamMembers(
+                                            task.projectId
+                                          );
                                           setProjectTeamMembers(teamMembers);
                                           setLoadingTeamMembers(false);
                                         }
@@ -1037,11 +1152,7 @@ const Task = () => {
           <div className="modal-content">
             <div className="modal-header">
               <h4 className="modal-title">Add New Task</h4>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-              >
+              <button type="button" className="btn-close custom-btn-close" data-bs-dismiss="modal">
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -1055,11 +1166,13 @@ const Task = () => {
                 <div className="row">
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">Project <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Project <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className={`select ${fieldErrors.projectId ? 'is-invalid' : ''}`}
                         options={projectChoose}
-                        value={projectChoose.find(opt => opt.value === addForm.projectId) || null}
+                        value={projectChoose.find((opt) => opt.value === addForm.projectId) || null}
                         onChange={(option: any) => handleProjectSelection(option?.value)}
                       />
                       {fieldErrors.projectId && (
@@ -1069,13 +1182,15 @@ const Task = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Title <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Title <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
                         className={`form-control ${fieldErrors.title ? 'is-invalid' : ''}`}
                         value={addForm.title}
                         onChange={(e) => {
-                          setAddForm(prev => ({ ...prev, title: e.target.value }));
+                          setAddForm((prev) => ({ ...prev, title: e.target.value }));
                           clearFieldError('title');
                         }}
                         placeholder="Task title"
@@ -1087,19 +1202,21 @@ const Task = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Due Date <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Due Date <span className="text-danger">*</span>
+                      </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
                           className="form-control datetimepicker"
                           format={{
-                            format: "DD-MM-YYYY",
-                            type: "mask",
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
                           }}
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
                           value={addForm.dueDate}
                           onChange={(value) => {
-                            setAddForm(prev => ({ ...prev, dueDate: value }));
+                            setAddForm((prev) => ({ ...prev, dueDate: value }));
                             clearFieldError('dueDate');
                           }}
                         />
@@ -1128,18 +1245,28 @@ const Task = () => {
                           className="basic-multi-select"
                           classNamePrefix="select"
                           options={employeeOptions}
-                          value={employeeOptions.filter(opt => addForm.assignees.includes(opt.value))}
+                          value={employeeOptions.filter((opt) =>
+                            addForm.assignees.includes(opt.value)
+                          )}
                           onChange={(opts) => {
                             const values = (opts || []).map((opt) => opt.value);
-                            setAddForm(prev => ({ ...prev, assignees: values }));
+                            setAddForm((prev) => ({ ...prev, assignees: values }));
                             clearFieldError('assignees');
                           }}
-                          placeholder={employeeOptions.length === 0 ? "No team members available" : "Select team members"}
-                          isDisabled={!selectedProject || loadingTeamMembers || employeeOptions.length === 0}
+                          placeholder={
+                            employeeOptions.length === 0
+                              ? 'No team members available'
+                              : 'Select team members'
+                          }
+                          isDisabled={
+                            !selectedProject || loadingTeamMembers || employeeOptions.length === 0
+                          }
                         />
                       </div>
                       {!selectedProject && (
-                        <small className="text-muted mt-1 d-block">Please select a project first</small>
+                        <small className="text-muted mt-1 d-block">
+                          Please select a project first
+                        </small>
                       )}
                       {loadingTeamMembers && (
                         <small className="text-info mt-1 d-block">Loading team members...</small>
@@ -1154,7 +1281,7 @@ const Task = () => {
                       <label className="form-label">Tag</label>
                       <CommonTagsInput
                         value={addForm.tags}
-                        onChange={(value) => setAddForm(prev => ({ ...prev, tags: value }))}
+                        onChange={(value) => setAddForm((prev) => ({ ...prev, tags: value }))}
                         placeholder="Add new"
                         className="custom-input-class" // Optional custom class
                       />
@@ -1163,23 +1290,20 @@ const Task = () => {
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Status</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value="To do"
-                        readOnly
-                      />
+                      <input type="text" className="form-control" value="To do" readOnly />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">Priority <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Priority <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className={`select ${fieldErrors.priority ? 'is-invalid' : ''}`}
                         options={priorityChoose}
-                        value={priorityChoose.find(opt => opt.value === addForm.priority) || null}
+                        value={priorityChoose.find((opt) => opt.value === addForm.priority) || null}
                         onChange={(option: any) => {
-                          setAddForm(prev => ({ ...prev, priority: option?.value || "Medium" }));
+                          setAddForm((prev) => ({ ...prev, priority: option?.value || 'Medium' }));
                           clearFieldError('priority');
                         }}
                       />
@@ -1190,13 +1314,15 @@ const Task = () => {
                   </div>
                   <div className="col-lg-12">
                     <div className="mb-3">
-                      <label className="form-label">Description <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Description <span className="text-danger">*</span>
+                      </label>
                       <textarea
                         className={`form-control ${fieldErrors.description ? 'is-invalid' : ''}`}
                         rows={4}
                         value={addForm.description}
                         onChange={(e) => {
-                          setAddForm(prev => ({ ...prev, description: e.target.value }));
+                          setAddForm((prev) => ({ ...prev, description: e.target.value }));
                           clearFieldError('description');
                         }}
                         placeholder="Enter task description (minimum 10 characters)"
@@ -1209,11 +1335,7 @@ const Task = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-light me-2"
-                  data-bs-dismiss="modal"
-                >
+                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">
                   Cancel
                 </button>
                 <button
@@ -1222,7 +1344,7 @@ const Task = () => {
                   onClick={handleAddTaskSubmit}
                   disabled={creatingTask}
                 >
-                  {creatingTask ? "Saving..." : "Add New Task"}
+                  {creatingTask ? 'Saving...' : 'Add New Task'}
                 </button>
               </div>
             </form>
@@ -1236,11 +1358,7 @@ const Task = () => {
           <div className="modal-content">
             <div className="modal-header">
               <h4 className="modal-title">Edit Task</h4>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-              >
+              <button type="button" className="btn-close custom-btn-close" data-bs-dismiss="modal">
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -1254,13 +1372,15 @@ const Task = () => {
                 <div className="row">
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">Title <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Title <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
                         className={`form-control ${editFieldErrors.title ? 'is-invalid' : ''}`}
                         value={editForm.title}
                         onChange={(e) => {
-                          setEditForm(prev => ({ ...prev, title: e.target.value }));
+                          setEditForm((prev) => ({ ...prev, title: e.target.value }));
                           clearEditFieldError('title');
                         }}
                         placeholder="Task title"
@@ -1275,20 +1395,22 @@ const Task = () => {
                       <label className="form-label">Tag</label>
                       <CommonTagsInput
                         value={editForm.tags}
-                        onChange={(tags: string[]) => setEditForm(prev => ({ ...prev, tags }))}
+                        onChange={(tags: string[]) => setEditForm((prev) => ({ ...prev, tags }))}
                         className="form-control"
                       />
                     </div>
                   </div>
                   <div className="col-6">
                     <div className="mb-3">
-                      <label className="form-label">Priority <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Priority <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className={`select ${editFieldErrors.priority ? 'is-invalid' : ''}`}
                         options={priorityChoose}
-                        value={priorityChoose.find(opt => opt.value === editForm.priority)}
+                        value={priorityChoose.find((opt) => opt.value === editForm.priority)}
                         onChange={(option: any) => {
-                          setEditForm(prev => ({ ...prev, priority: option?.value || "Medium" }));
+                          setEditForm((prev) => ({ ...prev, priority: option?.value || 'Medium' }));
                           clearEditFieldError('priority');
                         }}
                       />
@@ -1299,13 +1421,15 @@ const Task = () => {
                   </div>
                   <div className="col-6">
                     <div className="mb-3">
-                      <label className="form-label">Status <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className={`select ${editFieldErrors.status ? 'is-invalid' : ''}`}
                         options={statusChoose}
-                        value={statusChoose.find(opt => opt.value === editForm.status)}
+                        value={statusChoose.find((opt) => opt.value === editForm.status)}
                         onChange={(option: any) => {
-                          setEditForm(prev => ({ ...prev, status: option?.value || "To do" }));
+                          setEditForm((prev) => ({ ...prev, status: option?.value || 'To do' }));
                           clearEditFieldError('status');
                         }}
                       />
@@ -1316,13 +1440,15 @@ const Task = () => {
                   </div>
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">Description <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Description <span className="text-danger">*</span>
+                      </label>
                       <textarea
                         className={`form-control ${editFieldErrors.description ? 'is-invalid' : ''}`}
                         rows={4}
                         value={editForm.description}
                         onChange={(e) => {
-                          setEditForm(prev => ({ ...prev, description: e.target.value }));
+                          setEditForm((prev) => ({ ...prev, description: e.target.value }));
                           clearEditFieldError('description');
                         }}
                         placeholder="Enter task description (minimum 10 characters)"
@@ -1334,19 +1460,21 @@ const Task = () => {
                   </div>
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">Due Date <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Due Date <span className="text-danger">*</span>
+                      </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
                           className="form-control datetimepicker"
                           format={{
-                            format: "DD-MM-YYYY",
-                            type: "mask",
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
                           }}
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
                           value={editForm.dueDate}
                           onChange={(value) => {
-                            setEditForm(prev => ({ ...prev, dueDate: value }));
+                            setEditForm((prev) => ({ ...prev, dueDate: value }));
                             clearEditFieldError('dueDate');
                           }}
                         />
@@ -1361,20 +1489,30 @@ const Task = () => {
                   </div>
                   <div className="col-12">
                     <div className="mb-0">
-                      <label className="form-label">Team Members <span className="text-danger">*</span></label>
+                      <label className="form-label">
+                        Team Members <span className="text-danger">*</span>
+                      </label>
                       <Select
                         isMulti
                         className={`basic-multi-select ${editFieldErrors.assignees ? 'is-invalid' : ''}`}
                         classNamePrefix="select"
                         options={employeeOptions}
-                        value={employeeOptions.filter(opt => editForm.assignees.includes(opt.value))}
+                        value={employeeOptions.filter((opt) =>
+                          editForm.assignees.includes(opt.value)
+                        )}
                         onChange={(opts) => {
                           const values = (opts || []).map((opt) => opt.value);
-                          setEditForm(prev => ({ ...prev, assignees: values }));
+                          setEditForm((prev) => ({ ...prev, assignees: values }));
                           clearEditFieldError('assignees');
                         }}
-                        placeholder={employeeOptions.length === 0 ? "No team members available" : "Select team members"}
-                        isDisabled={!editForm.projectId || loadingTeamMembers || employeeOptions.length === 0}
+                        placeholder={
+                          employeeOptions.length === 0
+                            ? 'No team members available'
+                            : 'Select team members'
+                        }
+                        isDisabled={
+                          !editForm.projectId || loadingTeamMembers || employeeOptions.length === 0
+                        }
                       />
                       {editFieldErrors.assignees && (
                         <div className="invalid-feedback d-block">{editFieldErrors.assignees}</div>
@@ -1398,7 +1536,7 @@ const Task = () => {
                   onClick={handleSaveEditTask}
                   disabled={savingEditTask}
                 >
-                  {savingEditTask ? "Saving..." : "Save Changes"}
+                  {savingEditTask ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1443,7 +1581,7 @@ const Task = () => {
                 onClick={handleDeleteTask}
                 disabled={deletingTask}
               >
-                {deletingTask ? "Deleting..." : "Delete Task"}
+                {deletingTask ? 'Deleting...' : 'Delete Task'}
               </button>
             </div>
           </div>
@@ -1455,9 +1593,7 @@ const Task = () => {
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header bg-dark">
-              <h4 className="modal-title text-white">
-                Respond to any pending messages
-              </h4>
+              <h4 className="modal-title text-white">Respond to any pending messages</h4>
               <span className="badge badge-danger d-inline-flex align-items-center">
                 <i className="ti ti-square me-1" />
                 Urgent
@@ -1506,13 +1642,11 @@ const Task = () => {
               <div className="mb-3">
                 <h5 className="mb-2">Description</h5>
                 <p>
-                  Hiking is a long, vigorous walk, usually on trails or
-                  footpaths in the countryside. Walking for pleasure developed
-                  in Europe during the eighteenth century. Religious pilgrimages
-                  have existed much longer but they involve walking long
-                  distances for a spiritual purpose associated with specific
-                  religions and also we achieve inner peace while we hike at a
-                  local park.
+                  Hiking is a long, vigorous walk, usually on trails or footpaths in the
+                  countryside. Walking for pleasure developed in Europe during the eighteenth
+                  century. Religious pilgrimages have existed much longer but they involve walking
+                  long distances for a spiritual purpose associated with specific religions and also
+                  we achieve inner peace while we hike at a local park.
                 </p>
               </div>
               <div className="mb-3">

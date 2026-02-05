@@ -3,17 +3,18 @@
  * Replaces Socket.IO-based task operations with REST API calls
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from '../SocketContext';
 import { message } from 'antd';
-import { get, post, put, del, patch, buildParams, ApiResponse } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, patch, post, put } from '../services/api';
+import { useSocket } from '../SocketContext';
 
 export interface Task {
   _id: string;
   title: string;
   description?: string;
-  project?: string;
-  assignee?: string;
+  project?: string; // For display/populated data
+  projectId?: string; // For create/update operations
+  assignee?: string | string[] | any[]; // Array of employee IDs (send to API) or populated employee objects (receive from API)
   status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
   priority: 'Low' | 'Medium' | 'High' | 'Urgent';
   dueDate?: string;
@@ -70,7 +71,8 @@ export const useTasksREST = () => {
         throw new Error(response.error?.message || 'Failed to fetch tasks');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch tasks';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to fetch tasks';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -99,7 +101,8 @@ export const useTasksREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to fetch task');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch task';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to fetch task';
       message.error(errorMessage);
       return null;
     }
@@ -111,35 +114,40 @@ export const useTasksREST = () => {
 
       if (response.success && response.data) {
         message.success('Task created successfully!');
-        setTasks(prev => [...prev, response.data!]);
+        setTasks((prev) => [...prev, response.data!]);
         return true;
       }
       throw new Error(response.error?.message || 'Failed to create task');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to create task';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to create task';
       message.error(errorMessage);
       return false;
     }
   }, []);
 
-  const updateTask = useCallback(async (taskId: string, updateData: Partial<Task>): Promise<boolean> => {
-    try {
-      const response: ApiResponse<Task> = await put(`/tasks/${taskId}`, updateData);
+  const updateTask = useCallback(
+    async (taskId: string, updateData: Partial<Task>): Promise<boolean> => {
+      try {
+        const response: ApiResponse<Task> = await put(`/tasks/${taskId}`, updateData);
 
-      if (response.success && response.data) {
-        message.success('Task updated successfully!');
-        setTasks(prev =>
-          prev.map(task => (task._id === taskId ? { ...task, ...response.data! } : task))
-        );
-        return true;
+        if (response.success && response.data) {
+          message.success('Task updated successfully!');
+          setTasks((prev) =>
+            prev.map((task) => (task._id === taskId ? { ...task, ...response.data! } : task))
+          );
+          return true;
+        }
+        throw new Error(response.error?.message || 'Failed to update task');
+      } catch (err: any) {
+        const errorMessage =
+          err.response?.data?.error?.message || err.message || 'Failed to update task';
+        message.error(errorMessage);
+        return false;
       }
-      throw new Error(response.error?.message || 'Failed to update task');
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update task';
-      message.error(errorMessage);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
   const deleteTask = useCallback(async (taskId: string): Promise<boolean> => {
     try {
@@ -147,12 +155,13 @@ export const useTasksREST = () => {
 
       if (response.success) {
         message.success('Task deleted successfully!');
-        setTasks(prev => prev.filter(task => task._id !== taskId));
+        setTasks((prev) => prev.filter((task) => task._id !== taskId));
         return true;
       }
       throw new Error(response.error?.message || 'Failed to delete task');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to delete task';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to delete task';
       message.error(errorMessage);
       return false;
     }
@@ -164,14 +173,15 @@ export const useTasksREST = () => {
 
       if (response.success && response.data) {
         message.success(`Task status updated to ${status}`);
-        setTasks(prev =>
-          prev.map(task => (task._id === taskId ? { ...task, ...response.data! } : task))
+        setTasks((prev) =>
+          prev.map((task) => (task._id === taskId ? { ...task, ...response.data! } : task))
         );
         return true;
       }
       throw new Error(response.error?.message || 'Failed to update status');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update status';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to update status';
       message.error(errorMessage);
       return false;
     }
@@ -187,7 +197,8 @@ export const useTasksREST = () => {
         setTasks(response.data);
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch project tasks';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to fetch project tasks';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -205,7 +216,8 @@ export const useTasksREST = () => {
         setTasks(response.data);
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch my tasks';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to fetch my tasks';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -219,26 +231,22 @@ export const useTasksREST = () => {
 
     const handleTaskCreated = (data: Task) => {
       console.log('[useTasksREST] Task created via broadcast:', data);
-      setTasks(prev => [...prev, data]);
+      setTasks((prev) => [...prev, data]);
     };
 
     const handleTaskUpdated = (data: Task) => {
       console.log('[useTasksREST] Task updated via broadcast:', data);
-      setTasks(prev =>
-        prev.map(task => (task._id === data._id ? { ...task, ...data } : task))
-      );
+      setTasks((prev) => prev.map((task) => (task._id === data._id ? { ...task, ...data } : task)));
     };
 
     const handleTaskStatusChanged = (data: Task) => {
       console.log('[useTasksREST] Task status changed via broadcast:', data);
-      setTasks(prev =>
-        prev.map(task => (task._id === data._id ? { ...task, ...data } : task))
-      );
+      setTasks((prev) => prev.map((task) => (task._id === data._id ? { ...task, ...data } : task)));
     };
 
     const handleTaskDeleted = (data: { _id: string }) => {
       console.log('[useTasksREST] Task deleted via broadcast:', data);
-      setTasks(prev => prev.filter(task => task._id !== data._id));
+      setTasks((prev) => prev.filter((task) => task._id !== data._id));
     };
 
     socket.on('task:created', handleTaskCreated);
@@ -267,7 +275,7 @@ export const useTasksREST = () => {
     deleteTask,
     updateStatus,
     getTasksByProject,
-    getMyTasks
+    getMyTasks,
   };
 };
 

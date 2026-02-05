@@ -3,10 +3,10 @@
  * Replaces Socket.IO-based project operations with REST API calls
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from '../SocketContext';
 import { message } from 'antd';
-import { get, post, put, del, patch, buildParams, ApiResponse } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, patch, post, put } from '../services/api';
+import { useSocket } from '../SocketContext';
 
 export interface Project {
   _id: string;
@@ -18,6 +18,7 @@ export interface Project {
   priority: 'High' | 'Medium' | 'Low';
   startDate?: Date;
   dueDate?: Date;
+  endDate?: Date; // Alias for dueDate - used in frontend
   budget?: number;
   progress: number;
   teamLeader?: string[];
@@ -72,27 +73,31 @@ export const useProjectsREST = () => {
     };
   }, []);
 
-  const fetchProjects = useCallback(async (filters: ProjectFilters = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = buildParams(filters);
-      const response: ApiResponse<Project[]> = await get('/projects', { params });
+  const fetchProjects = useCallback(
+    async (filters: ProjectFilters = {}) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = buildParams(filters);
+        const response: ApiResponse<Project[]> = await get('/projects', { params });
 
-      if (response.success && response.data) {
-        const projectsWithDates = response.data.map(convertDatesToDateObjects);
-        setProjects(projectsWithDates);
-      } else {
-        throw new Error(response.error?.message || 'Failed to fetch projects');
+        if (response.success && response.data) {
+          const projectsWithDates = response.data.map(convertDatesToDateObjects);
+          setProjects(projectsWithDates);
+        } else {
+          throw new Error(response.error?.message || 'Failed to fetch projects');
+        }
+      } catch (err: any) {
+        const errorMessage =
+          err.response?.data?.error?.message || err.message || 'Failed to fetch projects';
+        setError(errorMessage);
+        message.error(errorMessage);
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch projects';
-      setError(errorMessage);
-      message.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [convertDatesToDateObjects]);
+    },
+    [convertDatesToDateObjects]
+  );
 
   const fetchStats = useCallback(async () => {
     try {
@@ -106,20 +111,24 @@ export const useProjectsREST = () => {
     }
   }, []);
 
-  const getProjectById = useCallback(async (projectId: string): Promise<Project | null> => {
-    try {
-      const response: ApiResponse<Project> = await get(`/projects/${projectId}`);
+  const getProjectById = useCallback(
+    async (projectId: string): Promise<Project | null> => {
+      try {
+        const response: ApiResponse<Project> = await get(`/projects/${projectId}`);
 
-      if (response.success && response.data) {
-        return convertDatesToDateObjects(response.data);
+        if (response.success && response.data) {
+          return convertDatesToDateObjects(response.data);
+        }
+        throw new Error(response.error?.message || 'Failed to fetch project');
+      } catch (err: any) {
+        const errorMessage =
+          err.response?.data?.error?.message || err.message || 'Failed to fetch project';
+        message.error(errorMessage);
+        return null;
       }
-      throw new Error(response.error?.message || 'Failed to fetch project');
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch project';
-      message.error(errorMessage);
-      return null;
-    }
-  }, [convertDatesToDateObjects]);
+    },
+    [convertDatesToDateObjects]
+  );
 
   const createProject = useCallback(async (projectData: Partial<Project>): Promise<boolean> => {
     try {
@@ -127,35 +136,50 @@ export const useProjectsREST = () => {
 
       if (response.success && response.data) {
         message.success('Project created successfully!');
-        setProjects(prev => [...prev, response.data!]);
+        setProjects((prev) => [...prev, response.data!]);
         return true;
       }
       throw new Error(response.error?.message || 'Failed to create project');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to create project';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to create project';
       message.error(errorMessage);
       return false;
     }
   }, []);
 
-  const updateProject = useCallback(async (projectId: string, updateData: Partial<Project>): Promise<boolean> => {
-    try {
-      const response: ApiResponse<Project> = await put(`/projects/${projectId}`, updateData);
+  const updateProject = useCallback(
+    async (projectId: string, updateData: Partial<Project>): Promise<boolean> => {
+      try {
+        console.log('[useProjectsREST] Updating project:', { projectId, updateData });
+        const response: ApiResponse<Project> = await put(`/projects/${projectId}`, updateData);
+        console.log('[useProjectsREST] Update response:', response);
 
-      if (response.success && response.data) {
-        message.success('Project updated successfully!');
-        setProjects(prev =>
-          prev.map(proj => (proj._id === projectId ? { ...proj, ...response.data! } : proj))
-        );
-        return true;
+        // Check if response is successful
+        if (response.success) {
+          // Response might have data directly or nested
+          const projectData = response.data || response;
+          console.log('[useProjectsREST] Project data:', projectData);
+
+          message.success(response.message || 'Project updated successfully!');
+          setProjects((prev) =>
+            prev.map((proj) => (proj._id === projectId ? { ...proj, ...projectData } : proj))
+          );
+          return true;
+        }
+
+        console.error('[useProjectsREST] Update failed:', response);
+        throw new Error(response.error?.message || 'Failed to update project');
+      } catch (err: any) {
+        console.error('[useProjectsREST] Update error:', err);
+        const errorMessage =
+          err.response?.data?.error?.message || err.message || 'Failed to update project';
+        message.error(errorMessage);
+        return false;
       }
-      throw new Error(response.error?.message || 'Failed to update project');
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update project';
-      message.error(errorMessage);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
   const deleteProject = useCallback(async (projectId: string): Promise<boolean> => {
     try {
@@ -163,35 +187,42 @@ export const useProjectsREST = () => {
 
       if (response.success) {
         message.success('Project deleted successfully!');
-        setProjects(prev => prev.filter(proj => proj._id !== projectId));
+        setProjects((prev) => prev.filter((proj) => proj._id !== projectId));
         return true;
       }
       throw new Error(response.error?.message || 'Failed to delete project');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to delete project';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to delete project';
       message.error(errorMessage);
       return false;
     }
   }, []);
 
-  const updateProgress = useCallback(async (projectId: string, progress: number): Promise<boolean> => {
-    try {
-      const response: ApiResponse<Project> = await patch(`/projects/${projectId}/progress`, { progress });
+  const updateProgress = useCallback(
+    async (projectId: string, progress: number): Promise<boolean> => {
+      try {
+        const response: ApiResponse<Project> = await patch(`/projects/${projectId}/progress`, {
+          progress,
+        });
 
-      if (response.success && response.data) {
-        message.success('Project progress updated!');
-        setProjects(prev =>
-          prev.map(proj => (proj._id === projectId ? { ...proj, ...response.data! } : proj))
-        );
-        return true;
+        if (response.success && response.data) {
+          message.success('Project progress updated!');
+          setProjects((prev) =>
+            prev.map((proj) => (proj._id === projectId ? { ...proj, ...response.data! } : proj))
+          );
+          return true;
+        }
+        throw new Error(response.error?.message || 'Failed to update progress');
+      } catch (err: any) {
+        const errorMessage =
+          err.response?.data?.error?.message || err.message || 'Failed to update progress';
+        message.error(errorMessage);
+        return false;
       }
-      throw new Error(response.error?.message || 'Failed to update progress');
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update progress';
-      message.error(errorMessage);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
   const getMyProjects = useCallback(async () => {
     setLoading(true);
@@ -204,7 +235,8 @@ export const useProjectsREST = () => {
         setProjects(projectsWithDates);
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch my projects';
+      const errorMessage =
+        err.response?.data?.error?.message || err.message || 'Failed to fetch my projects';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -232,26 +264,26 @@ export const useProjectsREST = () => {
 
     const handleProjectCreated = (data: Project) => {
       console.log('[useProjectsREST] Project created via broadcast:', data);
-      setProjects(prev => [...prev, data]);
+      setProjects((prev) => [...prev, data]);
     };
 
     const handleProjectUpdated = (data: Project) => {
       console.log('[useProjectsREST] Project updated via broadcast:', data);
-      setProjects(prev =>
-        prev.map(proj => (proj._id === data._id ? { ...proj, ...data } : proj))
+      setProjects((prev) =>
+        prev.map((proj) => (proj._id === data._id ? { ...proj, ...data } : proj))
       );
     };
 
     const handleProjectProgressUpdated = (data: Project) => {
       console.log('[useProjectsREST] Project progress updated via broadcast:', data);
-      setProjects(prev =>
-        prev.map(proj => (proj._id === data._id ? { ...proj, ...data } : proj))
+      setProjects((prev) =>
+        prev.map((proj) => (proj._id === data._id ? { ...proj, ...data } : proj))
       );
     };
 
     const handleProjectDeleted = (data: { _id: string }) => {
       console.log('[useProjectsREST] Project deleted via broadcast:', data);
-      setProjects(prev => prev.filter(proj => proj._id !== data._id));
+      setProjects((prev) => prev.filter((proj) => proj._id !== data._id));
     };
 
     socket.on('project:created', handleProjectCreated);
@@ -280,7 +312,7 @@ export const useProjectsREST = () => {
     deleteProject,
     updateProgress,
     getMyProjects,
-    getProjectTeamMembers
+    getProjectTeamMembers,
   };
 };
 

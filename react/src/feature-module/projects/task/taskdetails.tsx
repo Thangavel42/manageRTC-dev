@@ -3,21 +3,24 @@ import dayjs, { Dayjs } from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Select from 'react-select';
-import { useSocket } from '../../../SocketContext';
-import CommonTagsInput from '../../../core/common/Taginput';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import CommonSelect from '../../../core/common/commonSelect';
 import Footer from '../../../core/common/footer';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { Task, useTasksREST } from '../../../hooks/useTasksREST';
+import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
+import { useSocket } from '../../../SocketContext';
 import { all_routes } from '../../router/all_routes';
 
 const TaskDetails = () => {
   const { taskId } = useParams();
-  const socket = useSocket() as any;
+  const socket = useSocket() as any; // Keep for real-time updates from backend broadcasts
   const { getTaskById: getTaskByIdAPI, updateTask: updateTaskAPI } = useTasksREST();
   const { getProjectById: getProjectByIdAPI } = useProjectsREST();
+  const { statuses: statusesFromHook, fetchTaskStatuses: fetchTaskStatusesAPI } =
+    useTaskStatusREST();
 
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,8 @@ const TaskDetails = () => {
 
     try {
       const taskData = await getTaskByIdAPI(taskId);
+      console.log('[TaskDetails] Loaded task data:', taskData);
+
       if (taskData) {
         setTask(taskData);
         setEditTitle(taskData.title || '');
@@ -57,24 +62,41 @@ const TaskDetails = () => {
         setEditPriority(taskData.priority || '');
         setEditDueDate(taskData.dueDate ? dayjs(taskData.dueDate) : null);
 
-        // Handle assignee - could be string or array
-        const assigneeStr = taskData.assignee || '';
-        const assigneeArray =
-          typeof assigneeStr === 'string' ? assigneeStr.split(',').filter((a) => a.trim()) : [];
+        // Handle assignee - could be string, array of strings, or array of populated objects
+        const assigneeArray = Array.isArray(taskData.assignee)
+          ? taskData.assignee
+              .map((a: any) => {
+                // Handle populated employee objects with _id
+                if (typeof a === 'object' && a !== null) {
+                  return (a._id || a.id || a).toString();
+                }
+                return a.toString();
+              })
+              .filter(Boolean)
+          : typeof taskData.assignee === 'string'
+            ? taskData.assignee.split(',').filter((a) => a.trim())
+            : [];
         setEditAssignees(assigneeArray);
+        console.log('[TaskDetails] Loaded task data:', taskData);
+        console.log('[TaskDetails] Processed assignee IDs:', assigneeArray);
 
         setTags1(Array.isArray(taskData.tags) ? taskData.tags : []);
 
-        // Load project details
-        if (taskData.project) {
+        // Load project details - check both project and projectId fields
+        const projectIdToLoad = taskData.project || taskData.projectId;
+        if (projectIdToLoad) {
           const projectId =
-            typeof taskData.project === 'string'
-              ? taskData.project
-              : (taskData.project as any)?._id || taskData.project;
+            typeof projectIdToLoad === 'string'
+              ? projectIdToLoad
+              : (projectIdToLoad as any)?._id || projectIdToLoad;
+          console.log('[TaskDetails] Loading project:', projectId);
           const project = await getProjectByIdAPI(projectId);
+          console.log('[TaskDetails] Loaded project:', project);
           if (project) {
             setProjectDetails(project);
           }
+        } else {
+          console.warn('[TaskDetails] No project ID found in task data');
         }
       } else {
         setError('Failed to load task details');
@@ -87,57 +109,123 @@ const TaskDetails = () => {
     }
   }, [taskId, getTaskByIdAPI, getProjectByIdAPI]);
 
+  // Load project members from projectDetails (already fetched via REST)
   const loadProjectMembers = useCallback(() => {
-    if (!task?.projectId || !socket) return;
+    if (!projectDetails) return;
 
     setLoadingMembers(true);
-    // Project members are loaded via socket.io for now
-    socket.emit('project:getMembers', { projectId: task.projectId });
-  }, [task?.projectId, socket]);
+    // Combine team members, team leaders, and project managers from project details
+    const allMembers = [
+      ...(projectDetails.teamMembers || []),
+      ...(projectDetails.teamLeader || []),
+      ...(projectDetails.projectManager || []),
+    ];
 
-  const loadTaskStatuses = useCallback(() => {
-    if (!socket) return;
-    // Task statuses are admin-managed, keeping socket.io for now
-    socket.emit('task:getStatuses');
-  }, [socket]);
+    // Remove duplicates based on _id
+    const uniqueMembers = allMembers
+      .filter(Boolean)
+      .filter(
+        (member, index, self) =>
+          index === self.findIndex((m) => m._id?.toString() === member._id?.toString())
+      );
+
+    setProjectMembers(uniqueMembers);
+    setLoadingMembers(false);
+  }, [projectDetails]);
+
+  const loadTaskStatuses = useCallback(async () => {
+    try {
+      await fetchTaskStatusesAPI();
+      // Task statuses will be available via statusesFromHook, sync via useEffect
+    } catch (error) {
+      console.error('[TaskDetails] Error loading task statuses:', error);
+    }
+  }, [fetchTaskStatusesAPI]);
+
+  // Sync task statuses from hook
+  useEffect(() => {
+    if (statusesFromHook && Array.isArray(statusesFromHook)) {
+      setTaskStatuses(statusesFromHook);
+    }
+  }, [statusesFromHook]);
 
   useEffect(() => {
     loadTask();
-    if (socket) {
-      loadTaskStatuses();
-    }
-  }, [loadTask, socket, loadTaskStatuses]);
+    loadTaskStatuses();
+  }, [loadTask, loadTaskStatuses]);
 
   useEffect(() => {
-    if (task?.projectId) {
+    if (projectDetails) {
       loadProjectMembers();
     }
-  }, [task?.projectId, loadProjectMembers]);
+  }, [projectDetails, loadProjectMembers]);
 
+  // Populate assignee details from task assignees and project members
   useEffect(() => {
-    if (socket) {
-      const handleProjectMembersResponse = (response: any) => {
-        setLoadingMembers(false);
-        if (response?.done) {
-          setProjectMembers(response.data?.members || response.data || []);
-        }
-      };
-
-      const handleTaskStatusesResponse = (response: any) => {
-        if (response?.done && Array.isArray(response.data)) {
-          setTaskStatuses(response.data);
-        }
-      };
-
-      socket.on('project:getMembers-response', handleProjectMembersResponse);
-      socket.on('task:getStatuses-response', handleTaskStatusesResponse);
-
-      return () => {
-        socket.off('project:getMembers-response', handleProjectMembersResponse);
-        socket.off('task:getStatuses-response', handleTaskStatusesResponse);
-      };
+    if (!task) {
+      setAssigneeDetails([]);
+      return;
     }
-  }, [socket]);
+
+    // Handle null/undefined assignee
+    if (!task.assignee || (Array.isArray(task.assignee) && task.assignee.length === 0)) {
+      setAssigneeDetails([]);
+      return;
+    }
+
+    // Check if assignees are already populated objects with employee data
+    const taskAssignees = Array.isArray(task.assignee) ? task.assignee : [];
+
+    // If assignees are populated objects with firstName/lastName, use them directly
+    const populatedAssignees = taskAssignees.filter(
+      (a: any) => typeof a === 'object' && a !== null && (a.firstName || a.employeeId)
+    );
+
+    if (populatedAssignees.length > 0) {
+      console.log('[TaskDetails] Using populated assignees from task:', populatedAssignees);
+      setAssigneeDetails(populatedAssignees);
+      return;
+    }
+
+    // Otherwise, try to match with project members
+    // Normalize assignee IDs - handle both string arrays and populated object arrays
+    const taskAssigneeIds = taskAssignees
+      .map((a: any) => {
+        // Handle populated employee objects
+        if (typeof a === 'object' && a !== null && a._id) {
+          return a._id.toString();
+        }
+        // Handle string IDs
+        return a?.toString() || '';
+      })
+      .filter(Boolean);
+
+    if (taskAssigneeIds.length === 0) {
+      setAssigneeDetails([]);
+      return;
+    }
+
+    console.log('[TaskDetails] Task assignee IDs:', taskAssigneeIds);
+    console.log('[TaskDetails] Project members:', projectMembers);
+
+    // If no project members, return empty
+    if (!projectMembers || projectMembers.length === 0) {
+      console.warn('[TaskDetails] No project members available to match assignees');
+      setAssigneeDetails([]);
+      return;
+    }
+
+    // Match assignee IDs with project members
+    const details = projectMembers.filter((member) => {
+      const memberId = (member._id || member.id)?.toString();
+      if (!memberId) return false;
+
+      return taskAssigneeIds.some((assigneeId) => memberId === assigneeId);
+    });
+
+    console.log('[TaskDetails] Matched assignee details:', details);
+    setAssigneeDetails(details);
+  }, [task, projectMembers]);
 
   const getModalContainer = () => {
     const modalElement = document.getElementById('modal-datepicker');
@@ -258,9 +346,21 @@ const TaskDetails = () => {
     setEditStatus(matchedStatus);
     setEditPriority(task.priority || '');
     setEditDueDate(task.dueDate ? dayjs(task.dueDate) : null);
-    setEditAssignees(
-      Array.isArray(task.assignee) ? task.assignee.map((a: any) => a?.toString()) : []
-    );
+
+    // Handle assignee - extract IDs from populated objects
+    const assigneeIds = Array.isArray(task.assignee)
+      ? task.assignee
+          .map((a: any) => {
+            if (typeof a === 'object' && a !== null) {
+              return (a._id || a.id || a).toString();
+            }
+            return a?.toString();
+          })
+          .filter(Boolean)
+      : [];
+    setEditAssignees(assigneeIds);
+    console.log('[TaskDetails] Edit modal assignee IDs:', assigneeIds);
+
     setTags1(Array.isArray(task.tags) ? task.tags : []);
     setEditModalError(null);
     setEditFieldErrors({});
@@ -282,17 +382,15 @@ const TaskDetails = () => {
         priority: editPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
         dueDate: editDueDate ? editDueDate.format('YYYY-MM-DD') : undefined,
         tags: validTags,
-        assignee: editAssignees.join(','),
+        assignee: editAssignees, // Send as array to match backend schema
       };
 
       const success = await updateTaskAPI(taskId, updateData);
       if (success) {
         // Reload task to get updated data
         await loadTask();
-        // Broadcast via Socket.IO for real-time updates
-        if (socket) {
-          socket.emit('task:updated', { taskId, ...updateData });
-        }
+        // Socket.IO broadcast is handled by backend via socketBroadcaster.js
+        // No need to emit manually here
       } else {
         setEditModalError('Failed to update task');
       }
@@ -326,7 +424,7 @@ const TaskDetails = () => {
     try {
       // Update assignees only
       const success = await updateTaskAPI(taskId, {
-        assignee: selectedNewAssignees.join(','),
+        assignee: selectedNewAssignees, // Send as array to match backend schema
       });
 
       if (success) {
@@ -341,10 +439,8 @@ const TaskDetails = () => {
         setAssigneeModalError(null);
         // Reload task
         await loadTask();
-        // Broadcast via Socket.IO for real-time updates
-        if (socket) {
-          socket.emit('task:updated', { taskId, assignee: selectedNewAssignees.join(',') });
-        }
+        // Socket.IO broadcast is handled by backend via socketBroadcaster.js
+        // No need to emit manually here
       } else {
         setAssigneeModalError('Failed to add assignees');
       }
@@ -356,25 +452,28 @@ const TaskDetails = () => {
     }
   }, [taskId, selectedNewAssignees, updateTaskAPI, loadTask, socket]);
 
-  // Handle Add Assignee Modal Show - Load team members and pre-select assigned employees
+  // Handle Add Assignee Modal Show - Pre-select assigned employees
+  // Project members are already loaded from projectDetails via REST
   useEffect(() => {
     const assigneeModal = document.getElementById('add_assignee_modal');
-    if (!assigneeModal || !socket) return;
+    if (!assigneeModal) return;
 
     const handleModalShow = () => {
-      // Load project members when modal opens
-      if (task?.projectId) {
-        socket.emit('project:getMembers', { projectId: task.projectId });
-      }
-
-      // Pre-select already assigned employees
+      // Pre-select already assigned employees - extract IDs from populated objects
       if (task?.assignee) {
-        const assigneeArray =
-          typeof task.assignee === 'string'
+        const assigneeArray = Array.isArray(task.assignee)
+          ? task.assignee
+              .map((a: any) => {
+                if (typeof a === 'object' && a !== null) {
+                  return (a._id || a.id || a).toString();
+                }
+                return a?.toString();
+              })
+              .filter(Boolean)
+          : typeof task.assignee === 'string'
             ? task.assignee.split(',').filter((a) => a.trim())
-            : Array.isArray(task.assignee)
-              ? task.assignee
-              : [];
+            : [];
+        console.log('[TaskDetails] Add Assignee modal - pre-selected IDs:', assigneeArray);
         setSelectedNewAssignees(assigneeArray);
       }
     };
@@ -384,7 +483,7 @@ const TaskDetails = () => {
     return () => {
       assigneeModal.removeEventListener('show.bs.modal', handleModalShow);
     };
-  }, [task?.projectId, task?.assignee, socket]);
+  }, [task?.assignee]);
 
   if (loading) {
     return (
@@ -594,7 +693,7 @@ const TaskDetails = () => {
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
                         {task.tags && task.tags.length > 0 ? (
-                          task.tags.map((tag: string, index: number) => (
+                          task.tags.map((tag: any, index: number) => (
                             <Link
                               key={index}
                               to="#"
@@ -602,7 +701,7 @@ const TaskDetails = () => {
                                 index % 2 === 0 ? 'bg-pink' : 'badge-info'
                               }`}
                             >
-                              {tag}
+                              {typeof tag === 'string' ? tag : tag?.name || 'Tag'}
                             </Link>
                           ))
                         ) : (
@@ -621,12 +720,32 @@ const TaskDetails = () => {
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">
                       <p className="mb-0">Project</p>
                       <h6 className="fw-normal">
-                        {projectDetails?.projectId || task.projectId || ''} -{' '}
-                        {projectDetails?.title ||
-                          projectDetails?.name ||
-                          task.projectName ||
-                          task.project ||
-                          'No project assigned'}
+                        {(() => {
+                          // Get project ID
+                          const projectIdDisplay =
+                            projectDetails?.projectId ||
+                            (typeof task.projectId === 'object'
+                              ? task.projectId?.projectId || task.projectId?._id
+                              : task.projectId) ||
+                            '';
+
+                          // Get project name
+                          const projectName =
+                            projectDetails?.name ||
+                            projectDetails?.title ||
+                            task.projectName ||
+                            (typeof task.project === 'object'
+                              ? task.project?.name || task.project?.title
+                              : task.project) ||
+                            (typeof task.projectId === 'object'
+                              ? task.projectId?.name || task.projectId?.title
+                              : '') ||
+                            'No project assigned';
+
+                          return projectIdDisplay
+                            ? `${projectIdDisplay} - ${projectName}`
+                            : projectName;
+                        })()}
                       </h6>
                     </div>
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">

@@ -1,3 +1,4 @@
+import { useUser } from '@clerk/clerk-react';
 import { DatePicker, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +22,31 @@ import { all_routes } from '../../router/all_routes';
 
 const ProjectDetails = () => {
   const { projectId } = useParams();
+  const { user: clerkUser } = useUser();
+
+  // Log user metadata for verification
+  useEffect(() => {
+    if (clerkUser) {
+      const metadata = clerkUser.publicMetadata as any;
+      const companyId = metadata?.companyId || metadata?.company;
+      const employeeId = metadata?.employeeId;
+
+      console.log('[ProjectDetails] ✅ User Metadata Verification:', {
+        userId: clerkUser.id,
+        role: metadata?.role,
+        companyId: companyId || '❌ MISSING',
+        employeeId: employeeId || '❌ MISSING - Add this to Clerk publicMetadata',
+        rawMetadata: metadata,
+      });
+
+      if (!employeeId) {
+        console.warn('[ProjectDetails] ⚠️ employeeId not found in Clerk user metadata!');
+        console.warn('[ProjectDetails] 💡 Add it via Clerk Dashboard or API:');
+        console.warn(`   publicMetadata.employeeId = "<employee_id_from_database>"`);
+      }
+    }
+  }, [clerkUser]);
+
   const {
     tasks: tasksFromHook,
     loading: tasksLoading,
@@ -69,6 +95,7 @@ const ProjectDetails = () => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('Medium');
+  const [taskStatus, setTaskStatus] = useState(''); // Will be set to "To Do" status key
   const [taskDueDate, setTaskDueDate] = useState<Dayjs | null>(null);
   const [taskTags, setTaskTags] = useState<string[]>([]);
   const [isSavingTask, setIsSavingTask] = useState(false);
@@ -166,7 +193,12 @@ const ProjectDetails = () => {
       console.log('[ProjectDetails] Project Manager:', projectData?.projectManager);
 
       if (projectData) {
-        setProject(projectData);
+        // Map dueDate to endDate for frontend consistency
+        const mappedProject = {
+          ...projectData,
+          endDate: projectData.dueDate || projectData.endDate,
+        };
+        setProject(mappedProject);
       } else {
         setError('Failed to load project details');
       }
@@ -200,9 +232,20 @@ const ProjectDetails = () => {
   // Sync task statuses from hook
   useEffect(() => {
     if (statusesFromHook && Array.isArray(statusesFromHook)) {
+      console.log('[ProjectDetails] Task statuses loaded:', statusesFromHook);
       setTaskStatuses(statusesFromHook);
+
+      // Set default task status to "To Do" for add task modal
+      if (!taskStatus && statusesFromHook.length > 0) {
+        const todoStatus = statusesFromHook.find(
+          (s) => s.key.toLowerCase() === 'todo' || s.name.toLowerCase() === 'to do'
+        );
+        const defaultStatus = todoStatus || statusesFromHook[0];
+        console.log('[ProjectDetails] Setting default task status:', defaultStatus.key);
+        setTaskStatus(defaultStatus.key);
+      }
     }
-  }, [statusesFromHook]);
+  }, [statusesFromHook, taskStatus]);
 
   const loadProjectNotes = useCallback(async () => {
     if (!project?._id) return;
@@ -337,13 +380,18 @@ const ProjectDetails = () => {
       modalElement.setAttribute('aria-hidden', 'true');
       modalElement.style.display = 'none';
     }
-    document.querySelectorAll('.modal-backdrop').forEach((node) => {
-      if (node && node.parentNode) {
-        node.parentNode.removeChild(node);
-      }
-    });
-    document.body.classList.remove('modal-open');
-    document.body.style.removeProperty('padding-right');
+
+    // Use timeout to ensure Bootstrap has finished its animations
+    setTimeout(() => {
+      document.querySelectorAll('.modal-backdrop').forEach((node) => {
+        if (node && node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+      });
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('padding-right');
+      document.body.style.removeProperty('overflow');
+    }, 300);
   }, []);
 
   // Clear field error when user starts typing
@@ -699,12 +747,33 @@ const ProjectDetails = () => {
       if (success) {
         await loadProject();
         closeModalById('add_team_members_modal');
+        // Extra cleanup to ensure backdrop is removed
+        setTimeout(() => {
+          document.querySelectorAll('.modal-backdrop').forEach((node) => {
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+          document.body.style.removeProperty('overflow');
+        }, 400);
       } else {
         setMemberModalError('Failed to update team members');
       }
     } catch (error) {
       console.error('[ProjectDetails] Error updating team members:', error);
       setMemberModalError('An error occurred while updating team members');
+      // Ensure backdrop is removed even on error
+      setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach((node) => {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+        });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+      }, 100);
     } finally {
       setIsSavingMembers(false);
     }
@@ -721,12 +790,33 @@ const ProjectDetails = () => {
       if (success) {
         await loadProject();
         closeModalById('add_team_leads_modal');
+        // Extra cleanup to ensure backdrop is removed
+        setTimeout(() => {
+          document.querySelectorAll('.modal-backdrop').forEach((node) => {
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+          document.body.style.removeProperty('overflow');
+        }, 400);
       } else {
         setLeadModalError('Failed to update team leads');
       }
     } catch (error) {
       console.error('[ProjectDetails] Error updating team leads:', error);
       setLeadModalError('An error occurred while updating team leads');
+      // Ensure backdrop is removed even on error
+      setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach((node) => {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+        });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+      }, 100);
     } finally {
       setIsSavingLeads(false);
     }
@@ -743,16 +833,72 @@ const ProjectDetails = () => {
       if (success) {
         await loadProject();
         closeModalById('add_project_managers_modal');
+        // Extra cleanup to ensure backdrop is removed
+        setTimeout(() => {
+          document.querySelectorAll('.modal-backdrop').forEach((node) => {
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+          document.body.style.removeProperty('overflow');
+        }, 400);
       } else {
         setManagerModalError('Failed to update project managers');
       }
     } catch (error) {
       console.error('[ProjectDetails] Error updating project managers:', error);
       setManagerModalError('An error occurred while updating project managers');
+      // Ensure backdrop is removed even on error
+      setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach((node) => {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+        });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+      }, 100);
     } finally {
       setIsSavingManagers(false);
     }
   }, [project?._id, selectedManagers, updateProjectAPI, loadProject, closeModalById]);
+
+  // Reset modal handlers - restore current project data when modals are closed
+  const resetTeamMembersModal = useCallback(() => {
+    if (Array.isArray(project?.teamMembers)) {
+      const memberIds = project.teamMembers.map((m: any) =>
+        typeof m === 'string' ? m : m._id || m
+      );
+      setSelectedMembers(memberIds);
+    } else {
+      setSelectedMembers([]);
+    }
+    setMemberModalError(null);
+  }, [project?.teamMembers]);
+
+  const resetTeamLeadsModal = useCallback(() => {
+    if (Array.isArray(project?.teamLeader)) {
+      const leadIds = project.teamLeader.map((m: any) => (typeof m === 'string' ? m : m._id || m));
+      setSelectedLeads(leadIds);
+    } else {
+      setSelectedLeads([]);
+    }
+    setLeadModalError(null);
+  }, [project?.teamLeader]);
+
+  const resetProjectManagersModal = useCallback(() => {
+    if (Array.isArray(project?.projectManager)) {
+      const managerIds = project.projectManager.map((m: any) =>
+        typeof m === 'string' ? m : m._id || m
+      );
+      setSelectedManagers(managerIds);
+    } else {
+      setSelectedManagers([]);
+    }
+    setManagerModalError(null);
+  }, [project?.projectManager]);
 
   // Validate a single field and return error message
   const validateField = (fieldName: string, value: any): string => {
@@ -1033,6 +1179,7 @@ const ProjectDetails = () => {
     setTaskTitle('');
     setTaskDescription('');
     setTaskPriority('Medium');
+    // Keep taskStatus - it will be reset to default on next open
     setTaskDueDate(null);
     setTaskTags([]);
     setSelectedAssignees([]);
@@ -1058,14 +1205,14 @@ const ProjectDetails = () => {
 
     try {
       const taskData: Partial<Task> = {
-        project: project._id,
+        projectId: project._id,
         title: taskTitle,
         description: taskDescription,
         priority: taskPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
         tags: validTags,
-        assignee: selectedAssignees.join(','),
+        assignee: selectedAssignees, // Send as array to match backend schema
         dueDate: taskDueDate ? taskDueDate.format('YYYY-MM-DD') : undefined,
-        status: 'Pending' as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: taskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
       };
 
       const success = await createTaskAPI(taskData);
@@ -1098,17 +1245,59 @@ const ProjectDetails = () => {
 
   const handleOpenEditTask = useCallback(
     (task: any) => {
+      console.log('[ProjectDetails] Opening edit task modal:', {
+        taskStatus: task.status,
+        availableStatuses: taskStatuses,
+      });
+
       setEditingTask(task);
       setEditTaskTitle(task.title || '');
       setEditTaskDescription(task.description || '');
       setEditTaskPriority(task.priority || 'Medium');
       setEditTaskDueDate(task.dueDate ? dayjs(task.dueDate) : null);
-      const matchedStatus = findMatchingStatus(task.status, taskStatuses);
+
+      // Match status more flexibly
+      let matchedStatus = '';
+      if (task.status && taskStatuses && taskStatuses.length > 0) {
+        matchedStatus = findMatchingStatus(task.status, taskStatuses);
+
+        // If no match found, try to find by partial match or use first status
+        if (!matchedStatus) {
+          console.warn('[ProjectDetails] No matching status found for:', task.status);
+          console.log(
+            '[ProjectDetails] Available statuses:',
+            taskStatuses.map((s) => ({ key: s.key, name: s.name }))
+          );
+          // Default to first status if no match
+          matchedStatus = taskStatuses[0]?.key || '';
+        }
+      }
+
+      console.log('[ProjectDetails] Matched status:', matchedStatus);
       setEditTaskStatus(matchedStatus);
       setEditTaskTags(Array.isArray(task.tags) ? task.tags : []);
-      setEditTaskAssignees(
-        Array.isArray(task.assignee) ? task.assignee.map((a: any) => a.toString()) : []
-      );
+
+      // Map assignees - handle both ObjectId strings and employee objects
+      const assigneeIds = Array.isArray(task.assignee)
+        ? task.assignee
+            .map((a: any) => {
+              // If it's an object, try to get _id, id, or employeeId
+              if (typeof a === 'object' && a !== null) {
+                return (a._id || a.id || a.employeeId || '').toString();
+              }
+              // Otherwise treat as ID string
+              return a.toString();
+            })
+            .filter(Boolean)
+        : [];
+
+      console.log('[ProjectDetails] Setting edit task assignees:', {
+        taskAssignee: task.assignee,
+        mappedIds: assigneeIds,
+        availableOptions: assigneeChoose.map((opt) => ({ value: opt.value, label: opt.label })),
+      });
+
+      setEditTaskAssignees(assigneeIds);
       setEditTaskModalError(null);
       setEditTaskFieldErrors({});
     },
@@ -1190,7 +1379,7 @@ const ProjectDetails = () => {
         priority: editTaskPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
         status: editTaskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
         tags: validTags,
-        assignee: editTaskAssignees.join(','),
+        assignee: editTaskAssignees, // Send as array to match backend schema
         dueDate: editTaskDueDate ? editTaskDueDate.format('YYYY-MM-DD') : undefined,
       };
 
@@ -1273,6 +1462,17 @@ const ProjectDetails = () => {
       if (success) {
         await loadProject(); // Reload to get updated data
         closeModalById('edit_project');
+        // Extra cleanup to ensure backdrop is removed
+        setTimeout(() => {
+          document.querySelectorAll('.modal-backdrop').forEach((node) => {
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+          document.body.style.removeProperty('overflow');
+        }, 400);
         setIsSavingProject(false);
       } else {
         setEditModalError('Failed to update project');
@@ -1282,6 +1482,17 @@ const ProjectDetails = () => {
       console.error('[ProjectDetails] Error updating project:', error);
       setEditModalError('An error occurred while updating the project');
       setIsSavingProject(false);
+      // Ensure backdrop is removed even on error
+      setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach((node) => {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+        });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+        document.body.style.removeProperty('overflow');
+      }, 100);
     }
   }, [
     updateProjectAPI,
@@ -1325,6 +1536,17 @@ const ProjectDetails = () => {
       if (success) {
         await loadProject(); // Reload to get updated data
         closeModalById('edit_project');
+        // Extra cleanup to ensure backdrop is removed
+        setTimeout(() => {
+          document.querySelectorAll('.modal-backdrop').forEach((node) => {
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+          document.body.style.removeProperty('overflow');
+        }, 400);
         setIsSavingProject(false);
       } else {
         setEditModalError('Failed to update project');
@@ -1334,6 +1556,17 @@ const ProjectDetails = () => {
       console.error('[ProjectDetails] Error updating project members:', error);
       setEditModalError('An error occurred while updating the project');
       setIsSavingProject(false);
+      // Ensure backdrop is removed even on error
+      setTimeout(() => {
+        document.querySelectorAll('.modal-backdrop').forEach((node) => {
+          if (node && node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+        });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+        document.body.style.removeProperty('overflow');
+      }, 100);
     }
   }, [
     updateProjectAPI,
@@ -1365,6 +1598,27 @@ const ProjectDetails = () => {
     [project?._id, updateProjectAPI, loadProject]
   );
 
+  // Setup modal event listeners for reset on close
+  useEffect(() => {
+    const memberModal = document.getElementById('add_team_members_modal');
+    const leadModal = document.getElementById('add_team_leads_modal');
+    const managerModal = document.getElementById('add_project_managers_modal');
+
+    const handleMemberModalHidden = () => resetTeamMembersModal();
+    const handleLeadModalHidden = () => resetTeamLeadsModal();
+    const handleManagerModalHidden = () => resetProjectManagersModal();
+
+    memberModal?.addEventListener('hidden.bs.modal', handleMemberModalHidden);
+    leadModal?.addEventListener('hidden.bs.modal', handleLeadModalHidden);
+    managerModal?.addEventListener('hidden.bs.modal', handleManagerModalHidden);
+
+    return () => {
+      memberModal?.removeEventListener('hidden.bs.modal', handleMemberModalHidden);
+      leadModal?.removeEventListener('hidden.bs.modal', handleLeadModalHidden);
+      managerModal?.removeEventListener('hidden.bs.modal', handleManagerModalHidden);
+    };
+  }, [resetTeamMembersModal, resetTeamLeadsModal, resetProjectManagersModal]);
+
   useEffect(() => {
     if (Array.isArray(project?.teamMembers)) {
       const memberIds = project.teamMembers.map((m: any) =>
@@ -1389,6 +1643,7 @@ const ProjectDetails = () => {
       console.log('[ProjectDetails] Syncing project data:', {
         startDate: project.startDate,
         endDate: project.endDate,
+        tags: project.tags,
       });
       setEditName(project.name || '');
       setEditClient(project.client || '');
@@ -1398,6 +1653,10 @@ const ProjectDetails = () => {
       setEditDescription(project.description || '');
       setEditStatus(project.status || 'Active');
       setEditTags(Array.isArray(project.tags) ? project.tags : []);
+      console.log(
+        '[ProjectDetails] Tags set to editTags:',
+        Array.isArray(project.tags) ? project.tags : []
+      );
       const parsedStart = parseDateValue(project.startDate);
       const parsedEnd = parseDateValue(project.endDate);
       setEditStartDate(parsedStart);
@@ -1779,6 +2038,7 @@ const ProjectDetails = () => {
                             className="d-flex align-items-center fs-12"
                             data-bs-toggle="modal"
                             data-bs-target="#add_team_members_modal"
+                            onClick={resetTeamMembersModal}
                           >
                             <i className="ti ti-circle-plus me-1" />
                             Add New
@@ -1827,6 +2087,7 @@ const ProjectDetails = () => {
                             className="d-flex align-items-center fs-12"
                             data-bs-toggle="modal"
                             data-bs-target="#add_team_leads_modal"
+                            onClick={resetTeamLeadsModal}
                           >
                             <i className="ti ti-circle-plus me-1" />
                             Add New
@@ -1875,6 +2136,7 @@ const ProjectDetails = () => {
                             className="d-flex align-items-center fs-12"
                             data-bs-toggle="modal"
                             data-bs-target="#add_project_managers_modal"
+                            onClick={resetProjectManagersModal}
                           >
                             <i className="ti ti-circle-plus me-1" />
                             Add New
@@ -2483,6 +2745,7 @@ const ProjectDetails = () => {
                 className="btn btn-outline-light border me-2"
                 data-bs-dismiss="modal"
                 disabled={isSavingMembers}
+                onClick={resetTeamMembersModal}
               >
                 Cancel
               </button>
@@ -2542,6 +2805,7 @@ const ProjectDetails = () => {
                 className="btn btn-outline-light border me-2"
                 data-bs-dismiss="modal"
                 disabled={isSavingLeads}
+                onClick={resetTeamLeadsModal}
               >
                 Cancel
               </button>
@@ -2603,6 +2867,7 @@ const ProjectDetails = () => {
                 className="btn btn-outline-light border me-2"
                 data-bs-dismiss="modal"
                 disabled={isSavingManagers}
+                onClick={resetProjectManagersModal}
               >
                 Cancel
               </button>
@@ -2925,28 +3190,6 @@ const ProjectDetails = () => {
                       )}
                       <div className="row">
                         <div className="col-md-12">
-                          <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                            <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                              <i className="ti ti-photo text-gray-2 fs-16" />
-                            </div>
-                            <div className="profile-upload">
-                              <div className="mb-2">
-                                <h6 className="mb-1">Upload Project Logo</h6>
-                                <p className="fs-12">Image should be below 4 mb</p>
-                              </div>
-                              <div className="profile-uploader d-flex align-items-center">
-                                <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                  Upload
-                                  <input type="file" className="form-control image-sign" multiple />
-                                </div>
-                                <Link to="#" className="btn btn-light btn-sm">
-                                  Cancel
-                                </Link>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
                           <div className="mb-3">
                             <label className="form-label">
                               Project Name <span className="text-danger">*</span>
@@ -3129,12 +3372,6 @@ const ProjectDetails = () => {
                                 {fieldErrors.description}
                               </div>
                             )}
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="input-block mb-0">
-                            <label className="form-label">Upload Files</label>
-                            <input className="form-control" type="file" />
                           </div>
                         </div>
                       </div>
@@ -3945,8 +4182,30 @@ const ProjectDetails = () => {
                   </div>
                   <div className="col-12">
                     <div className="mb-0">
-                      <label className="form-label">Status</label>
-                      <input type="text" className="form-control" value="To do" disabled readOnly />
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className="select"
+                        options={taskStatuses.map((status) => ({
+                          value: status.key,
+                          label: status.name,
+                        }))}
+                        value={
+                          taskStatuses.find((status) => status.key === taskStatus)
+                            ? {
+                                value: taskStatus,
+                                label: taskStatuses.find((status) => status.key === taskStatus)
+                                  ?.name,
+                              }
+                            : taskStatuses.length > 0
+                              ? { value: taskStatuses[0].key, label: taskStatuses[0].name }
+                              : { value: '', label: 'Select Status' }
+                        }
+                        onChange={(option: any) => {
+                          setTaskStatus(option?.value || '');
+                        }}
+                      />
                     </div>
                   </div>
                 </div>

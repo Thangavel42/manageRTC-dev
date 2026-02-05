@@ -14,7 +14,7 @@
 export const successResponse = (data, message = 'Success', pagination = null) => {
   const response = {
     success: true,
-    data
+    data,
   };
 
   if (message && message !== 'Success') {
@@ -43,8 +43,8 @@ export const errorResponse = (code, message, statusCode = 400, details = []) => 
     error: {
       code,
       message,
-      details
-    }
+      details,
+    },
   };
 };
 
@@ -86,7 +86,7 @@ export const buildPagination = (page, limit, total) => {
     total,
     pages,
     hasNext: page < pages,
-    hasPrev: page > 1
+    hasPrev: page > 1,
   };
 };
 
@@ -100,11 +100,7 @@ export const buildPagination = (page, limit, total) => {
  * @returns {Object} Response with pagination metadata
  */
 export const paginatedResponse = (data, page, limit, total) => {
-  return successResponse(
-    data,
-    null,
-    buildPagination(page, limit, total)
-  );
+  return successResponse(data, null, buildPagination(page, limit, total));
 };
 
 /**
@@ -117,20 +113,14 @@ export const paginatedResponse = (data, page, limit, total) => {
  * @returns {Promise<Object>} Result with data and pagination metadata
  */
 export const filterAndPaginate = async (model, filter = {}, options = {}) => {
-  const {
-    page = 1,
-    limit = 20,
-    sort = { createdAt: -1 },
-    populate = [],
-    select = null
-  } = options;
+  const { page = 1, limit = 20, sort = { createdAt: -1 }, populate = [], select = null } = options;
 
   // Build query
   let query = model.find(filter);
 
   // Apply populate
   if (populate.length > 0) {
-    populate.forEach(pop => {
+    populate.forEach((pop) => {
       query = query.populate(pop);
     });
   }
@@ -152,7 +142,7 @@ export const filterAndPaginate = async (model, filter = {}, options = {}) => {
 
   return {
     data,
-    pagination: buildPagination(page, limit, total)
+    pagination: buildPagination(page, limit, total),
   };
 };
 
@@ -169,8 +159,8 @@ export const buildSearchFilter = (searchTerm, fields = ['name', 'email']) => {
     return {};
   }
 
-  const orConditions = fields.map(field => ({
-    [field]: { $regex: searchTerm, $options: 'i' }
+  const orConditions = fields.map((field) => ({
+    [field]: { $regex: searchTerm, $options: 'i' },
   }));
 
   return { $or: orConditions };
@@ -210,7 +200,7 @@ export const buildDateRangeFilter = (startDate, endDate, field = 'createdAt') =>
  */
 export const sanitizeProjection = (fields = ['password', '__v']) => {
   const projection = {};
-  fields.forEach(field => {
+  fields.forEach((field) => {
     projection[field] = 0;
   });
   return projection;
@@ -226,8 +216,9 @@ export const extractUser = (req) => {
   return {
     userId: req.user?.userId,
     companyId: req.user?.companyId,
+    employeeId: req.user?.employeeId,
     role: req.user?.role,
-    email: req.user?.email
+    email: req.user?.email,
   };
 };
 
@@ -245,7 +236,7 @@ export const buildAuditFields = (userId, isUpdate = false) => {
   if (isUpdate) {
     return {
       updatedAt: timestamp,
-      updatedBy: userId
+      updatedBy: userId,
     };
   }
 
@@ -253,7 +244,7 @@ export const buildAuditFields = (userId, isUpdate = false) => {
     createdAt: timestamp,
     createdBy: userId,
     updatedAt: timestamp,
-    updatedBy: userId
+    updatedBy: userId,
   };
 };
 
@@ -323,12 +314,15 @@ export const sendNoContent = (res) => {
  * @returns {Object} Bulk operation response
  */
 export const bulkOperationResponse = (successCount, failureCount, errors = []) => {
-  return successResponse({
-    successCount,
-    failureCount,
-    total: successCount + failureCount,
-    errors: errors.length > 0 ? errors : undefined
-  }, `Bulk operation completed: ${successCount} succeeded, ${failureCount} failed`);
+  return successResponse(
+    {
+      successCount,
+      failureCount,
+      total: successCount + failureCount,
+      errors: errors.length > 0 ? errors : undefined,
+    },
+    `Bulk operation completed: ${successCount} succeeded, ${failureCount} failed`
+  );
 };
 
 /**
@@ -340,11 +334,14 @@ export const bulkOperationResponse = (successCount, failureCount, errors = []) =
  * @returns {Object} Stats response
  */
 export const statsResponse = (stats, period = 'all') => {
-  return successResponse({
-    ...stats,
-    period,
-    generatedAt: new Date().toISOString()
-  }, 'Statistics retrieved successfully');
+  return successResponse(
+    {
+      ...stats,
+      period,
+      generatedAt: new Date().toISOString(),
+    },
+    'Statistics retrieved successfully'
+  );
 };
 
 /**
@@ -357,12 +354,15 @@ export const statsResponse = (stats, period = 'all') => {
  * @returns {Object} Export response
  */
 export const exportResponse = (fileUrl, recordCount, format = 'excel') => {
-  return successResponse({
-    fileUrl,
-    recordCount,
-    format,
-    exportedAt: new Date().toISOString()
-  }, `Data exported successfully as ${format.toUpperCase()}`);
+  return successResponse(
+    {
+      fileUrl,
+      recordCount,
+      format,
+      exportedAt: new Date().toISOString(),
+    },
+    `Data exported successfully as ${format.toUpperCase()}`
+  );
 };
 
 export default {
@@ -396,5 +396,5 @@ export default {
   sendSuccess,
   sendCreated,
   sendError,
-  sendNoContent
+  sendNoContent,
 };

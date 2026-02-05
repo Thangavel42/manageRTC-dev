@@ -9,7 +9,9 @@ import {
   buildNotFoundError,
   buildValidationError,
 } from '../../middleware/errorHandler.js';
+import Employee from '../../models/employee/employee.schema.js';
 import Project from '../../models/project/project.schema.js';
+import Task from '../../models/task/task.schema.js';
 import {
   buildDateRangeFilter,
   buildSearchFilter,
@@ -45,19 +47,16 @@ export const getProjects = asyncHandler(async (req, res) => {
     ? getTenantModel(user.companyId, 'Project', Project.schema)
     : Project;
 
-  // Build filter - superadmins see all projects (case-insensitive)
+  // Build filter - in multi-tenant architecture, database isolation handles tenant separation
+  // Only filter by isDeleted (or missing field for backward compatibility)
   let filter = {
-    isDeleted: false,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
-  // Only filter by companyId for non-superadmin users (case-insensitive)
-  if (user.role?.toLowerCase() !== 'superadmin') {
-    filter.companyId = user.companyId;
-  }
-
   // Debug logging - lightweight
-  console.log('[getProjects] Filter:', JSON.stringify(filter));
   console.log('[getProjects] Using database:', user.companyId || 'default');
+  console.log('[getProjects] Filter:', JSON.stringify(filter));
+  console.log('[getProjects] User role:', user.role);
 
   // Apply status filter
   if (status) {
@@ -95,7 +94,7 @@ export const getProjects = asyncHandler(async (req, res) => {
   }
 
   // Simplified query - bypass filterAndPaginate due to timeout issues
-  console.log('[getProjects] Fetching projects with filter:', JSON.stringify(filter));
+  // console.log('[getProjects] Fetching projects with filter:', JSON.stringify(filter));
 
   const projects = await ProjectModel.find(filter)
     .sort(sort)
@@ -104,15 +103,60 @@ export const getProjects = asyncHandler(async (req, res) => {
 
   console.log('[getProjects] Found', projects.length, 'projects');
 
-  // Add overdue flag to each project
-  const result = projects.map((project) => {
-    const isOverdue =
-      project.status !== 'Completed' && project.dueDate && new Date(project.dueDate) < new Date();
-    return {
-      ...project,
-      isOverdue,
-    };
-  });
+  // Debug: If no projects found, check without filters
+  if (projects.length === 0) {
+    const totalInDb = await ProjectModel.countDocuments({});
+    console.log('[getProjects] Total projects in DB (no filter):', totalInDb);
+
+    const deletedCount = await ProjectModel.countDocuments({ isDeleted: true });
+    console.log('[getProjects] Deleted projects:', deletedCount);
+
+    const withCompanyId = await ProjectModel.countDocuments({ companyId: user.companyId });
+    console.log('[getProjects] Projects with matching companyId:', withCompanyId);
+
+    // Sample documents
+    const samples = await ProjectModel.find({}).limit(2).lean();
+    console.log(
+      '[getProjects] Sample documents:',
+      samples.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        companyId: p.companyId,
+        isDeleted: p.isDeleted,
+        hasIsDeleted: p.hasOwnProperty('isDeleted'),
+      }))
+    );
+  }
+
+  // Get tenant-specific Task model for task counts
+  const TaskModel = user.companyId ? getTenantModel(user.companyId, 'Task', Task.schema) : Task;
+
+  // Add overdue flag and task counts to each project
+  const result = await Promise.all(
+    projects.map(async (project) => {
+      const isOverdue =
+        project.status !== 'Completed' && project.dueDate && new Date(project.dueDate) < new Date();
+
+      // Get task counts for this project
+      const totalTasks = await TaskModel.countDocuments({
+        projectId: project._id,
+        $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+      });
+
+      const completedTasks = await TaskModel.countDocuments({
+        projectId: project._id,
+        status: { $regex: /^completed$/i },
+        $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+      });
+
+      return {
+        ...project,
+        isOverdue,
+        taskCount: totalTasks,
+        completedTaskCount: completedTasks,
+      };
+    })
+  );
 
   return sendSuccess(res, result, 'Projects retrieved successfully');
 });
@@ -131,32 +175,68 @@ export const getProjectById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid project ID format');
   }
 
-  // Build filter - superadmins can access any project
+  // Build filter - in tenant-specific database, no need to filter by companyId
   const filter = {
     _id: id,
-    isDeleted: false,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
-  // Only filter by companyId for non-superadmin users (case-insensitive)
-  if (user.role?.toLowerCase() !== 'superadmin') {
-    filter.companyId = user.companyId;
-  }
-
-  // Get tenant-specific model
+  // Get tenant-specific models
   const ProjectModel = getProjectModel(user.companyId);
+  const EmployeeModel = getTenantModel(user.companyId, 'Employee', Employee.schema);
 
   // Find project
-  const project = await ProjectModel.findOne(filter)
-    .populate('teamLeader', 'firstName lastName fullName employeeId')
-    .populate('teamMembers', 'firstName lastName fullName employeeId')
-    .populate('projectManager', 'firstName lastName fullName employeeId');
+  const project = await ProjectModel.findOne(filter).lean();
 
   if (!project) {
     throw buildNotFoundError('Project', id);
   }
 
-  const result = project.toObject();
-  result.isOverdue = project.isOverdue;
+  console.log('[getProjectById] Project tags:', project.tags);
+
+  // Manually fetch employee details from tenant-specific Employee collection
+  try {
+    if (project.teamLeader) {
+      const leaders = Array.isArray(project.teamLeader) ? project.teamLeader : [project.teamLeader];
+      const leaderIds = leaders.map((id) =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+      project.teamLeader = await EmployeeModel.find({ _id: { $in: leaderIds } })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (project.teamMembers && project.teamMembers.length > 0) {
+      const memberIds = project.teamMembers.map((id) =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+      project.teamMembers = await EmployeeModel.find({ _id: { $in: memberIds } })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (project.projectManager) {
+      const managers = Array.isArray(project.projectManager)
+        ? project.projectManager
+        : [project.projectManager];
+      const managerIds = managers.map((id) =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+      project.projectManager = await EmployeeModel.find({ _id: { $in: managerIds } })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+  } catch (employeeError) {
+    console.error('[getProjectById] Error fetching employee details:', employeeError);
+    // Continue with the response even if employee fetching fails
+  }
+
+  // Add overdue flag
+  const result = {
+    ...project,
+    isOverdue:
+      project.status !== 'Completed' && project.dueDate && new Date(project.dueDate) < new Date(),
+  };
 
   return sendSuccess(res, result);
 });
@@ -180,24 +260,66 @@ export const createProject = asyncHandler(async (req, res) => {
   projectData.createdBy = user.userId;
   projectData.updatedBy = user.userId;
 
-  // Get tenant-specific model
+  // Get tenant-specific models
   const ProjectModel = getProjectModel(user.companyId);
+  const EmployeeModel = getTenantModel(user.companyId, 'Employee', Employee.schema);
 
   // Create project
   const project = await ProjectModel.create(projectData);
+  const projectObj = project.toObject();
 
-  // Populate references for response
-  await project.populate('teamLeader', 'firstName lastName fullName employeeId');
-  await project.populate('teamMembers', 'firstName lastName fullName employeeId');
-  await project.populate('projectManager', 'firstName lastName fullName employeeId');
+  // Manually fetch employee details from tenant-specific Employee collection
+  try {
+    if (projectObj.teamLeader) {
+      const leaderIds = (
+        Array.isArray(projectObj.teamLeader) ? projectObj.teamLeader : [projectObj.teamLeader]
+      ).map((id) => (typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id));
+
+      projectObj.teamLeader = await EmployeeModel.find({
+        _id: { $in: leaderIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (projectObj.teamMembers && projectObj.teamMembers.length > 0) {
+      const memberIds = projectObj.teamMembers.map((id) =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+
+      projectObj.teamMembers = await EmployeeModel.find({
+        _id: { $in: memberIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (projectObj.projectManager) {
+      const managerIds = (
+        Array.isArray(projectObj.projectManager)
+          ? projectObj.projectManager
+          : [projectObj.projectManager]
+      ).map((id) => (typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id));
+
+      projectObj.projectManager = await EmployeeModel.find({
+        _id: { $in: managerIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+  } catch (employeeError) {
+    console.error('[createProject] Error fetching employee details:', employeeError);
+    // Continue with the response even if employee fetching fails
+    // The project is already created, so we should still return success
+  }
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
   if (io) {
-    broadcastProjectEvents.created(io, user.companyId, project);
+    broadcastProjectEvents.created(io, user.companyId, projectObj);
   }
 
-  return sendCreated(res, project, 'Project created successfully');
+  return sendCreated(res, projectObj, 'Project created successfully');
 });
 
 /**
@@ -209,7 +331,9 @@ export const updateProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
-
+  // console.log('[updateProject] Update data received:', updateData);
+  // console.log('[updateProject] User:', user);
+  // console.log('[updateProject] Project ID to update:', id);
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid project ID format');
@@ -222,20 +346,22 @@ export const updateProject = asyncHandler(async (req, res) => {
   };
 
   // Only filter by companyId for non-superadmin users (case-insensitive)
-  if (user.role?.toLowerCase() !== 'superadmin') {
-    filter.companyId = user.companyId;
-  }
+  // if (user.role?.toLowerCase() !== 'superadmin') {
+  //   filter.companyId = user.companyId;
+  // }
 
-  // Get tenant-specific model
+  // Get tenant-specific models
   const ProjectModel = getProjectModel(user.companyId);
+  const EmployeeModel = getTenantModel(user.companyId, 'Employee', Employee.schema);
 
   // Find project
   const project = await ProjectModel.findOne(filter);
 
   if (!project) {
+    // console.log('[updateProject] Project not found with filter:', filter);
     throw buildNotFoundError('Project', id);
   }
-
+  // console.log('[updateProject] Found project to update:', project);
   // Update audit fields
   updateData.updatedBy = user.userId;
   updateData.updatedAt = new Date();
@@ -244,10 +370,50 @@ export const updateProject = asyncHandler(async (req, res) => {
   Object.assign(project, updateData);
   await project.save();
 
-  // Populate references for response
-  await project.populate('teamLeader', 'firstName lastName fullName employeeId');
-  await project.populate('teamMembers', 'firstName lastName fullName employeeId');
-  await project.populate('projectManager', 'firstName lastName fullName employeeId');
+  // const projectObj = project.toObject();
+
+  // Manually fetch employee details from tenant-specific Employee collection
+  try {
+    if (project.teamLeader) {
+      const leaderIds = (
+        Array.isArray(project.teamLeader) ? project.teamLeader : [project.teamLeader]
+      ).map((id) => (typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id));
+
+      project.teamLeader = await EmployeeModel.find({
+        _id: { $in: leaderIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (project.teamMembers && project.teamMembers.length > 0) {
+      const memberIds = project.teamMembers.map((id) =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+
+      project.teamMembers = await EmployeeModel.find({
+        _id: { $in: memberIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+
+    if (project.projectManager) {
+      const managerIds = (
+        Array.isArray(project.projectManager) ? project.projectManager : [project.projectManager]
+      ).map((id) => (typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id));
+
+      project.projectManager = await EmployeeModel.find({
+        _id: { $in: managerIds },
+      })
+        .select('firstName lastName employeeId _id')
+        .lean();
+    }
+  } catch (employeeError) {
+    console.error('[updateProject] Error fetching employee details:', employeeError);
+    // Continue with the response even if employee fetching fails
+    // The project is already saved, so we should still return success
+  }
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -294,9 +460,7 @@ export const deleteProject = asyncHandler(async (req, res) => {
   }
 
   // Check if project has active tasks
-  const TaskModel = user.companyId
-    ? getTenantModel(user.companyId, 'Task', mongoose.model('Task').schema)
-    : mongoose.model('Task');
+  const TaskModel = user.companyId ? getTenantModel(user.companyId, 'Task', Task.schema) : Task;
 
   const activeTaskCount = await TaskModel.countDocuments({
     projectId: id,
@@ -419,8 +583,8 @@ export const getMyProjects = asyncHandler(async (req, res) => {
   // Get tenant-specific models
   const ProjectModel = getProjectModel(user.companyId);
   const EmployeeModel = user.companyId
-    ? getTenantModel(user.companyId, 'Employee', mongoose.model('Employee').schema)
-    : mongoose.model('Employee');
+    ? getTenantModel(user.companyId, 'Employee', Employee.schema)
+    : Employee;
 
   // Find the Employee record for this user
   const employee = await EmployeeModel.findOne({ clerkUserId: user.userId });
@@ -445,9 +609,9 @@ export const getMyProjects = asyncHandler(async (req, res) => {
   }
 
   const projects = await ProjectModel.find(filter)
-    .populate('teamLeader', 'firstName lastName fullName employeeId')
-    .populate('teamMembers', 'firstName lastName fullName employeeId')
-    .populate('projectManager', 'firstName lastName fullName employeeId')
+    .populate('teamLeader', 'firstName lastName fullName employeeId Id')
+    .populate('teamMembers', 'firstName lastName fullName employeeId Id')
+    .populate('projectManager', 'firstName lastName fullName employeeId Id')
     .sort({ createdAt: -1 })
     .limit(parseInt(limit) || 50);
 

@@ -203,7 +203,6 @@ import ClientDetails from '../projects/client/clientdetails';
 import ClientList from '../projects/client/clientlist';
 import Project from '../projects/project/project';
 import ProjectDetails from '../projects/project/projectdetails';
-import ProjectList from '../projects/project/projectlist';
 import Task from '../projects/task/task';
 import TaskBoard from '../projects/task/task-board';
 import TaskDetails from '../projects/task/taskdetails';
@@ -1632,7 +1631,7 @@ export const publicRoutes = [
   },
   {
     path: routes.projectlist,
-    element: <ProjectList />,
+    element: <Project />,
     route: Route,
     roles: ['public'],
   },
