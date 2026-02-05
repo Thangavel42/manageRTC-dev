@@ -2,6 +2,7 @@ node_modules
 z-docs
 react-org
 .claude
+.claudesss
 # Build outputs
 dist/
 build/
