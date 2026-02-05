@@ -986,7 +986,7 @@
     .header {
         border-bottom: none;
         background: transparent;
-        width: 260px;
+        width: 0;
         @include respond-below(lg){
             position: relative;
             border-bottom: 1px solid $gray-200;

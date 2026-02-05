@@ -129,6 +129,7 @@ export interface Employee {
   companyName?: string;
   companyId?: string;
   role?: string;
+  profileImage?: string;
   enabledModules?: Record<PermissionModule, boolean>;
   permissions?: Record<PermissionModule, PermissionSet>;
   totalProjects?: number;
@@ -267,11 +268,18 @@ export const useEmployeesREST = () => {
       const response: ApiResponse<Employee[]> = await get('/employees', { params });
 
       if (response.success && response.data) {
-        // Normalize status for all employees
-        const normalizedEmployees = response.data.map((emp: Employee) => ({
-          ...emp,
-          status: normalizeStatus(emp.status)
-        }));
+        // Normalize status and avatarUrl/profileImage for all employees
+        const normalizedEmployees = response.data.map((emp: Employee) => {
+          const normalized = {
+            ...emp,
+            status: normalizeStatus(emp.status)
+          };
+          // Ensure avatarUrl is set from profileImage if not already set
+          if (!normalized.avatarUrl && (normalized as any).profileImage) {
+            normalized.avatarUrl = (normalized as any).profileImage;
+          }
+          return normalized;
+        });
 
         setEmployees(normalizedEmployees);
 
@@ -378,7 +386,12 @@ export const useEmployeesREST = () => {
       const response: ApiResponse<Employee> = await get(`/employees/${employeeId}`);
 
       if (response.success && response.data) {
-        return response.data;
+        const employee = response.data;
+        // Ensure avatarUrl is set from profileImage if not already set
+        if (!employee.avatarUrl && employee.profileImage) {
+          employee.avatarUrl = employee.profileImage;
+        }
+        return employee;
       }
       throw new Error(response.error?.message || 'Failed to fetch employee details');
     } catch (err: any) {
@@ -413,6 +426,30 @@ export const useEmployeesREST = () => {
   }, []);
 
   /**
+   * Check email availability
+   * REST API: POST /api/employees/check-duplicates
+   */
+  const checkEmailAvailability = useCallback(async (email: string): Promise<boolean> => {
+    try {
+      const response: ApiResponse = await post('/employees/check-duplicates', { email });
+
+      // If response is successful and data.done is true, email is available
+      return response.success && response.data?.done === true;
+    } catch (err: any) {
+      const errorResponse = err.response?.data;
+
+      // 409 Conflict means email is taken
+      if (err.response?.status === 409 && errorResponse?.field === 'email') {
+        return false;
+      }
+
+      // For other errors, log but return true (don't block form submission)
+      console.error('[useEmployeesREST] Email check error:', err);
+      return true;
+    }
+  }, []);
+
+  /**
    * Create new employee
    * REST API: POST /api/employees
    */
@@ -431,7 +468,6 @@ export const useEmployeesREST = () => {
         await post('/employees', payload);
 
       if (response.success && response.data) {
-        message.success('Employee created successfully!');
         // Refresh the list to get the updated employee
         await fetchEmployeesWithStats();
         return { success: true, employee: response.data.employee };
@@ -459,31 +495,10 @@ export const useEmployeesREST = () => {
       // User-friendly error messages based on error code
       if (errorCode === 'USERNAME_TAKEN') {
         errorMessage = 'Username is already taken. Please choose another.';
-        message.error({
-          content: errorMessage,
-          key: 'username-error',
-          duration: 5
-        });
       } else if (errorCode === 'EMAIL_EXISTS_IN_CLERK') {
         errorMessage = 'This email is already registered in the system.';
-        message.error({
-          content: errorMessage,
-          key: 'email-error',
-          duration: 5
-        });
       } else if (errorCode === 'PASSWORD_TOO_WEAK') {
         errorMessage = 'Password is too weak. The system will generate a secure password.';
-        message.warning({
-          content: errorMessage,
-          key: 'password-warning',
-          duration: 5
-        });
-      } else {
-        message.error({
-          content: errorMessage,
-          key: 'general-error',
-          duration: 5
-        });
       }
 
       setError(errorMessage);
@@ -741,6 +756,36 @@ export const useEmployeesREST = () => {
   }, []);
 
   /**
+   * Reassign employee-owned records and delete employee
+   * REST API: POST /api/employees/:id/reassign-delete
+   */
+  const reassignAndDeleteEmployee = useCallback(async (
+    employeeId: string,
+    reassignToEmployeeId: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response: ApiResponse = await post(`/employees/${employeeId}/reassign-delete`, {
+        reassignTo: reassignToEmployeeId
+      });
+
+      if (response.success) {
+        message.success('Employee reassigned and deleted successfully!');
+        return true;
+      }
+      throw new Error(response.error?.message || 'Failed to reassign and delete employee');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to reassign and delete employee';
+      setError(errorMessage);
+      message.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Update employee about section
    * REST API: PUT /api/employees/:id
    */
@@ -969,12 +1014,14 @@ export const useEmployeesREST = () => {
     updateEducationInfo,
     updateEmergencyContacts,
     updateExperienceInfo,
+    reassignAndDeleteEmployee,
     updateAboutInfo,
     deleteEmployee,
     searchEmployees,
     getDepartmentStats,
     checkDuplicates,
     checkUsernameAvailability,
+    checkEmailAvailability,
     checkLifecycleStatus
   };
 };

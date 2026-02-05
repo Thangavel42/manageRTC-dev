@@ -6,13 +6,14 @@
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { ObjectId } from 'mongodb';
-import { getTenantCollections } from '../../config/db.js';
+import { client, getTenantCollections } from '../../config/db.js';
 import {
     asyncHandler,
     buildConflictError,
     buildNotFoundError,
     buildValidationError
 } from '../../middleware/errorHandler.js';
+import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
     buildPagination,
     extractUser,
@@ -176,6 +177,24 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const pagination = buildPagination(pageNum, limitNum, total);
 
   return sendSuccess(res, employees, 'Employees retrieved successfully', 200, pagination);
+});
+
+/**
+ * @desc    Check employee lifecycle status (resignation/termination)
+ * @route   POST /api/employees/check-lifecycle-status
+ * @access  Private (Admin, HR, Superadmin)
+ */
+export const checkLifecycleStatus = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const { employeeId } = req.body || {};
+
+  if (!employeeId || typeof employeeId !== 'string') {
+    throw buildValidationError('employeeId', 'Employee ID is required');
+  }
+
+  const result = await checkEmployeeLifecycleStatus(user.companyId, employeeId);
+
+  return sendSuccess(res, result, 'Lifecycle status retrieved successfully');
 });
 
 /**
@@ -663,6 +682,145 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Reassign employee-owned records and delete employee (soft delete)
+ * @route   POST /api/employees/:id/reassign-delete
+ * @access  Private (Admin, Superadmin only)
+ */
+export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reassignTo } = req.body;
+  const user = extractUser(req);
+
+  console.log('[Employee Controller] reassignAndDeleteEmployee - id:', id, 'reassignTo:', reassignTo, 'companyId:', user.companyId);
+
+  if (!ObjectId.isValid(id)) {
+    throw buildValidationError('id', 'Invalid employee ID format');
+  }
+
+  if (!ObjectId.isValid(reassignTo)) {
+    throw buildValidationError('reassignTo', 'Invalid reassignment employee ID format');
+  }
+
+  if (id === reassignTo) {
+    throw buildValidationError('reassignTo', 'Reassignment employee must be different from the employee being deleted');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const oldEmployeeId = new ObjectId(id);
+  const newEmployeeId = new ObjectId(reassignTo);
+
+  const employee = await collections.employees.findOne({ _id: oldEmployeeId });
+  if (!employee) {
+    throw buildNotFoundError('Employee', id);
+  }
+
+  const reassignee = await collections.employees.findOne({ _id: newEmployeeId, isDeleted: { $ne: true } });
+  if (!reassignee) {
+    throw buildValidationError('reassignTo', 'Reassignment employee not found or inactive');
+  }
+
+  // Validate same department and designation
+  if (reassignee.departmentId?.toString() !== employee.departmentId?.toString()) {
+    throw buildValidationError('reassignTo', 'Reassignment employee must be from the same department');
+  }
+
+  if (reassignee.designationId?.toString() !== employee.designationId?.toString()) {
+    throw buildValidationError('reassignTo', 'Reassignment employee must have the same designation');
+  }
+
+  const session = client.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      // Tasks: reassign assignee array entries
+      await collections.tasks.updateMany(
+        { assignee: oldEmployeeId },
+        { $set: { 'assignee.$[elem]': newEmployeeId } },
+        { arrayFilters: [{ elem: oldEmployeeId }], session }
+      );
+
+      // Projects: reassign team members, leaders, managers
+      await collections.projects.updateMany(
+        { teamMembers: oldEmployeeId },
+        { $set: { 'teamMembers.$[elem]': newEmployeeId } },
+        { arrayFilters: [{ elem: oldEmployeeId }], session }
+      );
+      await collections.projects.updateMany(
+        { teamLeader: oldEmployeeId },
+        { $set: { 'teamLeader.$[elem]': newEmployeeId } },
+        { arrayFilters: [{ elem: oldEmployeeId }], session }
+      );
+      await collections.projects.updateMany(
+        { projectManager: oldEmployeeId },
+        { $set: { 'projectManager.$[elem]': newEmployeeId } },
+        { arrayFilters: [{ elem: oldEmployeeId }], session }
+      );
+
+      // Tickets: reassign assignedTo with full reassignee details
+      const reassignedToPayload = {
+        _id: newEmployeeId,
+        firstName: reassignee.firstName || '',
+        lastName: reassignee.lastName || '',
+        avatar: reassignee.avatar || reassignee.avatarUrl || 'assets/img/profiles/avatar-01.jpg',
+        email: reassignee.contact?.email || reassignee.email || '',
+        role: reassignee.role || 'IT Support Specialist'
+      };
+
+      await collections.tickets.updateMany(
+        { 'assignedTo._id': oldEmployeeId },
+        { $set: { assignedTo: reassignedToPayload } },
+        { session }
+      );
+
+      // Leads: reassign owner/assignee
+      await collections.leads.updateMany(
+        { owner: oldEmployeeId },
+        { $set: { owner: newEmployeeId } },
+        { session }
+      );
+      await collections.leads.updateMany(
+        { assignee: oldEmployeeId },
+        { $set: { assignee: newEmployeeId } },
+        { session }
+      );
+
+      // Soft delete employee
+      const deleteResult = await collections.employees.updateOne(
+        { _id: oldEmployeeId },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: user.userId,
+            updatedAt: new Date()
+          }
+        },
+        { session }
+      );
+
+      if (deleteResult.matchedCount === 0) {
+        throw new Error('Employee delete failed');
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const io = getSocketIO(req);
+  if (io) {
+    broadcastEmployeeEvents.deleted(io, user.companyId, employee.employeeId, user.userId);
+  }
+
+  return sendSuccess(res, {
+    _id: employee._id,
+    employeeId: employee.employeeId,
+    isDeleted: true,
+    deletedAt: new Date(),
+    reassignedTo: reassignTo
+  }, 'Employee reassigned and deleted successfully');
+});
+
+/**
  * @desc    Get employee profile (current user)
  * @route   GET /api/employees/me
  * @access  Private (All authenticated users)
@@ -1121,6 +1279,7 @@ export default {
   getEmployeeById,
   createEmployee,
   updateEmployee,
+  reassignAndDeleteEmployee,
   deleteEmployee,
   getMyProfile,
   updateMyProfile,
