@@ -114,15 +114,23 @@ export const useProjectsREST = () => {
   const getProjectById = useCallback(
     async (projectId: string): Promise<Project | null> => {
       try {
+        console.log('[useProjectsREST] Fetching project by ID:', projectId);
         const response: ApiResponse<Project> = await get(`/projects/${projectId}`);
 
+        console.log('[useProjectsREST] Raw response:', response);
+
         if (response.success && response.data) {
-          return convertDatesToDateObjects(response.data);
+          const convertedData = convertDatesToDateObjects(response.data);
+          console.log('[useProjectsREST] Converted project data:', convertedData);
+          console.log('[useProjectsREST] Team members:', convertedData.teamMembers);
+          console.log('[useProjectsREST] Team leaders:', convertedData.teamLeader);
+          return convertedData;
         }
         throw new Error(response.error?.message || 'Failed to fetch project');
       } catch (err: any) {
         const errorMessage =
           err.response?.data?.error?.message || err.message || 'Failed to fetch project';
+        console.error('[useProjectsREST] Error fetching project:', errorMessage);
         message.error(errorMessage);
         return null;
       }
@@ -249,7 +257,30 @@ export const useProjectsREST = () => {
       const response: ApiResponse<Project> = await get(`/projects/${projectId}`);
 
       if (response.success && response.data) {
-        return response.data.teamMembers || [];
+        // Combine team members and team leaders
+        const allMembers = [
+          ...(response.data.teamMembers || []),
+          ...(response.data.teamLeader || []),
+        ];
+
+        // Remove duplicates based on _id or string value
+        const seen = new Set<string>();
+        const uniqueMembers = allMembers.filter((member) => {
+          if (!member) return false;
+
+          // Handle both string IDs and populated objects
+          const id =
+            typeof member === 'string'
+              ? member
+              : (member as any)._id?.toString() || (member as any).id?.toString();
+          if (!id) return false;
+
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+
+        return uniqueMembers;
       }
       return [];
     } catch (err: any) {

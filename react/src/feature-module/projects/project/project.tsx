@@ -11,6 +11,7 @@ import Footer from '../../../core/common/footer';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CommonTagsInput from '../../../core/common/Taginput';
 import { Project, useProjectsREST } from '../../../hooks/useProjectsREST';
+import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import { get as apiGet } from '../../../services/api';
 import { all_routes } from '../../router/all_routes';
 
@@ -62,6 +63,9 @@ const ProjectGrid = () => {
     updateProject,
     deleteProject,
   } = useProjectsREST();
+
+  // Initialize user profile hook
+  const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<ProjectStats>({
@@ -168,6 +172,19 @@ const ProjectGrid = () => {
           filters.search = filterParams.search;
         }
 
+        // Log employee filtering info if user is an employee
+        if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+          console.log('[Project] Fetching projects for employee:', {
+            _id: profile._id,
+            employeeId: profile.employeeId,
+            role: profile.role,
+            name: `${profile.firstName} ${profile.lastName}`,
+          });
+          console.log(
+            '[Project] Backend will filter projects where employee is in teamMembers, teamLeader, or projectManager'
+          );
+        }
+
         await fetchProjects(filters);
       } catch (err) {
         setError('Failed to load projects');
@@ -176,7 +193,7 @@ const ProjectGrid = () => {
         setLoading(false);
       }
     },
-    [fetchProjects]
+    [fetchProjects, profile]
   );
 
   const handleUpdateProject = useCallback(

@@ -1708,16 +1708,16 @@ const ProjectDetails = () => {
   // Dynamic assignee options from project team members (store employee object id like team member updates)
   const assigneeChoose = useMemo(() => {
     const baseOption = [{ value: 'Select', label: 'Select' }];
-    if (
-      !project?.teamMembers ||
-      !Array.isArray(project.teamMembers) ||
-      project.teamMembers.length === 0
-    ) {
+
+    // Combine team members and team leaders
+    const allMembers = [...(project?.teamMembers || []), ...(project?.teamLeader || [])];
+
+    if (allMembers.length === 0) {
       return baseOption;
     }
 
     const seen = new Set<string>();
-    const teamOptions = project.teamMembers.reduce((acc: any[], member: any) => {
+    const teamOptions = allMembers.reduce((acc: any[], member: any) => {
       const value = (member?._id || member?.id || member?.employeeId || '').toString();
       if (!value || seen.has(value)) return acc; // skip empty or duplicate ids
       seen.add(value);
@@ -1732,7 +1732,7 @@ const ProjectDetails = () => {
     }, []);
 
     return [...baseOption, ...teamOptions];
-  }, [project?.teamMembers]);
+  }, [project?.teamMembers, project?.teamLeader]);
 
   if (loading) {
     return (

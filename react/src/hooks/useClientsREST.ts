@@ -9,6 +9,7 @@ import { ApiResponse, del, get, getAuthToken, post, put } from '../services/api'
 
 export interface Client {
   _id: string;
+  clientId?: string;
   name: string;
   company?: string;
   email?: string;
@@ -22,6 +23,12 @@ export interface Client {
   contractValue?: number;
   projects?: number;
   notes?: string;
+  socialLinks?: {
+    instagram?: string;
+    facebook?: string;
+    linkedin?: string;
+    whatsapp?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

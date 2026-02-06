@@ -16,7 +16,7 @@ export const broadcastToCompany = (io, companyId, event, data) => {
 
   io.to(`company_${companyId}`).emit(event, {
     ...data,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 };
 
@@ -32,7 +32,7 @@ export const broadcastToUser = (io, userId, event, data) => {
 
   io.to(`user_${userId}`).emit(event, {
     ...data,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 };
 
@@ -48,7 +48,7 @@ export const broadcastToRoom = (io, room, event, data) => {
 
   io.to(room).emit(event, {
     ...data,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 };
 
@@ -66,7 +66,7 @@ export const broadcastEmployeeEvents = {
       name: employee.fullName,
       department: employee.department,
       designation: employee.designation,
-      createdBy: employee.createdBy
+      createdBy: employee.createdBy,
     });
   },
 
@@ -79,7 +79,7 @@ export const broadcastEmployeeEvents = {
       _id: employee._id,
       name: employee.fullName,
       department: employee.department,
-      updatedBy: employee.updatedBy
+      updatedBy: employee.updatedBy,
     });
   },
 
@@ -90,9 +90,9 @@ export const broadcastEmployeeEvents = {
     broadcastToCompany(io, companyId, 'employee:deleted', {
       employeeId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -105,20 +105,21 @@ export const broadcastProjectEvents = {
    */
   created: (io, companyId, project) => {
     // Send complete project object for consistency with REST API
+    const projectObj = project.toObject ? project.toObject() : project;
     broadcastToCompany(io, companyId, 'project:created', {
-      ...project.toObject(),
-      isOverdue: project.isOverdue,
-      timestamp: new Date().toISOString()
+      ...projectObj,
+      isOverdue: project.isOverdue || projectObj.isOverdue,
+      timestamp: new Date().toISOString(),
     });
 
     // Notify team members individually
-    if (project.teamMembers && project.teamMembers.length > 0) {
-      project.teamMembers.forEach(memberId => {
+    if (projectObj.teamMembers && projectObj.teamMembers.length > 0) {
+      projectObj.teamMembers.forEach((memberId) => {
         broadcastToUser(io, memberId, 'project:you_joined', {
-          projectId: project.projectId,
-          _id: project._id,
-          name: project.name,
-          timestamp: new Date().toISOString()
+          projectId: projectObj.projectId,
+          _id: projectObj._id,
+          name: projectObj.name,
+          timestamp: new Date().toISOString(),
         });
       });
     }
@@ -129,10 +130,11 @@ export const broadcastProjectEvents = {
    * Now sends complete project object to match REST API response
    */
   updated: (io, companyId, project) => {
+    const projectObj = project.toObject ? project.toObject() : project;
     broadcastToCompany(io, companyId, 'project:updated', {
-      ...project.toObject(),
-      isOverdue: project.isOverdue,
-      timestamp: new Date().toISOString()
+      ...projectObj,
+      isOverdue: project.isOverdue || projectObj.isOverdue,
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -141,10 +143,11 @@ export const broadcastProjectEvents = {
    * Now sends complete project object for consistency
    */
   progressUpdated: (io, companyId, project) => {
+    const projectObj = project.toObject ? project.toObject() : project;
     broadcastToRoom(io, `project_${project._id}`, 'project:progress_updated', {
-      ...project.toObject(),
-      isOverdue: project.isOverdue,
-      timestamp: new Date().toISOString()
+      ...projectObj,
+      isOverdue: project.isOverdue || projectObj.isOverdue,
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -155,9 +158,9 @@ export const broadcastProjectEvents = {
     broadcastToCompany(io, companyId, 'project:deleted', {
       projectId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -174,17 +177,17 @@ export const broadcastTaskEvents = {
       title: task.title,
       projectId: task.projectId,
       assignee: task.assignee,
-      createdBy: task.createdBy
+      createdBy: task.createdBy,
     });
 
     // Notify assignee
     if (task.assignee && Array.isArray(task.assignee)) {
-      task.assignee.forEach(assigneeId => {
+      task.assignee.forEach((assigneeId) => {
         broadcastToUser(io, assigneeId, 'task:assigned_to_you', {
           taskId: task.taskId,
           _id: task._id,
           title: task.title,
-          projectId: task.projectId
+          projectId: task.projectId,
         });
       });
     }
@@ -198,7 +201,7 @@ export const broadcastTaskEvents = {
       taskId: task.taskId,
       _id: task._id,
       title: task.title,
-      projectId: task.projectId
+      projectId: task.projectId,
     });
   },
 
@@ -211,7 +214,7 @@ export const broadcastTaskEvents = {
       _id: task._id,
       title: task.title,
       status: task.status,
-      projectId: task.projectId
+      projectId: task.projectId,
     });
   },
 
@@ -221,9 +224,9 @@ export const broadcastTaskEvents = {
   deleted: (io, companyId, taskId, projectId) => {
     broadcastToRoom(io, `project_${projectId}`, 'task:deleted', {
       taskId,
-      projectId
+      projectId,
     });
-  }
+  },
 };
 
 /**
@@ -241,7 +244,7 @@ export const broadcastLeadEvents = {
       company: lead.company,
       stage: lead.stage,
       owner: lead.owner,
-      createdBy: lead.createdBy
+      createdBy: lead.createdBy,
     });
   },
 
@@ -255,7 +258,7 @@ export const broadcastLeadEvents = {
       name: lead.name,
       company: lead.company,
       stage: lead.stage,
-      updatedBy: lead.updatedBy
+      updatedBy: lead.updatedBy,
     });
   },
 
@@ -269,7 +272,7 @@ export const broadcastLeadEvents = {
       name: lead.name,
       company: lead.company,
       previousStage,
-      newStage: lead.stage
+      newStage: lead.stage,
     });
   },
 
@@ -282,7 +285,7 @@ export const broadcastLeadEvents = {
       _id: lead._id,
       name: lead.name,
       clientId: client.clientId,
-      clientName: client.name
+      clientName: client.name,
     });
   },
 
@@ -293,9 +296,9 @@ export const broadcastLeadEvents = {
     broadcastToCompany(io, companyId, 'lead:deleted', {
       leadId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -313,7 +316,7 @@ export const broadcastClientEvents = {
       clientType: client.clientType,
       tier: client.tier,
       accountManager: client.accountManager,
-      createdBy: client.createdBy
+      createdBy: client.createdBy,
     });
   },
 
@@ -326,7 +329,7 @@ export const broadcastClientEvents = {
       _id: client._id,
       name: client.name,
       tier: client.tier,
-      updatedBy: client.updatedBy
+      updatedBy: client.updatedBy,
     });
   },
 
@@ -341,7 +344,7 @@ export const broadcastClientEvents = {
       totalDeals: client.totalDeals,
       wonDeals: client.wonDeals,
       totalValue: client.totalValue,
-      wonValue: client.wonValue
+      wonValue: client.wonValue,
     });
   },
 
@@ -352,9 +355,9 @@ export const broadcastClientEvents = {
     broadcastToCompany(io, companyId, 'client:deleted', {
       clientId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -372,7 +375,7 @@ export const broadcastAttendanceEvents = {
       date: attendance.date,
       status: attendance.status,
       clockIn: attendance.clockIn,
-      createdBy: attendance.createdBy
+      createdBy: attendance.createdBy,
     });
   },
 
@@ -387,7 +390,7 @@ export const broadcastAttendanceEvents = {
       date: attendance.date,
       status: attendance.status,
       hoursWorked: attendance.hoursWorked,
-      updatedBy: attendance.updatedBy
+      updatedBy: attendance.updatedBy,
     });
   },
 
@@ -401,7 +404,7 @@ export const broadcastAttendanceEvents = {
       _id: attendance._id,
       employee: attendance.employee,
       date: attendance.date,
-      clockInTime: attendance.clockIn.time
+      clockInTime: attendance.clockIn.time,
     });
 
     // Broadcast to specific employee
@@ -409,7 +412,7 @@ export const broadcastAttendanceEvents = {
       broadcastToUser(io, attendance.employee.toString(), 'attendance:you_clocked_in', {
         attendanceId: attendance.attendanceId,
         _id: attendance._id,
-        clockInTime: attendance.clockIn.time
+        clockInTime: attendance.clockIn.time,
       });
     }
   },
@@ -425,7 +428,7 @@ export const broadcastAttendanceEvents = {
       employee: attendance.employee,
       date: attendance.date,
       clockOutTime: attendance.clockOut.time,
-      hoursWorked: attendance.hoursWorked
+      hoursWorked: attendance.hoursWorked,
     });
 
     // Broadcast to specific employee
@@ -434,7 +437,7 @@ export const broadcastAttendanceEvents = {
         attendanceId: attendance.attendanceId,
         _id: attendance._id,
         clockOutTime: attendance.clockOut.time,
-        hoursWorked: attendance.hoursWorked
+        hoursWorked: attendance.hoursWorked,
       });
     }
   },
@@ -446,7 +449,7 @@ export const broadcastAttendanceEvents = {
     broadcastToCompany(io, companyId, 'attendance:deleted', {
       attendanceId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -457,9 +460,9 @@ export const broadcastAttendanceEvents = {
     broadcastToCompany(io, companyId, 'attendance:bulk_updated', {
       action: data.action,
       updatedCount: data.updatedCount,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -478,7 +481,7 @@ export const broadcastLeaveEvents = {
       startDate: leave.startDate,
       endDate: leave.endDate,
       status: leave.status,
-      createdBy: leave.createdBy
+      createdBy: leave.createdBy,
     });
   },
 
@@ -492,7 +495,7 @@ export const broadcastLeaveEvents = {
       employee: leave.employee,
       leaveType: leave.leaveType,
       status: leave.status,
-      updatedBy: leave.updatedBy
+      updatedBy: leave.updatedBy,
     });
   },
 
@@ -507,7 +510,7 @@ export const broadcastLeaveEvents = {
       leaveType: leave.leaveType,
       startDate: leave.startDate,
       endDate: leave.endDate,
-      approvedBy
+      approvedBy,
     });
 
     // Notify the employee
@@ -517,7 +520,7 @@ export const broadcastLeaveEvents = {
         _id: leave._id,
         leaveType: leave.leaveType,
         startDate: leave.startDate,
-        endDate: leave.endDate
+        endDate: leave.endDate,
       });
     }
   },
@@ -532,7 +535,7 @@ export const broadcastLeaveEvents = {
       employee: leave.employee,
       leaveType: leave.leaveType,
       rejectedBy,
-      reason
+      reason,
     });
 
     // Notify the employee
@@ -541,7 +544,7 @@ export const broadcastLeaveEvents = {
         leaveId: leave.leaveId,
         _id: leave._id,
         leaveType: leave.leaveType,
-        reason
+        reason,
       });
     }
   },
@@ -555,7 +558,7 @@ export const broadcastLeaveEvents = {
       _id: leave._id,
       employee: leave.employee,
       leaveType: leave.leaveType,
-      cancelledBy
+      cancelledBy,
     });
   },
 
@@ -566,7 +569,7 @@ export const broadcastLeaveEvents = {
     broadcastToCompany(io, companyId, 'leave:deleted', {
       leaveId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -578,9 +581,9 @@ export const broadcastLeaveEvents = {
     broadcastToUser(io, employeeId, 'leave:balance_updated', {
       employeeId,
       balances,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -596,7 +599,7 @@ export const broadcastLeaveTypeEvents = {
       name: leaveType.name,
       code: leaveType.code,
       isActive: leaveType.isActive,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -609,7 +612,7 @@ export const broadcastLeaveTypeEvents = {
       name: leaveType.name,
       code: leaveType.code,
       isActive: leaveType.isActive,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -621,7 +624,7 @@ export const broadcastLeaveTypeEvents = {
       leaveTypeId: leaveType.leaveTypeId,
       name: leaveType.name,
       isActive: leaveType.isActive,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -633,9 +636,9 @@ export const broadcastLeaveTypeEvents = {
       leaveTypeId: leaveType.leaveTypeId,
       name: leaveType.name,
       code: leaveType.code,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -655,7 +658,7 @@ export const broadcastOvertimeEvents = {
       requestedHours: overtimeRequest.requestedHours,
       reason: overtimeRequest.reason,
       status: overtimeRequest.status,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -672,7 +675,7 @@ export const broadcastOvertimeEvents = {
       requestedHours: overtimeRequest.requestedHours,
       approvedHours: overtimeRequest.approvedHours,
       status: overtimeRequest.status,
-      approvedBy
+      approvedBy,
     });
 
     // Notify the employee
@@ -680,7 +683,7 @@ export const broadcastOvertimeEvents = {
       broadcastToUser(io, overtimeRequest.employee.toString(), 'overtime:your_overtime_approved', {
         overtimeId: overtimeRequest.overtimeId,
         date: overtimeRequest.date,
-        approvedHours: overtimeRequest.approvedHours
+        approvedHours: overtimeRequest.approvedHours,
       });
     }
   },
@@ -698,7 +701,7 @@ export const broadcastOvertimeEvents = {
       requestedHours: overtimeRequest.requestedHours,
       status: overtimeRequest.status,
       rejectedBy,
-      reason
+      reason,
     });
 
     // Notify the employee
@@ -706,7 +709,7 @@ export const broadcastOvertimeEvents = {
       broadcastToUser(io, overtimeRequest.employee.toString(), 'overtime:your_overtime_rejected', {
         overtimeId: overtimeRequest.overtimeId,
         date: overtimeRequest.date,
-        reason
+        reason,
       });
     }
   },
@@ -722,7 +725,7 @@ export const broadcastOvertimeEvents = {
       employeeName: overtimeRequest.employeeName,
       date: overtimeRequest.date,
       status: overtimeRequest.status,
-      cancelledBy
+      cancelledBy,
     });
   },
 
@@ -733,9 +736,9 @@ export const broadcastOvertimeEvents = {
     broadcastToCompany(io, companyId, 'overtime:deleted', {
       overtimeId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -754,7 +757,7 @@ export const broadcastAssetEvents = {
       category: asset.category,
       status: asset.status,
       assignedTo: asset.assignedTo,
-      createdBy: asset.createdBy
+      createdBy: asset.createdBy,
     });
   },
 
@@ -770,7 +773,7 @@ export const broadcastAssetEvents = {
       category: asset.category,
       status: asset.status,
       assignedTo: asset.assignedTo,
-      updatedBy: asset.updatedBy
+      updatedBy: asset.updatedBy,
     });
   },
 
@@ -785,7 +788,7 @@ export const broadcastAssetEvents = {
       type: asset.type,
       assignedTo: asset.assignedTo,
       assignedDate: asset.assignedDate,
-      assignmentType: asset.assignmentType
+      assignmentType: asset.assignmentType,
     });
 
     // Notify the assigned employee
@@ -795,7 +798,7 @@ export const broadcastAssetEvents = {
         _id: asset._id,
         name: asset.name,
         type: asset.type,
-        assignedDate: asset.assignedDate
+        assignedDate: asset.assignedDate,
       });
     }
   },
@@ -809,7 +812,7 @@ export const broadcastAssetEvents = {
       _id: asset._id,
       name: asset.name,
       nextMaintenanceDate: asset.maintenanceSchedule.nextMaintenanceDate,
-      status: asset.status
+      status: asset.status,
     });
   },
 
@@ -820,9 +823,9 @@ export const broadcastAssetEvents = {
     broadcastToCompany(io, companyId, 'asset:deleted', {
       assetId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -842,7 +845,7 @@ export const broadcastTrainingEvents = {
       startDate: training.startDate,
       endDate: training.endDate,
       maxParticipants: training.maxParticipants,
-      createdBy: training.createdBy
+      createdBy: training.createdBy,
     });
   },
 
@@ -858,7 +861,7 @@ export const broadcastTrainingEvents = {
       status: training.status,
       startDate: training.startDate,
       endDate: training.endDate,
-      updatedBy: training.updatedBy
+      updatedBy: training.updatedBy,
     });
   },
 
@@ -872,7 +875,7 @@ export const broadcastTrainingEvents = {
       name: training.name,
       type: training.type,
       startDate: training.startDate,
-      availableSlots: training.availableSlots
+      availableSlots: training.availableSlots,
     });
   },
 
@@ -883,9 +886,9 @@ export const broadcastTrainingEvents = {
     broadcastToCompany(io, companyId, 'training:deleted', {
       trainingId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -905,7 +908,7 @@ export const broadcastActivityEvents = {
       status: activity.status,
       priority: activity.priority,
       owner: activity.owner,
-      createdBy: activity.createdBy
+      createdBy: activity.createdBy,
     });
   },
 
@@ -921,7 +924,7 @@ export const broadcastActivityEvents = {
       status: activity.status,
       priority: activity.priority,
       dueDate: activity.dueDate,
-      updatedBy: activity.updatedBy
+      updatedBy: activity.updatedBy,
     });
   },
 
@@ -933,7 +936,7 @@ export const broadcastActivityEvents = {
       activityId: activity.activityId,
       _id: activity._id,
       title: activity.title,
-      status: activity.status
+      status: activity.status,
     });
   },
 
@@ -947,7 +950,7 @@ export const broadcastActivityEvents = {
       title: activity.title,
       activityType: activity.activityType,
       dueDate: activity.dueDate,
-      priority: activity.priority
+      priority: activity.priority,
     });
   },
 
@@ -961,7 +964,7 @@ export const broadcastActivityEvents = {
       title: activity.title,
       activityType: activity.activityType,
       completedBy: activity.completedBy,
-      completedAt: activity.completedAt
+      completedAt: activity.completedAt,
     });
   },
 
@@ -973,7 +976,7 @@ export const broadcastActivityEvents = {
       activityId: activity.activityId,
       _id: activity._id,
       title: activity.title,
-      completedAt: activity.completedAt
+      completedAt: activity.completedAt,
     });
   },
 
@@ -985,7 +988,7 @@ export const broadcastActivityEvents = {
       activityId: activity.activityId,
       _id: activity._id,
       title: activity.title,
-      newDueDate: activity.dueDate
+      newDueDate: activity.dueDate,
     });
   },
 
@@ -997,7 +1000,7 @@ export const broadcastActivityEvents = {
       activityId: activity.activityId,
       _id: activity._id,
       title: activity.title,
-      newDueDate: activity.dueDate
+      newDueDate: activity.dueDate,
     });
   },
 
@@ -1008,7 +1011,7 @@ export const broadcastActivityEvents = {
     broadcastToCompany(io, companyId, 'activity:deleted', {
       activityId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1022,9 +1025,9 @@ export const broadcastActivityEvents = {
       title: activity.title,
       activityType: activity.activityType,
       dueDate: activity.dueDate,
-      reminder: activity.reminder
+      reminder: activity.reminder,
     });
-  }
+  },
 };
 
 /**
@@ -1043,7 +1046,7 @@ export const broadcastPipelineEvents = {
       stage: pipeline.stage,
       dealValue: pipeline.dealValue,
       owner: pipeline.owner,
-      createdBy: pipeline.createdBy
+      createdBy: pipeline.createdBy,
     });
   },
 
@@ -1058,7 +1061,7 @@ export const broadcastPipelineEvents = {
       stage: pipeline.stage,
       dealValue: pipeline.dealValue,
       status: pipeline.status,
-      updatedBy: pipeline.updatedBy
+      updatedBy: pipeline.updatedBy,
     });
   },
 
@@ -1071,7 +1074,7 @@ export const broadcastPipelineEvents = {
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
       stage: pipeline.stage,
-      probability: pipeline.probability
+      probability: pipeline.probability,
     });
   },
 
@@ -1083,7 +1086,7 @@ export const broadcastPipelineEvents = {
       pipelineId: pipeline.pipelineId,
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
-      stage: pipeline.stage
+      stage: pipeline.stage,
     });
   },
 
@@ -1096,7 +1099,7 @@ export const broadcastPipelineEvents = {
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
       dealValue: pipeline.dealValue,
-      expectedCloseDate: pipeline.expectedCloseDate
+      expectedCloseDate: pipeline.expectedCloseDate,
     });
   },
 
@@ -1108,7 +1111,7 @@ export const broadcastPipelineEvents = {
       pipelineId: pipeline.pipelineId,
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
-      status: pipeline.status
+      status: pipeline.status,
     });
   },
 
@@ -1121,7 +1124,7 @@ export const broadcastPipelineEvents = {
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
       dealValue: pipeline.dealValue,
-      actualCloseDate: pipeline.actualCloseDate
+      actualCloseDate: pipeline.actualCloseDate,
     });
   },
 
@@ -1133,7 +1136,7 @@ export const broadcastPipelineEvents = {
       pipelineId: pipeline.pipelineId,
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
-      dealValue: pipeline.dealValue
+      dealValue: pipeline.dealValue,
     });
   },
 
@@ -1146,7 +1149,7 @@ export const broadcastPipelineEvents = {
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
       dealValue: pipeline.dealValue,
-      outcomeReason: pipeline.outcomeReason
+      outcomeReason: pipeline.outcomeReason,
     });
   },
 
@@ -1158,7 +1161,7 @@ export const broadcastPipelineEvents = {
       pipelineId: pipeline.pipelineId,
       _id: pipeline._id,
       pipelineName: pipeline.pipelineName,
-      outcomeReason: pipeline.outcomeReason
+      outcomeReason: pipeline.outcomeReason,
     });
   },
 
@@ -1169,9 +1172,9 @@ export const broadcastPipelineEvents = {
     broadcastToCompany(io, companyId, 'pipeline:deleted', {
       pipelineId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -1189,7 +1192,7 @@ export const broadcastMilestoneEvents = {
       projectId: milestone.projectId,
       status: milestone.status,
       dueDate: milestone.dueDate,
-      createdBy: milestone.createdBy
+      createdBy: milestone.createdBy,
     });
   },
 
@@ -1204,7 +1207,7 @@ export const broadcastMilestoneEvents = {
       projectId: milestone.projectId,
       status: milestone.status,
       progress: milestone.progress,
-      updatedBy: milestone.updatedBy
+      updatedBy: milestone.updatedBy,
     });
   },
 
@@ -1218,7 +1221,7 @@ export const broadcastMilestoneEvents = {
       title: milestone.title,
       projectId: milestone.projectId,
       completedDate: milestone.completedDate,
-      progress: milestone.progress
+      progress: milestone.progress,
     });
   },
 
@@ -1232,7 +1235,7 @@ export const broadcastMilestoneEvents = {
       title: milestone.title,
       projectId: milestone.projectId,
       progress: milestone.progress,
-      status: milestone.status
+      status: milestone.status,
     });
   },
 
@@ -1242,9 +1245,9 @@ export const broadcastMilestoneEvents = {
   deleted: (io, companyId, milestoneId, projectId) => {
     broadcastToRoom(io, `project_${projectId}`, 'milestone:deleted', {
       milestoneId,
-      projectId
+      projectId,
     });
-  }
+  },
 };
 
 /**
@@ -1263,7 +1266,7 @@ export const broadcastTimeTrackingEvents = {
       date: timeEntry.date,
       duration: timeEntry.duration,
       billable: timeEntry.billable,
-      createdBy: timeEntry.createdBy
+      createdBy: timeEntry.createdBy,
     });
 
     // Notify project room
@@ -1271,7 +1274,7 @@ export const broadcastTimeTrackingEvents = {
       broadcastToRoom(io, `project_${timeEntry.projectId}`, 'timeentry:project_created', {
         timeEntryId: timeEntry.timeEntryId,
         userId: timeEntry.userId,
-        duration: timeEntry.duration
+        duration: timeEntry.duration,
       });
     }
   },
@@ -1285,7 +1288,7 @@ export const broadcastTimeTrackingEvents = {
       _id: timeEntry._id,
       date: timeEntry.date,
       duration: timeEntry.duration,
-      status: timeEntry.status
+      status: timeEntry.status,
     });
   },
 
@@ -1295,13 +1298,13 @@ export const broadcastTimeTrackingEvents = {
   timesheetSubmitted: (io, companyId, userId, submittedCount) => {
     broadcastToUser(io, userId, 'timesheet:submitted', {
       submittedCount,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Notify admins
     broadcastToCompany(io, companyId, 'timesheet:pending_approval', {
       userId,
-      submittedCount
+      submittedCount,
     });
   },
 
@@ -1311,7 +1314,7 @@ export const broadcastTimeTrackingEvents = {
   timesheetApproved: (io, companyId, userId, approvedCount) => {
     broadcastToUser(io, userId, 'timesheet:approved', {
       approvedCount,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1322,7 +1325,7 @@ export const broadcastTimeTrackingEvents = {
     broadcastToUser(io, userId, 'timesheet:rejected', {
       rejectedCount,
       reason,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1331,16 +1334,16 @@ export const broadcastTimeTrackingEvents = {
    */
   deleted: (io, companyId, timeEntryId, userId, projectId) => {
     broadcastToUser(io, userId, 'timeentry:deleted', {
-      timeEntryId
+      timeEntryId,
     });
 
     if (projectId) {
       broadcastToRoom(io, `project_${projectId}`, 'timeentry:project_deleted', {
         timeEntryId,
-        userId
+        userId,
       });
     }
-  }
+  },
 };
 
 /**
@@ -1359,7 +1362,7 @@ export const broadcastDashboardEvents = {
    */
   newNotification: (io, companyId, notification) => {
     broadcastToCompany(io, companyId, 'dashboard:new_notification', notification);
-  }
+  },
 };
 
 /**
@@ -1375,7 +1378,7 @@ export const broadcastDesignationEvents = {
       title: designation.title,
       department: designation.department,
       level: designation.level,
-      createdBy: designation.createdBy
+      createdBy: designation.createdBy,
     });
   },
 
@@ -1388,7 +1391,7 @@ export const broadcastDesignationEvents = {
       title: designation.title,
       department: designation.department,
       level: designation.level,
-      updatedBy: designation.updatedBy
+      updatedBy: designation.updatedBy,
     });
   },
 
@@ -1399,9 +1402,9 @@ export const broadcastDesignationEvents = {
     broadcastToCompany(io, companyId, 'designation:deleted', {
       designationId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -1417,7 +1420,7 @@ export const broadcastHolidayEvents = {
       name: holiday.name,
       date: holiday.date,
       type: holiday.type,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1430,7 +1433,7 @@ export const broadcastHolidayEvents = {
       name: holiday.name,
       date: holiday.date,
       type: holiday.type,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1441,9 +1444,9 @@ export const broadcastHolidayEvents = {
     broadcastToCompany(io, companyId, 'holiday:deleted', {
       holidayId: holiday.holidayId,
       name: holiday.name,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -1464,7 +1467,7 @@ export const broadcastShiftEvents = {
       duration: shift.duration,
       isDefault: shift.isDefault,
       createdBy: shift.createdBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1482,7 +1485,7 @@ export const broadcastShiftEvents = {
       duration: shift.duration,
       isDefault: shift.isDefault,
       updatedBy: shift.updatedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1493,7 +1496,7 @@ export const broadcastShiftEvents = {
     broadcastToCompany(io, companyId, 'shift:deleted', {
       shiftId,
       deletedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1507,7 +1510,7 @@ export const broadcastShiftEvents = {
       name: shift.name,
       code: shift.code,
       updatedBy: shift.updatedBy,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1521,7 +1524,7 @@ export const broadcastShiftEvents = {
       shiftId: assignment.shiftId,
       shiftName: assignment.shiftName,
       effectiveDate: assignment.effectiveDate,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1534,7 +1537,7 @@ export const broadcastShiftEvents = {
       shiftName: assignment.shiftName,
       employeeCount: assignment.employeeCount,
       effectiveDate: assignment.effectiveDate,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 
@@ -1545,9 +1548,9 @@ export const broadcastShiftEvents = {
     broadcastToCompany(io, companyId, 'shift:unassigned', {
       employeeId: assignment.employeeId,
       employeeName: assignment.employeeName,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-  }
+  },
 };
 
 /**
@@ -1581,5 +1584,5 @@ export default {
   broadcastPipelineEvents,
   broadcastDashboardEvents,
   broadcastDesignationEvents,
-  getSocketIO
+  getSocketIO,
 };

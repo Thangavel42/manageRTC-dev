@@ -11,12 +11,9 @@ import { getsuperadminCollections, getTenantCollections } from '../../config/db.
 import {
   asyncHandler,
   buildNotFoundError,
-  buildValidationError
+  buildValidationError,
 } from '../../middleware/errorHandler.js';
-import {
-  extractUser,
-  sendSuccess
-} from '../../utils/apiResponse.js';
+import { extractUser, sendSuccess } from '../../utils/apiResponse.js';
 
 /**
  * @desc    Get current user profile (role-based)
@@ -31,7 +28,14 @@ import {
 export const getCurrentUserProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[User Profile Controller] getCurrentUserProfile - userId:', user.userId, 'role:', user.role, 'companyId:', user.companyId);
+  console.log(
+    '[User Profile Controller] getCurrentUserProfile - userId:',
+    user.userId,
+    'role:',
+    user.role,
+    'companyId:',
+    user.companyId
+  );
 
   // Admin role - return company information
   if (user.role === 'admin') {
@@ -43,7 +47,7 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
 
     // Find company by ID in superadmin collection
     const company = await companiesCollection.findOne({
-      _id: new ObjectId(user.companyId)
+      _id: new ObjectId(user.companyId),
     });
 
     if (!company) {
@@ -78,10 +82,7 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
     // Find employee by Clerk user ID (stored in clerkUserId field)
     const employee = await collections.employees.findOne({
       isDeleted: { $ne: true },
-      $or: [
-        { clerkUserId: user.userId },
-        { 'account.userId': user.userId }
-      ]
+      $or: [{ clerkUserId: user.userId }, { 'account.userId': user.userId }],
     });
 
     if (!employee) {
@@ -91,10 +92,12 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
     // Return employee-specific data for HR/Employee
     const profileData = {
       role: user.role,
+      _id: employee._id.toString(),
       employeeId: employee.employeeId || null,
       firstName: employee.firstName || '',
       lastName: employee.lastName || '',
-      fullName: employee.fullName || `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
+      fullName:
+        employee.fullName || `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
       email: employee.contact?.email || user.email,
       phone: employee.contact?.phone || null,
       designation: employee.designation || null,
@@ -107,7 +110,11 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       companyId: user.companyId,
     };
 
-    return sendSuccess(res, profileData, `${user.role.toUpperCase()} profile retrieved successfully`);
+    return sendSuccess(
+      res,
+      profileData,
+      `${user.role.toUpperCase()} profile retrieved successfully`
+    );
   }
 
   // Superadmin role - return basic user info from Clerk metadata
@@ -141,11 +148,19 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const updateData = req.body;
 
-  console.log('[User Profile Controller] updateCurrentUserProfile - userId:', user.userId, 'role:', user.role);
+  console.log(
+    '[User Profile Controller] updateCurrentUserProfile - userId:',
+    user.userId,
+    'role:',
+    user.role
+  );
 
   // Only HR and Employee can update their profiles
   if (user.role !== 'hr' && user.role !== 'employee') {
-    throw buildValidationError('role', 'Profile update is only available for HR and Employee roles');
+    throw buildValidationError(
+      'role',
+      'Profile update is only available for HR and Employee roles'
+    );
   }
 
   if (!user.companyId) {
@@ -156,7 +171,7 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
 
   // Find employee by Clerk user ID
   const employee = await collections.employees.findOne({
-    'account.userId': user.userId
+    'account.userId': user.userId,
   });
 
   if (!employee) {
@@ -171,11 +186,11 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     'address',
     'emergencyContact',
     'socialProfiles',
-    'profileImage'
+    'profileImage',
   ];
 
   const sanitizedUpdate = {};
-  allowedFields.forEach(field => {
+  allowedFields.forEach((field) => {
     if (updateData[field] !== undefined) {
       sanitizedUpdate[field] = updateData[field];
     }
@@ -203,7 +218,9 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     employeeId: updatedEmployee.employeeId || null,
     firstName: updatedEmployee.firstName || '',
     lastName: updatedEmployee.lastName || '',
-    fullName: updatedEmployee.fullName || `${updatedEmployee.firstName || ''} ${updatedEmployee.lastName || ''}`.trim(),
+    fullName:
+      updatedEmployee.fullName ||
+      `${updatedEmployee.firstName || ''} ${updatedEmployee.lastName || ''}`.trim(),
     email: updatedEmployee.contact?.email || user.primaryEmail,
     phone: updatedEmployee.contact?.phone || null,
     designation: updatedEmployee.designation || null,

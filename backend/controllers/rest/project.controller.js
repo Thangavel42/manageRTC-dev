@@ -4,6 +4,7 @@
  */
 
 import mongoose from 'mongoose';
+import { getTenantCollections } from '../../config/db.js';
 import {
   asyncHandler,
   buildNotFoundError,
@@ -55,34 +56,105 @@ export const getProjects = asyncHandler(async (req, res) => {
 
   // Debug logging - lightweight
   console.log('[getProjects] Using database:', user.companyId || 'default');
-  console.log('[getProjects] Filter:', JSON.stringify(filter));
+  console.log('[getProjects] User object:', JSON.stringify(user, null, 2));
   console.log('[getProjects] User role:', user.role);
+  console.log('[getProjects] User employeeId:', user.employeeId);
+  console.log('[getProjects] Initial filter:', JSON.stringify(filter));
+
+  // For employee role, filter projects where they are assigned as team member, leader, or manager
+  if (user.role === 'employee') {
+    console.log('[getProjects] Employee role detected, applying filter');
+    const collections = getTenantCollections(user.companyId);
+
+    // Find employee's MongoDB _id using their employeeId or clerkUserId
+    const employee = await collections.employees.findOne({
+      $or: [{ clerkUserId: user.userId }, { 'account.userId': user.userId }],
+      isDeleted: { $ne: true },
+    });
+
+    console.log('[getProjects] Employee lookup result:', employee ? 'Found' : 'Not found');
+
+    if (employee) {
+      const employeeMongoId = employee._id;
+      const employeeMongoIdStr = employee._id.toString();
+      console.log('[getProjects] Employee filtering enabled');
+      console.log('[getProjects] Employee MongoDB _id:', employeeMongoIdStr);
+      console.log('[getProjects] Employee clerkUserId:', employee.clerkUserId);
+      console.log('[getProjects] Employee employeeId:', employee.employeeId);
+
+      // Use $and to combine isDeleted check with employee assignment check
+      // Check both ObjectId and string formats for backward compatibility
+      filter = {
+        $and: [
+          {
+            $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+          },
+          {
+            $or: [
+              { teamMembers: employeeMongoId },
+              { teamMembers: employeeMongoIdStr },
+              { teamLeader: employeeMongoId },
+              { teamLeader: employeeMongoIdStr },
+              { projectManager: employeeMongoId },
+              { projectManager: employeeMongoIdStr },
+            ],
+          },
+        ],
+      };
+      console.log('[getProjects] Employee filter applied:', JSON.stringify(filter, null, 2));
+    } else {
+      console.log('[getProjects] Employee not found for userId:', user.userId);
+      console.log('[getProjects] Searched with clerkUserId and account.userId');
+    }
+  } else {
+    console.log('[getProjects] Not employee role, no filtering applied');
+  }
 
   // Apply status filter
   if (status) {
-    filter.status = status;
+    if (filter.$and) {
+      filter.$and.push({ status });
+    } else {
+      filter.status = status;
+    }
   }
 
   // Apply priority filter
   if (priority) {
-    filter.priority = priority;
+    if (filter.$and) {
+      filter.$and.push({ priority });
+    } else {
+      filter.priority = priority;
+    }
   }
 
   // Apply client filter
   if (client) {
-    filter.client = client;
+    if (filter.$and) {
+      filter.$and.push({ client });
+    } else {
+      filter.client = client;
+    }
   }
 
   // Apply search filter
   if (search && search.trim()) {
     const searchFilter = buildSearchFilter(search, ['name', 'description', 'client']);
-    filter = { ...filter, ...searchFilter };
+    if (filter.$and) {
+      filter.$and.push(searchFilter);
+    } else {
+      filter = { ...filter, ...searchFilter };
+    }
   }
 
   // Apply date range filter
   if (dateFrom || dateTo) {
     const dateFilter = buildDateRangeFilter(dateFrom, dateTo, 'startDate');
-    filter = { ...filter, ...dateFilter };
+    if (filter.$and) {
+      filter.$and.push(dateFilter);
+    } else {
+      filter = { ...filter, ...dateFilter };
+    }
   }
 
   // Build sort option
@@ -130,8 +202,11 @@ export const getProjects = asyncHandler(async (req, res) => {
 
   // Get tenant-specific Task model for task counts
   const TaskModel = user.companyId ? getTenantModel(user.companyId, 'Task', Task.schema) : Task;
+  const EmployeeModel = user.companyId
+    ? getTenantModel(user.companyId, 'Employee', Employee.schema)
+    : Employee;
 
-  // Add overdue flag and task counts to each project
+  // Add overdue flag, task counts, and populate team leader to each project
   const result = await Promise.all(
     projects.map(async (project) => {
       const isOverdue =
@@ -149,11 +224,30 @@ export const getProjects = asyncHandler(async (req, res) => {
         $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
       });
 
+      // Populate teamLeader with employee details
+      let teamLeader = project.teamLeader;
+      if (project.teamLeader) {
+        try {
+          const leaders = Array.isArray(project.teamLeader)
+            ? project.teamLeader
+            : [project.teamLeader];
+          const leaderIds = leaders.map((id) =>
+            typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+          );
+          teamLeader = await EmployeeModel.find({ _id: { $in: leaderIds } })
+            .select('firstName lastName employeeId _id')
+            .lean();
+        } catch (err) {
+          console.error('[getProjects] Error populating teamLeader:', err);
+        }
+      }
+
       return {
         ...project,
         isOverdue,
         taskCount: totalTasks,
         completedTaskCount: completedTasks,
+        teamLeader,
       };
     })
   );
@@ -266,7 +360,7 @@ export const createProject = asyncHandler(async (req, res) => {
 
   // Create project
   const project = await ProjectModel.create(projectData);
-  const projectObj = project.toObject();
+  const projectObj = project.toObject ? project.toObject() : project;
 
   // Manually fetch employee details from tenant-specific Employee collection
   try {
@@ -616,7 +710,7 @@ export const getMyProjects = asyncHandler(async (req, res) => {
     .limit(parseInt(limit) || 50);
 
   const result = projects.map((project) => {
-    const proj = project.toObject();
+    const proj = project.toObject ? project.toObject() : project;
     proj.isOverdue = project.isOverdue;
     return proj;
   });

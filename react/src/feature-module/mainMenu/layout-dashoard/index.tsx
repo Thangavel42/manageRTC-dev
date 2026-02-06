@@ -1,25 +1,25 @@
-import React, { useEffect, useState } from "react";
-import ReactApexChart from "react-apexcharts";
-import { Link, useLocation } from "react-router-dom";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { all_routes } from "../../router/all_routes";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
-import { Chart } from "primereact/chart";
-import { Calendar } from "primereact/calendar";
-import RequestModals from "../../../core/modals/requestModal";
-import TodoModal from "../../../core/modals/todoModal";
-import { useDispatch } from "react-redux";
-import Footer from "../../../core/common/footer";
+import { Calendar } from 'primereact/calendar';
+import { Chart } from 'primereact/chart';
+import { useEffect, useState } from 'react';
+import ReactApexChart from 'react-apexcharts';
+import { useDispatch } from 'react-redux';
+import { Link, useLocation } from 'react-router-dom';
+import 'slick-carousel/slick/slick-theme.css';
+import 'slick-carousel/slick/slick.css';
+import Footer from '../../../core/common/footer';
+import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import RequestModals from '../../../core/modals/requestModal';
+import TodoModal from '../../../core/modals/todoModal';
+import { all_routes } from '../../router/all_routes';
 
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import {
   resetAllMode,
   setDataLayout,
   setDataTheme,
   setDataWidth,
   setRtl,
-} from "../../../core/data/redux/themeSettingSlice";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+} from '../../../core/data/redux/themeSettingSlice';
 
 const LayoutDemo = () => {
   const routes = all_routes;
@@ -33,7 +33,7 @@ const LayoutDemo = () => {
   const [empDepartment] = useState<any>({
     chart: {
       height: 235,
-      type: "bar",
+      type: 'bar',
       padding: {
         top: 0,
         left: 0,
@@ -45,12 +45,12 @@ const LayoutDemo = () => {
       },
     },
     fill: {
-      colors: ["#F26522"], // Fill color for the bars
+      colors: ['#F26522'], // Fill color for the bars
       opacity: 1, // Adjust opacity (1 is fully opaque)
     },
-    colors: ["#F26522"],
+    colors: ['#F26522'],
     grid: {
-      borderColor: "#E5E7EB",
+      borderColor: '#E5E7EB',
       strokeDashArray: 5,
       padding: {
         top: -20,
@@ -63,8 +63,8 @@ const LayoutDemo = () => {
       bar: {
         borderRadius: 5,
         horizontal: true,
-        barHeight: "35%",
-        endingShape: "rounded",
+        barHeight: '35%',
+        endingShape: 'rounded',
       },
     },
     dataLabels: {
@@ -73,22 +73,15 @@ const LayoutDemo = () => {
     series: [
       {
         data: [80, 110, 80, 20, 60, 100],
-        name: "Employee",
+        name: 'Employee',
       },
     ],
     xaxis: {
-      categories: [
-        "UI/UX",
-        "Development",
-        "Management",
-        "HR",
-        "Testing",
-        "Marketing",
-      ],
+      categories: ['UI/UX', 'Development', 'Management', 'HR', 'Testing', 'Marketing'],
       labels: {
         style: {
-          colors: "#111827",
-          fontSize: "13px",
+          colors: '#111827',
+          fontSize: '13px',
         },
       },
     },
@@ -97,19 +90,19 @@ const LayoutDemo = () => {
   const [salesIncome] = useState<any>({
     chart: {
       height: 290,
-      type: "bar",
+      type: 'bar',
       stacked: true,
       toolbar: {
         show: false,
       },
     },
-    colors: ["#FF6F28", "#F8F9FA"],
+    colors: ['#FF6F28', '#F8F9FA'],
     responsive: [
       {
         breakpoint: 480,
         options: {
           legend: {
-            position: "bottom",
+            position: 'bottom',
             offsetX: -10,
             offsetY: 0,
           },
@@ -119,40 +112,40 @@ const LayoutDemo = () => {
     plotOptions: {
       bar: {
         borderRadius: 5,
-        borderRadiusWhenStacked: "all",
+        borderRadiusWhenStacked: 'all',
         horizontal: false,
-        endingShape: "rounded",
+        endingShape: 'rounded',
       },
     },
     series: [
       {
-        name: "Income",
+        name: 'Income',
         data: [40, 30, 45, 80, 85, 90, 80, 80, 80, 85, 20, 80],
       },
       {
-        name: "Expenses",
+        name: 'Expenses',
         data: [60, 70, 55, 20, 15, 10, 20, 20, 20, 15, 80, 20],
       },
     ],
     xaxis: {
       categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ],
       labels: {
         style: {
-          colors: "#6B7280",
-          fontSize: "13px",
+          colors: '#6B7280',
+          fontSize: '13px',
         },
       },
     },
@@ -160,13 +153,13 @@ const LayoutDemo = () => {
       labels: {
         offsetX: -15,
         style: {
-          colors: "#6B7280",
-          fontSize: "13px",
+          colors: '#6B7280',
+          fontSize: '13px',
         },
       },
     },
     grid: {
-      borderColor: "#E5E7EB",
+      borderColor: '#E5E7EB',
       strokeDashArray: 5,
       padding: {
         left: -8,
@@ -188,17 +181,17 @@ const LayoutDemo = () => {
   const [chartOptions, setChartOptions] = useState({});
   useEffect(() => {
     const data = {
-      labels: ["Late", "Present", "Permission", "Absent"],
+      labels: ['Late', 'Present', 'Permission', 'Absent'],
       datasets: [
         {
-          label: "Semi Donut",
+          label: 'Semi Donut',
           data: [40, 20, 30, 10],
-          backgroundColor: ["#0C4B5E", "#03C95A", "#FFC107", "#E70D0D"],
+          backgroundColor: ['#0C4B5E', '#03C95A', '#FFC107', '#E70D0D'],
           borderWidth: 5,
           borderRadius: 10,
-          borderColor: "#fff", // Border between segments
+          borderColor: '#fff', // Border between segments
           hoverBorderWidth: 0, // Border radius for curved edges
-          cutout: "60%",
+          cutout: '60%',
         },
       ],
     };
@@ -236,16 +229,16 @@ const LayoutDemo = () => {
   };
   useEffect(() => {
     const data = {
-      labels: ["Ongoing", "Onhold", "Completed", "Overdue"],
+      labels: ['Ongoing', 'Onhold', 'Completed', 'Overdue'],
       datasets: [
         {
-          label: "Semi Donut",
+          label: 'Semi Donut',
           data: [20, 40, 20, 10],
-          backgroundColor: ["#FFC107", "#1B84FF", "#03C95A", "#E70D0D"],
+          backgroundColor: ['#FFC107', '#1B84FF', '#03C95A', '#E70D0D'],
           borderWidth: -10,
-          borderColor: "transparent", // Border between segments
+          borderColor: 'transparent', // Border between segments
           hoverBorderWidth: 0, // Border radius for curved edges
-          cutout: "75%",
+          cutout: '75%',
           spacing: -30,
         },
       ],
@@ -280,57 +273,57 @@ const LayoutDemo = () => {
   }, []);
 
   useEffect(() => {
-    if (Location.pathname === "/layout-horizontal") {
-      dispatch(setDataLayout("horizontal"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-horizontal-single") {
-      dispatch(setDataLayout("horizontal-single"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-detached") {
-      dispatch(setDataLayout("detached"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-twocolumn") {
-      dispatch(setDataLayout("twocolumn"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-without-header") {
-      dispatch(setDataLayout("without-header"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-horizontal-overlay") {
-      dispatch(setDataLayout("horizontal-overlay"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-horizontal-sidemenu") {
-      dispatch(setDataLayout("horizontal-sidemenu"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-modern") {
-      dispatch(setDataLayout("modern"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-transparent") {
-      dispatch(setDataLayout("transparent"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-horizontal-box") {
-      dispatch(setDataLayout("mini"));
-      dispatch(setDataWidth("box"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-hovered") {
-      dispatch(setDataLayout("default"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-mini") {
-      dispatch(setDataLayout("mini"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-dark") {
-      dispatch(setDataLayout("default"));
-      dispatch(setDataTheme("dark"));
-      dispatch(setRtl(""));
-    } else if (Location.pathname === "/layout-rtl") {
-      dispatch(setDataLayout("rtl"));
-      dispatch(setRtl("layout-mode-rtl"));
-    } else if (Location.pathname === "/layout-box") {
-      dispatch(setDataLayout("mini"));
-      dispatch(setDataWidth("box"));
-      dispatch(setRtl(""));
+    if (Location.pathname === '/layout-horizontal') {
+      dispatch(setDataLayout('horizontal'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-horizontal-single') {
+      dispatch(setDataLayout('horizontal-single'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-detached') {
+      dispatch(setDataLayout('detached'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-twocolumn') {
+      dispatch(setDataLayout('twocolumn'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-without-header') {
+      dispatch(setDataLayout('without-header'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-horizontal-overlay') {
+      dispatch(setDataLayout('horizontal-overlay'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-horizontal-sidemenu') {
+      dispatch(setDataLayout('horizontal-sidemenu'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-modern') {
+      dispatch(setDataLayout('modern'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-transparent') {
+      dispatch(setDataLayout('transparent'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-horizontal-box') {
+      dispatch(setDataLayout('mini'));
+      dispatch(setDataWidth('box'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-hovered') {
+      dispatch(setDataLayout('default'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-mini') {
+      dispatch(setDataLayout('mini'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-dark') {
+      dispatch(setDataLayout('default'));
+      dispatch(setDataTheme('dark'));
+      dispatch(setRtl(''));
+    } else if (Location.pathname === '/layout-rtl') {
+      dispatch(setDataLayout('rtl'));
+      dispatch(setRtl('layout-mode-rtl'));
+    } else if (Location.pathname === '/layout-box') {
+      dispatch(setDataLayout('mini'));
+      dispatch(setDataWidth('box'));
+      dispatch(setRtl(''));
     } else {
-      dispatch(setDataLayout("default"));
-      dispatch(setRtl(""));
+      dispatch(setDataLayout('default'));
+      dispatch(setRtl(''));
     }
     return () => {
       dispatch(resetAllMode());
@@ -381,7 +374,7 @@ const LayoutDemo = () => {
                     <li>
                       <Link to="#" className="dropdown-item rounded-1">
                         <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
+                        Export as Excel{' '}
                       </Link>
                     </li>
                   </ul>
@@ -420,32 +413,21 @@ const LayoutDemo = () => {
                 </span>
                 <div className="ms-3">
                   <h3 className="mb-2">
-                    Welcome Back, Adrian{" "}
+                    Welcome Back, Adrian{' '}
                     <Link to="#" className="edit-icon">
                       <i className="ti ti-edit fs-14" />
                     </Link>
                   </h3>
                   <p>
-                    You have{" "}
-                    <span className="text-primary text-decoration-underline">
-                      21
-                    </span>{" "}
-                    Pending Approvals &amp;{" "}
-                    <span className="text-primary text-decoration-underline">
-                      14
-                    </span>{" "}
-                    Leave Requests
+                    You have <span className="text-primary text-decoration-underline">21</span>{' '}
+                    Pending Approvals &amp;{' '}
+                    <span className="text-primary text-decoration-underline">14</span> Leave
+                    Requests
                   </p>
                 </div>
               </div>
               <div className="d-flex align-items-center flex-wrap mb-1">
-                <Link
-                  to="#"
-                  className="btn btn-secondary btn-md me-2 mb-2"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_project"
-                >
+                <Link to={routes.projectlist} className="btn btn-secondary btn-md me-2 mb-2">
                   <i className="ti ti-square-rounded-plus me-1" />
                   Add Project
                 </Link>
@@ -473,20 +455,15 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-primary mb-2">
                         <i className="ti ti-calendar-share fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Attendance
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Attendance</h6>
                       <h3 className="mb-3">
-                        92/99{" "}
+                        92/99{' '}
                         <span className="fs-12 fw-medium text-success">
                           <i className="fa-solid fa-caret-up me-1" />
                           +2.1%
                         </span>
                       </h3>
-                      <Link
-                        to="attendance-employee.html"
-                        className="link-default"
-                      >
+                      <Link to="attendance-employee.html" className="link-default">
                         View Details
                       </Link>
                     </div>
@@ -498,11 +475,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-secondary mb-2">
                         <i className="ti ti-browser fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Total Project's
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Total Project's</h6>
                       <h3 className="mb-3">
-                        90/94{" "}
+                        90/94{' '}
                         <span className="fs-12 fw-medium text-danger">
                           <i className="fa-solid fa-caret-down me-1" />
                           -2.1%
@@ -520,11 +495,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-info mb-2">
                         <i className="ti ti-users-group fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Total Clients
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Total Clients</h6>
                       <h3 className="mb-3">
-                        69/86{" "}
+                        69/86{' '}
                         <span className="fs-12 fw-medium text-danger">
                           <i className="fa-solid fa-caret-down me-1" />
                           -11.2%
@@ -542,11 +515,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-pink mb-2">
                         <i className="ti ti-checklist fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Total Tasks
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Total Tasks</h6>
                       <h3 className="mb-3">
-                        25/28{" "}
+                        25/28{' '}
                         <span className="fs-12 fw-medium text-success">
                           <i className="fa-solid fa-caret-down me-1" />
                           +11.2%
@@ -564,11 +535,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-purple mb-2">
                         <i className="ti ti-moneybag fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Earnings
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Earnings</h6>
                       <h3 className="mb-3">
-                        $2144{" "}
+                        $2144{' '}
                         <span className="fs-12 fw-medium text-success">
                           <i className="fa-solid fa-caret-up me-1" />
                           +10.2%
@@ -586,20 +555,15 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-danger mb-2">
                         <i className="ti ti-browser fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Profit This Week
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Profit This Week</h6>
                       <h3 className="mb-3">
-                        $5,544{" "}
+                        $5,544{' '}
                         <span className="fs-12 fw-medium text-success">
                           <i className="fa-solid fa-caret-up me-1" />
                           +2.1%
                         </span>
                       </h3>
-                      <Link
-                        to="purchase-transaction.html"
-                        className="link-default"
-                      >
+                      <Link to="purchase-transaction.html" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -611,11 +575,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-success mb-2">
                         <i className="ti ti-users-group fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        Job Applicants
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">Job Applicants</h6>
                       <h3 className="mb-3">
-                        98{" "}
+                        98{' '}
                         <span className="fs-12 fw-medium text-success">
                           <i className="fa-solid fa-caret-up me-1" />
                           +2.1%
@@ -633,11 +595,9 @@ const LayoutDemo = () => {
                       <span className="avatar rounded-circle bg-dark mb-2">
                         <i className="ti ti-user-star fs-16" />
                       </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">
-                        New Hire
-                      </h6>
+                      <h6 className="fs-13 fw-medium text-default mb-1">New Hire</h6>
                       <h3 className="mb-3">
-                        45/48{" "}
+                        45/48{' '}
                         <span className="fs-12 fw-medium text-danger">
                           <i className="fa-solid fa-caret-down me-1" />
                           -11.2%
@@ -695,9 +655,10 @@ const LayoutDemo = () => {
                   />
                   <p className="fs-13">
                     <i className="ti ti-circle-filled me-2 fs-8 text-primary" />
-                    No of Employees increased by{" "}
-                    <span className="text-success fw-bold">+20%</span> from last
-                    Week
+                    No of Employees increased by <span className="text-success fw-bold">
+                      +20%
+                    </span>{' '}
+                    from last Week
                   </p>
                 </div>
               </div>
@@ -751,7 +712,7 @@ const LayoutDemo = () => {
                       aria-valuenow={15}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      style={{ width: "40%" }}
+                      style={{ width: '40%' }}
                     >
                       <div className="progress-bar bg-warning" />
                     </div>
@@ -762,7 +723,7 @@ const LayoutDemo = () => {
                       aria-valuenow={30}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      style={{ width: "20%" }}
+                      style={{ width: '20%' }}
                     >
                       <div className="progress-bar bg-secondary" />
                     </div>
@@ -773,7 +734,7 @@ const LayoutDemo = () => {
                       aria-valuenow={20}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      style={{ width: "10%" }}
+                      style={{ width: '10%' }}
                     >
                       <div className="progress-bar bg-danger" />
                     </div>
@@ -784,7 +745,7 @@ const LayoutDemo = () => {
                       aria-valuenow={20}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      style={{ width: "30%" }}
+                      style={{ width: '30%' }}
                     >
                       <div className="progress-bar bg-pink" />
                     </div>
@@ -835,10 +796,7 @@ const LayoutDemo = () => {
                       <span className="me-2">
                         <i className="ti ti-award-filled text-primary fs-24" />
                       </span>
-                      <Link
-                        to="employee-details.html"
-                        className="avatar avatar-md me-2"
-                      >
+                      <Link to="employee-details.html" className="avatar avatar-md me-2">
                         <ImageWithBasePath
                           src="assets/img/profiles/avatar-24.jpg"
                           className="rounded-circle border border-white"
@@ -857,10 +815,7 @@ const LayoutDemo = () => {
                       <h5 className="text-primary">99%</h5>
                     </div>
                   </div>
-                  <Link
-                    to="employees.html"
-                    className="btn btn-light btn-md w-100"
-                  >
+                  <Link to="employees.html" className="btn btn-light btn-md w-100">
                     View All Employees
                   </Link>
                 </div>
@@ -961,16 +916,10 @@ const LayoutDemo = () => {
                           />
                         </span>
                         <span className="avatar avatar-rounded">
-                          <ImageWithBasePath
-                            src="assets/img/profiles/avatar-14.jpg"
-                            alt="img"
-                          />
+                          <ImageWithBasePath src="assets/img/profiles/avatar-14.jpg" alt="img" />
                         </span>
                         <span className="avatar avatar-rounded">
-                          <ImageWithBasePath
-                            src="assets/img/profiles/avatar-29.jpg"
-                            alt="img"
-                          />
+                          <ImageWithBasePath src="assets/img/profiles/avatar-29.jpg" alt="img" />
                         </span>
                         <Link
                           className="avatar bg-primary avatar-rounded text-fixed-white fs-10"
@@ -1064,9 +1013,7 @@ const LayoutDemo = () => {
                           />
                         </Link>
                         <div className="ms-2">
-                          <h6 className="fs-14 fw-medium text-truncate">
-                            Daniel Esbella
-                          </h6>
+                          <h6 className="fs-14 fw-medium text-truncate">Daniel Esbella</h6>
                           <p className="fs-13">UI/UX Designer</p>
                         </div>
                       </div>
@@ -1115,9 +1062,7 @@ const LayoutDemo = () => {
                             />
                           </Link>
                           <div className="ms-2">
-                            <h6 className="fs-14 fw-medium text-truncate">
-                              Brian Villalobos
-                            </h6>
+                            <h6 className="fs-14 fw-medium text-truncate">Brian Villalobos</h6>
                             <p className="fs-13">PHP Developer</p>
                           </div>
                         </div>
@@ -1168,7 +1113,7 @@ const LayoutDemo = () => {
                       </span>
                       <div className="ms-2">
                         <h6 className="fs-14 fw-medium text-truncate">
-                          Anthony Lewis{" "}
+                          Anthony Lewis{' '}
                           <span className="fs-10 fw-medium d-inline-flex align-items-center badge badge-success">
                             <i className="ti ti-clock-hour-11 me-1" />
                             30 Min
@@ -1187,10 +1132,7 @@ const LayoutDemo = () => {
                       </span>
                     </div>
                   </div>
-                  <Link
-                    to="attendance-report.html"
-                    className="btn btn-light btn-md w-100"
-                  >
+                  <Link to="attendance-report.html" className="btn btn-light btn-md w-100">
                     View All Attendance
                   </Link>
                 </div>
@@ -1204,10 +1146,7 @@ const LayoutDemo = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Jobs Applicants</h5>
-                  <Link
-                    to="job-list.html"
-                    className="btn btn-light btn-md mb-2"
-                  >
+                  <Link to="job-list.html" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -1247,10 +1186,7 @@ const LayoutDemo = () => {
                     <div className="tab-pane fade" id="openings">
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0 bg-gray-100"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0 bg-gray-100">
                             <ImageWithBasePath
                               src="assets/img/icons/apple.svg"
                               className="img-fluid rounded-circle w-auto h-auto"
@@ -1273,10 +1209,7 @@ const LayoutDemo = () => {
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0 bg-gray-100"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0 bg-gray-100">
                             <ImageWithBasePath
                               src="assets/img/icons/php.svg"
                               className="img-fluid w-auto h-auto"
@@ -1299,10 +1232,7 @@ const LayoutDemo = () => {
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0 bg-gray-100"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0 bg-gray-100">
                             <ImageWithBasePath
                               src="assets/img/icons/react.svg"
                               className="img-fluid w-auto h-auto"
@@ -1325,10 +1255,7 @@ const LayoutDemo = () => {
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-0">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0 bg-gray-100"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0 bg-gray-100">
                             <ImageWithBasePath
                               src="assets/img/icons/laravel-icon.svg"
                               className="img-fluid w-auto h-auto"
@@ -1353,10 +1280,7 @@ const LayoutDemo = () => {
                     <div className="tab-pane fade show active" id="applicants">
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0">
                             <ImageWithBasePath
                               src="assets/img/users/user-09.jpg"
                               className="img-fluid rounded-circle"
@@ -1374,16 +1298,11 @@ const LayoutDemo = () => {
                             </span>
                           </div>
                         </div>
-                        <span className="badge badge-secondary badge-xs">
-                          UI/UX Designer
-                        </span>
+                        <span className="badge badge-secondary badge-xs">UI/UX Designer</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0">
                             <ImageWithBasePath
                               src="assets/img/users/user-32.jpg"
                               className="img-fluid rounded-circle"
@@ -1401,16 +1320,11 @@ const LayoutDemo = () => {
                             </span>
                           </div>
                         </div>
-                        <span className="badge badge-info badge-xs">
-                          Python Developer
-                        </span>
+                        <span className="badge badge-info badge-xs">Python Developer</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-4">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0">
                             <ImageWithBasePath
                               src="assets/img/users/user-32.jpg"
                               className="img-fluid rounded-circle"
@@ -1428,16 +1342,11 @@ const LayoutDemo = () => {
                             </span>
                           </div>
                         </div>
-                        <span className="badge badge-pink badge-xs">
-                          Android Developer
-                        </span>
+                        <span className="badge badge-pink badge-xs">Android Developer</span>
                       </div>
                       <div className="d-flex align-items-center justify-content-between mb-0">
                         <div className="d-flex align-items-center">
-                          <Link
-                            to="#"
-                            className="avatar overflow-hidden flex-shrink-0"
-                          >
+                          <Link to="#" className="avatar overflow-hidden flex-shrink-0">
                             <ImageWithBasePath
                               src="assets/img/users/user-34.jpg"
                               className="img-fluid rounded-circle"
@@ -1455,9 +1364,7 @@ const LayoutDemo = () => {
                             </span>
                           </div>
                         </div>
-                        <span className="badge badge-purple badge-xs">
-                          React Developer
-                        </span>
+                        <span className="badge badge-purple badge-xs">React Developer</span>
                       </div>
                     </div>
                   </div>
@@ -1470,10 +1377,7 @@ const LayoutDemo = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Employees</h5>
-                  <Link
-                    to="employees.html"
-                    className="btn btn-light btn-md mb-2"
-                  >
+                  <Link to="employees.html" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -1554,9 +1458,7 @@ const LayoutDemo = () => {
                             </div>
                           </td>
                           <td>
-                            <span className="badge badge-info-transparent badge-xs">
-                              Marketing
-                            </span>
+                            <span className="badge badge-info-transparent badge-xs">Marketing</span>
                           </td>
                         </tr>
                         <tr>
@@ -1578,9 +1480,7 @@ const LayoutDemo = () => {
                             </div>
                           </td>
                           <td>
-                            <span className="badge badge-purple-transparent badge-xs">
-                              Manager
-                            </span>
+                            <span className="badge badge-purple-transparent badge-xs">Manager</span>
                           </td>
                         </tr>
                         <tr>
@@ -1661,7 +1561,7 @@ const LayoutDemo = () => {
                 <div className="card-body">
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[0] ? "todo-strike" : ""
+                      isTodo[0] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1672,17 +1572,14 @@ const LayoutDemo = () => {
                         id="todo1"
                         onChange={() => toggleTodo(0)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo1"
-                      >
+                      <label className="form-check-label fw-medium" htmlFor="todo1">
                         Add Holidays
                       </label>
                     </div>
                   </div>
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[1] ? "todo-strike" : ""
+                      isTodo[1] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1693,17 +1590,14 @@ const LayoutDemo = () => {
                         id="todo2"
                         onChange={() => toggleTodo(1)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo2"
-                      >
+                      <label className="form-check-label fw-medium" htmlFor="todo2">
                         Add Meeting to Client
                       </label>
                     </div>
                   </div>
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[2] ? "todo-strike" : ""
+                      isTodo[2] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1714,17 +1608,14 @@ const LayoutDemo = () => {
                         id="todo3"
                         onChange={() => toggleTodo(2)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo3"
-                      >
+                      <label className="form-check-label fw-medium" htmlFor="todo3">
                         Chat with Adrian
                       </label>
                     </div>
                   </div>
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[3] ? "todo-strike" : ""
+                      isTodo[3] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1735,17 +1626,14 @@ const LayoutDemo = () => {
                         id="todo4"
                         onChange={() => toggleTodo(3)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo4"
-                      >
+                      <label className="form-check-label fw-medium" htmlFor="todo4">
                         Management Call
                       </label>
                     </div>
                   </div>
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[4] ? "todo-strike" : ""
+                      isTodo[4] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1756,17 +1644,14 @@ const LayoutDemo = () => {
                         id="todo5"
                         onChange={() => toggleTodo(4)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo5"
-                      >
+                      <label className="form-check-label fw-medium" htmlFor="todo5">
                         Add Payroll
                       </label>
                     </div>
                   </div>
                   <div
                     className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[5] ? "todo-strike" : ""
+                      isTodo[5] ? 'todo-strike' : ''
                     }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
@@ -1777,11 +1662,8 @@ const LayoutDemo = () => {
                         id="todo6"
                         onChange={() => toggleTodo(5)}
                       />
-                      <label
-                        className="form-check-label fw-medium"
-                        htmlFor="todo6"
-                      >
-                        Add Policy for Increment{" "}
+                      <label className="form-check-label fw-medium" htmlFor="todo6">
+                        Add Policy for Increment{' '}
                       </label>
                     </div>
                   </div>
@@ -1918,10 +1800,7 @@ const LayoutDemo = () => {
                         <tr>
                           <td className="px-0">
                             <div className="d-flex align-items-center">
-                              <Link
-                                to="invoice-details.html"
-                                className="avatar"
-                              >
+                              <Link to="invoice-details.html" className="avatar">
                                 <ImageWithBasePath
                                   src="assets/img/users/user-39.jpg"
                                   className="img-fluid rounded-circle"
@@ -1930,9 +1809,7 @@ const LayoutDemo = () => {
                               </Link>
                               <div className="ms-2">
                                 <h6 className="fw-medium">
-                                  <Link to="invoice-details.html">
-                                    Redesign Website
-                                  </Link>
+                                  <Link to="invoice-details.html">Redesign Website</Link>
                                 </h6>
                                 <span className="fs-13 d-inline-flex align-items-center">
                                   #INVOO2
@@ -1956,10 +1833,7 @@ const LayoutDemo = () => {
                         <tr>
                           <td className="px-0">
                             <div className="d-flex align-items-center">
-                              <Link
-                                to="invoice-details.html"
-                                className="avatar"
-                              >
+                              <Link to="invoice-details.html" className="avatar">
                                 <ImageWithBasePath
                                   src="assets/img/users/user-40.jpg"
                                   className="img-fluid rounded-circle"
@@ -1968,9 +1842,7 @@ const LayoutDemo = () => {
                               </Link>
                               <div className="ms-2">
                                 <h6 className="fw-medium">
-                                  <Link to="invoice-details.html">
-                                    Module Completion
-                                  </Link>
+                                  <Link to="invoice-details.html">Module Completion</Link>
                                 </h6>
                                 <span className="fs-13 d-inline-flex align-items-center">
                                   #INVOO5
@@ -1994,10 +1866,7 @@ const LayoutDemo = () => {
                         <tr>
                           <td className="px-0">
                             <div className="d-flex align-items-center">
-                              <Link
-                                to="invoice-details.html"
-                                className="avatar"
-                              >
+                              <Link to="invoice-details.html" className="avatar">
                                 <ImageWithBasePath
                                   src="assets/img/users/user-55.jpg"
                                   className="img-fluid rounded-circle"
@@ -2006,9 +1875,7 @@ const LayoutDemo = () => {
                               </Link>
                               <div className="ms-2">
                                 <h6 className="fw-medium">
-                                  <Link to="invoice-details.html">
-                                    Change on Emp Module
-                                  </Link>
+                                  <Link to="invoice-details.html">Change on Emp Module</Link>
                                 </h6>
                                 <span className="fs-13 d-inline-flex align-items-center">
                                   #INVOO3
@@ -2032,10 +1899,7 @@ const LayoutDemo = () => {
                         <tr>
                           <td className="px-0">
                             <div className="d-flex align-items-center">
-                              <Link
-                                to="invoice-details.html"
-                                className="avatar"
-                              >
+                              <Link to="invoice-details.html" className="avatar">
                                 <ImageWithBasePath
                                   src="assets/img/users/user-42.jpg"
                                   className="img-fluid rounded-circle"
@@ -2044,9 +1908,7 @@ const LayoutDemo = () => {
                               </Link>
                               <div className="ms-2">
                                 <h6 className="fw-medium">
-                                  <Link to="invoice-details.html">
-                                    Changes on the Board
-                                  </Link>
+                                  <Link to="invoice-details.html">Changes on the Board</Link>
                                 </h6>
                                 <span className="fs-13 d-inline-flex align-items-center">
                                   #INVOO2
@@ -2070,10 +1932,7 @@ const LayoutDemo = () => {
                         <tr>
                           <td className="px-0">
                             <div className="d-flex align-items-center">
-                              <Link
-                                to="invoice-details.html"
-                                className="avatar"
-                              >
+                              <Link to="invoice-details.html" className="avatar">
                                 <ImageWithBasePath
                                   src="assets/img/users/user-44.jpg"
                                   className="img-fluid rounded-circle"
@@ -2082,9 +1941,7 @@ const LayoutDemo = () => {
                               </Link>
                               <div className="ms-2">
                                 <h6 className="fw-medium">
-                                  <Link to="invoice-details.html">
-                                    Hospital Management
-                                  </Link>
+                                  <Link to="invoice-details.html">Hospital Management</Link>
                                 </h6>
                                 <span className="fs-13 d-inline-flex align-items-center">
                                   #INVOO6
@@ -2108,10 +1965,7 @@ const LayoutDemo = () => {
                       </tbody>
                     </table>
                   </div>
-                  <Link
-                    to="invoice.html"
-                    className="btn btn-light btn-md w-100 mt-2"
-                  >
+                  <Link to="invoice.html" className="btn btn-light btn-md w-100 mt-2">
                     View All
                   </Link>
                 </div>
@@ -2171,18 +2025,13 @@ const LayoutDemo = () => {
                       <tbody>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-001
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Office Management App
-                              </Link>
+                              <Link to="project-details.html">Office Management App</Link>
                             </h6>
                           </td>
                           <td>
@@ -2219,10 +2068,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "40%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '40%' }} />
                             </div>
                           </td>
                           <td>12/09/2024</td>
@@ -2235,18 +2081,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-002
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Clinic Management{" "}
-                              </Link>
+                              <Link to="project-details.html">Clinic Management </Link>
                             </h6>
                           </td>
                           <td>
@@ -2289,10 +2130,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "40%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '40%' }} />
                             </div>
                           </td>
                           <td>24/10/2024</td>
@@ -2305,18 +2143,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-003
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Educational Platform
-                              </Link>
+                              <Link to="project-details.html">Educational Platform</Link>
                             </h6>
                           </td>
                           <td>
@@ -2353,10 +2186,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "50%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '50%' }} />
                             </div>
                           </td>
                           <td>18/02/2024</td>
@@ -2369,18 +2199,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-004
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Chat &amp; Call Mobile App
-                              </Link>
+                              <Link to="project-details.html">Chat &amp; Call Mobile App</Link>
                             </h6>
                           </td>
                           <td>
@@ -2417,10 +2242,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "50%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '50%' }} />
                             </div>
                           </td>
                           <td>19/02/2024</td>
@@ -2433,18 +2255,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-005
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Travel Planning Website
-                              </Link>
+                              <Link to="project-details.html">Travel Planning Website</Link>
                             </h6>
                           </td>
                           <td>
@@ -2481,10 +2298,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "50%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '50%' }} />
                             </div>
                           </td>
                           <td>18/02/2024</td>
@@ -2497,18 +2311,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td>
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-006
                             </Link>
                           </td>
                           <td>
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Service Booking Software
-                              </Link>
+                              <Link to="project-details.html">Service Booking Software</Link>
                             </h6>
                           </td>
                           <td>
@@ -2545,10 +2354,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "50%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '50%' }} />
                             </div>
                           </td>
                           <td>20/02/2024</td>
@@ -2561,18 +2367,13 @@ const LayoutDemo = () => {
                         </tr>
                         <tr>
                           <td className="border-0">
-                            <Link
-                              to="project-details.html"
-                              className="link-default"
-                            >
+                            <Link to="project-details.html" className="link-default">
                               PRO-008
                             </Link>
                           </td>
                           <td className="border-0">
                             <h6 className="fw-medium">
-                              <Link to="project-details.html">
-                                Travel Planning Website
-                              </Link>
+                              <Link to="project-details.html">Travel Planning Website</Link>
                             </h6>
                           </td>
                           <td className="border-0">
@@ -2615,10 +2416,7 @@ const LayoutDemo = () => {
                               aria-valuemin={0}
                               aria-valuemax={100}
                             >
-                              <div
-                                className="progress-bar bg-primary"
-                                style={{ width: "45%" }}
-                              />
+                              <div className="progress-bar bg-primary" style={{ width: '45%' }} />
                             </div>
                           </td>
                           <td className="border-0">17/10/2024</td>
@@ -2695,7 +2493,7 @@ const LayoutDemo = () => {
                     <div className="border-end text-center me-2 pe-2 mb-3">
                       <p className="fs-13 d-inline-flex align-items-center mb-1">
                         <i className="ti ti-circle-filled fs-10 me-1 text-info" />
-                        On Hold{" "}
+                        On Hold{' '}
                       </p>
                       <h5>10%</h5>
                     </div>
@@ -2717,14 +2515,9 @@ const LayoutDemo = () => {
                   <div className="bg-dark br-5 p-3 pb-0 d-flex align-items-center justify-content-between">
                     <div className="mb-2">
                       <h4 className="text-success">389/689 hrs</h4>
-                      <p className="fs-13 mb-0">
-                        Spent on Overall Tasks This Week
-                      </p>
+                      <p className="fs-13 mb-0">Spent on Overall Tasks This Week</p>
                     </div>
-                    <Link
-                      to="tasks.html"
-                      className="btn btn-sm btn-light mb-2 text-nowrap"
-                    >
+                    <Link to="tasks.html" className="btn btn-sm btn-light mb-2 text-nowrap">
                       View All
                     </Link>
                   </div>
@@ -2739,21 +2532,14 @@ const LayoutDemo = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Schedules</h5>
-                  <Link
-                    to="candidates.html"
-                    className="btn btn-light btn-md mb-2"
-                  >
+                  <Link to="candidates.html" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
                 <div className="card-body">
                   <div className="bg-light p-3 br-5 mb-4">
-                    <span className="badge badge-secondary badge-xs mb-1">
-                      UI/ UX Designer
-                    </span>
-                    <h6 className="mb-2 text-truncate">
-                      Interview Candidates - UI/UX Designer
-                    </h6>
+                    <span className="badge badge-secondary badge-xs mb-1">UI/ UX Designer</span>
+                    <h6 className="mb-2 text-truncate">Interview Candidates - UI/UX Designer</h6>
                     <div className="d-flex align-items-center flex-wrap">
                       <p className="fs-13 mb-1 me-2">
                         <i className="ti ti-calendar-event me-2" />
@@ -2814,12 +2600,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div className="bg-light p-3 br-5 mb-0">
-                    <span className="badge badge-dark badge-xs mb-1">
-                      IOS Developer
-                    </span>
-                    <h6 className="mb-2 text-truncate">
-                      Interview Candidates - IOS Developer
-                    </h6>
+                    <span className="badge badge-dark badge-xs mb-1">IOS Developer</span>
+                    <h6 className="mb-2 text-truncate">Interview Candidates - IOS Developer</h6>
                     <div className="d-flex align-items-center flex-wrap">
                       <p className="fs-13 mb-1 me-2">
                         <i className="ti ti-calendar-event me-2" />
@@ -2888,10 +2670,7 @@ const LayoutDemo = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Recent Activities</h5>
-                  <Link
-                    to="activity.html"
-                    className="btn btn-light btn-md mb-2"
-                  >
+                  <Link to="activity.html" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -2914,8 +2693,7 @@ const LayoutDemo = () => {
                             <p className="fs-13">05:30 PM</p>
                           </div>
                           <p className="fs-13">
-                            Added New Project{" "}
-                            <span className="text-primary">HRMS Dashboard</span>
+                            Added New Project <span className="text-primary">HRMS Dashboard</span>
                           </p>
                         </div>
                       </div>
@@ -2938,9 +2716,7 @@ const LayoutDemo = () => {
                             </h6>
                             <p className="fs-13">05:00 PM</p>
                           </div>
-                          <p className="fs-13">
-                            Commented on Uploaded Document
-                          </p>
+                          <p className="fs-13">Commented on Uploaded Document</p>
                         </div>
                       </div>
                     </div>
@@ -2984,9 +2760,7 @@ const LayoutDemo = () => {
                             </h6>
                             <p className="fs-13">06:00 PM</p>
                           </div>
-                          <p className="fs-13">
-                            Requesting Access to Module Tickets
-                          </p>
+                          <p className="fs-13">Requesting Access to Module Tickets</p>
                         </div>
                       </div>
                     </div>
@@ -3151,7 +2925,7 @@ const LayoutDemo = () => {
         <Footer />
       </div>
       {/* /Page Wrapper */}
-      <RequestModals mode = "employee" />
+      <RequestModals mode="employee" />
       <TodoModal />
     </>
   );

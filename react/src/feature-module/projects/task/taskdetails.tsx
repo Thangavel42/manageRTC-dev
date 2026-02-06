@@ -111,15 +111,23 @@ const TaskDetails = () => {
 
   // Load project members from projectDetails (already fetched via REST)
   const loadProjectMembers = useCallback(() => {
-    if (!projectDetails) return;
+    if (!projectDetails) {
+      console.log('[TaskDetails] No project details available');
+      return;
+    }
+
+    console.log('[TaskDetails] Loading project members from:', projectDetails);
+    console.log('[TaskDetails] Team Members:', projectDetails.teamMembers);
+    console.log('[TaskDetails] Team Leaders:', projectDetails.teamLeader);
 
     setLoadingMembers(true);
-    // Combine team members, team leaders, and project managers from project details
+    // Combine team members and team leaders from project details
     const allMembers = [
       ...(projectDetails.teamMembers || []),
       ...(projectDetails.teamLeader || []),
-      ...(projectDetails.projectManager || []),
     ];
+
+    console.log('[TaskDetails] Combined members:', allMembers);
 
     // Remove duplicates based on _id
     const uniqueMembers = allMembers
@@ -129,6 +137,7 @@ const TaskDetails = () => {
           index === self.findIndex((m) => m._id?.toString() === member._id?.toString())
       );
 
+    console.log('[TaskDetails] Unique members after filtering:', uniqueMembers);
     setProjectMembers(uniqueMembers);
     setLoadingMembers(false);
   }, [projectDetails]);
@@ -256,7 +265,8 @@ const TaskDetails = () => {
   const assigneeSelectOptions = useMemo(
     () =>
       (projectMembers || []).map((member) => {
-        const rawValue = member?._id || member?.id || member?.employeeId;
+        // Use _id as primary identifier to match backend assignee references
+        const rawValue = member?._id || member?.id;
         const value = rawValue ? rawValue.toString() : '';
         return {
           value,
@@ -459,23 +469,11 @@ const TaskDetails = () => {
     if (!assigneeModal) return;
 
     const handleModalShow = () => {
-      // Pre-select already assigned employees - extract IDs from populated objects
-      if (task?.assignee) {
-        const assigneeArray = Array.isArray(task.assignee)
-          ? task.assignee
-              .map((a: any) => {
-                if (typeof a === 'object' && a !== null) {
-                  return (a._id || a.id || a).toString();
-                }
-                return a?.toString();
-              })
-              .filter(Boolean)
-          : typeof task.assignee === 'string'
-            ? task.assignee.split(',').filter((a) => a.trim())
-            : [];
-        console.log('[TaskDetails] Add Assignee modal - pre-selected IDs:', assigneeArray);
-        setSelectedNewAssignees(assigneeArray);
-      }
+      // Pre-select already assigned employees using editAssignees state
+      console.log('[TaskDetails] Add Assignee modal opening');
+      console.log('[TaskDetails] Current editAssignees:', editAssignees);
+      console.log('[TaskDetails] Available assigneeSelectOptions:', assigneeSelectOptions);
+      setSelectedNewAssignees(editAssignees);
     };
 
     assigneeModal.addEventListener('show.bs.modal', handleModalShow);
@@ -483,7 +481,7 @@ const TaskDetails = () => {
     return () => {
       assigneeModal.removeEventListener('show.bs.modal', handleModalShow);
     };
-  }, [task?.assignee]);
+  }, [editAssignees, assigneeSelectOptions]);
 
   if (loading) {
     return (

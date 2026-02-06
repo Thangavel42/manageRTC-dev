@@ -11,23 +11,28 @@ import CommonSelect from '../../../core/common/commonSelect';
 import Footer from '../../../core/common/footer';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CommonTagsInput from '../../../core/common/Taginput';
-import CommonTextEditor from '../../../core/common/textEditor';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { Task, useTasksREST } from '../../../hooks/useTasksREST';
 import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
+import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 
 const TaskBoard = () => {
   // Initialize REST API hooks for tasks
   const {
     tasks: tasksList,
     loading: tasksLoading,
+    createTask: createTaskAPI,
     updateTask: updateTaskAPI,
     updateStatus: updateTaskStatusAPI,
     getTasksByProject: fetchTasksByProject,
   } = useTasksREST();
 
   // Initialize REST API hooks for projects
-  const { projects: projectsList, fetchProjects: fetchProjectsAPI } = useProjectsREST();
+  const {
+    projects: projectsList,
+    fetchProjects: fetchProjectsAPI,
+    getProjectById: getProjectByIdAPI,
+  } = useProjectsREST();
 
   // Initialize REST API hooks for task statuses
   const {
@@ -36,6 +41,9 @@ const TaskBoard = () => {
     createTaskStatus: createTaskStatusAPI,
     updateTaskStatus: updateTaskStatusBoardAPI,
   } = useTaskStatusREST();
+
+  // Initialize user profile hook
+  const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
 
   const [selectedProject, setSelectedProject] = useState('Select');
   const [projects, setProjects] = useState<any[]>([]);
@@ -76,6 +84,19 @@ const TaskBoard = () => {
     progress?: number;
   } | null>(null);
 
+  // Add Task Modal States
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskPriority, setTaskPriority] = useState('Medium');
+  const [taskStatus, setTaskStatus] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState<Dayjs | null>(null);
+  const [taskTags, setTaskTags] = useState<string[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [isSavingTask, setIsSavingTask] = useState(false);
+  const [taskModalError, setTaskModalError] = useState<string | null>(null);
+  const [taskFieldErrors, setTaskFieldErrors] = useState<Record<string, string>>({});
+  const addTaskCloseButtonRef = useRef<HTMLButtonElement>(null);
+
   // Fallback statuses in case API fails or returns empty
   const defaultTaskStatuses = useMemo(
     () => [
@@ -98,13 +119,26 @@ const TaskBoard = () => {
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
+      // Log employee filtering info if user is an employee
+      if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+        console.log('[TaskBoard] Fetching projects for employee:', {
+          _id: profile._id,
+          employeeId: profile.employeeId,
+          role: profile.role,
+          name: `${profile.firstName} ${profile.lastName}`,
+        });
+        console.log(
+          '[TaskBoard] Backend will filter projects where employee is in teamMembers, teamLeader, or projectManager'
+        );
+      }
+
       await fetchProjectsAPI();
     } catch (error) {
       console.error('[TaskBoard] Error loading projects:', error);
     } finally {
       setLoading(false);
     }
-  }, [fetchProjectsAPI]);
+  }, [fetchProjectsAPI, profile]);
 
   const loadTaskStatuses = useCallback(async () => {
     try {
@@ -144,13 +178,7 @@ const TaskBoard = () => {
       label: project.projectId ? `${project.name} (${project.projectId})` : project.name,
     })),
   ];
-  const statusChoose = [
-    { value: 'Select', label: 'Select' },
-    { value: 'Inprogress', label: 'Inprogress' },
-    { value: 'Completed', label: 'Completed' },
-    { value: 'Pending', label: 'Pending' },
-    { value: 'Onhold', label: 'Onhold' },
-  ];
+
   const priorityChoose = [
     { value: 'Select', label: 'Select' },
     { value: 'Medium', label: 'Medium' },
@@ -158,21 +186,27 @@ const TaskBoard = () => {
     { value: 'Low', label: 'Low' },
   ];
 
-  // Dynamic assignee options from current project's team members
+  // Dynamic assignee options from current project's team members and team leaders
   const assigneeChoose = useMemo(() => {
     const baseOption = [{ value: 'Select', label: 'Select' }];
     const currentProject = projects.find(
       (p) => p._id === selectedProject || p.projectId === selectedProject
     );
 
-    if (!currentProject?.teamMembersdetail || currentProject.teamMembersdetail.length === 0) {
+    // Combine team members and team leaders
+    const allMembers = [
+      ...(currentProject?.teamMembersdetail || []),
+      ...(currentProject?.teamLeaderdetail || []),
+    ];
+
+    if (allMembers.length === 0) {
       return baseOption;
     }
 
     const seen = new Set<string>();
-    const teamOptions = currentProject.teamMembersdetail.reduce((acc: any[], member: any) => {
+    const teamOptions = allMembers.reduce((acc: any[], member: any) => {
       const value = (member?._id || member?.id || member?.employeeId || '').toString();
-      if (!value || seen.has(value)) return acc;
+      if (!value || seen.has(value)) return acc; // skip empty or duplicate ids
       seen.add(value);
       acc.push({
         value,
@@ -186,9 +220,6 @@ const TaskBoard = () => {
 
     return [...baseOption, ...teamOptions];
   }, [projects, selectedProject]);
-
-  const [tags, setTags] = useState<string[]>(['Jerald', 'Andrew', 'Philip', 'Davis']);
-  const [tags1, setTags1] = useState<string[]>(['Collab', 'Rated']);
 
   const normalizeStatus = (status?: string) => (status || 'Pending').toLowerCase();
 
@@ -452,6 +483,199 @@ const TaskBoard = () => {
     }
   }, []);
 
+  // Add Task Functions
+  const clearTaskFieldError = (fieldName: string) => {
+    setTaskFieldErrors((prev) => {
+      const newErrors = { ...prev };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
+  };
+
+  const validateTaskField = (fieldName: string, value: any): string => {
+    switch (fieldName) {
+      case 'taskTitle':
+        if (!value || !value.trim()) return 'Task title is required';
+        if (value.trim().length < 3) return 'Task title must be at least 3 characters';
+        break;
+      case 'taskDescription':
+        if (!value || !value.trim()) return 'Task description is required';
+        if (value.trim().length < 10) return 'Task description must be at least 10 characters';
+        break;
+      case 'taskPriority':
+        if (!value || value === 'Select') return 'Please select a priority level';
+        break;
+      case 'taskAssignees':
+        if (!Array.isArray(value) || value.length === 0)
+          return 'Please select at least one assignee';
+        break;
+      case 'taskDueDate':
+        if (!value) return 'Due date is required';
+        // Get current project
+        const currentProject = projects.find(
+          (p) => p._id === selectedProject || p.projectId === selectedProject
+        );
+        if (currentProject?.endDate && dayjs(value).isAfter(dayjs(currentProject.endDate))) {
+          return `Due date cannot exceed project end date (${dayjs(currentProject.endDate).format('DD-MM-YYYY')})`;
+        }
+        break;
+    }
+    return '';
+  };
+
+  const handleTaskFieldBlur = (fieldName: string, value: any) => {
+    const error = validateTaskField(fieldName, value);
+    if (error) {
+      setTaskFieldErrors((prev) => ({ ...prev, [fieldName]: error }));
+    }
+  };
+
+  const validateTaskForm = useCallback((): boolean => {
+    const errors: Record<string, string> = {};
+
+    const titleError = validateTaskField('taskTitle', taskTitle.trim());
+    if (titleError) errors.taskTitle = titleError;
+
+    const descriptionError = validateTaskField('taskDescription', taskDescription.trim());
+    if (descriptionError) errors.taskDescription = descriptionError;
+
+    const priorityError = validateTaskField('taskPriority', taskPriority);
+    if (priorityError) errors.taskPriority = priorityError;
+
+    const assigneeError = validateTaskField('taskAssignees', selectedAssignees);
+    if (assigneeError) errors.taskAssignees = assigneeError;
+
+    const dueDateError = validateTaskField('taskDueDate', taskDueDate);
+    if (dueDateError) errors.taskDueDate = dueDateError;
+
+    setTaskFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      setTimeout(() => {
+        const firstErrorField = Object.keys(errors)[0];
+        const errorElement =
+          document.querySelector(`[name="${firstErrorField}"]`) ||
+          document.querySelector(`#${firstErrorField}`) ||
+          document.querySelector(`.field-${firstErrorField}`);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          (errorElement as HTMLElement).focus?.();
+        }
+      }, 100);
+
+      return false;
+    }
+
+    return true;
+  }, [
+    taskTitle,
+    taskDescription,
+    taskPriority,
+    taskDueDate,
+    selectedAssignees,
+    projects,
+    selectedProject,
+  ]);
+
+  const handleOpenAddTask = useCallback(
+    (statusKey: string) => {
+      if (selectedProject === 'Select') {
+        toast.error('Please select a project first');
+        return;
+      }
+
+      // Reset form
+      setTaskTitle('');
+      setTaskDescription('');
+      setTaskPriority('Medium');
+      setTaskStatus(statusKey);
+      setTaskDueDate(null);
+      setTaskTags([]);
+      setSelectedAssignees([]);
+      setTaskModalError(null);
+      setTaskFieldErrors({});
+
+      // Open modal
+      const modalElement = document.getElementById('add_task');
+      if (modalElement) {
+        const modal = new (window as any).bootstrap.Modal(modalElement);
+        modal.show();
+      }
+    },
+    [selectedProject]
+  );
+
+  const closeAddTaskModal = useCallback(() => {
+    setTaskTitle('');
+    setTaskDescription('');
+    setTaskPriority('Medium');
+    setTaskStatus('');
+    setTaskDueDate(null);
+    setTaskTags([]);
+    setSelectedAssignees([]);
+    setTaskModalError(null);
+    setTaskFieldErrors({});
+    closeModalById('add_task');
+  }, [closeModalById]);
+
+  const handleSaveTask = useCallback(async () => {
+    if (!validateTaskForm()) {
+      return;
+    }
+
+    // Filter out empty tags
+    const validTags = taskTags.filter((tag) => tag && tag.trim() !== '');
+
+    setIsSavingTask(true);
+    setTaskModalError(null);
+    setTaskFieldErrors({});
+
+    try {
+      const taskData: Partial<Task> = {
+        projectId: selectedProject,
+        title: taskTitle,
+        description: taskDescription,
+        priority: taskPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
+        tags: validTags,
+        assignee: selectedAssignees,
+        dueDate: taskDueDate ? taskDueDate.format('YYYY-MM-DD') : undefined,
+        status: taskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+      };
+
+      const success = await createTaskAPI(taskData);
+      if (success) {
+        if (addTaskCloseButtonRef.current) {
+          addTaskCloseButtonRef.current.click();
+        }
+        closeAddTaskModal();
+        // Reload tasks to reflect the change
+        if (selectedProject !== 'Select') {
+          loadprojecttasks(selectedProject);
+        }
+      } else {
+        setTaskModalError('Failed to create task');
+      }
+    } catch (error) {
+      console.error('[TaskBoard] Error creating task:', error);
+      setTaskModalError('An error occurred while creating the task');
+    } finally {
+      setIsSavingTask(false);
+    }
+  }, [
+    validateTaskForm,
+    taskTitle,
+    taskDescription,
+    taskPriority,
+    taskStatus,
+    taskDueDate,
+    taskTags,
+    selectedAssignees,
+    selectedProject,
+    createTaskAPI,
+    closeAddTaskModal,
+    loadprojecttasks,
+  ]);
+
   const clearEditTaskFieldError = (fieldName: string) => {
     setEditTaskFieldErrors((prev) => {
       const newErrors = { ...prev };
@@ -460,7 +684,7 @@ const TaskBoard = () => {
     });
   };
 
-  const validateTaskField = (fieldName: string, value: any): string => {
+  const validateEditTaskField = (fieldName: string, value: any): string => {
     switch (fieldName) {
       case 'taskTitle':
         if (!value || !value.trim()) return 'Task title is required';
@@ -489,10 +713,6 @@ const TaskBoard = () => {
         if (currentProject?.endDate && dayjs(value).isAfter(dayjs(currentProject.endDate))) {
           return `Due date cannot exceed project end date (${dayjs(currentProject.endDate).format('DD-MM-YYYY')})`;
         }
-        // Check if due date is in the past
-        if (dayjs(value).isBefore(dayjs(), 'day')) {
-          return 'Due date cannot be in the past';
-        }
         break;
     }
     return '';
@@ -501,22 +721,22 @@ const TaskBoard = () => {
   const validateEditTaskForm = useCallback((): boolean => {
     const errors: Record<string, string> = {};
 
-    const titleError = validateTaskField('taskTitle', editTaskTitle.trim());
+    const titleError = validateEditTaskField('taskTitle', editTaskTitle.trim());
     if (titleError) errors.taskTitle = titleError;
 
-    const descriptionError = validateTaskField('taskDescription', editTaskDescription.trim());
+    const descriptionError = validateEditTaskField('taskDescription', editTaskDescription.trim());
     if (descriptionError) errors.taskDescription = descriptionError;
 
-    const priorityError = validateTaskField('taskPriority', editTaskPriority);
+    const priorityError = validateEditTaskField('taskPriority', editTaskPriority);
     if (priorityError) errors.taskPriority = priorityError;
 
-    const statusError = validateTaskField('taskStatus', editTaskStatus);
+    const statusError = validateEditTaskField('taskStatus', editTaskStatus);
     if (statusError) errors.taskStatus = statusError;
 
-    const assigneeError = validateTaskField('taskAssignees', editTaskAssignees);
+    const assigneeError = validateEditTaskField('taskAssignees', editTaskAssignees);
     if (assigneeError) errors.taskAssignees = assigneeError;
 
-    const dueDateError = validateTaskField('taskDueDate', editTaskDueDate);
+    const dueDateError = validateEditTaskField('taskDueDate', editTaskDueDate);
     if (dueDateError) errors.taskDueDate = dueDateError;
 
     setEditTaskFieldErrors(errors);
@@ -589,9 +809,22 @@ const TaskBoard = () => {
       const matchedStatus = findMatchingStatus(task.status, taskStatuses);
       setEditTaskStatus(matchedStatus);
       setEditTaskTags(Array.isArray(task.tags) ? task.tags : []);
-      setEditTaskAssignees(
-        Array.isArray(task.assignee) ? task.assignee.map((a: any) => a.toString()) : []
-      );
+
+      // Handle assignees - they can be objects (populated) or strings (IDs)
+      const assigneeIds = Array.isArray(task.assignee)
+        ? task.assignee
+            .map((a: any) => {
+              // If it's an object (populated), extract _id
+              if (typeof a === 'object' && a !== null) {
+                return (a._id || a.id || '').toString();
+              }
+              // If it's already a string ID
+              return a.toString();
+            })
+            .filter(Boolean) // Remove any empty values
+        : [];
+
+      setEditTaskAssignees(assigneeIds);
       setEditTaskModalError(null);
       setEditTaskFieldErrors({});
     },
@@ -868,6 +1101,24 @@ const TaskBoard = () => {
                         setSelectedProject(value);
                         console.log('Selected project:', value);
                         if (value !== 'Select') {
+                          // Fetch full project details to get team members
+                          getProjectByIdAPI(value).then((fullProject) => {
+                            if (fullProject) {
+                              // Update the project in the list with full details including teamMembersdetail and teamLeaderdetail
+                              setProjects((prev) =>
+                                prev.map((p) =>
+                                  p._id === value || p.projectId === value
+                                    ? {
+                                        ...p,
+                                        ...fullProject,
+                                        teamMembersdetail: fullProject.teamMembers,
+                                        teamLeaderdetail: fullProject.teamLeader,
+                                      }
+                                    : p
+                                )
+                              );
+                            }
+                          });
                           loadprojecttasks(value);
                         } else {
                           setTasks([]);
@@ -959,66 +1210,7 @@ const TaskBoard = () => {
             </div>
             <div className="card-body">
               <div className="row">
-                <div className="col-lg-4">
-                  <div className="d-flex align-items-center flex-wrap row-gap-3 mb-3">
-                    <h6 className="me-2">Priority</h6>
-                    <ul
-                      className="nav nav-pills border d-inline-flex p-1 rounded bg-light todo-tabs"
-                      id="pills-tab"
-                      role="tablist"
-                    >
-                      <li className="nav-item" role="presentation">
-                        <button
-                          className="nav-link btn btn-sm btn-icon py-3 d-flex align-items-center justify-content-center w-auto active"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-home"
-                          type="button"
-                          role="tab"
-                          aria-selected="true"
-                        >
-                          All
-                        </button>
-                      </li>
-                      <li className="nav-item" role="presentation">
-                        <button
-                          className="nav-link btn btn-sm btn-icon py-3 d-flex align-items-center justify-content-center w-auto"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-contact"
-                          type="button"
-                          role="tab"
-                          aria-selected="false"
-                        >
-                          High
-                        </button>
-                      </li>
-                      <li className="nav-item" role="presentation">
-                        <button
-                          className="nav-link btn btn-sm btn-icon py-3 d-flex align-items-center justify-content-center w-auto"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-medium"
-                          type="button"
-                          role="tab"
-                          aria-selected="false"
-                        >
-                          Medium
-                        </button>
-                      </li>
-                      <li className="nav-item" role="presentation">
-                        <button
-                          className="nav-link btn btn-sm btn-icon py-3 d-flex align-items-center justify-content-center w-auto"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-low"
-                          type="button"
-                          role="tab"
-                          aria-selected="false"
-                        >
-                          Low
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="col-lg-8">
+                <div className="col-lg-12">
                   <div className="d-flex align-items-center justify-content-lg-end flex-wrap row-gap-3 mb-3">
                     <div className="input-icon w-120 position-relative me-2">
                       <span className="input-icon-addon">
@@ -1344,9 +1536,10 @@ const TaskBoard = () => {
                               <Link
                                 to="#"
                                 className="btn btn-white border border-dashed d-flex align-items-center justify-content-center"
-                                data-bs-toggle="modal"
-                                data-inert={true}
-                                data-bs-target="#add_task"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleOpenAddTask(status.key);
+                                }}
                               >
                                 <i className="ti ti-plus me-2" /> New Task
                               </Link>
@@ -1367,31 +1560,158 @@ const TaskBoard = () => {
 
       {/* Add Task */}
       <div className="modal fade" id="add_task">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
+        <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
               <h4 className="modal-title">Add New Task</h4>
               <button
+                ref={addTaskCloseButtonRef}
                 type="button"
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={closeAddTaskModal}
               >
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form>
+            <form onSubmit={(e) => e.preventDefault()}>
               <div className="modal-body">
+                {taskModalError && (
+                  <div className="alert alert-danger" role="alert">
+                    {taskModalError}
+                  </div>
+                )}
                 <div className="row">
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">Title</label>
-                      <input type="text" className="form-control" />
+                      <label className="form-label">
+                        Task Title <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="taskTitle"
+                        className={`form-control ${taskFieldErrors.taskTitle ? 'is-invalid' : ''}`}
+                        value={taskTitle}
+                        onChange={(e) => {
+                          setTaskTitle(e.target.value);
+                          clearTaskFieldError('taskTitle');
+                        }}
+                        onBlur={(e) => handleTaskFieldBlur('taskTitle', e.target.value)}
+                        placeholder="Enter task title"
+                      />
+                      {taskFieldErrors.taskTitle && (
+                        <div className="invalid-feedback d-block">{taskFieldErrors.taskTitle}</div>
+                      )}
                     </div>
                   </div>
-                  <div className="col-md-6">
+                  <div className="col-6">
                     <div className="mb-3">
-                      <label className="form-label">Due Date</label>
+                      <label className="form-label">Tags</label>
+                      <CommonTagsInput
+                        value={taskTags}
+                        onChange={(tags) => setTaskTags(tags)}
+                        placeholder="Add task tags"
+                      />
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Priority <span className="text-danger">*</span>
+                      </label>
+                      <div
+                        id="taskPriority"
+                        className={taskFieldErrors.taskPriority ? 'is-invalid' : ''}
+                      >
+                        <CommonSelect
+                          className={`select ${taskFieldErrors.taskPriority ? 'is-invalid' : ''}`}
+                          options={priorityChoose}
+                          defaultValue={
+                            priorityChoose.find((p) => p.value === taskPriority) ||
+                            priorityChoose[2]
+                          }
+                          onChange={(option: any) => {
+                            setTaskPriority(option?.value || 'Medium');
+                            clearTaskFieldError('taskPriority');
+                            handleTaskFieldBlur('taskPriority', option?.value || 'Medium');
+                          }}
+                        />
+                      </div>
+                      {taskFieldErrors.taskPriority && (
+                        <div className="invalid-feedback d-block">
+                          {taskFieldErrors.taskPriority}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-lg-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Description <span className="text-danger">*</span>
+                      </label>
+                      <textarea
+                        name="taskDescription"
+                        className={`form-control ${taskFieldErrors.taskDescription ? 'is-invalid' : ''}`}
+                        rows={5}
+                        value={taskDescription}
+                        onChange={(e) => {
+                          setTaskDescription(e.target.value);
+                          clearTaskFieldError('taskDescription');
+                        }}
+                        onBlur={(e) => handleTaskFieldBlur('taskDescription', e.target.value)}
+                        placeholder="Enter task description (minimum 10 characters)"
+                      />
+                      {taskFieldErrors.taskDescription && (
+                        <div className="invalid-feedback d-block">
+                          {taskFieldErrors.taskDescription}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Add Assignee <span className="text-danger">*</span>
+                      </label>
+                      <div
+                        id="taskAssignees"
+                        className={`field-taskAssignees ${taskFieldErrors.taskAssignees ? 'is-invalid' : ''}`}
+                      >
+                        <Select
+                          isMulti
+                          className="basic-multi-select"
+                          classNamePrefix="select"
+                          options={assigneeChoose.filter((opt) => opt.value !== 'Select')}
+                          value={assigneeChoose.filter((opt) =>
+                            selectedAssignees.includes(opt.value)
+                          )}
+                          onChange={(opts) => {
+                            const values = (opts || []).map((opt) => opt.value);
+                            setSelectedAssignees(values);
+                            clearTaskFieldError('taskAssignees');
+                            handleTaskFieldBlur('taskAssignees', values);
+                          }}
+                          placeholder={
+                            assigneeChoose.length === 1
+                              ? 'No team members available'
+                              : 'Select assignees'
+                          }
+                          isDisabled={assigneeChoose.length === 1}
+                        />
+                      </div>
+                      {taskFieldErrors.taskAssignees && (
+                        <div className="invalid-feedback d-block">
+                          {taskFieldErrors.taskAssignees}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Due Date <span className="text-danger">*</span>
+                      </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
                           className="form-control datetimepicker"
@@ -1399,150 +1719,89 @@ const TaskBoard = () => {
                             format: 'DD-MM-YYYY',
                             type: 'mask',
                           }}
-                          getPopupContainer={getModalContainer}
+                          getPopupContainer={() =>
+                            document.getElementById('add_task') || document.body
+                          }
                           placeholder="DD-MM-YYYY"
+                          value={taskDueDate}
+                          onChange={(value) => {
+                            setTaskDueDate(value);
+                            clearTaskFieldError('taskDueDate');
+                            if (value) {
+                              handleTaskFieldBlur('taskDueDate', value);
+                            }
+                          }}
                         />
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-7" />
                         </span>
                       </div>
+                      {taskFieldErrors.taskDueDate && (
+                        <div className="invalid-feedback d-block">
+                          {taskFieldErrors.taskDueDate}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Project</label>
+                  <div className="col-12">
+                    <div className="mb-0">
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
                       <CommonSelect
                         className="select"
-                        options={projectChoose}
-                        defaultValue={projectChoose[1]}
+                        options={taskStatuses.map((status) => ({
+                          value: status.key,
+                          label: status.name,
+                        }))}
+                        value={
+                          taskStatuses.find((status) => status.key === taskStatus)
+                            ? {
+                                value: taskStatus,
+                                label: taskStatuses.find((status) => status.key === taskStatus)
+                                  ?.name,
+                              }
+                            : taskStatuses.length > 0
+                              ? { value: taskStatuses[0].key, label: taskStatuses[0].name }
+                              : { value: '', label: 'Select Status' }
+                        }
+                        onChange={(option: any) => {
+                          setTaskStatus(option?.value || '');
+                        }}
+                        disabled={true}
                       />
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="mb-3">
-                      <label className="form-label me-2">Team Members</label>
-                      <CommonTagsInput
-                        value={tags}
-                        onChange={setTags}
-                        placeholder="Add new"
-                        className="custom-input-class" // Optional custom class
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Tag</label>
-                      <CommonTagsInput
-                        value={tags1}
-                        onChange={setTags1}
-                        placeholder="Add new"
-                        className="custom-input-class" // Optional custom class
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Status</label>
-                      <CommonSelect
-                        className="select"
-                        options={statusChoose}
-                        defaultValue={statusChoose[1]}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="mb-3">
-                      <label className="form-label">Priority</label>
-                      <CommonSelect
-                        className="select"
-                        options={priorityChoose}
-                        defaultValue={priorityChoose[1]}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <label className="form-label">Who Can See this Task?</label>
-                    <div className="d-flex align-items-center mb-3">
-                      <div className="form-check me-3">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name="flexRadioDefault"
-                          id="flexRadioDefault1"
-                        />
-                        <label className="form-check-label text-dark" htmlFor="flexRadioDefault1">
-                          Public
-                        </label>
-                      </div>
-                      <div className="form-check me-3">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name="flexRadioDefault"
-                          id="flexRadioDefault2"
-                          defaultChecked
-                        />
-                        <label className="form-check-label text-dark" htmlFor="flexRadioDefault2">
-                          Private
-                        </label>
-                      </div>
-                      <div className="form-check ">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name="flexRadioDefault"
-                          id="flexRadioDefault3"
-                          defaultChecked
-                        />
-                        <label className="form-check-label text-dark" htmlFor="flexRadioDefault3">
-                          Admin Only
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-lg-12">
-                    <div className="mb-3">
-                      <label className="form-label">Descriptions</label>
-                      <CommonTextEditor />
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <label className="form-label">Upload Attachment</label>
-                    <div className="bg-light rounded p-2">
-                      <div className="profile-uploader border-bottom mb-2 pb-2">
-                        <div className="drag-upload-btn btn btn-sm btn-white border px-3">
-                          Select File
-                          <input type="file" className="form-control image-sign" multiple />
-                        </div>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-bottom mb-2 pb-2">
-                        <div className="d-flex align-items-center">
-                          <h6 className="fs-12 fw-medium me-1">Logo.zip</h6>
-                          <span className="badge badge-soft-info">21MB </span>
-                        </div>
-                        <Link to="#" className="btn btn-sm btn-icon">
-                          <i className="ti ti-trash" />
-                        </Link>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <h6 className="fs-12 fw-medium me-1">Files.zip</h6>
-                          <span className="badge badge-soft-info">25MB </span>
-                        </div>
-                        <Link to="#" className="btn btn-sm btn-icon">
-                          <i className="ti ti-trash" />
-                        </Link>
-                      </div>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                  onClick={closeAddTaskModal}
+                  disabled={isSavingTask}
+                >
                   Cancel
                 </button>
-                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
-                  Add New Task
+                <button
+                  type="button"
+                  onClick={handleSaveTask}
+                  disabled={isSavingTask}
+                  className="btn btn-primary"
+                >
+                  {isSavingTask ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Add New Task'
+                  )}
                 </button>
               </div>
             </form>

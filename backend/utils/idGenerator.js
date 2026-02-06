@@ -4,6 +4,8 @@
  */
 
 import mongoose from 'mongoose';
+import Project from '../models/project/project.schema.js';
+import { getTenantModel } from './mongooseMultiTenant.js';
 
 /**
  * generateEmployeeId - Generate unique employee ID
@@ -20,7 +22,7 @@ export const generateEmployeeId = async (companyId, joiningDate = new Date()) =>
   // Find the highest employee ID for this company and year
   const lastEmployee = await Employee.findOne({
     companyId,
-    employeeId: new RegExp(`^EMP-${year}-`)
+    employeeId: new RegExp(`^EMP-${year}-`),
   }).sort({ employeeId: -1 });
 
   let sequence = 1;
@@ -44,12 +46,15 @@ export const generateEmployeeId = async (companyId, joiningDate = new Date()) =>
  * @returns {Promise<string>} Generated project ID
  */
 export const generateProjectId = async (companyId) => {
-  const Project = mongoose.model('Project');
+  // Use tenant-specific model to avoid conflicts across tenants
+  const ProjectModel = companyId
+    ? getTenantModel(companyId, 'Project', Project.schema)
+    : mongoose.model('Project');
+
   const year = new Date().getFullYear();
 
-  const lastProject = await Project.findOne({
-    companyId,
-    projectId: new RegExp(`^PRJ-${year}-`)
+  const lastProject = await ProjectModel.findOne({
+    projectId: new RegExp(`^PRJ-${year}-`),
   }).sort({ projectId: -1 });
 
   let sequence = 1;
@@ -77,7 +82,7 @@ export const generateTaskId = async (projectId) => {
 
   const lastTask = await Task.findOne({
     project: projectId,
-    taskId: new RegExp(`^TSK-${year}-`)
+    taskId: new RegExp(`^TSK-${year}-`),
   }).sort({ taskId: -1 });
 
   let sequence = 1;
@@ -105,7 +110,7 @@ export const generateLeaveId = async (companyId) => {
 
   const lastLeave = await Leave.findOne({
     companyId,
-    leaveId: new RegExp(`^LEA-${year}-`)
+    leaveId: new RegExp(`^LEA-${year}-`),
   }).sort({ leaveId: -1 });
 
   let sequence = 1;
@@ -133,7 +138,7 @@ export const generateLeadId = async (companyId) => {
 
   const lastLead = await Lead.findOne({
     companyId,
-    leadId: new RegExp(`^LD-${year}-`)
+    leadId: new RegExp(`^LD-${year}-`),
   }).sort({ leadId: -1 });
 
   let sequence = 1;
@@ -161,7 +166,7 @@ export const generateClientId = async (companyId) => {
 
   const lastClient = await Client.findOne({
     companyId,
-    clientId: new RegExp(`^CLI-${year}-`)
+    clientId: new RegExp(`^CLI-${year}-`),
   }).sort({ clientId: -1 });
 
   let sequence = 1;
@@ -189,7 +194,7 @@ export const generateAttendanceId = async (companyId) => {
 
   const lastAttendance = await Attendance.findOne({
     companyId,
-    attendanceId: new RegExp(`^ATT-${year}-`)
+    attendanceId: new RegExp(`^ATT-${year}-`),
   }).sort({ attendanceId: -1 });
 
   let sequence = 1;
@@ -218,7 +223,7 @@ export const generateOvertimeId = async (companyId, date = new Date()) => {
 
   const lastOvertime = await OvertimeRequest.findOne({
     companyId,
-    overtimeId: new RegExp(`^OVT-${year}-`)
+    overtimeId: new RegExp(`^OVT-${year}-`),
   }).sort({ overtimeId: -1 });
 
   let sequence = 1;
@@ -246,7 +251,7 @@ export const generateShiftId = async (companyId) => {
 
   const lastShift = await Shift.findOne({
     companyId,
-    shiftId: new RegExp(`^SHF-${year}-`)
+    shiftId: new RegExp(`^SHF-${year}-`),
   }).sort({ shiftId: -1 });
 
   let sequence = 1;
@@ -274,7 +279,7 @@ export const generateAssetId = async (companyId) => {
 
   const lastAsset = await Asset.findOne({
     companyId,
-    assetId: new RegExp(`^AST-${year}-`)
+    assetId: new RegExp(`^AST-${year}-`),
   }).sort({ assetId: -1 });
 
   let sequence = 1;
@@ -302,7 +307,7 @@ export const generateTrainingId = async (companyId) => {
 
   const lastTraining = await Training.findOne({
     companyId,
-    trainingId: new RegExp(`^TRN-${year}-`)
+    trainingId: new RegExp(`^TRN-${year}-`),
   }).sort({ trainingId: -1 });
 
   let sequence = 1;
@@ -330,7 +335,7 @@ export const generateActivityId = async (companyId) => {
 
   const lastActivity = await Activity.findOne({
     companyId,
-    activityId: new RegExp(`^ACT-${year}-`)
+    activityId: new RegExp(`^ACT-${year}-`),
   }).sort({ activityId: -1 });
 
   let sequence = 1;
@@ -358,7 +363,7 @@ export const generatePipelineId = async (companyId) => {
 
   const lastPipeline = await Pipeline.findOne({
     companyId,
-    pipelineId: new RegExp(`^PLN-${year}-`)
+    pipelineId: new RegExp(`^PLN-${year}-`),
   }).sort({ pipelineId: -1 });
 
   let sequence = 1;
@@ -400,7 +405,7 @@ export const generateBatchId = async (companyId) => {
 
   const lastBatch = await Batch.findOne({
     companyId,
-    batchId: new RegExp(`^BCH-${year}-`)
+    batchId: new RegExp(`^BCH-${year}-`),
   }).sort({ batchId: -1 });
 
   let sequence = 1;
@@ -430,5 +435,5 @@ export default {
   generateTrainingId,
   generateActivityId,
   generatePipelineId,
-  generateId
+  generateId,
 };

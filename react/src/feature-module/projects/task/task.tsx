@@ -11,6 +11,8 @@ import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { useTasksREST } from '../../../hooks/useTasksREST';
+import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
+import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import { all_routes } from '../../router/all_routes';
 
 const Task = () => {
@@ -35,6 +37,8 @@ const Task = () => {
     fetchProjects,
     getProjectTeamMembers,
   } = useProjectsREST();
+  const { statuses: taskStatuses, fetchTaskStatuses } = useTaskStatusREST();
+  const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
   const [employees, setEmployees] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
@@ -44,6 +48,7 @@ const Task = () => {
     project: 'all',
     search: '',
   });
+  const [sortBy, setSortBy] = useState<'createdAt' | 'dueDate'>('createdAt');
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [projectTeamMembers, setProjectTeamMembers] = useState<any[]>([]);
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(false);
@@ -77,6 +82,12 @@ const Task = () => {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
 
+  // Pagination state
+  const [projectPage, setProjectPage] = useState(1);
+  const [taskPage, setTaskPage] = useState(1);
+  const projectsPerPage = 5;
+  const tasksPerPage = 10;
+
   // Derived counts: total and completed tasks per project (from project data or tasks)
   const projectTaskCounts = React.useMemo(() => {
     const counts: Record<string, { total: number; completed: number }> = {};
@@ -104,18 +115,78 @@ const Task = () => {
     [projectTaskCounts]
   );
 
-  // Dynamic project options from loaded projects
+  // Projects are already filtered by backend for employees
+  // Admin and HR get all projects, employees get only their assigned projects
+  const filteredProjects = React.useMemo(() => {
+    return projects;
+  }, [projects]);
+
+  // Client-side filtering and sorting for tasks
+  const filteredTasks = React.useMemo(() => {
+    let filtered = tasks.filter((task: any) => {
+      // Filter by priority
+      if (filters.priority !== 'all' && task.priority !== filters.priority) {
+        return false;
+      }
+      // Filter by status
+      if (filters.status !== 'all' && task.status !== filters.status) {
+        return false;
+      }
+      // Filter by search
+      if (
+        filters.search &&
+        task.title &&
+        !task.title.toLowerCase().includes(filters.search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    // Sort tasks
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === 'createdAt') {
+        // Sort by created date (oldest first)
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateA - dateB;
+      } else if (sortBy === 'dueDate') {
+        // Sort by due date (tasks ending soonest first)
+        const dateA = new Date(a.dueDate || '9999-12-31').getTime();
+        const dateB = new Date(b.dueDate || '9999-12-31').getTime();
+        return dateA - dateB;
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [tasks, filters.priority, filters.status, filters.search, sortBy]);
+
+  // Pagination calculations
+  const totalProjects = filteredProjects.length;
+  const totalProjectPages = Math.ceil(totalProjects / projectsPerPage);
+  const startProjectIndex = (projectPage - 1) * projectsPerPage;
+  const endProjectIndex = startProjectIndex + projectsPerPage;
+  const paginatedProjects = filteredProjects.slice(startProjectIndex, endProjectIndex);
+
+  const totalTasks = filteredTasks.length;
+  const totalTaskPages = Math.ceil(totalTasks / tasksPerPage);
+  const startTaskIndex = (taskPage - 1) * tasksPerPage;
+  const endTaskIndex = startTaskIndex + tasksPerPage;
+  const paginatedTasks = filteredTasks.slice(startTaskIndex, endTaskIndex);
+
+  // Dynamic project options from filtered projects with project IDs
   const projectChoose = React.useMemo(
     () => [
       { value: 'Select', label: 'Select' },
-      ...projects
+      ...filteredProjects
         .filter((project) => project.status !== 'Completed')
         .map((project) => ({
           value: project._id,
-          label: project.name || 'Untitled Project',
+          label: `${project.projectId || project._id} - ${project.name || 'Untitled Project'}`,
         })),
     ],
-    [projects]
+    [filteredProjects]
   );
 
   // Dynamic employee options for team members (from selected project)
@@ -131,15 +202,24 @@ const Task = () => {
     [projectTeamMembers]
   );
 
-  const statusChoose = [
-    { value: 'To do', label: 'To do' },
-    { value: 'Pending', label: 'Pending' },
-    { value: 'Inprogress', label: 'Inprogress' },
-    { value: 'Completed', label: 'Completed' },
-    { value: 'Onhold', label: 'Onhold' },
-    { value: 'Review', label: 'Review' },
-    { value: 'Cancelled', label: 'Cancelled' },
-  ];
+  // Dynamic status options from task statuses collection
+  const statusChoose = React.useMemo(() => {
+    if (!taskStatuses || taskStatuses.length === 0) {
+      return [
+        { value: 'To do', label: 'To do' },
+        { value: 'Pending', label: 'Pending' },
+        { value: 'Inprogress', label: 'Inprogress' },
+        { value: 'Completed', label: 'Completed' },
+        { value: 'Onhold', label: 'Onhold' },
+        { value: 'Review', label: 'Review' },
+        { value: 'Cancelled', label: 'Cancelled' },
+      ];
+    }
+    return taskStatuses.map((status) => ({
+      value: status.key,
+      label: status.name || status.key,
+    }));
+  }, [taskStatuses]);
   const priorityChoose = [
     { value: 'Medium', label: 'Medium' },
     { value: 'High', label: 'High' },
@@ -147,43 +227,53 @@ const Task = () => {
   ];
 
   const loadTasks = useCallback(() => {
-    // Only load tasks if a project is selected
+    // Only load tasks if a specific project is selected
     if (!filters.project || filters.project === 'all') {
-      console.log('[Task] No project selected, skipping task load');
       return;
     }
 
     setError(null);
-    // Convert filters to REST format
+    // Only send project filter to backend, priority and status filters are applied client-side
     const restFilters: any = {};
-    if (filters.priority && filters.priority !== 'all') {
-      restFilters.priority = filters.priority;
-    }
-    if (filters.status && filters.status !== 'all') {
-      restFilters.status = filters.status;
-    }
     if (filters.project && filters.project !== 'all') {
       restFilters.project = filters.project;
     }
-    if (filters.search) {
-      restFilters.search = filters.search;
-    }
 
-    console.log('[Task] Loading tasks for project:', filters.project);
     fetchTasks(restFilters);
-  }, [filters, fetchTasks]);
+  }, [filters.project, fetchTasks]);
 
   const loadProjects = useCallback(async () => {
     try {
       setError(null);
+
+      // Log employee filtering info if user is an employee
+      if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+        console.log('[Task] Fetching projects for employee:', {
+          _id: profile._id,
+          employeeId: profile.employeeId,
+          role: profile.role,
+          name: `${profile.firstName} ${profile.lastName}`,
+        });
+        console.log(
+          '[Task] Backend will filter projects where employee is in teamMembers, teamLeader, or projectManager'
+        );
+      }
+
       await fetchProjects();
-      console.log('[Task] Projects loaded with task counts');
     } catch (err) {
       console.error('[Task] Failed to load projects:', err);
       setError('Failed to load projects');
       message.error('Failed to load projects');
     }
-  }, [fetchProjects]);
+  }, [fetchProjects, profile]);
+
+  const loadTaskStatuses = useCallback(async () => {
+    try {
+      await fetchTaskStatuses();
+    } catch (err) {
+      console.error('[Task] Failed to load task statuses:', err);
+    }
+  }, [fetchTaskStatuses]);
 
   const validateField = useCallback(
     (field: string, value: any): string => {
@@ -211,6 +301,9 @@ const Task = () => {
           return '';
         case 'priority':
           if (!value || value === 'Select') return 'Please select a priority';
+          return '';
+        case 'status':
+          if (!value || value === 'Select') return 'Please select a status';
           return '';
         case 'description':
           if (!value || !value.trim()) return 'Description is required';
@@ -312,6 +405,9 @@ const Task = () => {
     const priorityError = validateField('priority', addForm.priority);
     if (priorityError) errors.priority = priorityError;
 
+    const statusError = validateField('status', addForm.status);
+    if (statusError) errors.status = statusError;
+
     const descriptionError = validateField('description', addForm.description);
     if (descriptionError) errors.description = descriptionError;
 
@@ -321,7 +417,6 @@ const Task = () => {
 
   const handleProjectSelection = useCallback(
     async (projectId: string) => {
-      console.log('Selected project ID:', projectId);
       if (!projectId || projectId === 'Select') {
         setSelectedProject(null);
         setProjectTeamMembers([]);
@@ -346,22 +441,43 @@ const Task = () => {
     setFilters((prev) => ({ ...prev, priority }));
   }, []);
 
+  const handleStatusFilter = useCallback((status: string) => {
+    setFilters((prev) => ({ ...prev, status }));
+  }, []);
+
+  const handleSortChange = useCallback((sort: 'createdAt' | 'dueDate') => {
+    setSortBy(sort);
+  }, []);
+
   const handleProjectTasksClick = useCallback(
     (projectId) => {
-      console.log('Filtering tasks for project:', projectId);
       if (!projectId) return;
+
+      // Update filters to reflect selected project
+      setFilters((prev) => ({
+        ...prev,
+        project: projectId,
+      }));
+
+      // Fetch tasks for the selected project
       getTasksByProject(projectId);
+
+      // Reset to first page when changing project
+      setTaskPage(1);
     },
     [getTasksByProject]
   );
 
   const resetAddForm = useCallback(() => {
+    // Use first status from loaded statuses or default to 'To do'
+    const defaultStatus = taskStatuses && taskStatuses.length > 0 ? taskStatuses[0].key : 'To do';
+
     setAddForm({
       title: '',
       projectId: '',
       assignees: [],
       dueDate: null,
-      status: 'To do',
+      status: defaultStatus,
       priority: 'Medium',
       description: '',
       tags: [],
@@ -371,7 +487,7 @@ const Task = () => {
     setLoadingTeamMembers(false);
     setFormError(null);
     setFieldErrors({});
-  }, []);
+  }, [taskStatuses]);
 
   const closeAddModal = useCallback(() => {
     const modalElement = document.getElementById('add_task');
@@ -579,14 +695,48 @@ const Task = () => {
     [employees]
   );
 
-  // Initial load - only load projects on mount (tasks loaded by filter changes)
+  // Initial load - load projects and task statuses on mount (tasks loaded by filter changes)
   useEffect(() => {
     loadProjects();
-  }, []); // Only run once on mount
+    loadTaskStatuses();
+  }, [loadProjects, loadTaskStatuses]);
+
+  // Console log employee _id from profile
+  useEffect(() => {
+    if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+      console.log('============================================');
+      console.log('[Task Page] Employee MongoDB _id:', profile._id);
+      console.log('[Task Page] Employee ID:', profile.employeeId);
+      console.log('[Task Page] Employee Name:', profile.firstName, profile.lastName);
+      console.log('[Task Page] Employee Role:', profile.role);
+      console.log('[Task Page] Full Profile:', profile);
+      console.log('============================================');
+    }
+  }, [profile]);
 
   useEffect(() => {
     loadTasks();
-  }, [filters, loadTasks]);
+    setTaskPage(1); // Reset to first page when project filter changes
+  }, [loadTasks]);
+
+  // Reset to first page when priority or status filters change
+  useEffect(() => {
+    setTaskPage(1);
+  }, [filters.priority, filters.status, filters.search]);
+
+  // Reset task page when tasks data changes
+  useEffect(() => {
+    if (taskPage > totalTaskPages && totalTaskPages > 0) {
+      setTaskPage(totalTaskPages);
+    }
+  }, [filteredTasks.length, taskPage, totalTaskPages]);
+
+  // Reset project page when projects data changes
+  useEffect(() => {
+    if (projectPage > totalProjectPages && totalProjectPages > 0) {
+      setProjectPage(totalProjectPages);
+    }
+  }, [filteredProjects.length, projectPage, totalProjectPages]);
 
   // Reset modal state when modals open
   useEffect(() => {
@@ -595,12 +745,13 @@ const Task = () => {
 
     const resetModalState = () => {
       resetAddForm();
+      const defaultStatus = taskStatuses && taskStatuses.length > 0 ? taskStatuses[0].key : 'To do';
       setEditForm({
         title: '',
         projectId: '',
         assignees: [],
         dueDate: null,
-        status: 'To do',
+        status: defaultStatus,
         priority: 'Medium',
         description: '',
         tags: [],
@@ -622,7 +773,7 @@ const Task = () => {
         editTaskModal.removeEventListener('show.bs.modal', resetModalState);
       }
     };
-  }, [resetAddForm]);
+  }, [resetAddForm, taskStatuses]);
 
   return (
     <>
@@ -676,13 +827,25 @@ const Task = () => {
                     <p className="text-muted small">Create your first project to see tasks</p>
                   </div>
                 ) : (
-                  projects.slice(0, 5).map((project: any, index: number) => (
-                    <div key={project._id} className="card">
+                  paginatedProjects.map((project: any, index: number) => (
+                    <div
+                      key={project._id}
+                      className={`card ${filters.project === project._id ? 'border-primary' : ''}`}
+                      style={{
+                        borderWidth: filters.project === project._id ? '2px' : '1px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onClick={() => handleProjectTasksClick(project._id)}
+                      onMouseEnter={() => setHoveredProjectId(project._id)}
+                      onMouseLeave={() => setHoveredProjectId(null)}
+                    >
                       <div className="card-body">
                         <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
                           <Link
                             to={`${all_routes.projectdetails}/${project._id}`}
                             className="flex-shrink-0 me-2"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <ImageWithBasePath
                               src={`assets/img/social/project-0${(index % 5) + 1}.svg`}
@@ -692,13 +855,18 @@ const Task = () => {
                           <div>
                             <h6 className="mb-1">
                               <span
-                                className={`text-dark text-truncate d-inline-block ${hoveredProjectId === project._id ? 'text-primary' : ''}`}
-                                style={{ cursor: 'pointer' }}
-                                onMouseEnter={() => setHoveredProjectId(project._id)}
-                                onMouseLeave={() => setHoveredProjectId(null)}
-                                onClick={() => handleProjectTasksClick(project._id)}
+                                className={`text-truncate d-inline-block ${
+                                  filters.project === project._id
+                                    ? 'text-primary fw-bold'
+                                    : hoveredProjectId === project._id
+                                      ? 'text-primary'
+                                      : 'text-dark'
+                                }`}
                               >
                                 {project.name || 'Untitled Project'}
+                                {filters.project === project._id && (
+                                  <i className="ti ti-check-circle ms-2" />
+                                )}
                               </span>
                             </h6>
                             <div className="d-flex align-items-center">
@@ -739,25 +907,33 @@ const Task = () => {
                               <h6 className="fw-normal d-flex align-items-center">
                                 {(() => {
                                   const teamLead =
-                                    Array.isArray(project.teamleadName) &&
-                                    project.teamleadName.length > 0
-                                      ? project.teamleadName[0]
-                                      : null;
+                                    Array.isArray(project.teamLeader) &&
+                                    project.teamLeader.length > 0
+                                      ? project.teamLeader[0]
+                                      : project.teamLeader && typeof project.teamLeader === 'object'
+                                        ? project.teamLeader
+                                        : null;
 
-                                  if (teamLead && teamLead.name) {
-                                    return (
-                                      <>
-                                        <span
-                                          className="text-truncate"
-                                          title={`${teamLead.name} (${teamLead.employeeId || 'N/A'})`}
-                                        >
-                                          {teamLead.name}
-                                          <small className="text-muted ms-1">
-                                            ({teamLead.employeeId || 'N/A'})
-                                          </small>
-                                        </span>
-                                      </>
-                                    );
+                                  if (teamLead) {
+                                    const name =
+                                      `${teamLead.firstName || ''} ${teamLead.lastName || ''}`.trim();
+                                    const employeeId = teamLead.employeeId || 'N/A';
+
+                                    if (name) {
+                                      return (
+                                        <>
+                                          <span
+                                            className="text-truncate"
+                                            title={`${name} (${employeeId})`}
+                                          >
+                                            {name}
+                                            <small className="text-muted ms-1">
+                                              ({employeeId})
+                                            </small>
+                                          </span>
+                                        </>
+                                      );
+                                    }
                                   }
 
                                   return (
@@ -816,6 +992,59 @@ const Task = () => {
                     </div>
                   ))
                 )}
+                {/* Project Pagination */}
+                {totalProjects > projectsPerPage && (
+                  <div className="card mt-3">
+                    <div className="card-body p-2">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <span className="text-muted small">
+                          Showing {startProjectIndex + 1} to{' '}
+                          {Math.min(endProjectIndex, totalProjects)} of {totalProjects} projects
+                        </span>
+                        <div className="btn-group">
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => setProjectPage(Math.max(1, projectPage - 1))}
+                            disabled={projectPage === 1}
+                          >
+                            <i className="ti ti-chevron-left" />
+                          </button>
+                          {Array.from({ length: totalProjectPages }, (_, i) => i + 1)
+                            .filter(
+                              (page) =>
+                                page === 1 ||
+                                page === totalProjectPages ||
+                                (page >= projectPage - 1 && page <= projectPage + 1)
+                            )
+                            .map((page, idx, arr) => (
+                              <React.Fragment key={page}>
+                                {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                  <button className="btn btn-sm btn-outline-primary" disabled>
+                                    ...
+                                  </button>
+                                )}
+                                <button
+                                  className={`btn btn-sm ${page === projectPage ? 'btn-primary' : 'btn-outline-primary'}`}
+                                  onClick={() => setProjectPage(page)}
+                                >
+                                  {page}
+                                </button>
+                              </React.Fragment>
+                            ))}
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() =>
+                              setProjectPage(Math.min(totalProjectPages, projectPage + 1))
+                            }
+                            disabled={projectPage === totalProjectPages}
+                          >
+                            <i className="ti ti-chevron-right" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="col-xl-8">
@@ -873,60 +1102,89 @@ const Task = () => {
                 </div>
                 <div className="col-lg-7">
                   <div className="d-flex align-items-center justify-content-lg-end flex-wrap row-gap-3 mb-3">
-                    <div className="input-icon w-120 position-relative me-2">
-                      <span className="input-icon-addon">
-                        <i className="ti ti-calendar" />
-                      </span>
-                      <DatePicker
-                        className="form-control datetimepicker"
-                        format={{
-                          format: 'DD-MM-YYYY',
-                          type: 'mask',
-                        }}
-                        getPopupContainer={getModalContainer}
-                        placeholder="Due Date"
-                      />
-                    </div>
-                    <div className="dropdown me-2">
-                      <Link
-                        to="#"
-                        className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        All Tags
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            All Tags
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            Internal
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            Projects
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            Meetings
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            Reminder
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            Research
-                          </Link>
-                        </li>
-                      </ul>
+                    <div className="d-flex align-items-center me-3">
+                      <span className="d-inline-flex me-2">Status : </span>
+                      <div className="dropdown">
+                        <Link
+                          to="#"
+                          className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                          data-bs-toggle="dropdown"
+                        >
+                          {filters.status === 'all'
+                            ? 'All Status'
+                            : taskStatuses?.find((s) => s.key === filters.status)?.name ||
+                              filters.status}
+                        </Link>
+                        <ul className="dropdown-menu dropdown-menu-end p-3">
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.status === 'all' ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleStatusFilter('all');
+                              }}
+                            >
+                              All Status
+                            </Link>
+                          </li>
+                          {taskStatuses && taskStatuses.length > 0 ? (
+                            taskStatuses.map((status) => (
+                              <li key={status.key}>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${filters.status === status.key ? 'active' : ''}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleStatusFilter(status.key);
+                                  }}
+                                >
+                                  {status.name || status.key}
+                                </Link>
+                              </li>
+                            ))
+                          ) : (
+                            <>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${filters.status === 'Pending' ? 'active' : ''}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleStatusFilter('Pending');
+                                  }}
+                                >
+                                  Pending
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${filters.status === 'Inprogress' ? 'active' : ''}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleStatusFilter('Inprogress');
+                                  }}
+                                >
+                                  Inprogress
+                                </Link>
+                              </li>
+                              <li>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${filters.status === 'Completed' ? 'active' : ''}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleStatusFilter('Completed');
+                                  }}
+                                >
+                                  Completed
+                                </Link>
+                              </li>
+                            </>
+                          )}
+                        </ul>
+                      </div>
                     </div>
                     <div className="d-flex align-items-center">
                       <span className="d-inline-flex me-2">Sort By : </span>
@@ -936,21 +1194,30 @@ const Task = () => {
                           className="dropdown-toggle btn btn-white d-inline-flex align-items-center border-0 bg-transparent p-0 text-dark"
                           data-bs-toggle="dropdown"
                         >
-                          Created Date
+                          {sortBy === 'createdAt' ? 'Created Date' : 'Due Date'}
                         </Link>
-                        <ul className="dropdown-menu  dropdown-menu-end p-3">
+                        <ul className="dropdown-menu dropdown-menu-end p-3">
                           <li>
-                            <Link to="#" className="dropdown-item rounded-1">
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${sortBy === 'createdAt' ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSortChange('createdAt');
+                              }}
+                            >
                               Created Date
                             </Link>
                           </li>
                           <li>
-                            <Link to="#" className="dropdown-item rounded-1">
-                              Priority
-                            </Link>
-                          </li>
-                          <li>
-                            <Link to="#" className="dropdown-item rounded-1">
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${sortBy === 'dueDate' ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSortChange('dueDate');
+                              }}
+                            >
                               Due Date
                             </Link>
                           </li>
@@ -968,11 +1235,27 @@ const Task = () => {
                 {tasks.length === 0 ? (
                   <div className="text-center py-5">
                     <i className="ti ti-clipboard-x fs-1 text-muted mb-3"></i>
-                    <h6 className="text-muted">No tasks found</h6>
-                    <p className="text-muted small">Tasks will appear here once created</p>
+                    <h6 className="text-muted">
+                      {filters.project === 'all' || !filters.project
+                        ? 'Select a project to view tasks'
+                        : 'No tasks found'}
+                    </h6>
+                    <p className="text-muted small">
+                      {filters.project === 'all' || !filters.project
+                        ? 'Click on a project card on the left to load its tasks'
+                        : 'This project has no tasks yet'}
+                    </p>
+                  </div>
+                ) : filteredTasks.length === 0 ? (
+                  <div className="text-center py-5">
+                    <i className="ti ti-filter-x fs-1 text-muted mb-3"></i>
+                    <h6 className="text-muted">No tasks match the current filters</h6>
+                    <p className="text-muted small">
+                      Try adjusting your priority or status filters
+                    </p>
                   </div>
                 ) : (
-                  tasks.map((task: any) => (
+                  paginatedTasks.map((task: any) => (
                     <div
                       key={task._id}
                       className="list-group-item list-item-hover shadow-sm rounded mb-2 p-3"
@@ -1140,6 +1423,53 @@ const Task = () => {
                   ))
                 )}
               </div>
+              {/* Task Pagination */}
+              {totalTasks > tasksPerPage && (
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                  <span className="text-muted">
+                    Showing {startTaskIndex + 1} to {Math.min(endTaskIndex, totalTasks)} of{' '}
+                    {totalTasks} tasks
+                  </span>
+                  <div className="btn-group">
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={() => setTaskPage(Math.max(1, taskPage - 1))}
+                      disabled={taskPage === 1}
+                    >
+                      <i className="ti ti-chevron-left" />
+                    </button>
+                    {Array.from({ length: totalTaskPages }, (_, i) => i + 1)
+                      .filter(
+                        (page) =>
+                          page === 1 ||
+                          page === totalTaskPages ||
+                          (page >= taskPage - 1 && page <= taskPage + 1)
+                      )
+                      .map((page, idx, arr) => (
+                        <React.Fragment key={page}>
+                          {idx > 0 && arr[idx - 1] !== page - 1 && (
+                            <button className="btn btn-sm btn-outline-primary" disabled>
+                              ...
+                            </button>
+                          )}
+                          <button
+                            className={`btn btn-sm ${page === taskPage ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setTaskPage(page)}
+                          >
+                            {page}
+                          </button>
+                        </React.Fragment>
+                      ))}
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={() => setTaskPage(Math.min(totalTaskPages, taskPage + 1))}
+                      disabled={taskPage === totalTaskPages}
+                    >
+                      <i className="ti ti-chevron-right" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1289,8 +1619,24 @@ const Task = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Status</label>
-                      <input type="text" className="form-control" value="To do" readOnly />
+                      <label className="form-label">
+                        Status <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className={`select ${fieldErrors.status ? 'is-invalid' : ''}`}
+                        options={statusChoose}
+                        value={
+                          statusChoose.find((opt) => opt.value === addForm.status) ||
+                          statusChoose[0]
+                        }
+                        onChange={(option: any) => {
+                          setAddForm((prev) => ({ ...prev, status: option?.value || 'To do' }));
+                          clearFieldError('status');
+                        }}
+                      />
+                      {fieldErrors.status && (
+                        <div className="invalid-feedback d-block">{fieldErrors.status}</div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">

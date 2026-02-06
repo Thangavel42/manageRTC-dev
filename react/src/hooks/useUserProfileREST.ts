@@ -29,6 +29,7 @@ export interface AdminProfileData {
 
 export interface EmployeeProfileData {
   role: 'hr' | 'employee';
+  _id: string;
   employeeId: string | null;
   firstName: string;
   lastName: string;
@@ -117,7 +118,7 @@ export const useUserProfileREST = (): UseUserProfileRESTReturn => {
       const response = await fetch(`${API_BASE_URL}/api/user-profile/current`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -143,43 +144,46 @@ export const useUserProfileREST = (): UseUserProfileRESTReturn => {
   }, [isLoaded, isSignedIn, getToken]);
 
   // Update current user profile (HR/Employee only)
-  const updateProfile = useCallback(async (data: Record<string, any>): Promise<UserProfileResponse> => {
-    if (!isLoaded || !isSignedIn) {
-      return { success: false, error: 'User not authenticated' };
-    }
-
-    try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Authentication token not available');
+  const updateProfile = useCallback(
+    async (data: Record<string, any>): Promise<UserProfileResponse> => {
+      if (!isLoaded || !isSignedIn) {
+        return { success: false, error: 'User not authenticated' };
       }
 
-      console.log('[useUserProfileREST] Updating profile...');
+      try {
+        const token = await getToken();
+        if (!token) {
+          throw new Error('Authentication token not available');
+        }
 
-      const response = await fetch(`${API_BASE_URL}/api/user-profile/current`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+        console.log('[useUserProfileREST] Updating profile...');
 
-      const result: UserProfileResponse = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/user-profile/current`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        });
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || result.message || 'Failed to update profile');
+        const result: UserProfileResponse = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || result.message || 'Failed to update profile');
+        }
+
+        console.log('[useUserProfileREST] Profile updated successfully:', result.data);
+        setProfile(result.data || null);
+        return result;
+      } catch (err: any) {
+        const errorMsg = err.message || 'Failed to update profile';
+        console.error('[useUserProfileREST] Error:', err);
+        return { success: false, error: errorMsg };
       }
-
-      console.log('[useUserProfileREST] Profile updated successfully:', result.data);
-      setProfile(result.data || null);
-      return result;
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to update profile';
-      console.error('[useUserProfileREST] Error:', err);
-      return { success: false, error: errorMsg };
-    }
-  }, [isLoaded, isSignedIn, getToken]);
+    },
+    [isLoaded, isSignedIn, getToken]
+  );
 
   // Refetch profile data
   const refetch = useCallback(async (): Promise<void> => {
