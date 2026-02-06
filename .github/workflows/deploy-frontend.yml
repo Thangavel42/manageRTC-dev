@@ -33,7 +33,7 @@ jobs:
       - name: Write .env.production
         run: |
           cat > .env.production << 'EOF'
-          CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY_PUBLIC }}
+          REACT_APP_CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY_PUBLIC }}
           REACT_APP_BACKEND_URL=https://apidev.manage-rtc.com
           EOF
 
