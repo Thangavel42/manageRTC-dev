@@ -120,9 +120,9 @@ import PayslipReport from '../administration/reports/payslipreport';
 import ProjectReport from '../administration/reports/projectreport';
 import TaskReport from '../administration/reports/taskreport';
 import UserReports from '../administration/reports/userreports';
-import PermissionPage from '../administration/user-management/permissionpage';
-import RolesPermission from '../administration/user-management/rolePermission';
-import Users from '../administration/user-management/users';
+import PermissionPage from '../super-admin/permissionpage';
+import RolesPermission from '../super-admin/rolePermission';
+import Users from '../super-admin/users';
 import IncomingCall from '../application/call/incomingcall';
 import OutgoingCalls from '../application/call/outgingcalls';
 import Videocallss from '../application/call/videocalls';
@@ -174,6 +174,7 @@ import Taxes from '../finance-accounts/sales/taxes';
 import Department from '../hrm/employees/deparment';
 import Designations from '../hrm/employees/designations';
 import EmployeeDetails from '../hrm/employees/employeedetails';
+import EmployeesGrid from '../hrm/employees/employeesGrid';
 import EmployeeList from '../hrm/employees/employeesList';
 import Policy from '../hrm/employees/policy';
 import Holidays from '../hrm/holidays';
@@ -183,12 +184,12 @@ import EmployeeDashboard from '../mainMenu/employeeDashboard/employee-dashboard'
 import HRDashboard from '../mainMenu/hrDashboard';
 import LayoutDemo from '../mainMenu/layout-dashoard';
 import LeadsDasboard from '../mainMenu/leadsDashboard';
+import AdminProfilePage from '../pages/admin-profile';
 import ApiKeys from '../pages/api-keys';
 import Gallery from '../pages/gallery';
 import Pricing from '../pages/pricing';
 import PrivacyPolicy from '../pages/privacy-policy';
 import Profile from '../pages/profile';
-import AdminProfilePage from '../pages/admin-profile';
 import SearchResult from '../pages/search-result';
 import StarterPage from '../pages/starter';
 import TermsCondition from '../pages/terms-condition';
@@ -1396,7 +1397,7 @@ export const publicRoutes = [
   {
     path: routes.permissionpage,
     element: <PermissionPage />,
-    roles: ['public'],
+    roles: ['superadmin'],
   },
   {
     path: routes.expensesreport,
@@ -1514,17 +1515,17 @@ export const publicRoutes = [
   {
     path: routes.users,
     element: <Users />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.rolePermission,
     element: <RolesPermission />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.permissionpage,
     element: <Permission />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.invoiceDetails,
@@ -1757,15 +1758,12 @@ export const publicRoutes = [
     roles: ['admin', 'hr', 'superadmin'],
   },
   {
-<<<<<<< main
-=======
     path: routes.employeeGrid,
-    element: <EmployeesGrid />,
+    element: <EmployeeList />,
     route: Route,
     roles: ['admin', 'hr', 'superadmin'],
   },
   {
->>>>>>> main
     path: routes.departments,
     element: <Department />,
     route: Route,
