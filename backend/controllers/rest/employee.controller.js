@@ -27,8 +27,8 @@ import {
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
+import { devError, devLog } from '../../utils/logger.js';
 import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * Generate secure random password for new employees
@@ -266,6 +266,27 @@ export const getEmployees = asyncHandler(async (req, res) => {
             then: { $toObjectId: '$designationId' },
             else: null
           }
+        },
+        reportingToObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
+            then: { $toObjectId: '$reportingTo' },
+            else: null
+          }
+        },
+        shiftObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
+            then: { $toObjectId: '$shiftId' },
+            else: null
+          }
+        },
+        batchObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
+            then: { $toObjectId: '$batchId' },
+            else: null
+          }
         }
       }
     },
@@ -286,9 +307,43 @@ export const getEmployees = asyncHandler(async (req, res) => {
       }
     },
     {
+      $lookup: {
+        from: 'employees',
+        let: { reportingToObjId: '$reportingToObjId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$_id', '$$reportingToObjId'] },
+              isDeleted: { $ne: true }
+            }
+          }
+        ],
+        as: 'reportingToInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'shifts',
+        localField: 'shiftObjId',
+        foreignField: '_id',
+        as: 'shiftInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'batches',
+        localField: 'batchObjId',
+        foreignField: '_id',
+        as: 'batchInfo'
+      }
+    },
+    {
       $addFields: {
         department: { $arrayElemAt: ['$departmentInfo', 0] },
         designation: { $arrayElemAt: ['$designationInfo', 0] },
+        reportingToManager: { $arrayElemAt: ['$reportingToInfo', 0] },
+        shiftData: { $arrayElemAt: ['$shiftInfo', 0] },
+        batchData: { $arrayElemAt: ['$batchInfo', 0] },
         // Assign default avatar for employees without profile image
         profileImage: {
           $cond: {
@@ -308,11 +363,59 @@ export const getEmployees = asyncHandler(async (req, res) => {
       }
     },
     {
+      $addFields: {
+        // Reporting Manager Name from populated manager
+        reportingManagerName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Shift information from populated shift
+        shiftName: { $ifNull: ['$shiftData.name', null] },
+        shiftColor: { $ifNull: ['$shiftData.color', null] },
+        shiftTiming: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            then: {
+              $concat: [
+                { $ifNull: ['$shiftData.startTime', ''] },
+                ' - ',
+                { $ifNull: ['$shiftData.endTime', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Batch information from populated batch
+        batchName: { $ifNull: ['$batchData.name', null] },
+        batchShiftName: { $ifNull: ['$batchData.currentShiftName', null] },
+        batchShiftTiming: { $ifNull: ['$batchData.currentShiftTiming', null] },
+        batchShiftColor: { $ifNull: ['$batchData.currentShiftColor', null] }
+      }
+    },
+    {
       $project: {
         departmentObjId: 0,
         designationObjId: 0,
+        reportingToObjId: 0,
+        shiftObjId: 0,
+        batchObjId: 0,
         departmentInfo: 0,
         designationInfo: 0,
+        reportingToInfo: 0,
+        reportingToManager: 0,
+        shiftInfo: 0,
+        batchInfo: 0,
+        shiftData: 0,
+        batchData: 0,
         salary: 0,
         bank: 0,
         emergencyContacts: 0,
@@ -431,9 +534,45 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        shiftObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
+            then: { $toObjectId: '$shiftId' },
+            else: null
+          }
+        },
+        batchObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
+            then: { $toObjectId: '$batchId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'shifts',
+        localField: 'shiftObjId',
+        foreignField: '_id',
+        as: 'shiftInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'batches',
+        localField: 'batchObjId',
+        foreignField: '_id',
+        as: 'batchInfo'
+      }
+    },
+    {
+      $addFields: {
         department: { $arrayElemAt: ['$departmentInfo', 0] },
         designation: { $arrayElemAt: ['$designationInfo', 0] },
-        reportingTo: { $arrayElemAt: ['$reportingToInfo', 0] },
+        reportingToManager: { $arrayElemAt: ['$reportingToInfo', 0] },
+        shiftData: { $arrayElemAt: ['$shiftInfo', 0] },
+        batchData: { $arrayElemAt: ['$batchInfo', 0] },
         // Assign default avatar for employees without profile image
         profileImage: {
           $cond: {
@@ -453,13 +592,61 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
       }
     },
     {
+      $addFields: {
+        // Reporting Manager Name from populated manager
+        reportingManagerName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Shift information from populated shift
+        shiftName: { $ifNull: ['$shiftData.name', null] },
+        shiftColor: { $ifNull: ['$shiftData.color', null] },
+        shiftTiming: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            then: {
+              $concat: [
+                { $ifNull: ['$shiftData.startTime', ''] },
+                ' - ',
+                { $ifNull: ['$shiftData.endTime', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Batch information from populated batch
+        batchName: { $ifNull: ['$batchData.name', null] },
+        batchShiftName: { $ifNull: ['$batchData.currentShiftName', null] },
+        batchShiftTiming: { $ifNull: ['$batchData.currentShiftTiming', null] },
+        batchShiftColor: { $ifNull: ['$batchData.currentShiftColor', null] },
+        // Keep reportingTo as just the ID for consistency
+        reportingTo: '$reportingTo'
+      }
+    },
+    {
       $project: {
         departmentObjId: 0,
         designationObjId: 0,
         reportingToObjId: 0,
+        shiftObjId: 0,
+        batchObjId: 0,
         departmentInfo: 0,
         designationInfo: 0,
-        reportingToInfo: 0
+        reportingToInfo: 0,
+        reportingToManager: 0,
+        shiftInfo: 0,
+        batchInfo: 0,
+        shiftData: 0,
+        batchData: 0
       }
     }
   ];

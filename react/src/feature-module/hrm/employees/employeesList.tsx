@@ -1,5 +1,4 @@
 import { useUser } from "@clerk/clerk-react";
-import { Modal } from "bootstrap";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
@@ -782,6 +781,12 @@ const EmployeeList = () => {
       companyName: emp.companyName || "",
       departmentId: emp.departmentId || "",
       designationId: emp.designationId || "",
+      reportingTo: emp.reportingTo || "",
+      reportingManagerName: emp.reportingManagerName || "",
+      shiftId: emp.shiftId || "",
+      batchId: emp.batchId || "",
+      shiftName: emp.shiftName || "",
+      batchName: emp.batchName || "",
       about: emp.about || "",
       avatarUrl: emp.avatarUrl || "",
       status: normalizeStatus(emp.status),

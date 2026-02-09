@@ -1,17 +1,16 @@
 import { DatePicker } from "antd";
-import { Modal } from "bootstrap";
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast, ToastContainer } from "react-toastify";
 import { Socket } from "socket.io-client";
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import CommonSelect from '../../../core/common/commonSelect';
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import EditEmployeeModal from '../../../core/modals/EditEmployeeModal';
 import PromotionDetailsModal from '../../../core/modals/PromotionDetailsModal';
 import ResignationDetailsModal from '../../../core/modals/ResignationDetailsModal';
 import TerminationDetailsModal from '../../../core/modals/TerminationDetailsModal';
-import EditEmployeeModal from '../../../core/modals/EditEmployeeModal';
 import { useSocket } from "../../../SocketContext";
 import { all_routes } from '../../router/all_routes';
 // REST API Hooks for HRM operations
@@ -265,6 +264,7 @@ const EmployeeDetails = () => {
     const [editFormData, setEditFormData] = useState<Partial<Employee>>({});
     // const [maritalStatus, setMaritalStatus] = useState<string>("");
     const [bankFormData, setBankFormData] = useState({
+        accountHolderName: "",
         bankName: "",
         accountNumber: "",
         ifscCode: "",
@@ -317,6 +317,11 @@ const EmployeeDetails = () => {
     const [editingFamilyIndex, setEditingFamilyIndex] = useState<number | null>(null);
     const [editingEducationIndex, setEditingEducationIndex] = useState<number | null>(null);
     const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
+    const [familyFormLoading, setFamilyFormLoading] = useState(false);
+    const [bankFormLoading, setBankFormLoading] = useState(false);
+    const [educationFormLoading, setEducationFormLoading] = useState(false);
+    const [experienceFormLoading, setExperienceFormLoading] = useState(false);
+    const [personalFormLoading, setPersonalFormLoading] = useState(false);
 
     const DATE_FORMAT = "DD-MM-YYYY";
     const DATE_REGEX = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-(\d{4})$/;
@@ -471,8 +476,11 @@ const EmployeeDetails = () => {
     const handleBankFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Prevent duplicate submissions
+        if (bankFormLoading) return;
+
         // Validate all fields are filled
-        if (!bankFormData.bankName || !bankFormData.accountNumber ||
+        if (!bankFormData.accountHolderName || !bankFormData.bankName || !bankFormData.accountNumber ||
             !bankFormData.ifscCode || !bankFormData.branch) {
             toast.error("All bank details fields are required!", {
                 position: "top-right",
@@ -489,10 +497,11 @@ const EmployeeDetails = () => {
             return;
         }
 
+        setBankFormLoading(true);
+
         // Submit bank details to backend using REST API
         const bankData = {
-            ...bankFormData,
-            accountHolderName: `${employee.firstName} ${employee.lastName}`
+            ...bankFormData
         };
 
         try {
@@ -521,10 +530,13 @@ const EmployeeDetails = () => {
                 position: "top-right",
                 autoClose: 3000,
             });
+        } finally {
+            setBankFormLoading(false);
         }
     };
     const  resetBankForm = () => {
         setBankFormData({
+            accountHolderName: employee.bank?.accountHolderName || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
             bankName: employee.bank?.bankName || "",
             accountNumber: employee.bank?.accountNumber || "",
             ifscCode: employee.bank?.ifscCode || "",
@@ -535,6 +547,10 @@ const EmployeeDetails = () => {
     // handle education form validation and submission
     const handleEducationFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Prevent duplicate submissions
+        if (educationFormLoading) return;
+
         if(!educationFormData.institution || !educationFormData.course || !educationFormData.startDate || !educationFormData.endDate) {
             toast.error("All education details fields are required!", {
                 position: "top-right",
@@ -550,6 +566,8 @@ const EmployeeDetails = () => {
             });
             return;
         }
+
+        setEducationFormLoading(true);
 
         const newEntry: EducationEntry = {
             institution: educationFormData.institution,
@@ -594,6 +612,8 @@ const EmployeeDetails = () => {
                 position: "top-right",
                 autoClose: 3000,
             });
+        } finally {
+            setEducationFormLoading(false);
         }
     };
 
@@ -660,6 +680,10 @@ const EmployeeDetails = () => {
     // handleFamily form validation and submission
     const handleFamilyFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Prevent duplicate submissions
+        if (familyFormLoading) return;
+
         // Validate all fields are filled
         if (!familyFormData.familyMemberName || !familyFormData.relationship || !familyFormData.phone) {
             console.log("Validation failed - missing required fields");
@@ -677,6 +701,8 @@ const EmployeeDetails = () => {
             });
             return;
         }
+
+        setFamilyFormLoading(true);
 
         const newEntry: FamilyInfo = {
             Name: familyFormData.familyMemberName,
@@ -719,6 +745,8 @@ const EmployeeDetails = () => {
                 position: "top-right",
                 autoClose: 3000,
             });
+        } finally {
+            setFamilyFormLoading(false);
         }
     };
 
@@ -783,6 +811,9 @@ const EmployeeDetails = () => {
     const handlePersonalFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Prevent duplicate submissions
+        if (personalFormLoading) return;
+
         // Validate required fields
         if (!personalFormData.passportNo || !personalFormData.passportExpiryDate ||
             !personalFormData.nationality || !personalFormData.religion || personalFormData.maritalStatus === "Select") {
@@ -801,6 +832,8 @@ const EmployeeDetails = () => {
             });
             return;
         }
+
+        setPersonalFormLoading(true);
 
         // Submit personal details to backend using REST API
         const personalData = {
@@ -844,6 +877,8 @@ const EmployeeDetails = () => {
                 position: "top-right",
                 autoClose: 3000,
             });
+        } finally {
+            setPersonalFormLoading(false);
         }
     };
     const resetPersonalForm = () => {
@@ -942,6 +977,10 @@ const EmployeeDetails = () => {
     // Handle experience form validation and submission
     const handleExperienceFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Prevent duplicate submissions
+        if (experienceFormLoading) return;
+
         if(!employee) {
             toast.error("Cannot save experience details at this time.", {
                 position: "top-right",
@@ -949,6 +988,8 @@ const EmployeeDetails = () => {
             });
             return;
         }
+
+        setExperienceFormLoading(true);
         const newEntry: ExperienceEntry = {
             previousCompany: experienceFormData.company,
             designation: experienceFormData.designation,
@@ -990,6 +1031,8 @@ const EmployeeDetails = () => {
                 position: "top-right",
                 autoClose: 3000,
             });
+        } finally {
+            setExperienceFormLoading(false);
         }
     };
 
@@ -1282,6 +1325,7 @@ const EmployeeDetails = () => {
 
             // Initialize bank form data
             setBankFormData({
+                accountHolderName: employee.bank?.accountHolderName || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
                 bankName: employee.bank?.bankName || "",
                 accountNumber: employee.bank?.accountNumber || "",
                 ifscCode: employee.bank?.ifscCode || "",
@@ -1838,6 +1882,42 @@ const EmployeeDetails = () => {
         return fallbackModal || document.body;
     };
 
+    // Helper function to safely prepare employee for editing
+    const prepareEmployeeForEdit = (emp: Employee): Employee => {
+        return {
+            ...emp,
+            account: emp.account || ({ role: "", userName: "", password: "" } as AccountInfo),
+            email: emp.email || "",
+            phone: emp.phone || "",
+            gender: emp.gender || "",
+            dateOfBirth: emp.dateOfBirth || null,
+            address: emp.address || {
+                street: "",
+                city: "",
+                state: "",
+                postalCode: "",
+                country: "",
+            },
+            firstName: emp.firstName || "",
+            lastName: emp.lastName || "",
+            companyName: emp.companyName || "",
+            departmentId: emp.departmentId || "",
+            designationId: emp.designationId || "",
+            reportingTo: emp.reportingTo || "",
+            reportingManagerName: emp.reportingManagerName || "",
+            reportOffice: emp.reportOffice || "",
+            shiftId: emp.shiftId || "",
+            batchId: emp.batchId || "",
+            shiftName: emp.shiftName || "",
+            batchName: emp.batchName || "",
+            about: emp.about || "",
+            avatarUrl: emp.avatarUrl || "",
+            profileImage: emp.profileImage || "",
+            status: emp.status,
+            dateOfJoining: emp.dateOfJoining || null,
+        };
+    };
+
     interface Option {
         value: string;
         label: string;
@@ -1979,21 +2059,7 @@ const EmployeeDetails = () => {
                                                 </span>
                                                 <p className="text-dark">{formatDate(employee?.dateOfJoining) || '-'}</p>
                                             </div>
-                                            <div className="d-flex align-items-center justify-content-between">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-calendar-check me-2" />
-                                                    Report Office
-                                                </span>
-                                                <div className="d-flex align-items-center">
-                                                    {/* <span className="avatar avatar-sm avatar-rounded me-2">
-                                                        <ImageWithBasePath
-                                                            src="assets/img/profiles/avatar-12.jpg"
-                                                            alt="Img"
-                                                        />
-                                                    </span> */}
-                                                    <p className="text-gray-9 mb-0">{employee?.reportOffice || '—'}</p>
-                                                </div>
-                                            </div>
+                                            
                                             <div className="d-flex align-items-center justify-content-between mt-2">
                                                 <span className="d-inline-flex align-items-center">
                                                     <i className="ti ti-building me-2" />
@@ -2136,8 +2202,9 @@ const EmployeeDetails = () => {
                                                             className="btn btn-dark w-100"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
-                                                                // Set editing employee - modal will open automatically
-                                                                setEditingEmployee(employee);
+                                                                // Prepare and set editing employee - modal will open automatically
+                                                                const preparedEmployee = prepareEmployeeForEdit(employee);
+                                                                setEditingEmployee(preparedEmployee);
                                                             }}
                                                         >
                                                             <i className="ti ti-edit me-1" />
@@ -2164,8 +2231,9 @@ const EmployeeDetails = () => {
                                                 className="btn btn-icon btn-sm"
                                                 onClick={(e) => {
                                                     e.preventDefault();
-                                                    // Set editing employee - modal will open automatically
-                                                    setEditingEmployee(employee);
+                                                    // Prepare and set editing employee - modal will open automatically
+                                                    const preparedEmployee = prepareEmployeeForEdit(employee);
+                                                    setEditingEmployee(preparedEmployee);
                                                 }}
                                             >
                                                 <i className="ti ti-edit" />
@@ -2424,6 +2492,13 @@ const EmployeeDetails = () => {
                                                     data-bs-parent="#accordionExample"
                                                 >
                                                     <div className="accordion-body mt-2 ">
+                                                        <div className="d-flex align-items-center justify-content-between mb-2">
+                                                            <span className="d-inline-flex align-items-center">
+                                                            <i className="ti ti-user me-2" />
+                                                                Account Holder Name
+                                                            </span>
+                                                            <p className="text-dark">{employee?.bank?.accountHolderName || '-'}</p>
+                                                        </div>
                                                         <div className="d-flex align-items-center justify-content-between mb-2">
                                                             <span className="d-inline-flex align-items-center">
                                                             <i className="ti ti-e-passport me-2" />
@@ -3173,8 +3248,10 @@ const EmployeeDetails = () => {
                 employee={editingEmployee}
                 modalId="edit_employee_details"
                 onUpdate={(updatedEmployee) => {
+                    // Update both employee and editingEmployee with new data
+                    // Don't set editingEmployee to null here - let modal's cleanup handle it
                     setEmployee(updatedEmployee as any);
-                    setEditingEmployee(null);
+                    setEditingEmployee(updatedEmployee as Employee);
                     toast.success("Employee updated successfully!");
                 }}
                 getModalContainer={getModalContainer}
@@ -3391,11 +3468,23 @@ const EmployeeDetails = () => {
                                     className="btn btn-white border me-2"
                                     data-bs-dismiss="modal"
                                     onClick={resetPersonalForm}
+                                    disabled={personalFormLoading}
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={personalFormLoading}
+                                >
+                                    {personalFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -3510,11 +3599,27 @@ const EmployeeDetails = () => {
                                     <div className="col-md-12">
                                         <div className="mb-3">
                                             <label className="form-label">
+                                                Account Holder Name <span className="text-danger"> *</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                placeholder="Enter account holder name"
+                                                value={bankFormData.accountHolderName}
+                                                onChange={(e) => setBankFormData(prev => ({ ...prev, accountHolderName: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-md-12">
+                                        <div className="mb-3">
+                                            <label className="form-label">
                                                 Bank Name <span className="text-danger"> *</span>
                                             </label>
                                             <input
                                                 type="text"
                                                 className="form-control"
+                                                placeholder="Enter bank name"
                                                 value={bankFormData.bankName}
                                                 onChange={(e) => setBankFormData(prev => ({ ...prev, bankName: e.target.value }))}
                                                 required
@@ -3571,11 +3676,23 @@ const EmployeeDetails = () => {
                                     className="btn btn-white border me-2"
                                     data-bs-dismiss="modal"
                                     onClick={resetBankForm}
+                                    disabled={bankFormLoading}
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={bankFormLoading}
+                                >
+                                    {bankFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -3627,10 +3744,18 @@ const EmployeeDetails = () => {
                                     <div className="col-md-12">
                                         <div className="mb-3">
                                             <label className="form-label">Phone </label>
-                                            <input type="text" className="form-control"
-                                            value={familyFormData.phone}
-                                            required
-                                            onChange={(e) => setFamilyFormData(prev => ({ ...prev, phone: e.target.value }))}/>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={familyFormData.phone}
+                                                required
+                                                pattern="[0-9+() ]*"
+                                                title="Only numbers, +, (), and spaces are allowed"
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/[^0-9+() ]/g, '');
+                                                    setFamilyFormData(prev => ({ ...prev, phone: value }));
+                                                }}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -3641,11 +3766,23 @@ const EmployeeDetails = () => {
                                     className="btn btn-white border me-2"
                                     data-bs-dismiss="modal"
                                     onClick={resetFamilyForm}
+                                    disabled={familyFormLoading}
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={familyFormLoading}
+                                >
+                                    {familyFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -3760,11 +3897,23 @@ const EmployeeDetails = () => {
                                     className="btn btn-white border me-2"
                                     data-bs-dismiss="modal"
                                     onClick={resetEducationForm}
+                                    disabled={educationFormLoading}
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={educationFormLoading}
+                                >
+                                    {educationFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -3902,11 +4051,23 @@ const EmployeeDetails = () => {
                                     className="btn btn-white border me-2"
                                     data-bs-dismiss="modal"
                                     onClick={resetExperienceForm}
+                                    disabled={experienceFormLoading}
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={experienceFormLoading}
+                                >
+                                    {experienceFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
                                 </button>
                             </div>
                         </form>

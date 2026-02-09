@@ -251,7 +251,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       // Extract IDs from populated objects if needed
       const departmentId = employee.departmentId || (employee as any).department?._id || "";
       const designationId = employee.designationId || (employee as any).designation?._id || "";
-      const reportingTo = employee.reportingTo || (employee as any).reportingManagerName || "";
+      const reportingTo = employee.reportingTo || "";
 
       setEditingEmployee({ ...employee, departmentId, designationId, reportingTo });
       setSelectedDepartment(departmentId);
