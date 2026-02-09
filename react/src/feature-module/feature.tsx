@@ -8,6 +8,8 @@ import HorizontalSidebar from "../core/common/horizontal-sidebar";
 import TwoColumnSidebar from "../core/common/two-column";
 import StackedSidebar from "../core/common/stacked-sidebar";
 import DeleteModal from "../core/modals/deleteModal";
+import RoleDebugger from "../core/components/RoleDebugger";
+
 const Feature = () => {
   const [showLoader, setShowLoader] = useState(true);
   const headerCollapse = useSelector((state: any) => state.themeSetting.headerCollapse);

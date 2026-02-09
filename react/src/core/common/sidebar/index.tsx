@@ -27,22 +27,26 @@ const Sidebar = () => {
 
   // Check if user has access to menu item (case-insensitive)
   const hasAccess = (roles?: string[]): boolean => {
-    if (!roles || roles.length === 0) return true;
-    if (roles.includes("public")) return true;
+    if (!roles || roles.length === 0) {
+      console.log('[Sidebar hasAccess] No roles specified - ALLOWING');
+      return true;
+    }
+    if (roles.includes("public")) {
+      console.log('[Sidebar hasAccess] Public role - ALLOWING');
+      return true;
+    }
     const userRole = getUserRole();
     // Normalize both sides to lowercase for case-insensitive comparison
     const normalizedRoles = roles.map(r => r?.toLowerCase());
     const hasAccessResult = normalizedRoles.includes(userRole?.toLowerCase());
 
-    // Debug logging for access checks
-    if (!hasAccessResult && roles && roles.length > 0) {
-      console.log('[Sidebar hasAccess] Access Denied:', {
-        userRole,
-        requiredRoles: roles,
-        normalizedRoles,
-        hasAccessResult
-      });
-    }
+    // BRUTAL DEBUGGING: Log ALL access checks
+    console.log('[Sidebar hasAccess]', {
+      userRole,
+      requiredRoles: roles,
+      normalizedRoles,
+      result: hasAccessResult ? '✅ ALLOWED' : '❌ DENIED'
+    });
 
     return hasAccessResult;
   };
@@ -100,6 +104,22 @@ const Sidebar = () => {
   const dataLayout = useSelector((state: any) => state.themeSetting.dataLayout);
   const miniSidebar = useSelector((state: any) => state.sidebarSlice.miniSidebar);
   const expandMenu = useSelector((state: any) => state.sidebarSlice.expandMenu);
+
+  // Debug: Log the sidebar data received from useSidebarData
+  console.log('[Sidebar Component] Rendering sidebar with data:', {
+    dataReceived: !!SidebarDataTest,
+    dataLength: SidebarDataTest?.length,
+    sections: SidebarDataTest?.map((s: any) => s.tittle),
+    userRole: user?.publicMetadata?.role,
+  });
+
+  // Debug: Check if menu-horizontal class is applied
+  const isHorizontalLayout = dataLayout === "horizontal" || dataLayout === "horizontal-single" || dataLayout === "horizontal-overlay" || dataLayout === "horizontal-box";
+  console.log('[Sidebar Component] Layout info:', {
+    dataLayout,
+    isHorizontalLayout,
+    verticalSidebarVisible: !isHorizontalLayout,
+  });
 
   useEffect(() => {
     const layoutPages = [

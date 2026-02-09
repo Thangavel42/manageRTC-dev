@@ -58,6 +58,7 @@ import clerkWebhookRoutes from "./routes/webhooks/clerk.routes.js";
 import scheduleRoutes from "./routes/api/schedule.js";
 import batchRoutes from "./routes/api/batches.js";
 import healthRoutes from "./routes/health.js";
+import syncRoleRoutes from "./routes/api/syncRole.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,6 +204,7 @@ const initializeServer = async () => {
     app.use("/api/timetracking", timetrackingRoutes);
     app.use("/api/overtime", overtimeRoutes);
     app.use("/api/schedule", scheduleRoutes);
+    app.use("/api/sync-role", syncRoleRoutes);
 
     // Clerk Webhooks
     app.use("/api/webhooks", clerkWebhookRoutes);

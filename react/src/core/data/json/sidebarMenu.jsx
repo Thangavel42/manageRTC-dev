@@ -4,14 +4,44 @@ import { useUser } from "@clerk/clerk-react";
 const useSidebarData = () => {
   const { user } = useUser();
   const routes = all_routes;
+
+  // BRUTAL DEBUGGING: Log absolutely everything
+  console.log('%c=== SIDEBAR MENU DEBUG START ===', 'background: #ff0000; color: white; font-size: 16px; font-weight: bold; padding: 5px;');
+  console.log('[BRUTAL DEBUG] User object:', user);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata:', user?.publicMetadata);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata?.role:', user?.publicMetadata?.role);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata?.role type:', typeof user?.publicMetadata?.role);
+
   const originalRole = user?.publicMetadata?.role || "public";
   const userRole = originalRole?.toLowerCase();
 
   console.log('[Sidebar Menu] User Role Detection:', {
     originalRole,
     normalizedRole: userRole,
-    matchingCase: userRole
+    userPublicMetadata: user?.publicMetadata,
+    userFullName: user?.fullName,
+    userPrimaryEmail: user?.primaryEmailAddress?.emailAddress,
+    allMetadata: user?.publicMetadata
   });
+
+  // Log available routes for debugging
+  console.log('[Sidebar Menu] Available Routes Sample:', {
+    employees: routes.employees,
+    departments: routes.departments,
+    tickets: routes.tickets,
+    performance: routes.performanceIndicator,
+    training: routes.trainingList,
+    resignation: routes.resignation,
+    termination: routes.termination
+  });
+
+  // Log which case will match
+  console.log('[Sidebar Menu] Switch case matching for role:', userRole, '- will match hr case:', userRole === 'hr');
+
+  // EMERGENCY FALLBACK: If role is definitely "hr", bypass switch and return HR menu directly
+  if (userRole === 'hr') {
+    console.warn('%c[EMERGENCY FALLBACK] Detected HR role, bypassing switch statement!', 'background: #00ff00; color: black; font-size: 14px; font-weight: bold; padding: 5px;');
+  }
 
   switch (userRole) {
     case "superadmin":
@@ -2947,7 +2977,8 @@ const useSidebarData = () => {
       ];
       break;
     case "hr":
-      return [
+      console.log('[Sidebar Menu] HR case matched! Returning full HRM menu...');
+      const hrMenu = [
         {
           tittle: "Main Menu",
           icon: "airplay",
@@ -2995,19 +3026,53 @@ const useSidebarData = () => {
           showAsTab: false,
           separateRoute: false,
           submenuItems: [
-            { label: "Employees", link: routes.employees, submenu: false, showSubRoute: false, icon: "user", base: "employees", materialicons: "people", submenuItems: [] },
-            { label: "Departments", link: routes.departments, submenu: false, showSubRoute: false, icon: "building", base: "departments", materialicons: "apartment", submenuItems: [] },
-            { label: "Designations", link: routes.designations, submenu: false, showSubRoute: false, icon: "layers", base: "designations", materialicons: "badge", submenuItems: [] },
-            { label: "Time Sheet", link: routes.timesheet, submenu: false, showSubRoute: false, icon: "file-time", base: "timesheet", materialicons: "schedule", submenuItems: [] },
-            { label: "Shift & Schedule", link: routes.scheduletiming, submenu: false, showSubRoute: false, icon: "clock", base: "shift-schedule", materialicons: "access_time", submenuItems: [] },
-            { label: "Leave Management", link: routes.leaveadmin, submenu: true, showSubRoute: false, icon: "calendar-event", base: "leaves", materialicons: "event", submenuItems: [
-              { label: "Leaves", link: routes.leaveadmin, submenu: false, showSubRoute: false },
-              { label: "Leave Settings", link: routes.leavesettings, submenu: false, showSubRoute: false },
-            ]},
-            { label: "Attendance", link: routes.attendanceadmin, submenu: false, showSubRoute: false, icon: "file-text", base: "attendance-admin", materialicons: "how_to_reg", submenuItems: [] },
-            { label: "Overtime", link: routes.overtime, submenu: false, showSubRoute: false, icon: "clock", base: "overtime", materialicons: "update", submenuItems: [] },
-            { label: "Holidays", link: routes.holidays, submenu: false, showSubRoute: false, icon: "sun", base: "holidays", materialicons: "beach_access", submenuItems: [] },
-            { label: "Policies", link: routes.policies, submenu: false, showSubRoute: false, icon: "file-check", base: "policies", materialicons: "policy", submenuItems: [] },
+            {
+              label: "Employees",
+              link: routes.employeeList,
+              submenu: true,
+              showSubRoute: false,
+              icon: "user",
+              base: "employees",
+              materialicons: "people",
+              submenuItems: [
+                { label: "Employees", link: routes.employeeList, base: "employees" },
+                { label: "Departments", link: routes.departments, base: "departments" },
+                { label: "Designations", link: routes.designations, base: "designations" },
+                { label: "Policies", link: routes.policy, base: "policy" },
+              ],
+            },
+            { label: "Time Sheet", link: routes.timesheet, submenu: false, showSubRoute: false, icon: "file-time", base: "timesheet", materialicons: "schedule" },
+            {
+              label: "Shift & Schedule",
+              submenu: true,
+              showSubRoute: false,
+              icon: "clock",
+              base: "shift-schedule",
+              materialicons: "access_time",
+              submenuItems: [
+                { label: "Schedule Timing", link: routes.scheduletiming, base: "schedule" },
+                { label: "Shifts Management", link: routes.shiftsManagement, base: "shifts" },
+                { label: "Shift Batches", link: routes.batchesManagement, base: "batches" },
+              ],
+            },
+            {
+              label: "Leave Management",
+              submenu: true,
+              showSubRoute: false,
+              icon: "calendar-event",
+              base: "leaves",
+              materialicons: "event",
+              submenuItems: [
+                { label: "Leaves", link: routes.leaveadmin, base: "leaves" },
+                { label: "Leave Settings", link: routes.leavesettings, base: "leave-settings" },
+              ],
+            },
+            { label: "Attendance", link: routes.attendanceadmin, submenu: false, showSubRoute: false, icon: "file-text", base: "attendance-admin", materialicons: "how_to_reg" },
+            { label: "Overtime", link: routes.overtime, submenu: false, showSubRoute: false, icon: "clock", base: "overtime", materialicons: "update" },
+            { label: "Holidays", link: routes.holidays, submenu: false, showSubRoute: false, icon: "sun", base: "holidays", materialicons: "beach_access" },
+            { label: "Policies", link: routes.policy, submenu: false, showSubRoute: false, icon: "file-check", base: "policy", materialicons: "policy" },
+            { label: "Resignation", link: routes.resignation, submenu: false, showSubRoute: false, icon: "log-out", base: "resignation", materialicons: "exit_to_app" },
+            { label: "Termination", link: routes.termination, submenu: false, showSubRoute: false, icon: "user-x", base: "termination", materialicons: "person_remove" },
           ],
         },
         {
@@ -3027,7 +3092,7 @@ const useSidebarData = () => {
               materialicons: "topic",
               submenuItems: [
                 { label: "Projects", link: routes.project, base: "project-grid", base2: "project-list", base3: "project-details" },
-                { label: "Tasks", link: "tasks", base: "tasks" },
+                { label: "Tasks", link: routes.tasks, base: "tasks" },
                 { label: "Task Board", link: routes.taskboard, base: "task-board" },
               ],
             },
@@ -3058,6 +3123,16 @@ const useSidebarData = () => {
           ],
         },
         {
+          tittle: "Tickets",
+          icon: "ticket",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Tickets", link: routes.tickets, submenu: false, showSubRoute: false, icon: "square-check", base: "tickets", materialicons: "confirmation_number", submenuItems: [] },
+            { label: "Tickets Grid", link: routes.ticketGrid, submenu: false, showSubRoute: false, icon: "grid", base: "ticket-grid", materialicons: "grid_view", submenuItems: [] },
+          ],
+        },
+        {
           tittle: "Performance",
           icon: "school",
           showAsTab: false,
@@ -3066,8 +3141,8 @@ const useSidebarData = () => {
             { label: "Performance Indicator", link: routes.performanceIndicator, submenu: false, showSubRoute: false, icon: "line-chart", base: "indicator", submenuItems: [] },
             { label: "Performance Review", link: routes.performanceReview, submenu: false, showSubRoute: false, icon: "star", base: "review", submenuItems: [] },
             { label: "Performance Appraisal", link: routes.performanceAppraisal, submenu: false, showSubRoute: false, icon: "award", base: "appraisal", submenuItems: [] },
-            { label: "Goal List", link: routes.goalTracking, submenu: false, showSubRoute: false, icon: "target", base: "appraisal", submenuItems: [] },
-            { label: "Goal Type", link: routes.goalType, submenu: false, showSubRoute: false, icon: "tag", base: "appraisal", submenuItems: [] },
+            { label: "Goal List", link: routes.goalTracking, submenu: false, showSubRoute: false, icon: "target", base: "goal-tracking", submenuItems: [] },
+            { label: "Goal Type", link: routes.goalType, submenu: false, showSubRoute: false, icon: "tag", base: "goal-type", submenuItems: [] },
           ],
         },
         {
@@ -3076,9 +3151,9 @@ const useSidebarData = () => {
           showAsTab: false,
           separateRoute: false,
           submenuItems: [
-            { label: "Training List", link: routes.trainingList, submenu: false, showSubRoute: false, icon: "list", base: "lists", submenuItems: [] },
+            { label: "Training List", link: routes.trainingList, submenu: false, showSubRoute: false, icon: "list", base: "training-list", submenuItems: [] },
             { label: "Trainers", link: routes.trainers, submenu: false, showSubRoute: false, icon: "user", base: "trainer", submenuItems: [] },
-            { label: "Training Type", link: routes.trainingType, submenu: false, showSubRoute: false, icon: "tag", base: "types", submenuItems: [] },
+            { label: "Training Type", link: routes.trainingType, submenu: false, showSubRoute: false, icon: "tag", base: "training-type", submenuItems: [] },
           ],
         },
         {
@@ -3098,7 +3173,15 @@ const useSidebarData = () => {
           ],
         },
       ];
-      break;
+      console.log('[Sidebar Menu] HR Menu constructed successfully:', {
+        sectionCount: hrMenu.length,
+        sections: hrMenu.map(s => s.tittle),
+        hrmSection: hrMenu.find(s => s.tittle === 'HRM')?.submenuItems?.map(i => i.label),
+        ticketsSection: hrMenu.find(s => s.tittle === 'Tickets')?.submenuItems?.map(i => i.label),
+        performanceSection: hrMenu.find(s => s.tittle === 'Performance')?.submenuItems?.map(i => i.label),
+        trainingSection: hrMenu.find(s => s.tittle === 'Training')?.submenuItems?.map(i => i.label),
+      });
+      return hrMenu;
     case "manager":
       return [
         {
@@ -3350,6 +3433,11 @@ const useSidebarData = () => {
       ];
       break;
     default:
+      console.warn('[Sidebar Menu] Unknown role - falling back to default menu:', {
+        userRole,
+        originalRole,
+        availableCases: ['superadmin', 'admin', 'hr', 'manager', 'leads', 'employee'],
+      });
       return [
         {
           tittle: "Main Menu",
