@@ -15,6 +15,7 @@ import {
   sendSuccess
 } from '../../utils/apiResponse.js';
 import * as adminService from '../../services/admin/admin.services.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * @desc    Get full Admin Dashboard data (all sections)
@@ -25,7 +26,7 @@ export const getAdminDashboardAll = asyncHandler(async (req, res) => {
   const { year } = req.query;
   const user = extractUser(req);
 
-  console.log('[Admin Dashboard Controller] getAdminDashboardAll - companyId:', user.companyId, 'year:', year);
+  devLog('[Admin Dashboard Controller] getAdminDashboardAll - companyId:', user.companyId, 'year:', year);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -37,7 +38,7 @@ export const getAdminDashboardAll = asyncHandler(async (req, res) => {
       const result = await serviceCall;
       return { success: true, data: result.data };
     } catch (error) {
-      console.error(`[Admin Dashboard] ${serviceName} failed:`, error.message);
+      devError(`[Admin Dashboard] ${serviceName} failed:`, error.message);
       return { success: false, error: error.message, data: null };
     }
   };
@@ -69,7 +70,7 @@ export const getAdminDashboardAll = asyncHandler(async (req, res) => {
   // Check which services failed
   const failedServices = results.filter(r => !r.success);
   if (failedServices.length > 0) {
-    console.warn(`[Admin Dashboard] ${failedServices.length} services failed:`, failedServices.map(f => f.error));
+    devWarn(`[Admin Dashboard] ${failedServices.length} services failed:`, failedServices.map(f => f.error));
   }
 
   // Build response with partial data even if some services failed
@@ -122,7 +123,7 @@ export const getAdminDashboardAll = asyncHandler(async (req, res) => {
 export const getAdminDashboardSummary = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Admin Dashboard Controller] getAdminDashboardSummary - companyId:', user.companyId);
+  devLog('[Admin Dashboard Controller] getAdminDashboardSummary - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');

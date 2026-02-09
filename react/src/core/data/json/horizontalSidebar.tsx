@@ -13,36 +13,37 @@ export const HorizontalSidebarData = [
         showSubRoute: false,
         icon: "smart-home",
         base: "dashboard",
+        roles: ["admin", "hr", "manager", "leads", "employee"],
         subMenus: [
           {
             menuValue: "Admin Dashboard",
             route: routes.adminDashboard,
             base: "index",
-            roles: ["admin"],
+            roles: ["admin", "manager"],
           },
           {
             menuValue: "Employee Dashboard",
             route: routes.employeeDashboard,
             base: "employee",
-            roles: ["public"],
+            roles: ["employee", "admin", "hr", "manager", "leads"],
           },
           {
             menuValue: "Deals Dashboard",
             route: routes.dealsDashboard,
             base: "deals",
-            roles: ["public"],
+            roles: ["admin", "hr", "manager", "leads"],
           },
           {
             menuValue: "Leads Dashboard",
             route: routes.leadsDashboard,
             base: "leads",
-            roles: ["public"],
+            roles: ["admin", "hr", "manager", "leads"],
           },
           {
             menuValue: "HR Dashboard",
             route: routes.hrDashboard,
             base: "hr",
-            roles: ["hr"],
+            roles: ["hr", "manager", "leads"],
           },
         ],
       },
@@ -52,6 +53,7 @@ export const HorizontalSidebarData = [
         showSubRoute: false,
         icon: "user-star",
         base: "super-admin",
+        roles: ["superadmin"],
         subMenus: [
           {
             menuValue: "Dashboard",
@@ -92,6 +94,7 @@ export const HorizontalSidebarData = [
         showSubRoute: false,
         icon: "layout-grid-add",
         base: "application",
+        roles: ["admin", "hr", "manager", "leads", "employee"],
         subMenus: [
           {
             menuValue: "Chat",
@@ -330,6 +333,7 @@ export const HorizontalSidebarData = [
         showSubRoute: false,
         icon: "user-star",
         base: "client",
+        roles: ["admin", "hr", "manager", "leads", "employee"],
         base2: "project",
         base3: "crm",
         base4: "employee",
@@ -340,6 +344,7 @@ export const HorizontalSidebarData = [
             route: routes.clientgrid,
             base: "client",
             customSubmenuTwo: false,
+            roles: ["admin", "hr", "manager", "leads"],
           },
           {
             menuValue: "Projects",
@@ -370,6 +375,7 @@ export const HorizontalSidebarData = [
                 menuValue: "Contacts",
                 route: routes.contactGrid,
                 base: "contact",
+                roles: ["admin", "hr", "manager", "leads"],
               },
               {
                 menuValue: "Companies",
@@ -487,6 +493,7 @@ export const HorizontalSidebarData = [
                 menuValue: "Attendance (Employee)",
                 route: routes.attendanceemployee,
                 base: "attendance-employee",
+                roles: ["hr", "manager", "leads", "employee"],
               },
 
               {
@@ -586,6 +593,7 @@ export const HorizontalSidebarData = [
         showSubRoute: false,
         icon: "user-star",
         base: "jobs",
+        roles: ["admin"],
         base2: "candidates",
         base3: "refferals",
         base4: "sales",
@@ -602,6 +610,7 @@ export const HorizontalSidebarData = [
             base2: "candidates",
             base3: "refferals",
             customSubmenuTwo: true,
+            roles: ["admin", "hr", "manager"],
             subMenusTwo: [
               {
                 menuValue: "Jobs",

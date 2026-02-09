@@ -14,6 +14,12 @@ import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
 // REST API Hook for HR Dashboard
 import { useHRDashboardREST } from "../../../hooks/useHRDashboardREST";
+// REST API Hook for user profile
+import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
+// Role-Based Components
+import { RoleBasedRenderer, HROnly } from "../../../core/components/RoleBasedRenderer";
+import ErrorBoundary from "../../../core/components/ErrorBoundary";
+import { PageLoading, CardSkeleton } from "../../../core/components/LoadingStates";
 
 const HRDashboard = () => {
   const routes = all_routes;
@@ -29,6 +35,9 @@ const HRDashboard = () => {
     fetchDashboardStats
   } = useHRDashboardREST();
 
+  // REST API Hook for current user profile (for avatar display)
+  const { profile } = useUserProfileREST();
+
   // Filter states
   const [filters, setFilters] = useState({
     employeeDistribution: "all",
@@ -43,6 +52,14 @@ const HRDashboard = () => {
   };
 
   const getUserName = () => {
+    // Use profile data from REST API first, then fallback to Clerk user
+    if (profile) {
+      const firstName = (profile as any).firstName;
+      const lastName = (profile as any).lastName;
+      if (firstName || lastName) {
+        return `${firstName || ""} ${lastName || ""}`.trim();
+      }
+    }
     if (!user) return "HR Manager";
     return (
       user.fullName ||
@@ -753,49 +770,19 @@ const HRDashboard = () => {
   };
 
   if (loading) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div className="alert alert-danger" role="alert">
-            {error}
-          </div>
-        </div>
-      </div>
-    );
+    return <PageLoading message="Loading HR Dashboard..." />;
   }
 
   // Show loading state if data hasn't been fetched yet
   if (!dashboardData && !error) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "400px" }}>
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading dashboard data...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <PageLoading message="Loading dashboard data..." />;
   }
 
   return (
-    <>
-      <div className="page-wrapper">
+    <ErrorBoundary>
+      <HROnly>
+        <>
+          <div className="page-wrapper">
         <div className="content">
           {/* Breadcrumb */}
           <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
@@ -876,11 +863,43 @@ const HRDashboard = () => {
             <div className="card-body d-flex align-items-center justify-content-between flex-wrap pb-1">
               <div className="d-flex align-items-center mb-3">
                 <span className="avatar avatar-xl flex-shrink-0">
-                  <ImageWithBasePath
-                    src={user?.imageUrl || "assets/img/profiles/avatar-31.jpg"}
-                    className="rounded-circle"
-                    alt="img"
-                  />
+                  {(() => {
+                    // Determine avatar source based on role (case-insensitive)
+                    let avatarSrc: string | undefined | null;
+                    const userRole = profile?.role?.toLowerCase();
+                    if (userRole === 'admin') {
+                      // Admin uses companyLogo
+                      avatarSrc = (profile as any).companyLogo;
+                    } else if (userRole === 'hr' || userRole === 'employee') {
+                      // HR and Employee use profileImage
+                      avatarSrc = (profile as any).profileImage;
+                    }
+
+                    // Ensure path starts with / if it's a relative path
+                    if (avatarSrc && !avatarSrc.startsWith('/') && !avatarSrc.startsWith('http')) {
+                      avatarSrc = `/${avatarSrc}`;
+                    }
+
+                    const finalSrc = avatarSrc || user?.imageUrl || '/assets/img/profiles/profile.png';
+
+                    return finalSrc ? (
+                      <img
+                        src={finalSrc}
+                        className="rounded-circle"
+                        alt="Profile"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "/assets/img/profiles/profile.png";
+                        }}
+                      />
+                    ) : (
+                      <ImageWithBasePath
+                        src="assets/img/profiles/profile.png"
+                        alt="Profile"
+                        className="rounded-circle"
+                      />
+                    );
+                  })()}
                 </span>
                 <div className="ms-3">
                   <h3 className="mb-2">
@@ -2531,7 +2550,9 @@ const HRDashboard = () => {
         </div>
         <Footer />
       </div>
-    </>
+        </>
+      </HROnly>
+    </ErrorBoundary>
   );
 };
 

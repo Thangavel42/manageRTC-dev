@@ -4,7 +4,45 @@ import { useUser } from "@clerk/clerk-react";
 const useSidebarData = () => {
   const { user } = useUser();
   const routes = all_routes;
-  const userRole = user?.publicMetadata?.role || "public";
+
+  // BRUTAL DEBUGGING: Log absolutely everything
+  console.log('%c=== SIDEBAR MENU DEBUG START ===', 'background: #ff0000; color: white; font-size: 16px; font-weight: bold; padding: 5px;');
+  console.log('[BRUTAL DEBUG] User object:', user);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata:', user?.publicMetadata);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata?.role:', user?.publicMetadata?.role);
+  console.log('[BRUTAL DEBUG] user?.publicMetadata?.role type:', typeof user?.publicMetadata?.role);
+
+  const originalRole = user?.publicMetadata?.role || "public";
+  const userRole = originalRole?.toLowerCase();
+
+  console.log('[Sidebar Menu] User Role Detection:', {
+    originalRole,
+    normalizedRole: userRole,
+    userPublicMetadata: user?.publicMetadata,
+    userFullName: user?.fullName,
+    userPrimaryEmail: user?.primaryEmailAddress?.emailAddress,
+    allMetadata: user?.publicMetadata
+  });
+
+  // Log available routes for debugging
+  console.log('[Sidebar Menu] Available Routes Sample:', {
+    employees: routes.employees,
+    departments: routes.departments,
+    tickets: routes.tickets,
+    performance: routes.performanceIndicator,
+    training: routes.trainingList,
+    resignation: routes.resignation,
+    termination: routes.termination
+  });
+
+  // Log which case will match
+  console.log('[Sidebar Menu] Switch case matching for role:', userRole, '- will match hr case:', userRole === 'hr');
+
+  // EMERGENCY FALLBACK: If role is definitely "hr", bypass switch and return HR menu directly
+  if (userRole === 'hr') {
+    console.warn('%c[EMERGENCY FALLBACK] Detected HR role, bypassing switch statement!', 'background: #00ff00; color: black; font-size: 14px; font-weight: bold; padding: 5px;');
+  }
+
   switch (userRole) {
     case "superadmin":
       return [
@@ -2034,7 +2072,9 @@ const useSidebarData = () => {
               dot: true,
               submenuItems: [
                 { label: "Admin Dashboard", link: routes.adminDashboard, roles: ["admin"] },
-                { label: "HR Dashboard", link: routes.hrDashboard, roles: ["hr"] },
+                { label: "Employee Dashboard", link: routes.employeeDashboard, roles: ["employee", "admin", "hr", "manager", "leads"] },
+                { label: "Deals Dashboard", link: routes.dealsDashboard, roles: ["admin", "hr", "manager", "leads"] },
+                { label: "Leads Dashboard", link: routes.leadsDashboard, roles: ["admin", "hr", "manager", "leads"] },
               ],
             },
             {
@@ -2434,9 +2474,15 @@ const useSidebarData = () => {
                 },
 
                 {
-                  label: "Attendance",
+                  label: "Attendance (Admin)",
                   link: routes.attendanceadmin,
                   base: "attendance-admin",
+                  customSubmenuTwo: false,
+                },
+                {
+                  label: "My Attendance",
+                  link: routes.attendanceemployee,
+                  base: "attendance-employee",
                   customSubmenuTwo: false,
                 },
                 {
@@ -2930,7 +2976,213 @@ const useSidebarData = () => {
         },
       ];
       break;
-    default:
+    case "hr":
+      console.log('[Sidebar Menu] HR case matched! Returning full HRM menu...');
+      const hrMenu = [
+        {
+          tittle: "Main Menu",
+          icon: "airplay",
+          showAsTab: true,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Dashboard",
+              link: "index",
+              submenu: true,
+              showSubRoute: false,
+              icon: "smart-home",
+              base: "dashboard",
+              materialicons: "start",
+              dot: true,
+              submenuItems: [
+                { label: "HR Dashboard", link: routes.hrDashboard },
+                { label: "Employee Dashboard", link: routes.employeeDashboard },
+                { label: "Deals Dashboard", link: routes.dealsDashboard },
+                { label: "Leads Dashboard", link: routes.leadsDashboard },
+              ],
+            },
+            {
+              label: "Applications",
+              link: "apps",
+              submenu: true,
+              showSubRoute: false,
+              icon: "layout-grid-add",
+              base: "application",
+              materialicons: "dashboard",
+              submenuItems: [
+                { label: "Chat", link: routes.chat, base: "chats", customSubmenuTwo: false },
+                { label: "Calendar", showSubRoute: false, link: routes.calendar, customSubmenuTwo: false, base: "calendar" },
+                { label: "To Do", showSubRoute: false, link: routes.todo, customSubmenuTwo: false, base: "todo" },
+                { label: "Notes", showSubRoute: false, link: routes.notes, customSubmenuTwo: false, base: "notes" },
+                { label: "File Manager", showSubRoute: false, link: routes.fileManager, customSubmenuTwo: false, base: "file-manager" },
+                { label: "Kanban", showSubRoute: false, link: routes.kanbanView, customSubmenuTwo: false, base: "kanban" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "HRM",
+          icon: "users",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Employees",
+              link: routes.employeeList,
+              submenu: true,
+              showSubRoute: false,
+              icon: "user",
+              base: "employees",
+              materialicons: "people",
+              submenuItems: [
+                { label: "Employees", link: routes.employeeList, base: "employees" },
+                { label: "Departments", link: routes.departments, base: "departments" },
+                { label: "Designations", link: routes.designations, base: "designations" },
+                { label: "Policies", link: routes.policy, base: "policy" },
+              ],
+            },
+            { label: "Time Sheet", link: routes.timesheet, submenu: false, showSubRoute: false, icon: "file-time", base: "timesheet", materialicons: "schedule" },
+            {
+              label: "Shift & Schedule",
+              submenu: true,
+              showSubRoute: false,
+              icon: "clock",
+              base: "shift-schedule",
+              materialicons: "access_time",
+              submenuItems: [
+                { label: "Schedule Timing", link: routes.scheduletiming, base: "schedule" },
+                { label: "Shifts Management", link: routes.shiftsManagement, base: "shifts" },
+                { label: "Shift Batches", link: routes.batchesManagement, base: "batches" },
+              ],
+            },
+            {
+              label: "Leave Management",
+              submenu: true,
+              showSubRoute: false,
+              icon: "calendar-event",
+              base: "leaves",
+              materialicons: "event",
+              submenuItems: [
+                { label: "Leaves", link: routes.leaveadmin, base: "leaves" },
+                { label: "Leave Settings", link: routes.leavesettings, base: "leave-settings" },
+              ],
+            },
+            { label: "Attendance", link: routes.attendanceadmin, submenu: false, showSubRoute: false, icon: "file-text", base: "attendance-admin", materialicons: "how_to_reg" },
+            { label: "Overtime", link: routes.overtime, submenu: false, showSubRoute: false, icon: "clock", base: "overtime", materialicons: "update" },
+            { label: "Holidays", link: routes.holidays, submenu: false, showSubRoute: false, icon: "sun", base: "holidays", materialicons: "beach_access" },
+            { label: "Policies", link: routes.policy, submenu: false, showSubRoute: false, icon: "file-check", base: "policy", materialicons: "policy" },
+            { label: "Resignation", link: routes.resignation, submenu: false, showSubRoute: false, icon: "log-out", base: "resignation", materialicons: "exit_to_app" },
+            { label: "Termination", link: routes.termination, submenu: false, showSubRoute: false, icon: "user-x", base: "termination", materialicons: "person_remove" },
+          ],
+        },
+        {
+          tittle: "PROJECTS",
+          icon: "layers",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Clients", link: routes.clientgrid, submenu: false, showSubRoute: false, icon: "users-group", base: "client", materialicons: "person", submenuItems: [] },
+            {
+              label: "Projects",
+              link: routes.project,
+              submenu: true,
+              showSubRoute: false,
+              icon: "box",
+              base: "projects",
+              materialicons: "topic",
+              submenuItems: [
+                { label: "Projects", link: routes.project, base: "project-grid", base2: "project-list", base3: "project-details" },
+                { label: "Tasks", link: routes.tasks, base: "tasks" },
+                { label: "Task Board", link: routes.taskboard, base: "task-board" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "CRM",
+          icon: "file",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Contacts", link: routes.contactList, submenu: false, showSubRoute: false, icon: "user-shield", base: "contact", materialicons: "confirmation_number", submenuItems: [] },
+            { label: "Companies", link: routes.companiesList, submenu: false, showSubRoute: false, icon: "building", base: "company", materialicons: "shopping_bag", submenuItems: [] },
+            { label: "Deals", link: routes.dealsList, submenu: false, showSubRoute: false, icon: "heart-handshake", base: "deals", materialicons: "account_balance_wallet", submenuItems: [] },
+            { label: "Leads", link: routes.leadsList, submenu: false, showSubRoute: false, icon: "user-check", base: "leads", materialicons: "request_quote", submenuItems: [] },
+            { label: "Pipeline", link: routes.pipeline, submenu: false, showSubRoute: false, icon: "timeline-event-text", base: "pipeline", materialicons: "verified_user", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "RECRUITMENT",
+          icon: "file",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Jobs", link: routes.jobgrid, submenu: false, showSubRoute: false, icon: "timeline", base: "jobs", materialicons: "confirmation_number", submenuItems: [] },
+            { label: "Candidates", link: routes.candidatesGrid, submenu: false, showSubRoute: false, icon: "user-shield", base: "candidates", materialicons: "shopping_bag", submenuItems: [] },
+            { label: "Refferals", link: routes.refferal, submenu: false, showSubRoute: false, icon: "ux-circle", base: "refferals", materialicons: "account_balance_wallet", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Tickets",
+          icon: "ticket",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Tickets", link: routes.tickets, submenu: false, showSubRoute: false, icon: "square-check", base: "tickets", materialicons: "confirmation_number", submenuItems: [] },
+            { label: "Tickets Grid", link: routes.ticketGrid, submenu: false, showSubRoute: false, icon: "grid", base: "ticket-grid", materialicons: "grid_view", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Performance",
+          icon: "school",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Performance Indicator", link: routes.performanceIndicator, submenu: false, showSubRoute: false, icon: "line-chart", base: "indicator", submenuItems: [] },
+            { label: "Performance Review", link: routes.performanceReview, submenu: false, showSubRoute: false, icon: "star", base: "review", submenuItems: [] },
+            { label: "Performance Appraisal", link: routes.performanceAppraisal, submenu: false, showSubRoute: false, icon: "award", base: "appraisal", submenuItems: [] },
+            { label: "Goal List", link: routes.goalTracking, submenu: false, showSubRoute: false, icon: "target", base: "goal-tracking", submenuItems: [] },
+            { label: "Goal Type", link: routes.goalType, submenu: false, showSubRoute: false, icon: "tag", base: "goal-type", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Training",
+          icon: "edit",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Training List", link: routes.trainingList, submenu: false, showSubRoute: false, icon: "list", base: "training-list", submenuItems: [] },
+            { label: "Trainers", link: routes.trainers, submenu: false, showSubRoute: false, icon: "user", base: "trainer", submenuItems: [] },
+            { label: "Training Type", link: routes.trainingType, submenu: false, showSubRoute: false, icon: "tag", base: "training-type", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Reports",
+          icon: "file-description",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Expense Report", link: routes.expensereport, submenu: false, showSubRoute: false, icon: "file-dollar", base: "expense-report", submenuItems: [] },
+            { label: "Invoice Report", link: routes.invoicereport, submenu: false, showSubRoute: false, icon: "file-invoice", base: "invoice-report", submenuItems: [] },
+            { label: "Project Report", link: routes.projectreport, submenu: false, showSubRoute: false, icon: "file-chart", base: "project-report", submenuItems: [] },
+            { label: "Task Report", link: routes.taskreport, submenu: false, showSubRoute: false, icon: "file-check", base: "task-report", submenuItems: [] },
+            { label: "Employee Report", link: routes.employeereport, submenu: false, showSubRoute: false, icon: "file-user", base: "employee-report", submenuItems: [] },
+            { label: "Attendance Report", link: routes.attendancereport, submenu: false, showSubRoute: false, icon: "file-time", base: "attendance-report", submenuItems: [] },
+            { label: "Leave Report", link: routes.leavereport, submenu: false, showSubRoute: false, icon: "file-calendar", base: "leave-report", submenuItems: [] },
+            { label: "Daily Report", link: routes.dailyreport, submenu: false, showSubRoute: false, icon: "file-text", base: "daily-report", submenuItems: [] },
+          ],
+        },
+      ];
+      console.log('[Sidebar Menu] HR Menu constructed successfully:', {
+        sectionCount: hrMenu.length,
+        sections: hrMenu.map(s => s.tittle),
+        hrmSection: hrMenu.find(s => s.tittle === 'HRM')?.submenuItems?.map(i => i.label),
+        ticketsSection: hrMenu.find(s => s.tittle === 'Tickets')?.submenuItems?.map(i => i.label),
+        performanceSection: hrMenu.find(s => s.tittle === 'Performance')?.submenuItems?.map(i => i.label),
+        trainingSection: hrMenu.find(s => s.tittle === 'Training')?.submenuItems?.map(i => i.label),
+      });
+      return hrMenu;
+    case "manager":
       return [
         {
           tittle: "Main Menu",
@@ -2948,11 +3200,266 @@ const useSidebarData = () => {
               materialicons: "start",
               dot: true,
               submenuItems: [
-                { label: "Admin Dashboard", link: routes.adminDashboard, roles: ["admin"] },
-                { label: "Employee Dashboard", link: routes.employeeDashboard, roles: ["public"] },
-                { label: "Deals Dashboard", link: routes.dealsDashboard, roles: ["public"] },
-                { label: "Leads Dashboard", link: routes.leadsDashboard, roles: ["public"] },
-                { label: "HR Dashboard", link: routes.hrDashboard, roles: ["hr"] },
+                { label: "Admin Dashboard", link: routes.adminDashboard },
+                { label: "Employee Dashboard", link: routes.employeeDashboard },
+                { label: "Deals Dashboard", link: routes.dealsDashboard },
+                { label: "Leads Dashboard", link: routes.leadsDashboard },
+              ],
+            },
+            {
+              label: "Applications",
+              link: "apps",
+              submenu: true,
+              showSubRoute: false,
+              icon: "layout-grid-add",
+              base: "application",
+              materialicons: "dashboard",
+              submenuItems: [
+                { label: "Chat", link: routes.chat, base: "chats", customSubmenuTwo: false },
+                { label: "Calendar", showSubRoute: false, link: routes.calendar, customSubmenuTwo: false, base: "calendar" },
+                { label: "To Do", showSubRoute: false, link: routes.todo, customSubmenuTwo: false, base: "todo" },
+                { label: "Notes", showSubRoute: false, link: routes.notes, customSubmenuTwo: false, base: "notes" },
+                { label: "File Manager", showSubRoute: false, link: routes.fileManager, customSubmenuTwo: false, base: "file-manager" },
+                { label: "Kanban", showSubRoute: false, link: routes.kanbanView, customSubmenuTwo: false, base: "kanban" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "PROJECTS",
+          icon: "layers",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Clients", link: routes.clientgrid, submenu: false, showSubRoute: false, icon: "users-group", base: "client", materialicons: "person", submenuItems: [] },
+            {
+              label: "Projects",
+              link: routes.project,
+              submenu: true,
+              showSubRoute: false,
+              icon: "box",
+              base: "projects",
+              materialicons: "topic",
+              submenuItems: [
+                { label: "Projects", link: routes.project, base: "project-grid", base2: "project-list", base3: "project-details" },
+                { label: "Tasks", link: "tasks", base: "tasks" },
+                { label: "Task Board", link: routes.taskboard, base: "task-board" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "CRM",
+          icon: "file",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Contacts", link: routes.contactList, submenu: false, showSubRoute: false, icon: "user-shield", base: "contact", materialicons: "confirmation_number", submenuItems: [] },
+            { label: "Companies", link: routes.companiesList, submenu: false, showSubRoute: false, icon: "building", base: "company", materialicons: "shopping_bag", submenuItems: [] },
+            { label: "Deals", link: routes.dealsList, submenu: false, showSubRoute: false, icon: "heart-handshake", base: "deals", materialicons: "account_balance_wallet", submenuItems: [] },
+            { label: "Leads", link: routes.leadsList, submenu: false, showSubRoute: false, icon: "user-check", base: "leads", materialicons: "request_quote", submenuItems: [] },
+            { label: "Pipeline", link: routes.pipeline, submenu: false, showSubRoute: false, icon: "timeline-event-text", base: "pipeline", materialicons: "verified_user", submenuItems: [] },
+            { label: "Activities", link: routes.activity, submenu: false, showSubRoute: false, icon: "activity", base: "activity", materialicons: "shutter_speed", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Performance",
+          icon: "school",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Performance Indicator", link: routes.performanceIndicator, submenu: false, showSubRoute: false, icon: "line-chart", base: "indicator", submenuItems: [] },
+            { label: "Performance Review", link: routes.performanceReview, submenu: false, showSubRoute: false, icon: "star", base: "review", submenuItems: [] },
+            { label: "Performance Appraisal", link: routes.performanceAppraisal, submenu: false, showSubRoute: false, icon: "award", base: "appraisal", submenuItems: [] },
+            { label: "Goal List", link: routes.goalTracking, submenu: false, showSubRoute: false, icon: "target", base: "appraisal", submenuItems: [] },
+            { label: "Goal Type", link: routes.goalType, submenu: false, showSubRoute: false, icon: "tag", base: "appraisal", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Reports",
+          icon: "file-description",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Project Report", link: routes.projectreport, submenu: false, showSubRoute: false, icon: "file-chart", base: "project-report", submenuItems: [] },
+            { label: "Task Report", link: routes.taskreport, submenu: false, showSubRoute: false, icon: "file-check", base: "task-report", submenuItems: [] },
+            { label: "Daily Report", link: routes.dailyreport, submenu: false, showSubRoute: false, icon: "file-text", base: "daily-report", submenuItems: [] },
+          ],
+        },
+      ];
+      break;
+    case "leads":
+      return [
+        {
+          tittle: "Main Menu",
+          icon: "airplay",
+          showAsTab: true,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Dashboard",
+              link: "index",
+              submenu: true,
+              showSubRoute: false,
+              icon: "smart-home",
+              base: "dashboard",
+              materialicons: "start",
+              dot: true,
+              submenuItems: [
+                { label: "Employee Dashboard", link: routes.employeeDashboard },
+                { label: "Deals Dashboard", link: routes.dealsDashboard },
+                { label: "Leads Dashboard", link: routes.leadsDashboard },
+              ],
+            },
+            {
+              label: "Applications",
+              link: "apps",
+              submenu: true,
+              showSubRoute: false,
+              icon: "layout-grid-add",
+              base: "application",
+              materialicons: "dashboard",
+              submenuItems: [
+                { label: "Chat", link: routes.chat, base: "chats", customSubmenuTwo: false },
+                { label: "Calendar", showSubRoute: false, link: routes.calendar, customSubmenuTwo: false, base: "calendar" },
+                { label: "To Do", showSubRoute: false, link: routes.todo, customSubmenuTwo: false, base: "todo" },
+                { label: "Notes", showSubRoute: false, link: routes.notes, customSubmenuTwo: false, base: "notes" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "CRM",
+          icon: "file",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Companies", link: routes.companiesList, submenu: false, showSubRoute: false, icon: "building", base: "company", materialicons: "shopping_bag", submenuItems: [] },
+            { label: "Deals", link: routes.dealsList, submenu: false, showSubRoute: false, icon: "heart-handshake", base: "deals", materialicons: "account_balance_wallet", submenuItems: [] },
+            { label: "Leads", link: routes.leadsList, submenu: false, showSubRoute: false, icon: "user-check", base: "leads", materialicons: "request_quote", submenuItems: [] },
+            { label: "Pipeline", link: routes.pipeline, submenu: false, showSubRoute: false, icon: "timeline-event-text", base: "pipeline", materialicons: "verified_user", submenuItems: [] },
+            { label: "Activities", link: routes.activity, submenu: false, showSubRoute: false, icon: "activity", base: "activity", materialicons: "shutter_speed", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "Reports",
+          icon: "file-description",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Daily Report", link: routes.dailyreport, submenu: false, showSubRoute: false, icon: "file-text", base: "daily-report", submenuItems: [] },
+          ],
+        },
+      ];
+      break;
+    case "employee":
+      return [
+        {
+          tittle: "Main Menu",
+          icon: "airplay",
+          showAsTab: true,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Dashboard",
+              link: "index",
+              submenu: true,
+              showSubRoute: false,
+              icon: "smart-home",
+              base: "dashboard",
+              materialicons: "start",
+              dot: true,
+              submenuItems: [
+                { label: "Employee Dashboard", link: routes.employeeDashboard },
+              ],
+            },
+            {
+              label: "Applications",
+              link: "apps",
+              submenu: true,
+              showSubRoute: false,
+              icon: "layout-grid-add",
+              base: "application",
+              materialicons: "dashboard",
+              submenuItems: [
+                { label: "Chat", link: routes.chat, base: "chats", customSubmenuTwo: false },
+                { label: "Calendar", showSubRoute: false, link: routes.calendar, customSubmenuTwo: false, base: "calendar" },
+                { label: "To Do", showSubRoute: false, link: routes.todo, customSubmenuTwo: false, base: "todo" },
+                { label: "Notes", showSubRoute: false, link: routes.notes, customSubmenuTwo: false, base: "notes" },
+                { label: "File Manager", showSubRoute: false, link: routes.fileManager, customSubmenuTwo: false, base: "file-manager" },
+                { label: "Kanban", showSubRoute: false, link: routes.kanbanView, customSubmenuTwo: false, base: "kanban" },
+              ],
+            },
+          ],
+        },
+        {
+          tittle: "HRM",
+          icon: "users",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            { label: "Time Sheet", link: routes.timesheet, submenu: false, showSubRoute: false, icon: "file-time", base: "timesheet", materialicons: "schedule", submenuItems: [] },
+            { label: "Leave Management", link: routes.leaveemployee, submenu: true, showSubRoute: false, icon: "calendar-event", base: "leaves", materialicons: "event", submenuItems: [
+              { label: "Leaves", link: routes.leaveemployee, submenu: false, showSubRoute: false },
+            ]},
+            { label: "Attendance", link: routes.attendanceemployee, submenu: false, showSubRoute: false, icon: "file-text", base: "attendance-employee", materialicons: "how_to_reg", submenuItems: [] },
+            { label: "Holidays", link: routes.holidays, submenu: false, showSubRoute: false, icon: "sun", base: "holidays", materialicons: "beach_access", submenuItems: [] },
+            { label: "Policies", link: routes.policies, submenu: false, showSubRoute: false, icon: "file-check", base: "policies", materialicons: "policy", submenuItems: [] },
+            { label: "Resignation", link: routes.resignation, submenu: false, showSubRoute: false, icon: "logout", base: "resignation", materialicons: "exit_to_app", submenuItems: [] },
+          ],
+        },
+        {
+          tittle: "PROJECTS",
+          icon: "layers",
+          showAsTab: false,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Projects",
+              link: routes.project,
+              submenu: true,
+              showSubRoute: false,
+              icon: "box",
+              base: "projects",
+              materialicons: "topic",
+              submenuItems: [
+                { label: "Projects", link: routes.project, base: "project-grid", base2: "project-list", base3: "project-details" },
+                { label: "Tasks", link: "tasks", base: "tasks" },
+                { label: "Task Board", link: routes.taskboard, base: "task-board" },
+              ],
+            },
+          ],
+        },
+      ];
+      break;
+    default:
+      console.warn('[Sidebar Menu] Unknown role - falling back to default menu:', {
+        userRole,
+        originalRole,
+        availableCases: ['superadmin', 'admin', 'hr', 'manager', 'leads', 'employee'],
+      });
+      return [
+        {
+          tittle: "Main Menu",
+          icon: "airplay",
+          showAsTab: true,
+          separateRoute: false,
+          submenuItems: [
+            {
+              label: "Dashboard",
+              link: "index",
+              submenu: true,
+              showSubRoute: false,
+              icon: "smart-home",
+              base: "dashboard",
+              materialicons: "start",
+              dot: true,
+              submenuItems: [
+                { label: "Admin Dashboard", link: routes.adminDashboard, roles: ["admin", "manager"] },
+                { label: "Employee Dashboard", link: routes.employeeDashboard, roles: ["employee", "admin", "hr", "manager", "leads"] },
+                { label: "Deals Dashboard", link: routes.dealsDashboard, roles: ["admin", "hr", "manager", "leads"] },
+                { label: "Leads Dashboard", link: routes.leadsDashboard, roles: ["admin", "hr", "manager", "leads"] },
+                { label: "HR Dashboard", link: routes.hrDashboard, roles: ["hr", "manager", "leads"] },
               ],
             },
             {

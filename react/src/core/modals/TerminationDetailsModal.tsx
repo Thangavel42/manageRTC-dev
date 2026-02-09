@@ -1,36 +1,19 @@
 import React from "react";
 import dayjs from "dayjs";
 import ImageWithBasePath from "../common/imageWithBasePath";
-
-interface Termination {
-  terminationId: string;
-  employeeName: string | null;
-  employeeId: string | null;
-  employee_id?: string | null;
-  employeeImage?: string | null;
-  department: string | null;
-  departmentId: string | null;
-  designation?: string | null;
-  terminationType: string;
-  terminationDate: string; // ISO format or YYYY-MM-DD
-  noticeDate: string; // ISO format or YYYY-MM-DD
-  reason?: string;
-  notes?: string;
-  status?: string;
-  lastWorkingDate?: string;
-}
+import type { Termination } from "../../hooks/useTerminationsREST";
 
 interface TerminationDetailsModalProps {
   termination: Termination | null;
   modalId?: string;
 }
 
-const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({ 
-  termination, 
-  modalId = "view_termination_details" 
+const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
+  termination,
+  modalId = "view_termination_details"
 }) => {
   // Extract just the name part if employeeName contains "ID - Name" format
-  const getDisplayName = (employeeName: string | null): string => {
+  const getDisplayName = (employeeName?: string | null): string => {
     if (!employeeName) return "Unknown Employee";
     // Check if name contains " - " pattern (e.g., "EMP-8984 - Hari Haran")
     const parts = employeeName.split(' - ');
@@ -80,20 +63,6 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
     );
   }
 
-  // Status badge rendering
-  const getStatusBadge = (status?: string) => {
-    const statusMap: Record<string, { className: string; text: string }> = {
-      pending: { className: "badge badge-soft-warning", text: "Pending" },
-      processed: { className: "badge badge-soft-success", text: "Processed" },
-      cancelled: { className: "badge badge-soft-danger", text: "Cancelled" },
-    };
-    const statusInfo = statusMap[status?.toLowerCase() || ''] || { 
-      className: "badge badge-soft-secondary", 
-      text: status || "Unknown" 
-    };
-    return <span className={statusInfo.className}>{statusInfo.text}</span>;
-  };
-
   return (
     <div className="modal fade" id={modalId}>
       <div className="modal-dialog modal-dialog-centered modal-lg">
@@ -131,7 +100,7 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
                     </div>
                     <div>
                       <h5 className="mb-1">{displayName}</h5>
-                      <p className="text-muted mb-0">{termination.department || "N/A"}</p>
+                      <p className="text-muted mb-0">{termination.department || termination.departmentId || "N/A"}</p>
                     </div>
                   </div>
                   {termination.status && (
@@ -142,9 +111,9 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
                           processed: { className: "badge badge-soft-success", text: "Processed" },
                           cancelled: { className: "badge badge-soft-danger", text: "Cancelled" },
                         };
-                        const statusInfo = statusMap[termination.status?.toLowerCase() || ""] || { 
-                          className: "badge badge-soft-secondary", 
-                          text: termination.status 
+                        const statusInfo = statusMap[termination.status?.toLowerCase() || ""] || {
+                          className: "badge badge-soft-secondary",
+                          text: termination.status
                         };
                         return <span className={statusInfo.className}>{statusInfo.text}</span>;
                       })()}
@@ -162,13 +131,13 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Employee ID</label>
                         <p className="fw-medium mb-0">
-                          {termination.employeeId || "N/A"}
+                          {termination.employeeId || termination.employee_id || "N/A"}
                         </p>
                       </div>
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Department</label>
                         <p className="fw-medium mb-0">
-                          {termination.department || "N/A"}
+                          {termination.department || termination.departmentId || "N/A"}
                         </p>
                       </div>
 
@@ -209,6 +178,23 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
                           <p className="fw-medium mb-0">
                             <i className="ti ti-calendar-check me-1 text-gray-5" />
                             {dayjs(termination.lastWorkingDate).format("DD MMM YYYY")}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Processed information */}
+                      {termination.processedBy && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Processed By</label>
+                          <p className="fw-medium mb-0">{termination.processedBy}</p>
+                        </div>
+                      )}
+
+                      {termination.processedAt && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Processed At</label>
+                          <p className="fw-medium mb-0">
+                            {dayjs(termination.processedAt).format("DD MMM YYYY")}
                           </p>
                         </div>
                       )}

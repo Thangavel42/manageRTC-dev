@@ -1,0 +1,1218 @@
+openapi: 3.0.3
+info:
+  title: manageRTC HRM API
+  description: |
+    Human Resource Management API for the manageRTC application.
+
+    Features include:
+    - Timesheet management with approval workflow
+    - Leave request management
+    - Overtime request handling
+    - Employee lifecycle management (promotions, resignations, terminations)
+    - Attendance tracking
+    - Department and designation management
+
+    **Authentication**: All endpoints require Bearer token authentication via Clerk JWT.
+
+    **Multi-Tenant**: The API uses company-specific database collections. Include `X-Company-Id` header or use JWT claim.
+  version: 1.0.0
+  contact:
+    name: manageRTC Support
+    email: support@manageRTC.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000/api
+    description: Development server
+  - url: https://api.managertc.com/api
+    description: Production server
+
+tags:
+  - name: Timesheets
+    description: Weekly timesheet management
+  - name: Leaves
+    description: Leave request management
+  - name: Overtime
+    description: Overtime request management
+  - name: Employees
+    description: Employee management
+  - name: Promotions
+    description: Employee promotion management
+  - name: Resignations
+    description: Employee resignation management
+  - name: Terminations
+    description: Employee termination management
+  - name: Attendance
+    description: Attendance tracking
+  - name: Departments
+    description: Department management
+  - name: Designations
+    description: Designation/position management
+
+security:
+  - BearerAuth: []
+
+paths:
+  /timesheets:
+    get:
+      tags: [Timesheets]
+      summary: Get all timesheets
+      description: |
+        Retrieve a paginated list of timesheets.
+
+        **Role Requirements**: Admin, HR, Manager - can view all timesheets.
+        **Role Requirements**: Employee - can only view own timesheets.
+      operationId: getTimesheets
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Items per page
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [draft, submitted, approved, rejected, cancelled]
+        - name: employeeId
+          in: query
+          description: Filter by employee
+          schema:
+            type: string
+            format: uuid
+        - name: startDate
+          in: query
+          description: Filter by week start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Filter by week end date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Timesheet'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  count:
+                    type: integer
+                    example: 42
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Timesheets]
+      summary: Create new timesheet
+      description: |
+        Create a new weekly timesheet with time entries.
+
+        **Role Requirements**: All authenticated users.
+
+        A timesheet represents a week of work (Monday-Sunday) with daily
+        time entries for projects, tasks, and descriptions.
+      operationId: createTimesheet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - weekStart
+                - entries
+              properties:
+                weekStart:
+                  type: string
+                  format: date-time
+                  description: Week start date (typically Monday)
+                  example: '2024-01-15T00:00:00.000Z'
+                entries:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/TimesheetEntry'
+                notes:
+                  type: string
+                  description: Optional notes for the timesheet
+                  example: 'Regular work week'
+      responses:
+        '201':
+          description: Timesheet created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /timesheets/my:
+    get:
+      tags: [Timesheets]
+      summary: Get current user's timesheets
+      description: |
+        Retrieve timesheets for the authenticated user only.
+
+        **Role Requirements**: All authenticated users.
+      operationId: getMyTimesheets
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, approved, rejected, cancelled]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Timesheet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /timesheets/{id}:
+    get:
+      tags: [Timesheets]
+      summary: Get timesheet by ID
+      description: Retrieve a single timesheet by its ID.
+      operationId: getTimesheetById
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Timesheets]
+      summary: Update timesheet
+      description: |
+        Update an existing timesheet.
+
+        **Role Requirements**: Employee can only update own timesheets.
+        **Validation**: Only draft and rejected timesheets can be edited.
+      operationId: updateTimesheet
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entries
+              properties:
+                entries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TimesheetEntry'
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Timesheet updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '400':
+          description: Cannot update submitted/approved timesheet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Timesheets]
+      summary: Delete timesheet
+      description: |
+        Delete a timesheet (soft delete).
+
+        **Role Requirements**: Employee can delete own draft timesheets.
+        **Validation**: Only draft timesheets can be deleted.
+      operationId: deleteTimesheet
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      responses:
+        '200':
+          description: Timesheet deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: 'Timesheet deleted successfully'
+        '400':
+          description: Cannot delete submitted/approved timesheet
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /timesheets/{id}/submit:
+    post:
+      tags: [Timesheets]
+      summary: Submit timesheet for approval
+      description: |
+        Submit a draft timesheet for manager approval.
+
+        **Role Requirements**: Employee submitting own timesheet.
+        **Workflow**: draft → submitted
+        **Notification**: Triggers notification to manager.
+      operationId: submitTimesheet
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      responses:
+        '200':
+          description: Timesheet submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '400':
+          description: Timesheet not in draft state
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /timesheets/{id}/approve:
+    post:
+      tags: [Timesheets]
+      summary: Approve timesheet
+      description: |
+        Approve a submitted timesheet.
+
+        **Role Requirements**: Admin, HR, Manager.
+        **Workflow**: submitted → approved
+        **Transaction**: Updates employee work hours within transaction.
+        **Notification**: Triggers notification to employee.
+      operationId: approveTimesheet
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+                  description: Optional approval comments
+                  example: 'Approved. Great work this week!'
+      responses:
+        '200':
+          description: Timesheet approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '400':
+          description: Timesheet not in submitted state
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /timesheets/{id}/reject:
+    post:
+      tags: [Timesheets]
+      summary: Reject timesheet
+      description: |
+        Reject a submitted timesheet.
+
+        **Role Requirements**: Admin, HR, Manager.
+        **Workflow**: submitted → rejected
+        **Transaction**: Updates employee work hours within transaction.
+        **Notification**: Triggers notification to employee.
+      operationId: rejectTimesheet
+      parameters:
+        - $ref: '#/components/parameters/TimesheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Rejection reason (required)
+                  example: 'Missing project allocation for Wednesday'
+                  minLength: 10
+                  maxLength: 500
+      responses:
+        '200':
+          description: Timesheet rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Timesheet'
+        '400':
+          description: Timesheet not in submitted state or missing reason
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /timesheets/stats:
+    get:
+      tags: [Timesheets]
+      summary: Get timesheet statistics
+      description: |
+        Retrieve aggregated timesheet statistics.
+
+        **Role Requirements**: Admin, HR, Manager.
+      operationId: getTimesheetStats
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/TimesheetStats'
+
+  /leaves:
+    get:
+      tags: [Leaves]
+      summary: Get all leave requests
+      description: Retrieve paginated leave requests.
+      operationId: getLeaves
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: employeeId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveRequest'
+
+  /leaves/{id}/approve:
+    post:
+      tags: [Leaves]
+      summary: Approve leave request
+      description: |
+        Approve a pending leave request.
+
+        **Role Requirements**: Admin, HR, Manager.
+        **Transaction**: Updates leave balance within transaction.
+        **Workflow**: pending → approved
+      operationId: approveLeave
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+      responses:
+        '200':
+          description: Leave approved successfully
+
+  /leaves/{id}/reject:
+    post:
+      tags: [Leaves]
+      summary: Reject leave request
+      description: |
+        Reject a pending leave request.
+
+        **Role Requirements**: Admin, HR, Manager.
+        **Transaction**: Does NOT affect leave balance.
+        **Workflow**: pending → rejected
+      operationId: rejectLeave
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  minLength: 10
+      responses:
+        '200':
+          description: Leave rejected successfully
+
+  /overtime:
+    get:
+      tags: [Overtime]
+      summary: Get overtime requests
+      description: Retrieve paginated overtime requests.
+      operationId: getOvertimeRequests
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OvertimeRequest'
+
+  /overtime/{id}:
+    put:
+      tags: [Overtime]
+      summary: Update overtime request
+      description: Update an existing overtime request.
+      operationId: updateOvertimeRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                hours:
+                  type: number
+                  minimum: 0.5
+                  maximum: 12
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Overtime request updated successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /promotions:
+    post:
+      tags: [Promotions]
+      summary: Create promotion request
+      description: |
+        Create a new employee promotion request.
+
+        **Role Requirements**: Admin, HR.
+        **Stores**: Current position (promotionFrom) is stored when creating.
+        **Updates**: Employee salary when promotion is applied.
+      operationId: createPromotion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - employeeId
+                - fromDesignation
+                - toDesignation
+                - promotionDate
+              properties:
+                employeeId:
+                  type: string
+                  format: uuid
+                fromDesignation:
+                  type: string
+                  description: Current designation (stored at creation)
+                  example: 'Senior Developer'
+                toDesignation:
+                  type: string
+                  description: New designation
+                  example: 'Team Lead'
+                promotionDate:
+                  type: string
+                  format: date
+                salary:
+                  type: number
+                  description: New salary after promotion
+                  example: 85000
+                remarks:
+                  type: string
+      responses:
+        '201':
+          description: Promotion created successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /resignations:
+    get:
+      tags: [Resignations]
+      summary: Get resignation requests
+      description: Retrieve all resignation requests.
+      operationId: getResignations
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Resignation'
+
+  /resignations/{id}/approve:
+    post:
+      tags: [Resignations]
+      summary: Approve resignation
+      description: |
+        Approve a resignation request.
+
+        **Role Requirements**: Admin, HR.
+        **Effect**: Employee status changes to 'On Notice'.
+      operationId: approveResignation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resignation approved successfully
+
+  /terminations:
+    get:
+      tags: [Terminations]
+      summary: Get termination records
+      description: Retrieve termination records.
+      operationId: getTerminations
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Termination'
+
+  /departments:
+    get:
+      tags: [Departments]
+      summary: Get all departments
+      description: Retrieve list of all departments.
+      operationId: getDepartments
+      responses:
+        '200':
+          description: Successful response
+    post:
+      tags: [Departments]
+      summary: Create department
+      description: Create a new department.
+      operationId: createDepartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - department
+              properties:
+                department:
+                  type: string
+                  minLength: 2
+                status:
+                  type: string
+                  enum: [Active, Inactive]
+                  default: Active
+      responses:
+        '201':
+          description: Department created successfully
+
+  /designations:
+    get:
+      tags: [Designations]
+      summary: Get all designations
+      description: Retrieve list of all designations/positions.
+      operationId: getDesignations
+      responses:
+        '200':
+          description: Successful response
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token from Clerk authentication.
+
+        Include in Authorization header:
+        ```
+        Authorization: Bearer <token>
+        ```
+
+  parameters:
+    TimesheetId:
+      name: id
+      in: path
+      required: true
+      description: Timesheet ID (UUID)
+      schema:
+        type: string
+        format: uuid
+      example: '507f1f77bcf86cd799439011'
+
+  schemas:
+    Timesheet:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: uuid
+          readOnly: true
+        timesheetId:
+          type: string
+          readOnly: true
+          example: 'TS-0001'
+        employeeId:
+          type: string
+          format: uuid
+          description: Employee who owns this timesheet
+        weekStartDate:
+          type: string
+          format: date-time
+          description: Week start date (Monday)
+          example: '2024-01-15T00:00:00.000Z'
+        weekEndDate:
+          type: string
+          format: date-time
+          description: Week end date (Sunday)
+          example: '2024-01-21T23:59:59.999Z'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimesheetEntry'
+        totalHours:
+          type: number
+          format: float
+          description: Total hours for the week
+          example: 40
+        totalRegularHours:
+          type: number
+          format: float
+          description: Regular work hours (≤8/day)
+          example: 40
+        totalOvertimeHours:
+          type: number
+          format: float
+          description: Overtime hours (>8/day)
+          example: 0
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected, cancelled]
+          description: Timesheet status
+        submittedBy:
+          type: string
+          format: uuid
+          description: User who submitted the timesheet
+          readOnly: true
+        submittedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        approvedBy:
+          type: string
+          format: uuid
+          description: User who approved the timesheet
+          readOnly: true
+        approvedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        approvalComments:
+          type: string
+          description: Comments from approver
+          readOnly: true
+        rejectedBy:
+          type: string
+          format: uuid
+          readOnly: true
+        rejectedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        rejectionReason:
+          type: string
+          readOnly: true
+        notes:
+          type: string
+          description: Optional notes
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    TimesheetEntry:
+      type: object
+      required:
+        - date
+        - description
+        - hours
+      properties:
+        date:
+          type: string
+          format: date-time
+          description: Entry date
+          example: '2024-01-15T00:00:00.000Z'
+        project:
+          type: string
+          description: Associated project
+          example: 'Website Redesign'
+        task:
+          type: string
+          description: Task type or category
+          example: 'Development'
+        description:
+          type: string
+          description: Work description
+          example: 'Implemented login page'
+          minLength: 5
+          maxLength: 500
+        hours:
+          type: number
+          format: float
+          description: Hours worked
+          minimum: 0
+          maximum: 24
+          example: 8
+        regularHours:
+          type: number
+          format: float
+          description: Regular hours (auto-calculated, max 8)
+          readOnly: true
+        overtimeHours:
+          type: number
+          format: float
+          description: Overtime hours (auto-calculated, >8)
+          readOnly: true
+        isBillable:
+          type: boolean
+          description: Whether work is billable
+          default: true
+
+    TimesheetStats:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total timesheets
+          example: 150
+        pending:
+          type: integer
+          description: Pending approval (draft + submitted)
+          example: 12
+        byStatus:
+          type: object
+          description: Statistics by status
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              totalHours:
+                type: number
+              totalRegularHours:
+                type: number
+              totalOvertimeHours:
+                type: number
+
+    LeaveRequest:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: uuid
+        requestId:
+          type: string
+          example: 'LR-0001'
+        employeeId:
+          type: string
+          format: uuid
+        employeeName:
+          type: string
+          readOnly: true
+        leaveType:
+          type: string
+          example: 'Annual Leave'
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        numberOfDays:
+          type: integer
+          minimum: 0.5
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+        reason:
+          type: string
+        appliedOn:
+          type: string
+          format: date-time
+          readOnly: true
+        approvedBy:
+          type: string
+          format: uuid
+        approvedAt:
+          type: string
+          format: date-time
+        rejectionReason:
+          type: string
+
+    OvertimeRequest:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        employeeName:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        hours:
+          type: number
+          minimum: 0.5
+          maximum: 12
+        reason:
+          type: string
+          minLength: 10
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    Resignation:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        employeeName:
+          type: string
+          readOnly: true
+        resignationDate:
+          type: string
+          format: date
+        noticeDate:
+          type: string
+          format: date
+        lastWorkingDay:
+          type: string
+          format: date
+        reason:
+          type: string
+        resignationStatus:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+
+    Termination:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        employeeName:
+          type: string
+          readOnly: true
+        terminationDate:
+          type: string
+          format: date
+        terminationType:
+          type: string
+          enum: [Voluntary, Involuntary]
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, processed]
+        createdAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 42
+        pages:
+          type: integer
+          example: 5
+        hasNext:
+          type: boolean
+          example: true
+        hasPrev:
+          type: boolean
+          example: false
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: 'Validation failed'
+        message:
+          type: string
+          example: 'Entries are required'
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: 'Validation Error'
+            message: 'weekStart is required'
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: 'Unauthorized'
+            message: 'Invalid or missing authentication token'
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: 'Forbidden'
+            message: 'You do not have permission to perform this action'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error: 'Not Found'
+            message: 'Timesheet not found'

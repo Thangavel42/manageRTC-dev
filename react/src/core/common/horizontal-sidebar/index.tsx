@@ -52,7 +52,7 @@ const HorizontalSidebar = () => {
                 </li>
                 {HorizontalSidebarData?.map((mainMenu, index) => (
                 <React.Fragment key={`main-${index}`}>
-                    {mainMenu?.menu?.map((data, i) => (
+                    {mainMenu?.menu?.filter((data: any) => hasAccess(data?.roles)).map((data, i) => (
                     <li className="submenu" key={`menu-${i}`}>
                         <Link to="#" className={`
                              ${
@@ -88,7 +88,7 @@ const HorizontalSidebar = () => {
                             {/* Check if `customSubmenuTwo` exists */}
                             {subMenu?.customSubmenuTwo && subMenu?.subMenusTwo && (
                                 <ul style={{ display: subsidebar === subMenu.menuValue ? "block" : "none" }}>
-                                {subMenu.subMenusTwo.map((subMenuTwo:any, k:number) => (
+                                {subMenu.subMenusTwo.filter((subMenuTwo: any) => hasAccess(subMenuTwo?.roles)).map((subMenuTwo:any, k:number) => (
                                     <li key={`submenu-two-${k}`}>
                                     <Link className={subMenuTwo.route === Location.pathname?'active':''} to={subMenuTwo.route}>{subMenuTwo.menuValue}</Link>
                                     </li>
@@ -108,7 +108,11 @@ const HorizontalSidebar = () => {
                 </ul>
                 <div className="d-xl-flex align-items-center d-none">
                     <Link to="#" className="me-3 avatar avatar-sm">
-                        <ImageWithBasePath src="assets/img/profiles/avatar-07.jpg" alt="profile" className="rounded-circle" />
+                        <ImageWithBasePath
+                            src={user?.imageUrl || "assets/img/profiles/avatar-07.jpg"}
+                            alt="profile"
+                            className="rounded-circle"
+                        />
                     </Link>
                     <Link to="#" className="btn btn-icon btn-sm rounded-circle mode-toggle">
                         <i className="ti ti-sun"></i>

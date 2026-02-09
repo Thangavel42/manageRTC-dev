@@ -1,5 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
+import cacheManager from "../../utils/cacheManager.js";
+import logger from "../../utils/logger.js";
 
 const normalizeStatus = (status) => {
   if (!status) return "Active";
@@ -116,6 +118,10 @@ export const addHoliday = async (companyId, hrId, holidaydata) => {
 
     const result = await collections.holidays.insertOne(holidayDocument);
 
+    // Invalidate holiday cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidays');
+    logger.info('[addHoliday] Cache invalidated', { companyId });
+
     return {
       done: true,
       data: {
@@ -134,15 +140,29 @@ export const addHoliday = async (companyId, hrId, holidaydata) => {
 
 export const displayHoliday = async (companyId) => {
   try {
-    console.log('[displayHoliday] Starting with companyId:', companyId);
+    logger.debug('[displayHoliday] Starting', { companyId });
 
     if (!companyId) {
-      console.error('[displayHoliday] Missing companyId');
+      logger.warn('[displayHoliday] Missing companyId');
       return { done: false, message: "Missing companyId" };
     }
 
+    // Try to get from cache first
+    const cacheKey = `holidays:${companyId}`;
+    const cachedHolidays = cacheManager.get(cacheKey);
+    if (cachedHolidays) {
+      logger.debug('[displayHoliday] Cache hit', { companyId });
+      return {
+        done: true,
+        data: cachedHolidays,
+        message: cachedHolidays.length
+          ? "holidays fetched successfully (cached)"
+          : "No holidays found matching criteria",
+      };
+    }
+
     const collections = getTenantCollections(companyId);
-    console.log('[displayHoliday] Got tenant collections');
+    logger.debug('[displayHoliday] Got tenant collections', { companyId });
 
     // Use aggregation pipeline to resolve holidayTypeName via lookup
     const holidays = await collections.holidays
@@ -176,7 +196,10 @@ export const displayHoliday = async (companyId) => {
       ])
       .toArray();
 
-    console.log('[displayHoliday] Found holidays:', holidays.length);
+    logger.debug('[displayHoliday] Found holidays', { companyId, count: holidays.length });
+
+    // Cache the results (15 minutes - MEDIUM TTL for holidays)
+    cacheManager.set(cacheKey, holidays, cacheManager.TTL.MEDIUM);
 
     return {
       done: true,
@@ -186,7 +209,7 @@ export const displayHoliday = async (companyId) => {
         : "No holidays found matching criteria",
     };
   } catch (error) {
-    console.error('[displayHoliday] Error:', error.message, error.stack);
+    logger.error('[displayHoliday] Error', { error: error.message, stack: error.stack });
     return {
       done: false,
       message: `Failed to fetch holidays: ${error.message}`,
@@ -293,6 +316,10 @@ export const updateHoliday = async (companyId, hrId, payload) => {
       return { done: false, message: "Holiday not found" };
     }
 
+    // Invalidate holiday cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidays');
+    logger.info('[updateHoliday] Cache invalidated', { companyId, holidayId });
+
     return {
       done: true,
       data: { _id: holidayId, ...payload },
@@ -320,12 +347,17 @@ export const deleteHoliday = async (companyId, holidayId) => {
       return { done: false, message: "Holiday not found" };
     }
 
+    // Invalidate holiday cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidays');
+    logger.info('[deleteHoliday] Cache invalidated', { companyId, holidayId });
+
     return {
       done: true,
       data: { holidayId },
       message: "Holiday deleted successfully",
     };
   } catch (error) {
+    logger.error('[deleteHoliday] Error', { error: error.message });
     return {
       done: false,
       error: `Failed to delete holiday: ${error.message}`,

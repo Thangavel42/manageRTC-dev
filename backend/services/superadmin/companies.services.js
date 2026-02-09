@@ -63,6 +63,9 @@ const addCompany = async (data, user) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       createdby: user,
+      // PHASE 2: Initialize userCount field
+      userCount: 0,  // New companies start with 0 users
+      userCountLastUpdated: new Date(),
     };
 
     // Step 2: Insert company in DB

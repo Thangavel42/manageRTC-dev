@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { getClients } from '../../services/client/client.services.js';
 import { getAllEmployees } from '../../services/employee/employee.services.js';
 import { addUser } from '../../services/user/user.services.js';
@@ -38,7 +39,7 @@ const userSocketController = (socket, io) => {
         data: allUsers,
       });
     } catch (error) {
-      console.error('Error in users/get-all:', error.message);
+      devError('Error in users/get-all:', error.message);
       socket.emit('users/get-all-response', {
         done: false,
         error: error.message,
@@ -60,7 +61,7 @@ const userSocketController = (socket, io) => {
         data: result,
       });
     } catch (error) {
-      console.error('Error in users/add:', error.message);
+      devError('Error in users/add:', error.message);
       socket.emit('users/add-response', {
         done: false,
         error: error.message,

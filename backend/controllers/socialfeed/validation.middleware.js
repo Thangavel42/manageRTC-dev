@@ -1,10 +1,12 @@
 // Validation middleware for social feed endpoints
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+
 export const validateCompanyAccess = (req, res, next) => {
   try {
     const { companyId } = req.user.publicMetadata || {};
 
     if (!companyId) {
-      console.warn(`Company ID not found for user ${req.user?.sub}`);
+      devWarn(`Company ID not found for user ${req.user?.sub}`);
       return res.status(400).json({
         done: false,
         error: 'Company ID not found in user metadata'
@@ -14,7 +16,7 @@ export const validateCompanyAccess = (req, res, next) => {
     req.companyId = companyId;
     next();
   } catch (error) {
-    console.error('Error in validateCompanyAccess:', error);
+    devError('Error in validateCompanyAccess:', error);
     res.status(500).json({
       done: false,
       error: 'Internal server error'
@@ -24,7 +26,7 @@ export const validateCompanyAccess = (req, res, next) => {
 
 export const validateSocketAuth = (socket) => {
   if (!socket.userId) {
-    console.error(`Socket ${socket.id} missing userId`);
+    devError(`Socket ${socket.id} missing userId`);
     socket.emit('socialfeed:error', {
       done: false,
       error: 'Authentication required'
@@ -33,7 +35,7 @@ export const validateSocketAuth = (socket) => {
   }
 
   if (!socket.authenticated) {
-    console.error(`Socket ${socket.id} not authenticated`);
+    devError(`Socket ${socket.id} not authenticated`);
     socket.emit('socialfeed:error', {
       done: false,
       error: 'Authentication required'
@@ -42,7 +44,7 @@ export const validateSocketAuth = (socket) => {
   }
 
   if (!socket.companyId) {
-    console.error(`Socket ${socket.id} missing companyId`);
+    devError(`Socket ${socket.id} missing companyId`);
     socket.emit('socialfeed:error', {
       done: false,
       error: 'Company ID required for social feed'

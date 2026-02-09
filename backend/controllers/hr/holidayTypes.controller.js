@@ -1,18 +1,19 @@
 import * as hrmHolidayTypes from "../../services/hr/hrm.holidayTypes.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
 const holidayTypeController = (socket, io) => {
-    console.log("==========================================");
-    console.log("HOLIDAY TYPE CONTROLLER INITIALIZING");
-    console.log("Socket ID:", socket.id);
-    console.log("Company ID:", socket.companyId);
-    console.log("==========================================");
-    
+    devLog("==========================================");
+    devLog("HOLIDAY TYPE CONTROLLER INITIALIZING");
+    devLog("Socket ID:", socket.id);
+    devLog("Company ID:", socket.companyId);
+    devLog("==========================================");
+
     // Log all events for debugging
     socket.onAny((eventName, ...args) => {
         if (eventName.includes("holidayType")) {
-            console.log("[Holiday Types Controller] Received event:", eventName, "with args:", args);
+            devLog("[Holiday Types Controller] Received event:", eventName, "with args:", args);
         }
     });
     
@@ -22,18 +23,18 @@ const holidayTypeController = (socket, io) => {
 
     const validateHrAccess = (socket) => {
         if (!socket.companyId) {
-            console.error("[HR] Company ID not found in user metadata", {
+            devError("[HR] Company ID not found in user metadata", {
                 user: socket.user?.sub,
             });
             throw new Error("Company ID not found in user metadata");
         }
         const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
         if (!companyIdRegex.test(socket.companyId)) {
-            console.error(`[HR] Invalid company ID format: ${socket.companyId}`);
+            devError(`[HR] Invalid company ID format: ${socket.companyId}`);
             throw new Error("Invalid company ID format");
         }
         if (socket.userMetadata?.companyId !== socket.companyId) {
-            console.error(
+            devError(
                 `[HR] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
             );
             throw new Error("Unauthorized: Company ID mismatch");
@@ -87,13 +88,13 @@ const holidayTypeController = (socket, io) => {
     // Get all holiday types
     socket.on("hrm/holidayType/get", async () => {
         try {
-            console.log("[Holiday Types Controller] Fetching holiday types");
+            devLog("[Holiday Types Controller] Fetching holiday types");
             const { companyId } = validateHrAccess(socket);
             const res = await hrmHolidayTypes.getHolidayTypes(companyId);
-            console.log("[Holiday Types Controller] Get result:", res.done ? `${res.data?.length || 0} types` : res.message);
+            devLog("[Holiday Types Controller] Get result:", res.done ? `${res.data?.length || 0} types` : res.message);
             socket.emit("hrm/holidayType/get-response", res);
         } catch (error) {
-            console.error("[Holiday Types Controller] Error fetching:", error);
+            devError("[Holiday Types Controller] Error fetching:", error);
             socket.emit("hrm/holidayType/get-response", toErr(error));
         }
     });
@@ -101,23 +102,23 @@ const holidayTypeController = (socket, io) => {
     // Add new holiday type
     socket.on("hrm/holidayType/add", withRateLimit(async (formData) => {
         try {
-            console.log("[Holiday Types Controller] Adding holiday type", formData);
+            devLog("[Holiday Types Controller] Adding holiday type", formData);
             const { companyId, hrId } = validateHrAccess(socket);
             
-            console.log("[Holiday Types Controller] Validating data for company:", companyId);
+            devLog("[Holiday Types Controller] Validating data for company:", companyId);
             const validationResult = validateHolidayTypeData(formData);
             if (validationResult) {
-                console.log("[Holiday Types Controller] Validation failed:", validationResult);
+                devLog("[Holiday Types Controller] Validation failed:", validationResult);
                 return socket.emit("hrm/holidayType/add-response", validationResult);
             }
             
-            console.log("[Holiday Types Controller] Calling service to add holiday type");
+            devLog("[Holiday Types Controller] Calling service to add holiday type");
             const result = await hrmHolidayTypes.addHolidayType(companyId, hrId, formData);
-            console.log("[Holiday Types Controller] Service result:", result);
+            devLog("[Holiday Types Controller] Service result:", result);
             
             socket.emit("hrm/holidayType/add-response", result);
         } catch (error) {
-            console.error("[Holiday Types Controller] Error adding holiday type:", error);
+            devError("[Holiday Types Controller] Error adding holiday type:", error);
             socket.emit("hrm/holidayType/add-response", toErr(error));
         }
     }));
@@ -125,7 +126,7 @@ const holidayTypeController = (socket, io) => {
     // Update holiday type
     socket.on("hrm/holidayType/update", withRateLimit(async (payload) => {
         try {
-            console.log("Updating holiday type", payload);
+            devLog("Updating holiday type", payload);
             const { companyId, hrId } = validateHrAccess(socket);
             const validationResult = validateHolidayTypeData(payload);
             if (validationResult) {
@@ -134,7 +135,7 @@ const holidayTypeController = (socket, io) => {
             const result = await hrmHolidayTypes.updateHolidayType(companyId, hrId, payload);
             socket.emit("hrm/holidayType/update-response", result);
         } catch (error) {
-            console.error("Error updating holiday type:", error);
+            devError("Error updating holiday type:", error);
             socket.emit("hrm/holidayType/update-response", toErr(error));
         }
     }));
@@ -142,12 +143,12 @@ const holidayTypeController = (socket, io) => {
     // Delete holiday type
     socket.on("hrm/holidayType/delete", withRateLimit(async (typeId) => {
         try {
-            console.log("Deleting holiday type", typeId);
+            devLog("Deleting holiday type", typeId);
             const { companyId } = validateHrAccess(socket);
             const result = await hrmHolidayTypes.deleteHolidayType(companyId, typeId);
             socket.emit("hrm/holidayType/delete-response", result);
         } catch (error) {
-            console.error("Error deleting holiday type:", error);
+            devError("Error deleting holiday type:", error);
             socket.emit("hrm/holidayType/delete-response", toErr(error));
         }
     }));
@@ -155,24 +156,24 @@ const holidayTypeController = (socket, io) => {
     // Initialize default holiday types (useful for new companies)
     socket.on("hrm/holidayType/initialize", withRateLimit(async () => {
         try {
-            console.log("Initializing default holiday types");
+            devLog("Initializing default holiday types");
             const { companyId, hrId } = validateHrAccess(socket);
             const result = await hrmHolidayTypes.initializeDefaultHolidayTypes(companyId, hrId);
             socket.emit("hrm/holidayType/initialize-response", result);
         } catch (error) {
-            console.error("Error initializing default holiday types:", error);
+            devError("Error initializing default holiday types:", error);
             socket.emit("hrm/holidayType/initialize-response", toErr(error));
         }
     }));
     
-    console.log("==========================================");
-    console.log("HOLIDAY TYPE CONTROLLER: All listeners registered");
-    console.log("  - hrm/holidayType/get");
-    console.log("  - hrm/holidayType/add");
-    console.log("  - hrm/holidayType/update");
-    console.log("  - hrm/holidayType/delete");
-    console.log("  - hrm/holidayType/initialize");
-    console.log("==========================================");
+    devLog("==========================================");
+    devLog("HOLIDAY TYPE CONTROLLER: All listeners registered");
+    devLog("  - hrm/holidayType/get");
+    devLog("  - hrm/holidayType/add");
+    devLog("  - hrm/holidayType/update");
+    devLog("  - hrm/holidayType/delete");
+    devLog("  - hrm/holidayType/initialize");
+    devLog("==========================================");
 };
 
 export default holidayTypeController;

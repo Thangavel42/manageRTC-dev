@@ -1,33 +1,34 @@
 import * as hrmHolidays from "../../services/hr/hrm.holidays.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
 const holidayController = (socket, io) => {
-    console.log("Helllloooooo*******");
+    devLog("Helllloooooo*******");
     const isDevelopment =
         process.env.NODE_ENV === "development" ||
         process.env.NODE_ENV === "production";
 
     const validateHrAccess = (socket) => {
         if (!socket.companyId) {
-            console.error("[HR] Company ID not found in user metadata", {
+            devError("[HR] Company ID not found in user metadata", {
                 user: socket.user?.sub,
             });
             throw new Error("Company ID not found in user metadata");
         }
         const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
         if (!companyIdRegex.test(socket.companyId)) {
-            console.error(`[HR] Invalid company ID format: ${socket.companyId}`);
+            devError(`[HR] Invalid company ID format: ${socket.companyId}`);
             throw new Error("Invalid company ID format");
         }
         if (socket.userMetadata?.companyId !== socket.companyId) {
-            console.error(
+            devError(
                 `[HR] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
             );
             throw new Error("Unauthorized: Company ID mismatch");
         }
         // if (socket.userMetadata?.role !== "hr") {
-        //     console.error(`[HR] Unauthorized role: ${socket.userMetadata?.role}, HR role required`);
+        //     devError(`[HR] Unauthorized role: ${socket.userMetadata?.role}, HR role required`);
         //     throw new Error("Unauthorized: HR role required");
         // }
         return { companyId: socket.companyId, hrId: socket.user?.sub };
@@ -112,7 +113,7 @@ const holidayController = (socket, io) => {
 
     socket.on("hrm/holiday/get", async () => {
         try {
-            console.log("Hello from get controller");
+            devLog("Hello from get controller");
 
             const { companyId } = validateHrAccess(socket);
             const res = await hrmHolidays.displayHoliday(companyId);
@@ -124,7 +125,7 @@ const holidayController = (socket, io) => {
 
     socket.on("hrm/holiday/add", withRateLimit(async (formData) => {
         try {
-            console.log("Hello from add controller", formData);
+            devLog("Hello from add controller", formData);
             const { companyId, hrId } = validateHrAccess(socket);
             const validationResult = validateHolidayData(formData);
             if (validationResult) {
@@ -133,7 +134,7 @@ const holidayController = (socket, io) => {
             const result = await hrmHolidays.addHoliday(companyId, hrId, formData);
             socket.emit("hrm/holiday/add-response", result);
         } catch (error) {
-            console.log(toErr(error));
+            devLog(toErr(error));
             socket.emit("hrm/holiday/add-response", toErr(error));
         }
     }))

@@ -18,6 +18,7 @@ import {
   sendSuccess
 } from '../../utils/apiResponse.js';
 import { broadcastLeaveTypeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * @desc    Get all leave types with pagination and filtering
@@ -28,7 +29,7 @@ export const getLeaveTypes = asyncHandler(async (req, res) => {
   const { page, limit, search, status, sortBy = 'name', order = 'asc' } = req.query;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] getLeaveTypes - companyId:', user.companyId, 'filters:', { page, limit, search, status });
+  devLog('[LeaveType Controller] getLeaveTypes - companyId:', user.companyId, 'filters:', { page, limit, search, status });
 
   // Build filter - always exclude soft-deleted records
   let filter = {
@@ -52,7 +53,7 @@ export const getLeaveTypes = asyncHandler(async (req, res) => {
     ];
   }
 
-  console.log('[LeaveType Controller] MongoDB filter:', filter);
+  devLog('[LeaveType Controller] MongoDB filter:', filter);
 
   // Get total count
   const total = await LeaveType.countDocuments(filter);
@@ -72,7 +73,7 @@ export const getLeaveTypes = asyncHandler(async (req, res) => {
     .limit(limitNum)
     .lean();
 
-  console.log('[LeaveType Controller] Found', leaveTypes.length, 'leave types out of', total, 'total');
+  devLog('[LeaveType Controller] Found', leaveTypes.length, 'leave types out of', total, 'total');
 
   // Build pagination
   const pagination = buildPagination(pageNum, limitNum, total);
@@ -89,7 +90,7 @@ export const getLeaveTypeById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] getLeaveTypeById - id:', id, 'companyId:', user.companyId);
+  devLog('[LeaveType Controller] getLeaveTypeById - id:', id, 'companyId:', user.companyId);
 
   const leaveType = await LeaveType.findOne({
     leaveTypeId: id,
@@ -112,7 +113,7 @@ export const getLeaveTypeById = asyncHandler(async (req, res) => {
 export const getActiveLeaveTypes = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] getActiveLeaveTypes - companyId:', user.companyId);
+  devLog('[LeaveType Controller] getActiveLeaveTypes - companyId:', user.companyId);
 
   // Use the static method from the schema
   const leaveTypes = await LeaveType.getActiveTypes(user.companyId);
@@ -139,7 +140,7 @@ export const createLeaveType = asyncHandler(async (req, res) => {
   const leaveTypeData = req.body;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] createLeaveType - companyId:', user.companyId, 'data:', leaveTypeData);
+  devLog('[LeaveType Controller] createLeaveType - companyId:', user.companyId, 'data:', leaveTypeData);
 
   // Validate required fields
   if (!leaveTypeData.name || !leaveTypeData.name.trim()) {
@@ -214,7 +215,7 @@ export const createLeaveType = asyncHandler(async (req, res) => {
   });
 
   const savedLeaveType = await newLeaveType.save();
-  console.log('[LeaveType Controller] Leave type created:', savedLeaveType.leaveTypeId);
+  devLog('[LeaveType Controller] Leave type created:', savedLeaveType.leaveTypeId);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -237,7 +238,7 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
   const updateData = req.body;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] updateLeaveType - id:', id, 'companyId:', user.companyId);
+  devLog('[LeaveType Controller] updateLeaveType - id:', id, 'companyId:', user.companyId);
 
   // Find leave type
   const leaveType = await LeaveType.findOne({
@@ -305,7 +306,7 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
   leaveType.updatedAt = new Date();
   const updatedLeaveType = await leaveType.save();
 
-  console.log('[LeaveType Controller] Leave type updated:', updatedLeaveType.leaveTypeId);
+  devLog('[LeaveType Controller] Leave type updated:', updatedLeaveType.leaveTypeId);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -328,7 +329,7 @@ export const toggleLeaveTypeStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] toggleLeaveTypeStatus - id:', id, 'companyId:', user.companyId);
+  devLog('[LeaveType Controller] toggleLeaveTypeStatus - id:', id, 'companyId:', user.companyId);
 
   const leaveType = await LeaveType.findOne({
     leaveTypeId: id,
@@ -345,7 +346,7 @@ export const toggleLeaveTypeStatus = asyncHandler(async (req, res) => {
   leaveType.updatedAt = new Date();
   const updatedLeaveType = await leaveType.save();
 
-  console.log('[LeaveType Controller] Leave type status toggled:', updatedLeaveType.leaveTypeId, 'isActive:', updatedLeaveType.isActive);
+  devLog('[LeaveType Controller] Leave type status toggled:', updatedLeaveType.leaveTypeId, 'isActive:', updatedLeaveType.isActive);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -367,7 +368,7 @@ export const deleteLeaveType = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] deleteLeaveType - id:', id, 'companyId:', user.companyId);
+  devLog('[LeaveType Controller] deleteLeaveType - id:', id, 'companyId:', user.companyId);
 
   const leaveType = await LeaveType.findOne({
     leaveTypeId: id,
@@ -385,7 +386,7 @@ export const deleteLeaveType = asyncHandler(async (req, res) => {
   leaveType.updatedAt = new Date();
   const deletedLeaveType = await leaveType.save();
 
-  console.log('[LeaveType Controller] Leave type soft deleted:', deletedLeaveType.leaveTypeId);
+  devLog('[LeaveType Controller] Leave type soft deleted:', deletedLeaveType.leaveTypeId);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -406,7 +407,7 @@ export const deleteLeaveType = asyncHandler(async (req, res) => {
 export const getLeaveTypeStats = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[LeaveType Controller] getLeaveTypeStats - companyId:', user.companyId);
+  devLog('[LeaveType Controller] getLeaveTypeStats - companyId:', user.companyId);
 
   const allTypes = await LeaveType.find({
     companyId: user.companyId,

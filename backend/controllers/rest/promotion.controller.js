@@ -18,6 +18,8 @@ import {
   buildPagination,
   extractUser
 } from '../../utils/apiResponse.js';
+import { broadcastPromotionEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
+import logger from '../../utils/logger.js';
 
 /**
  * @desc    Get all promotions
@@ -28,7 +30,7 @@ export const getPromotions = asyncHandler(async (req, res) => {
   const { page, limit, status, type, departmentId, employeeId, sortBy, order } = req.query;
   const user = extractUser(req);
 
-  console.log('[Promotion Controller] getPromotions - companyId:', user.companyId);
+  logger.debug('[Promotion Controller] getPromotions called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -98,7 +100,7 @@ export const getPromotionById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid promotion ID format');
   }
 
-  console.log('[Promotion Controller] getPromotionById - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Promotion Controller] getPromotionById called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -123,8 +125,9 @@ export const getPromotionById = asyncHandler(async (req, res) => {
 export const createPromotion = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const promotionData = req.body;
+  const io = getSocketIO(req);
 
-  console.log('[Promotion Controller] createPromotion - companyId:', user.companyId);
+  logger.debug('[Promotion Controller] createPromotion called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -149,11 +152,25 @@ export const createPromotion = asyncHandler(async (req, res) => {
     throw buildConflictError('Employee already has a pending promotion');
   }
 
-  // Prepare promotion data
+  // Get current employee data to store current position
+  const employee = await collections.employees.findOne({
+    employeeId: promotionData.employeeId
+  });
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', promotionData.employeeId);
+  }
+
+  // Prepare promotion data with current position
   const promotionToInsert = {
     ...promotionData,
+    companyId: user.companyId,
+    promotionFrom: {
+      departmentId: employee.departmentId,
+      designationId: employee.designationId
+    },
+    salaryChange: promotionData.salaryChange || null,
     status: 'pending',
-    isDue: new Date(promotionData.promotionDate) <= new Date(),
     isDeleted: false,
     createdBy: {
       userId: user.userId,
@@ -169,20 +186,28 @@ export const createPromotion = asyncHandler(async (req, res) => {
     throw new Error('Failed to create promotion');
   }
 
-  // Check if promotion should be applied immediately
+  // Get the created promotion
   let promotion = await collections.promotions.findOne({ _id: result.insertedId });
 
-  if (promotion.isDue) {
+  // Check if promotion should be applied immediately
+  const isDue = new Date(promotionData.promotionDate) <= new Date();
+
+  if (isDue) {
     // Apply promotion immediately - update employee record
+    const updateData = {
+      departmentId: promotionData.promotionTo.departmentId,
+      designationId: promotionData.promotionTo.designationId,
+      updatedAt: new Date()
+    };
+
+    // Update salary if provided
+    if (promotionData.salaryChange?.newSalary) {
+      updateData['salary.basic'] = promotionData.salaryChange.newSalary;
+    }
+
     await collections.employees.updateOne(
       { employeeId: promotionData.employeeId },
-      {
-        $set: {
-          departmentId: promotionData.promotionTo.departmentId,
-          designationId: promotionData.promotionTo.designationId,
-          updatedAt: new Date()
-        }
-      }
+      { $set: updateData }
     );
 
     // Update promotion status
@@ -198,6 +223,19 @@ export const createPromotion = asyncHandler(async (req, res) => {
     );
 
     promotion = await collections.promotions.findOne({ _id: result.insertedId });
+
+    // Broadcast promotion applied event
+    if (io) {
+      const updatedEmployee = await collections.employees.findOne({
+        employeeId: promotionData.employeeId
+      });
+      broadcastPromotionEvents.applied(io, user.companyId, promotion, updatedEmployee);
+    }
+  } else {
+    // Broadcast promotion created event
+    if (io) {
+      broadcastPromotionEvents.created(io, user.companyId, promotion);
+    }
   }
 
   return sendCreated(res, promotion, 'Promotion created successfully');
@@ -212,12 +250,13 @@ export const updatePromotion = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
+  const io = getSocketIO(req);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid promotion ID format');
   }
 
-  console.log('[Promotion Controller] updatePromotion - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Promotion Controller] updatePromotion called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -258,6 +297,11 @@ export const updatePromotion = asyncHandler(async (req, res) => {
   // Get updated promotion
   const updatedPromotion = await collections.promotions.findOne({ _id: new ObjectId(id) });
 
+  // Broadcast promotion updated event
+  if (io) {
+    broadcastPromotionEvents.updated(io, user.companyId, updatedPromotion);
+  }
+
   return sendSuccess(res, updatedPromotion, 'Promotion updated successfully');
 });
 
@@ -269,12 +313,13 @@ export const updatePromotion = asyncHandler(async (req, res) => {
 export const deletePromotion = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid promotion ID format');
   }
 
-  console.log('[Promotion Controller] deletePromotion - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Promotion Controller] deletePromotion called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -307,6 +352,14 @@ export const deletePromotion = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Promotion', id);
   }
 
+  // Broadcast promotion deleted event
+  if (io) {
+    broadcastPromotionEvents.deleted(io, user.companyId, id, {
+      userId: user.userId,
+      userName: user.userName || user.fullName || user.name || ''
+    });
+  }
+
   return sendSuccess(res, {
     _id: promotion._id,
     isDeleted: true
@@ -321,12 +374,13 @@ export const deletePromotion = asyncHandler(async (req, res) => {
 export const applyPromotion = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid promotion ID format');
   }
 
-  console.log('[Promotion Controller] applyPromotion - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Promotion Controller] applyPromotion called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -340,16 +394,31 @@ export const applyPromotion = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Promotion', id);
   }
 
+  // Get employee before update
+  const employee = await collections.employees.findOne({
+    employeeId: promotion.employeeId
+  });
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', promotion.employeeId);
+  }
+
+  // Build update object for employee
+  const updateData = {
+    departmentId: promotion.promotionTo.departmentId,
+    designationId: promotion.promotionTo.designationId,
+    updatedAt: new Date()
+  };
+
+  // Update salary if salary change is specified
+  if (promotion.salaryChange?.newSalary) {
+    updateData['salary.basic'] = promotion.salaryChange.newSalary;
+  }
+
   // Apply promotion - update employee record
   await collections.employees.updateOne(
     { employeeId: promotion.employeeId },
-    {
-      $set: {
-        departmentId: promotion.promotionTo.departmentId,
-        designationId: promotion.promotionTo.designationId,
-        updatedAt: new Date()
-      }
-    }
+    { $set: updateData }
   );
 
   // Update promotion status
@@ -364,8 +433,16 @@ export const applyPromotion = asyncHandler(async (req, res) => {
     }
   );
 
-  // Get updated promotion
+  // Get updated promotion and employee
   const updatedPromotion = await collections.promotions.findOne({ _id: new ObjectId(id) });
+  const updatedEmployee = await collections.employees.findOne({
+    employeeId: promotion.employeeId
+  });
+
+  // Broadcast promotion applied event
+  if (io) {
+    broadcastPromotionEvents.applied(io, user.companyId, updatedPromotion, updatedEmployee);
+  }
 
   return sendSuccess(res, updatedPromotion, 'Promotion applied successfully');
 });
@@ -379,12 +456,13 @@ export const cancelPromotion = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid promotion ID format');
   }
 
-  console.log('[Promotion Controller] cancelPromotion - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Promotion Controller] cancelPromotion called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -413,6 +491,11 @@ export const cancelPromotion = asyncHandler(async (req, res) => {
   // Get updated promotion
   const updatedPromotion = await collections.promotions.findOne({ _id: new ObjectId(id) });
 
+  // Broadcast promotion cancelled event
+  if (io) {
+    broadcastPromotionEvents.cancelled(io, user.companyId, updatedPromotion);
+  }
+
   return sendSuccess(res, updatedPromotion, 'Promotion cancelled successfully');
 });
 
@@ -424,7 +507,7 @@ export const cancelPromotion = asyncHandler(async (req, res) => {
 export const getDepartments = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Promotion Controller] getDepartments - companyId:', user.companyId);
+  logger.debug('[Promotion Controller] getDepartments called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -457,7 +540,7 @@ export const getDesignationsForPromotion = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { departmentId } = req.query;
 
-  console.log('[Promotion Controller] getDesignationsForPromotion - companyId:', user.companyId);
+  logger.debug('[Promotion Controller] getDesignationsForPromotion called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -486,6 +569,45 @@ export const getDesignationsForPromotion = asyncHandler(async (req, res) => {
   return sendSuccess(res, designations, 'Designations retrieved successfully');
 });
 
+/**
+ * @desc    Get promotion statistics
+ * @route   GET /api/promotions/stats
+ * @access  Private (Admin, HR, Superadmin)
+ */
+export const getPromotionStats = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  logger.debug('[Promotion Controller] getPromotionStats called', { companyId: user.companyId, userId: user.userId });
+
+  // Get tenant collections
+  const collections = getTenantCollections(user.companyId);
+
+  // Count promotions by status
+  const total = await collections.promotions.countDocuments({ isDeleted: { $ne: true } });
+  const pending = await collections.promotions.countDocuments({ status: 'pending', isDeleted: { $ne: true } });
+  const approved = await collections.promotions.countDocuments({ status: 'approved', isDeleted: { $ne: true } });
+  const applied = await collections.promotions.countDocuments({ status: 'applied', isDeleted: { $ne: true } });
+  const cancelled = await collections.promotions.countDocuments({ status: 'cancelled', isDeleted: { $ne: true } });
+
+  // Count due promotions (pending promotions with promotionDate in the past)
+  const due = await collections.promotions.countDocuments({
+    status: 'pending',
+    promotionDate: { $lte: new Date() },
+    isDeleted: { $ne: true }
+  });
+
+  const stats = {
+    total,
+    pending,
+    approved,
+    applied,
+    cancelled,
+    due
+  };
+
+  return sendSuccess(res, stats, 'Promotion statistics retrieved successfully');
+});
+
 export default {
   getPromotions,
   getPromotionById,
@@ -495,5 +617,6 @@ export default {
   applyPromotion,
   cancelPromotion,
   getDepartments,
-  getDesignationsForPromotion
+  getDesignationsForPromotion,
+  getPromotionStats
 };

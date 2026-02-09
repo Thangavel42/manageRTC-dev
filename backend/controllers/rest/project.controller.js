@@ -23,6 +23,7 @@ import {
 import { generateProjectId } from '../../utils/idGenerator.js';
 import { getTenantModel } from '../../utils/mongooseMultiTenant.js';
 import { broadcastProjectEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * Helper function to get tenant-specific Project model
@@ -55,6 +56,7 @@ export const getProjects = asyncHandler(async (req, res) => {
   };
 
   // Debug logging - lightweight
+<<<<<<< main
   // console.log('[getProjects] Using database:', user.companyId || 'default');
   // console.log('[getProjects] User object:', JSON.stringify(user, null, 2));
   // console.log('[getProjects] User role:', user.role);
@@ -64,6 +66,17 @@ export const getProjects = asyncHandler(async (req, res) => {
   // For employee role, filter projects where they are assigned as team member, leader, or manager
   if (user.role === 'employee') {
     console.log('[getProjects] Employee role detected, applying filter');
+=======
+  devLog('[getProjects] Using database:', user.companyId || 'default');
+  devLog('[getProjects] User object:', JSON.stringify(user, null, 2));
+  devLog('[getProjects] User role:', user.role);
+  devLog('[getProjects] User employeeId:', user.employeeId);
+  devLog('[getProjects] Initial filter:', JSON.stringify(filter));
+
+  // For employee role, filter projects where they are assigned as team member, leader, or manager (case-insensitive)
+  if (user.role?.toLowerCase() === 'employee') {
+    devLog('[getProjects] Employee role detected, applying filter');
+>>>>>>> main
     const collections = getTenantCollections(user.companyId);
 
     // Find employee's MongoDB _id using their employeeId or clerkUserId
@@ -72,15 +85,15 @@ export const getProjects = asyncHandler(async (req, res) => {
       isDeleted: { $ne: true },
     });
 
-    console.log('[getProjects] Employee lookup result:', employee ? 'Found' : 'Not found');
+    devLog('[getProjects] Employee lookup result:', employee ? 'Found' : 'Not found');
 
     if (employee) {
       const employeeMongoId = employee._id;
       const employeeMongoIdStr = employee._id.toString();
-      console.log('[getProjects] Employee filtering enabled');
-      console.log('[getProjects] Employee MongoDB _id:', employeeMongoIdStr);
-      console.log('[getProjects] Employee clerkUserId:', employee.clerkUserId);
-      console.log('[getProjects] Employee employeeId:', employee.employeeId);
+      devLog('[getProjects] Employee filtering enabled');
+      devLog('[getProjects] Employee MongoDB _id:', employeeMongoIdStr);
+      devLog('[getProjects] Employee clerkUserId:', employee.clerkUserId);
+      devLog('[getProjects] Employee employeeId:', employee.employeeId);
 
       // Use $and to combine isDeleted check with employee assignment check
       // Check both ObjectId and string formats for backward compatibility
@@ -101,13 +114,13 @@ export const getProjects = asyncHandler(async (req, res) => {
           },
         ],
       };
-      console.log('[getProjects] Employee filter applied:', JSON.stringify(filter, null, 2));
+      devLog('[getProjects] Employee filter applied:', JSON.stringify(filter, null, 2));
     } else {
-      console.log('[getProjects] Employee not found for userId:', user.userId);
-      console.log('[getProjects] Searched with clerkUserId and account.userId');
+      devLog('[getProjects] Employee not found for userId:', user.userId);
+      devLog('[getProjects] Searched with clerkUserId and account.userId');
     }
   } else {
-    console.log('[getProjects] Not employee role, no filtering applied');
+    devLog('[getProjects] Not employee role, no filtering applied');
   }
 
   // Apply status filter
@@ -173,22 +186,22 @@ export const getProjects = asyncHandler(async (req, res) => {
     .limit(parseInt(limit) || 50)
     .lean();
 
-  console.log('[getProjects] Found', projects.length, 'projects');
+  devLog('[getProjects] Found', projects.length, 'projects');
 
   // Debug: If no projects found, check without filters
   if (projects.length === 0) {
     const totalInDb = await ProjectModel.countDocuments({});
-    console.log('[getProjects] Total projects in DB (no filter):', totalInDb);
+    devLog('[getProjects] Total projects in DB (no filter):', totalInDb);
 
     const deletedCount = await ProjectModel.countDocuments({ isDeleted: true });
-    console.log('[getProjects] Deleted projects:', deletedCount);
+    devLog('[getProjects] Deleted projects:', deletedCount);
 
     const withCompanyId = await ProjectModel.countDocuments({ companyId: user.companyId });
-    console.log('[getProjects] Projects with matching companyId:', withCompanyId);
+    devLog('[getProjects] Projects with matching companyId:', withCompanyId);
 
     // Sample documents
     const samples = await ProjectModel.find({}).limit(2).lean();
-    console.log(
+    devLog(
       '[getProjects] Sample documents:',
       samples.map((p) => ({
         _id: p._id,
@@ -238,7 +251,7 @@ export const getProjects = asyncHandler(async (req, res) => {
             .select('firstName lastName employeeId _id')
             .lean();
         } catch (err) {
-          console.error('[getProjects] Error populating teamLeader:', err);
+          devError('[getProjects] Error populating teamLeader:', err);
         }
       }
 
@@ -286,7 +299,7 @@ export const getProjectById = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Project', id);
   }
 
-  console.log('[getProjectById] Project tags:', project.tags);
+  devLog('[getProjectById] Project tags:', project.tags);
 
   // Manually fetch employee details from tenant-specific Employee collection
   try {
@@ -321,7 +334,7 @@ export const getProjectById = asyncHandler(async (req, res) => {
         .lean();
     }
   } catch (employeeError) {
-    console.error('[getProjectById] Error fetching employee details:', employeeError);
+    devError('[getProjectById] Error fetching employee details:', employeeError);
     // Continue with the response even if employee fetching fails
   }
 
@@ -402,7 +415,7 @@ export const createProject = asyncHandler(async (req, res) => {
         .lean();
     }
   } catch (employeeError) {
-    console.error('[createProject] Error fetching employee details:', employeeError);
+    devError('[createProject] Error fetching employee details:', employeeError);
     // Continue with the response even if employee fetching fails
     // The project is already created, so we should still return success
   }
@@ -504,7 +517,7 @@ export const updateProject = asyncHandler(async (req, res) => {
         .lean();
     }
   } catch (employeeError) {
-    console.error('[updateProject] Error fetching employee details:', employeeError);
+    devError('[updateProject] Error fetching employee details:', employeeError);
     // Continue with the response even if employee fetching fails
     // The project is already saved, so we should still return success
   }

@@ -44,6 +44,7 @@ export const all_routes = {
   //page module
   starter: "/starter",
   profile: "/pages/profile",
+  adminProfile: "/admin/profile",
   gallery: "/gallery",
   searchresult: "/search-result",
   timeline: "/timeline",

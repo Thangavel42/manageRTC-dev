@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import * as ticketsService from '../../services/tickets/tickets.services.js';
 
 // Get tickets dashboard statistics
@@ -7,7 +8,7 @@ const getTicketsStats = async (req, res) => {
     const result = await ticketsService.getTicketsStats(tenantDbName);
     res.json(result);
   } catch (error) {
-    console.error('Error getting tickets stats:', error);
+    devError('Error getting tickets stats:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -20,7 +21,7 @@ const getTicketsList = async (req, res) => {
     const result = await ticketsService.getTicketsList(tenantDbName, options);
     res.json(result);
   } catch (error) {
-    console.error('Error getting tickets list:', error);
+    devError('Error getting tickets list:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -32,7 +33,7 @@ const getTicketDetails = async (req, res) => {
     const result = await ticketsService.getTicketDetails(tenantDbName, ticketId);
     res.json(result);
   } catch (error) {
-    console.error('Error getting ticket details:', error);
+    devError('Error getting ticket details:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -45,7 +46,7 @@ const createTicket = async (req, res) => {
     const result = await ticketsService.createTicket(tenantDbName, ticketData);
     res.json(result);
   } catch (error) {
-    console.error('Error creating ticket:', error);
+    devError('Error creating ticket:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -58,7 +59,7 @@ const updateTicket = async (req, res) => {
     const result = await ticketsService.updateTicket(tenantDbName, ticketId, updateData);
     res.json(result);
   } catch (error) {
-    console.error('Error updating ticket:', error);
+    devError('Error updating ticket:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -71,7 +72,7 @@ const addComment = async (req, res) => {
     const result = await ticketsService.addComment(tenantDbName, ticketId, commentData);
     res.json(result);
   } catch (error) {
-    console.error('Error adding comment:', error);
+    devError('Error adding comment:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -83,7 +84,7 @@ const deleteTicket = async (req, res) => {
     const result = await ticketsService.deleteTicket(tenantDbName, ticketId);
     res.json(result);
   } catch (error) {
-    console.error('Error deleting ticket:', error);
+    devError('Error deleting ticket:', error);
     res.json({ done: false, error: error.message });
   }
 };
@@ -96,7 +97,7 @@ const bulkDeleteTickets = async (req, res) => {
     const result = await ticketsService.bulkDeleteTickets(tenantDbName, ticketIds);
     res.json(result);
   } catch (error) {
-    console.error('Error bulk deleting tickets:', error);
+    devError('Error bulk deleting tickets:', error);
     res.json({ done: false, error: error.message });
   }
 };

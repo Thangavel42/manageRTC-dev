@@ -6,6 +6,7 @@ import {
   updateAsset,
 } from '../../services/assets/assets.services.js';
 import { getAllEmployees } from '../../services/employee/employee.services.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const authorize = (socket, allowed = []) => {
   const role = (socket.role || '').toLowerCase();
@@ -45,7 +46,7 @@ const assetSocketController = (socket, io) => {
         const fresh = await getAssets(companyId, { page: 1, pageSize: 10, filters: {} });
         io.to(roomForCompany(companyId)).emit('admin/assets/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed asset list:', e);
+        devError('Failed to broadcast refreshed asset list:', e);
       }
 
       // Ack to creator
@@ -68,7 +69,7 @@ const assetSocketController = (socket, io) => {
         const fresh = await getAssets(companyId, { page: 1, pageSize: 10, filters: {} });
         io.to(roomForCompany(companyId)).emit('admin/assets/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed asset list after update:', e);
+        devError('Failed to broadcast refreshed asset list after update:', e);
       }
 
       socket.emit('admin/assets/update-response', { done: true });
@@ -89,7 +90,7 @@ const assetSocketController = (socket, io) => {
         const fresh = await getAssets(companyId, { page: 1, pageSize: 10, filters: {} });
         io.to(roomForCompany(companyId)).emit('admin/assets/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed asset list after delete:', e);
+        devError('Failed to broadcast refreshed asset list after delete:', e);
       }
 
       socket.emit('admin/assets/delete-response', { done: true });
@@ -114,10 +115,10 @@ const assetSocketController = (socket, io) => {
         avatar: e.avatarUrl || e.avatar || null, // Use avatarUrl field, fallback to avatar
       }));
 
-      console.log('Sending employee list response:', list.length);
+      devLog('Sending employee list response:', list.length);
       socket.emit('admin/employees/get-list-response', { done: true, data: list });
     } catch (err) {
-      console.error('Error fetching employees:', err);
+      devError('Error fetching employees:', err);
       socket.emit('admin/employees/get-list-response', { done: false, error: err.message });
     }
   });

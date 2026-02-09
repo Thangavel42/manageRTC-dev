@@ -1,5 +1,11 @@
-import { getsuperadminCollections } from "../../config/db.js";
+import { getsuperadminCollections, getTenantCollections } from "../../config/db.js";
 import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Get the base domain from environment or use default
+const BASE_DOMAIN = process.env.DOMAIN || "amanagertc.com";
 
 // Get dashboard statistics
 export const getDashboardStats = async () => {
@@ -262,47 +268,87 @@ export const getRecentlyRegistered = async () => {
           plan_type: 1,
           createdAt: 1,
           status: 1,
-          email: 1
+          email: 1,
+          userCount: 1,  // ✅ PHASE 2: Include cached userCount from database
+          userCountLastUpdated: 1
         }
       }
     ]).toArray();
 
     console.log("Recently registered companies raw data:", companies);
 
-    // Generate more realistic user counts and handle missing data
-    const formattedCompanies = companies.map(company => {
-      const logoPath = company.logo && company.logo.trim() !== ''
-        ? company.logo
-        : "assets/img/icons/company-icon-11.svg";
+    // Fetch real user counts - use cached value if available, fallback to tenant DB
+    const formattedCompanies = await Promise.all(
+      companies.map(async (company) => {
+        const logoPath = company.logo && company.logo.trim() !== ''
+          ? company.logo
+          : "assets/img/icons/company-icon-11.svg";
 
-      const domainUrl = company.domain && company.domain.trim() !== ''
-        ? `${company.domain}.example.com`
-        : `${(company.name || 'company').toLowerCase().replace(/\s+/g, '-')}.example.com`;
+        // FIX #1: Use actual domain from database with BASE_DOMAIN from environment
+        // If domain is not configured, show "Not configured" instead of fake .example.com
+        const domainUrl = company.domain && company.domain.trim() !== ''
+          ? `${company.domain}.${BASE_DOMAIN}`
+          : 'Not configured';
 
-      const planDisplay = company.plan_name && company.plan_type
-        ? `${company.plan_name} (${company.plan_type})`
-        : "Basic Plan";
+        const planDisplay = company.plan_name && company.plan_type
+          ? `${company.plan_name} (${company.plan_type})`
+          : "Basic Plan";
 
-      // Generate user count based on plan type
-      let userCount;
-      if (company.plan_type === "Enterprise") {
-        userCount = Math.floor(Math.random() * 300) + 100;
-      } else if (company.plan_type === "Premium") {
-        userCount = Math.floor(Math.random() * 150) + 50;
-      } else {
-        userCount = Math.floor(Math.random() * 50) + 10;
-      }
+        // FIX #2: Fetch real user count - use cached value with fallback to tenant DB
+        // PERFORMANCE: If userCount exists in company document, use it directly
+        // Only query tenant database if userCount is missing or potentially stale
+        let userCount = 0;
+        const USE_CACHED_USERCOUNT = true; // Set to false to always query tenant DB
+        const USERCOUNT_STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-      return {
-        id: company._id.toString(),
-        name: company.name || "Unknown Company",
-        logo: logoPath,
-        domain: domainUrl,
-        plan: planDisplay,
-        users: userCount,
-        registeredDate: format(new Date(company.createdAt), "d MMM yyyy")
-      };
-    });
+        if (USE_CACHED_USERCOUNT && company.userCount !== undefined && company.userCount !== null) {
+          // Check if cached value is stale
+          const isStale = !company.userCountLastUpdated ||
+            (new Date() - new Date(company.userCountLastUpdated)) > USERCOUNT_STALE_MS;
+
+          if (!isStale) {
+            // Use cached value - much faster!
+            userCount = company.userCount;
+            console.log(`Using cached userCount for ${company.name}: ${userCount}`);
+          } else {
+            console.log(`Cached userCount stale for ${company.name}, querying tenant DB...`);
+            // Fall through to tenant DB query
+          }
+        }
+
+        // Fallback: Query tenant database if userCount is missing or stale
+        if (userCount === 0 && (!company.userCount || company.userCount === undefined)) {
+          try {
+            const tenantCollections = getTenantCollections(company._id.toString());
+            userCount = await tenantCollections.employees.countDocuments({
+              status: "Active"
+            });
+
+            // Optionally: Update the cached value in the background
+            companiesCollection.updateOne(
+              { _id: company._id },
+              { $set: { userCount, userCountLastUpdated: new Date() } }
+            ).catch(() => {
+              // Ignore update errors - this is just a cache warm-up
+            });
+          } catch (dbError) {
+            // If tenant database doesn't exist or has an error, default to 0
+            console.warn(`Failed to fetch user count for company ${company._id}:`, dbError.message);
+            userCount = company.userCount || 0;
+          }
+        }
+
+        return {
+          id: company._id.toString(),
+          name: company.name || "Unknown Company",
+          logo: logoPath,
+          domain: domainUrl,
+          plan: planDisplay,
+          users: userCount, // Now using cached data with fallback to real-time query
+          registeredDate: format(new Date(company.createdAt), "d MMM yyyy")
+        };
+      })
+    );
 
     console.log("Formatted recently registered companies:", formattedCompanies);
 

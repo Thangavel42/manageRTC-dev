@@ -1,6 +1,5 @@
-import * as bootstrap from "bootstrap";
 import { ClerkProvider } from "@clerk/clerk-react";
-import React from "react";
+import * as bootstrap from "bootstrap";
 import ReactDOM from "react-dom/client";
 import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
@@ -15,14 +14,15 @@ import "../src/style/icon/ionic/ionicons.css";
 import "../src/style/icon/tabler-icons/webfont/tabler-icons.css";
 import "../src/style/icon/typicons/typicons.css";
 import "../src/style/icon/weather/weathericons.css";
-import ALLRoutes from "./feature-module/router/router";
-import { base_path } from "./environment";
+import { NotificationProvider } from "./contexts/NotificationContext";
 import store from "./core/data/redux/store";
+import { base_path } from "./environment";
+import ALLRoutes from "./feature-module/router/router";
 import { AuthProvider } from "./services/AuthProvider";
 import { SocketProvider } from "./SocketContext";
-import { NotificationProvider } from "./contexts/NotificationContext";
 
-// Expose Bootstrap globally so that data-bs-toggle="dropdown" and modal work
+// CRITICAL: Expose Bootstrap globally so that data-bs-toggle="dropdown" works
+// Without this, Bootstrap's auto-initialization of dropdowns, modals, etc. will fail
 (window as any).bootstrap = bootstrap;
 
 // SECURITY: Clerk publishable key from environment variable

@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { ObjectId } from "mongodb";
 import * as employeeService from "../../services/employee/dashboard.services.js";
 
@@ -9,22 +10,22 @@ const employeeDashboardController = (socket, io) => {
     const validateEmployeeAccess = (socket) => {
 
         if (!socket.companyId) {
-            console.error("[Employee] Company ID not found in user metadata", { user: socket.user?.sub });
+            devError("[Employee] Company ID not found in user metadata", { user: socket.user?.sub });
             throw new Error("Company ID not found in user metadata");
         }
         const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
         if (!companyIdRegex.test(socket.companyId)) {
-            console.error(`[Employee] Invalid company ID format: ${socket.companyId}`);
+            devError(`[Employee] Invalid company ID format: ${socket.companyId}`);
             throw new Error("Invalid company ID format");
         }
         if (socket.userMetadata?.companyId !== socket.companyId) {
-            console.error(
+            devError(
                 `[Employee] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
             );
             throw new Error("Unauthorized: Company ID mismatch");
         }
         if (socket.userMetadata?.role !== "employee") {
-            console.error(`[Employee] Unauthorized role: ${socket.userMetadata?.role}, employee role required`);
+            devError(`[Employee] Unauthorized role: ${socket.userMetadata?.role}, employee role required`);
             throw new Error("Unauthorized: Employee role required");
         }
         return { companyId: socket.companyId, employeeId: socket.user?.sub };
@@ -36,7 +37,7 @@ const employeeDashboardController = (socket, io) => {
                 return handler(...args);
             }
             if (!socket.checkRateLimit()) {
-                console.warn(`Rate limit exceeded for user ${socket.user.sub}`);
+                devWarn(`Rate limit exceeded for user ${socket.user.sub}`);
                 const eventName = args[0] || "unknown";
                 socket.emit(`${eventName}-response`, {
                     done: false,
@@ -151,7 +152,7 @@ const employeeDashboardController = (socket, io) => {
             });
             io.to(`hr_room_${companyId}`).emit("hr/leave/refresh", result);
         } catch (err) {
-            console.log(err);
+            devLog(err);
 
             socket.emit("employee/dashboard/add-leave-response", {
                 done: false,
@@ -366,7 +367,7 @@ const employeeDashboardController = (socket, io) => {
                     error: "Update must include at least one of: status, starred, or checked."
                 });
             }
-console.log("check 1");
+devLog("check 1");
 
             let allowedUpdates = {};
             if (typeof updateData.status === 'string') {
@@ -385,7 +386,7 @@ console.log("check 1");
             if (Object.keys(allowedUpdates).length === 0) {
                 return { done: false, error: 'No valid fields to update.' };
             }
-console.log("chek-2");
+devLog("chek-2");
 
             const result = await employeeService.updateTask({
                 companyId,
@@ -397,7 +398,7 @@ console.log("chek-2");
             });
             socket.emit("employee/dashboard/update-task-response", result);
         } catch (err) {
-            console.log(err);
+            devLog(err);
             
             socket.emit("employee/dashboard/update-task-response", {
                 done: false,

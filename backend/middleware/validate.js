@@ -89,14 +89,18 @@ export const commonSchemas = {
     .trim()
     .required()
     .messages({
-      'string.email': 'Invalid email format',
-      'any.required': 'Email is required',
+      'string.email': 'Please enter a valid email address',
+      'string.empty': 'Email address is required',
+      'any.required': 'Email address is required',
     }),
 
   // Phone number validation (international format)
   phone: Joi.string()
     .pattern(/^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/)
-    .message('Invalid phone number format'),
+    .messages({
+      'string.pattern.base': 'Please enter a valid phone number',
+      'string.empty': 'Phone number is required',
+    }),
 
   // Date validation (ISO 8601)
   isoDate: Joi.date().iso().messages({
@@ -218,7 +222,6 @@ export const employeeSchemas = {
     // Support nested account object structure
     account: Joi.object({
       role: Joi.string().allow('').optional(),
-      userName: Joi.string().allow('').optional(),
     }).optional(),
 
     // Support contact object from frontend
@@ -229,7 +232,7 @@ export const employeeSchemas = {
 
     // Other fields from frontend
     employeeId: Joi.string().optional(),
-    avatarUrl: Joi.string().uri().allow('').optional(),
+    avatarUrl: Joi.string().allow('', 'assets/img/profiles/profile.png').optional(),
     companyName: Joi.string().allow('').optional(),
     about: Joi.string().max(1000).allow('').optional(),
     status: Joi.string()
@@ -279,9 +282,9 @@ export const employeeSchemas = {
       allowances: Joi.number().min(0).optional(),
       currency: Joi.string().valid('USD', 'EUR', 'GBP', 'INR').optional(),
     }).optional(),
-    // Profile image fields
-    profileImage: Joi.string().uri().allow('').optional(),
-    avatarUrl: Joi.string().uri().allow('').optional(),
+    // Profile image fields - allow any string (validation happens in controller)
+    profileImage: Joi.string().allow('', 'assets/img/profiles/profile.png').optional(),
+    avatarUrl: Joi.string().allow('', 'assets/img/profiles/profile.png').optional(),
     // Contact information
     contact: Joi.object({
       email: commonSchemas.email.optional(),
@@ -1102,6 +1105,1001 @@ export const timesheetSchemas = {
 };
 
 /**
+ * Weekly Timesheet validation schemas (new structure)
+ */
+export const weeklyTimesheetSchemas = {
+  create: Joi.object({
+    weekStart: commonSchemas.isoDate.required().messages({
+      'any.required': 'Week start date is required',
+    }),
+    entries: Joi.array().items(
+      Joi.object({
+        date: commonSchemas.isoDate.required(),
+        project: commonSchemas.objectId.optional(),
+        task: Joi.string().max(200).optional(),
+        description: Joi.string().min(5).max(500).required(),
+        hours: Joi.number().min(0.25).max(24).required(),
+        isBillable: Joi.boolean().default(false),
+      })
+    ).min(1).required().messages({
+      'array.min': 'At least one entry is required',
+      'any.required': 'Entries are required',
+    }),
+    notes: Joi.string().max(1000).allow('').optional(),
+  }),
+
+  update: Joi.object({
+    entries: Joi.array().items(
+      Joi.object({
+        date: commonSchemas.isoDate.required(),
+        project: commonSchemas.objectId.optional(),
+        task: Joi.string().max(200).optional(),
+        description: Joi.string().min(5).max(500).required(),
+        hours: Joi.number().min(0.25).max(24).required(),
+        isBillable: Joi.boolean().default(false),
+      })
+    ).min(1).required(),
+    notes: Joi.string().max(1000).allow('').optional(),
+  }),
+
+  approveReject: Joi.object({
+    comments: Joi.string().max(1000).allow('').optional(),
+    reason: Joi.string().min(5).max(1000).optional(),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    status: Joi.string().valid('draft', 'submitted', 'approved', 'rejected', 'cancelled').optional(),
+    employee: Joi.string().optional(),
+    weekStart: commonSchemas.isoDate.optional(),
+    weekEnd: commonSchemas.isoDate.optional(),
+  }),
+};
+
+/**
+ * Department validation schemas
+ */
+export const departmentSchemas = {
+  create: Joi.object({
+    departmentId: Joi.string().min(2).max(50).trim().required().messages({
+      'string.min': 'Department ID must be at least 2 characters',
+      'string.max': 'Department ID cannot exceed 50 characters',
+      'any.required': 'Department ID is required',
+    }),
+    name: Joi.string().min(2).max(100).trim().required().messages({
+      'string.min': 'Department name must be at least 2 characters',
+      'string.max': 'Department name cannot exceed 100 characters',
+      'any.required': 'Department name is required',
+    }),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional().messages({
+      'string.min': 'Department code must be at least 1 character',
+      'string.max': 'Department code cannot exceed 20 characters',
+    }),
+    description: Joi.string().max(1000).allow('').optional(),
+    managerId: commonSchemas.objectId.optional(),
+    parentDepartmentId: commonSchemas.objectId.optional().messages({
+      'string.pattern.name': 'Invalid parent department ID format',
+    }),
+    color: Joi.string().pattern(/^#[0-9A-Fa-f]{6}$/).optional().messages({
+      'string.pattern.base': 'Color must be a valid hex code (e.g., #FF5733)',
+    }),
+    location: Joi.string().max(200).allow('').optional(),
+    budget: Joi.number().min(0).optional(),
+    status: Joi.string().valid('Active', 'Inactive').default('Active').optional(),
+  }).custom((value, helpers) => {
+    // Validate parentDepartmentId is not same as department being created
+    // Note: This validation happens after creation, so we just check format here
+    return value;
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(2).max(100).trim().optional(),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional(),
+    description: Joi.string().max(1000).allow('').optional(),
+    managerId: commonSchemas.objectId.optional(),
+    parentDepartmentId: commonSchemas.objectId.optional(),
+    color: Joi.string().pattern(/^#[0-9A-Fa-f]{6}$/).optional(),
+    location: Joi.string().max(200).allow('').optional(),
+    budget: Joi.number().min(0).optional(),
+    status: Joi.string().valid('Active', 'Inactive').optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    status: Joi.string().valid('Active', 'Inactive').optional(),
+    managerId: commonSchemas.objectId.optional(),
+    parentDepartmentId: commonSchemas.objectId.optional(),
+    sortBy: Joi.string().valid('name', 'code', 'createdAt', 'status').default('name'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Designation validation schemas
+ */
+export const designationSchemas = {
+  create: Joi.object({
+    designationId: Joi.string().min(2).max(50).trim().required().messages({
+      'string.min': 'Designation ID must be at least 2 characters',
+      'string.max': 'Designation ID cannot exceed 50 characters',
+      'any.required': 'Designation ID is required',
+    }),
+    title: Joi.string().min(2).max(100).trim().required().messages({
+      'string.min': 'Designation title must be at least 2 characters',
+      'string.max': 'Designation title cannot exceed 100 characters',
+      'any.required': 'Designation title is required',
+    }),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional(),
+    description: Joi.string().max(1000).allow('').optional(),
+    level: Joi.string()
+      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .required()
+      .messages({
+        'any.required': 'Designation level is required',
+      }),
+    levelNumber: Joi.number().integer().min(1).max(12).default(1).optional(),
+    rank: Joi.number().min(0).default(0).optional(),
+    departmentId: commonSchemas.objectId.optional(),
+    isDepartmentSpecific: Joi.boolean().default(true).optional(),
+    reportsTo: commonSchemas.objectId.optional(),
+    manages: Joi.array().items(commonSchemas.objectId).optional(),
+    compensationRange: Joi.object({
+      currency: Joi.string().default('USD').optional(),
+      min: Joi.number().min(0).default(0).optional(),
+      max: Joi.number().min(0).default(0).optional(),
+      median: Joi.number().min(0).default(0).optional(),
+    }).optional(),
+  }).custom((value, helpers) => {
+    // Validate compensation range min <= median <= max
+    if (value.compensationRange) {
+      const { min, max, median } = value.compensationRange;
+      if (min > max) {
+        return helpers.error('any.invalid', {
+          message: 'Minimum compensation cannot exceed maximum',
+        });
+      }
+      if (median < min || median > max) {
+        return helpers.error('any.invalid', {
+          message: 'Median compensation must be between minimum and maximum',
+        });
+      }
+    }
+    return value;
+  }),
+
+  update: Joi.object({
+    title: Joi.string().min(2).max(100).trim().optional(),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional(),
+    description: Joi.string().max(1000).allow('').optional(),
+    level: Joi.string()
+      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .optional(),
+    levelNumber: Joi.number().integer().min(1).max(12).optional(),
+    rank: Joi.number().min(0).optional(),
+    departmentId: commonSchemas.objectId.optional(),
+    isDepartmentSpecific: Joi.boolean().optional(),
+    reportsTo: commonSchemas.objectId.optional(),
+    manages: Joi.array().items(commonSchemas.objectId).optional(),
+    compensationRange: Joi.object({
+      currency: Joi.string().optional(),
+      min: Joi.number().min(0).optional(),
+      max: Joi.number().min(0).optional(),
+      median: Joi.number().min(0).optional(),
+    }).optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    level: Joi.string()
+      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .optional(),
+    departmentId: commonSchemas.objectId.optional(),
+    sortBy: Joi.string().valid('title', 'code', 'level', 'levelNumber', 'createdAt').default('levelNumber'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Policy validation schemas
+ */
+export const policySchemas = {
+  create: Joi.object({
+    policyName: Joi.string().min(3).max(200).trim().required().messages({
+      'string.min': 'Policy name must be at least 3 characters',
+      'string.max': 'Policy name cannot exceed 200 characters',
+      'any.required': 'Policy name is required',
+    }),
+    policyDescription: Joi.string().min(10).max(5000).trim().required().messages({
+      'string.min': 'Policy description must be at least 10 characters',
+      'string.max': 'Policy description cannot exceed 5000 characters',
+      'any.required': 'Policy description is required',
+    }),
+    effectiveDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'Effective date is required',
+    }),
+    applyToAll: Joi.boolean().default(false).optional(),
+    assignTo: Joi.array().items(
+      Joi.object({
+        departmentId: commonSchemas.objectId.required(),
+        designationIds: Joi.array().items(commonSchemas.objectId).optional(),
+      })
+    ).optional(),
+  }).custom((value, helpers) => {
+    // If not applyToAll, must have at least one assignment
+    if (!value.applyToAll && (!value.assignTo || value.assignTo.length === 0)) {
+      return helpers.error('any.invalid', {
+        message: 'Either applyToAll must be true or at least one assignment must be provided',
+      });
+    }
+    // Validate effectiveDate is not in the past (more than 30 days)
+    const effectiveDate = new Date(value.effectiveDate);
+    const today = new Date();
+    const daysDiff = Math.ceil((today - effectiveDate) / (1000 * 60 * 60 * 24));
+    if (daysDiff > 30) {
+      return helpers.error('any.invalid', {
+        message: 'Effective date cannot be more than 30 days in the past',
+      });
+    }
+    return value;
+  }),
+
+  update: Joi.object({
+    policyName: Joi.string().min(3).max(200).trim().optional(),
+    policyDescription: Joi.string().min(10).max(5000).trim().optional(),
+    effectiveDate: commonSchemas.isoDate.optional(),
+    applyToAll: Joi.boolean().optional(),
+    assignTo: Joi.array().items(
+      Joi.object({
+        departmentId: commonSchemas.objectId.required(),
+        designationIds: Joi.array().items(commonSchemas.objectId).optional(),
+      })
+    ).optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    applyToAll: Joi.boolean().optional(),
+    effectiveDateFrom: commonSchemas.isoDate.optional(),
+    effectiveDateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('policyName', 'effectiveDate', 'createdAt').default('effectiveDate'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }),
+};
+
+/**
+ * Holiday validation schemas
+ */
+export const holidaySchemas = {
+  create: Joi.object({
+    name: Joi.string().min(2).max(100).trim().required().messages({
+      'string.min': 'Holiday name must be at least 2 characters',
+      'string.max': 'Holiday name cannot exceed 100 characters',
+      'any.required': 'Holiday name is required',
+    }),
+    date: commonSchemas.isoDate.required().messages({
+      'any.required': 'Holiday date is required',
+    }),
+    year: Joi.number().integer().min(2020).max(2100).required().messages({
+      'number.min': 'Year must be 2020 or later',
+      'number.max': 'Year cannot exceed 2100',
+      'any.required': 'Year is required',
+    }),
+    isRecurring: Joi.boolean().default(false).optional(),
+    type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').default('Public').optional(),
+    description: Joi.string().max(500).allow('').optional(),
+  }).custom((value, helpers) => {
+    // Validate year matches date
+    const dateYear = new Date(value.date).getFullYear();
+    if (dateYear !== value.year) {
+      return helpers.error('any.invalid', {
+        message: `Year must match the date year (${dateYear})`,
+      });
+    }
+    return value;
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(2).max(100).trim().optional(),
+    date: commonSchemas.isoDate.optional(),
+    year: Joi.number().integer().min(2020).max(2100).optional(),
+    isRecurring: Joi.boolean().optional(),
+    type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').optional(),
+    description: Joi.string().max(500).allow('').optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  bulkImport: Joi.object({
+    holidays: Joi.array().items(
+      Joi.object({
+        name: Joi.string().min(2).max(100).trim().required(),
+        date: commonSchemas.isoDate.required(),
+        year: Joi.number().integer().min(2020).max(2100).required(),
+        isRecurring: Joi.boolean().default(false).optional(),
+        type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').default('Public').optional(),
+        description: Joi.string().max(500).allow('').optional(),
+      })
+    ).min(1).max(50).required().messages({
+      'array.min': 'At least one holiday is required',
+      'array.max': 'Cannot import more than 50 holidays at once',
+      'any.required': 'Holidays array is required',
+    }),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    year: Joi.number().integer().min(2020).max(2100).optional(),
+    type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').optional(),
+    dateFrom: commonSchemas.isoDate.optional(),
+    dateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('name', 'date', 'year', 'createdAt').default('date'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Promotion validation schemas
+ */
+export const promotionSchemas = {
+  create: Joi.object({
+    employeeId: commonSchemas.objectId.required().messages({
+      'any.required': 'Employee ID is required',
+    }),
+    promotionTo: Joi.object({
+      departmentId: commonSchemas.objectId.required().messages({
+        'any.required': 'Target department is required',
+      }),
+      designationId: commonSchemas.objectId.required().messages({
+        'any.required': 'Target designation is required',
+      }),
+    }).required(),
+    promotionDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'Promotion date is required',
+    }),
+    promotionType: Joi.string()
+      .valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other')
+      .default('Regular')
+      .optional(),
+    salaryChange: Joi.object({
+      previousSalary: Joi.number().min(0).optional(),
+      newSalary: Joi.number().min(0).optional(),
+      increment: Joi.number().min(0).optional(),
+      incrementPercentage: Joi.number().min(0).max(100).optional(),
+    }).optional(),
+    reason: Joi.string().max(500).allow('').optional(),
+    notes: Joi.string().max(1000).allow('').optional(),
+  }).custom((value, helpers) => {
+    // Validate salary change
+    if (value.salaryChange) {
+      const { previousSalary, newSalary, increment, incrementPercentage } = value.salaryChange;
+
+      // If both salaries provided, validate new > previous
+      if (previousSalary && newSalary && newSalary <= previousSalary) {
+        return helpers.error('any.invalid', {
+          message: 'New salary must be greater than previous salary',
+        });
+      }
+
+      // Validate increment calculation
+      if (previousSalary && newSalary && increment) {
+        const calculatedIncrement = newSalary - previousSalary;
+        if (Math.abs(calculatedIncrement - increment) > 0.01) {
+          return helpers.error('any.invalid', {
+            message: 'Increment value does not match salary difference',
+          });
+        }
+      }
+
+      // Validate increment percentage
+      if (previousSalary && newSalary && incrementPercentage) {
+        const calculatedPercentage = ((newSalary - previousSalary) / previousSalary) * 100;
+        if (Math.abs(calculatedPercentage - incrementPercentage) > 0.1) {
+          return helpers.error('any.invalid', {
+            message: 'Increment percentage does not match salary change',
+          });
+        }
+      }
+    }
+
+    // Validate promotionDate is not in the past
+    const promotionDate = new Date(value.promotionDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (promotionDate < today) {
+      return helpers.error('any.invalid', {
+        message: 'Promotion date cannot be in the past',
+      });
+    }
+
+    return value;
+  }),
+
+  update: Joi.object({
+    promotionTo: Joi.object({
+      departmentId: commonSchemas.objectId.optional(),
+      designationId: commonSchemas.objectId.optional(),
+    }).optional(),
+    promotionDate: commonSchemas.isoDate.optional(),
+    promotionType: Joi.string().valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other').optional(),
+    salaryChange: Joi.object({
+      previousSalary: Joi.number().min(0).optional(),
+      newSalary: Joi.number().min(0).optional(),
+      increment: Joi.number().min(0).optional(),
+      incrementPercentage: Joi.number().min(0).max(100).optional(),
+    }).optional(),
+    reason: Joi.string().max(500).allow('').optional(),
+    notes: Joi.string().max(1000).allow('').optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  approve: Joi.object({
+    comments: Joi.string().max(500).allow('').optional(),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    employeeId: commonSchemas.objectId.optional(),
+    status: Joi.string().valid('pending', 'applied', 'cancelled').optional(),
+    dateFrom: commonSchemas.isoDate.optional(),
+    dateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('promotionDate', 'createdAt', 'employeeId').default('promotionDate'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }),
+};
+
+/**
+ * Resignation validation schemas
+ */
+export const resignationSchemas = {
+  create: Joi.object({
+    employeeId: commonSchemas.objectId.required().messages({
+      'any.required': 'Employee ID is required',
+    }),
+    resignationDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'Resignation date is required',
+    }),
+    noticePeriodDays: Joi.number().integer().min(0).max(180).default(30).optional().messages({
+      'number.min': 'Notice period cannot be negative',
+      'number.max': 'Notice period cannot exceed 180 days',
+    }),
+    reason: Joi.string().min(10).max(1000).trim().required().messages({
+      'string.min': 'Reason must be at least 10 characters',
+      'string.max': 'Reason cannot exceed 1000 characters',
+      'any.required': 'Reason is required',
+    }),
+    notes: Joi.string().max(2000).allow('').optional(),
+    isNoticePeriodServed: Joi.boolean().default(true).optional(),
+    lastWorkingDate: commonSchemas.isoDate.optional().messages({
+      'any.invalid': 'Last working date must be after resignation date',
+    }),
+  }).custom((value, helpers) => {
+    // Validate lastWorkingDate is after resignationDate
+    if (value.lastWorkingDate) {
+      const resignationDate = new Date(value.resignationDate);
+      const lastWorkingDate = new Date(value.lastWorkingDate);
+      if (lastWorkingDate <= resignationDate) {
+        return helpers.error('any.invalid', {
+          message: 'Last working date must be after resignation date',
+        });
+      }
+
+      // Validate against notice period
+      const noticePeriodDays = value.noticePeriodDays || 30;
+      const expectedLastWorkingDate = new Date(resignationDate);
+      expectedLastWorkingDate.setDate(expectedLastWorkingDate.getDate() + noticePeriodDays);
+
+      const daysDiff = Math.ceil((lastWorkingDate - resignationDate) / (1000 * 60 * 60 * 24));
+      if (value.isNoticePeriodServed && daysDiff < noticePeriodDays) {
+        return helpers.error('any.invalid', {
+          message: `Last working date must be at least ${noticePeriodDays} days after resignation date when notice period is served`,
+        });
+      }
+    }
+
+    // Validate resignationDate is not in the future
+    const resignationDate = new Date(value.resignationDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (resignationDate > today) {
+      return helpers.error('any.invalid', {
+        message: 'Resignation date cannot be in the future',
+      });
+    }
+
+    return value;
+  }),
+
+  update: Joi.object({
+    resignationDate: commonSchemas.isoDate.optional(),
+    noticePeriodDays: Joi.number().integer().min(0).max(180).optional(),
+    reason: Joi.string().min(10).max(1000).trim().optional(),
+    notes: Joi.string().max(2000).allow('').optional(),
+    isNoticePeriodServed: Joi.boolean().optional(),
+    lastWorkingDate: commonSchemas.isoDate.optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  approve: Joi.object({
+    comments: Joi.string().max(500).allow('').optional(),
+    exitInterviewDate: commonSchemas.isoDate.optional(),
+    exitInterviewNotes: Joi.string().max(2000).allow('').optional(),
+  }),
+
+  reject: Joi.object({
+    reason: Joi.string().min(10).max(500).required().messages({
+      'string.min': 'Rejection reason must be at least 10 characters',
+      'string.max': 'Rejection reason cannot exceed 500 characters',
+      'any.required': 'Rejection reason is required',
+    }),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+    dateFrom: commonSchemas.isoDate.optional(),
+    dateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('resignationDate', 'createdAt', 'lastWorkingDate').default('resignationDate'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }),
+};
+
+/**
+ * Termination validation schemas
+ */
+export const terminationSchemas = {
+  create: Joi.object({
+    employeeId: commonSchemas.objectId.required().messages({
+      'any.required': 'Employee ID is required',
+    }),
+    terminationDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'Termination date is required',
+    }),
+    terminationType: Joi.string()
+      .valid('Voluntary', 'Involuntary', 'Mutual Agreement', 'Contract End', 'Retirement')
+      .required()
+      .messages({
+        'any.required': 'Termination type is required',
+      }),
+    reason: Joi.string().min(10).max(1000).trim().required().messages({
+      'string.min': 'Reason must be at least 10 characters',
+      'string.max': 'Reason cannot exceed 1000 characters',
+      'any.required': 'Reason is required',
+    }),
+    reasonCategory: Joi.string()
+      .valid('Performance', 'Misconduct', 'Attendance', 'Restructuring', 'Financial', 'Other')
+      .optional(),
+    notes: Joi.string().max(2000).allow('').optional(),
+    isEligibleForRehire: Joi.boolean().default(false).optional(),
+    severancePackage: Joi.object({
+      amount: Joi.number().min(0).optional(),
+      description: Joi.string().max(1000).allow('').optional(),
+      includesBenefits: Joi.boolean().default(false).optional(),
+    }).optional(),
+    exitInterviewCompleted: Joi.boolean().default(false).optional(),
+    exitInterviewNotes: Joi.string().max(2000).allow('').optional(),
+  }).custom((value, helpers) => {
+    // Validate terminationDate is not in the future
+    const terminationDate = new Date(value.terminationDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (terminationDate > today) {
+      return helpers.error('any.invalid', {
+        message: 'Termination date cannot be in the future',
+      });
+    }
+
+    return value;
+  }),
+
+  update: Joi.object({
+    terminationDate: commonSchemas.isoDate.optional(),
+    terminationType: Joi.string()
+      .valid('Voluntary', 'Involuntary', 'Mutual Agreement', 'Contract End', 'Retirement')
+      .optional(),
+    reason: Joi.string().min(10).max(1000).trim().optional(),
+    reasonCategory: Joi.string()
+      .valid('Performance', 'Misconduct', 'Attendance', 'Restructuring', 'Financial', 'Other')
+      .optional(),
+    notes: Joi.string().max(2000).allow('').optional(),
+    isEligibleForRehire: Joi.boolean().optional(),
+    severancePackage: Joi.object({
+      amount: Joi.number().min(0).optional(),
+      description: Joi.string().max(1000).allow('').optional(),
+      includesBenefits: Joi.boolean().optional(),
+    }).optional(),
+    exitInterviewCompleted: Joi.boolean().optional(),
+    exitInterviewNotes: Joi.string().max(2000).allow('').optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  approve: Joi.object({
+    comments: Joi.string().max(500).allow('').optional(),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    terminationType: Joi.string()
+      .valid('Voluntary', 'Involuntary', 'Mutual Agreement', 'Contract End', 'Retirement')
+      .optional(),
+    reasonCategory: Joi.string()
+      .valid('Performance', 'Misconduct', 'Attendance', 'Restructuring', 'Financial', 'Other')
+      .optional(),
+    isEligibleForRehire: Joi.boolean().optional(),
+    dateFrom: commonSchemas.isoDate.optional(),
+    dateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('terminationDate', 'createdAt', 'terminationType').default('terminationDate'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }),
+};
+
+/**
+ * Training validation schemas
+ */
+export const trainingSchemas = {
+  create: Joi.object({
+    name: Joi.string().min(3).max(200).trim().required().messages({
+      'string.min': 'Training name must be at least 3 characters',
+      'string.max': 'Training name cannot exceed 200 characters',
+      'any.required': 'Training name is required',
+    }),
+    description: Joi.string().max(2000).allow('').optional(),
+    trainingTypeId: commonSchemas.objectId.optional(),
+    trainerId: commonSchemas.objectId.optional(),
+    startDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'Start date is required',
+    }),
+    endDate: commonSchemas.isoDate.required().messages({
+      'any.required': 'End date is required',
+    }),
+    location: Joi.string().max(200).allow('').optional(),
+    isOnline: Joi.boolean().default(false).optional(),
+    meetingLink: Joi.string().uri().allow('').optional().messages({
+      'string.uri': 'Meeting link must be a valid URL',
+    }),
+    maxParticipants: Joi.number().integer().min(1).default(50).optional(),
+    budget: Joi.number().min(0).optional(),
+    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').default('Draft').optional(),
+  }).custom((value, helpers) => {
+    // Validate endDate is after startDate
+    if (new Date(value.startDate) >= new Date(value.endDate)) {
+      return helpers.error('any.invalid', {
+        message: 'End date must be after start date',
+      });
+    }
+
+    // Validate startDate is not in the past
+    const startDate = new Date(value.startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (startDate < today) {
+      return helpers.error('any.invalid', {
+        message: 'Start date cannot be in the past',
+      });
+    }
+
+    // Validate meeting link if isOnline is true
+    if (value.isOnline && !value.meetingLink) {
+      return helpers.error('any.invalid', {
+        message: 'Meeting link is required when training is online',
+      });
+    }
+
+    return value;
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(3).max(200).trim().optional(),
+    description: Joi.string().max(2000).allow('').optional(),
+    trainingTypeId: commonSchemas.objectId.optional(),
+    trainerId: commonSchemas.objectId.optional(),
+    startDate: commonSchemas.isoDate.optional(),
+    endDate: commonSchemas.isoDate.optional(),
+    location: Joi.string().max(200).allow('').optional(),
+    isOnline: Joi.boolean().optional(),
+    meetingLink: Joi.string().uri().allow('').optional(),
+    maxParticipants: Joi.number().integer().min(1).optional(),
+    budget: Joi.number().min(0).optional(),
+    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  enroll: Joi.object({
+    employeeIds: Joi.array().items(commonSchemas.objectId).min(1).max(100).required().messages({
+      'array.min': 'At least one employee must be enrolled',
+      'array.max': 'Cannot enroll more than 100 employees at once',
+      'any.required': 'Employee IDs array is required',
+    }),
+  }),
+
+  complete: Joi.object({
+    employeeId: commonSchemas.objectId.required().messages({
+      'any.required': 'Employee ID is required',
+    }),
+    score: Joi.number().min(0).max(100).optional(),
+    feedback: Joi.string().max(1000).allow('').optional(),
+    certificateUrl: Joi.string().uri().allow('').optional(),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    trainingTypeId: commonSchemas.objectId.optional(),
+    trainerId: commonSchemas.objectId.optional(),
+    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').optional(),
+    dateFrom: commonSchemas.isoDate.optional(),
+    dateTo: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('name', 'startDate', 'endDate', 'status', 'createdAt').default('startDate'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Training Type validation schemas
+ */
+export const trainingTypeSchemas = {
+  create: Joi.object({
+    name: Joi.string().min(2).max(100).trim().required().messages({
+      'string.min': 'Training type name must be at least 2 characters',
+      'string.max': 'Training type name cannot exceed 100 characters',
+      'any.required': 'Training type name is required',
+    }),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional(),
+    description: Joi.string().max(1000).allow('').optional(),
+    duration: Joi.number().min(0).optional().messages({
+      'number.min': 'Duration cannot be negative',
+    }),
+    isActive: Joi.boolean().default(true).optional(),
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(2).max(100).trim().optional(),
+    code: Joi.string().min(1).max(20).trim().uppercase().optional(),
+    description: Joi.string().max(1000).allow('').optional(),
+    duration: Joi.number().min(0).optional(),
+    isActive: Joi.boolean().optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    isActive: Joi.boolean().optional(),
+    sortBy: Joi.string().valid('name', 'code', 'createdAt').default('name'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Trainer validation schemas
+ */
+export const trainerSchemas = {
+  create: Joi.object({
+    name: Joi.string().min(2).max(100).trim().required().messages({
+      'string.min': 'Trainer name must be at least 2 characters',
+      'string.max': 'Trainer name cannot exceed 100 characters',
+      'any.required': 'Trainer name is required',
+    }),
+    email: Joi.string().email().optional(),
+    phone: commonSchemas.phone.optional(),
+    expertise: Joi.array().items(Joi.string().max(50)).min(1).required().messages({
+      'array.min': 'At least one area of expertise is required',
+      'any.required': 'Expertise is required',
+    }),
+    bio: Joi.string().max(2000).allow('').optional(),
+    certification: Joi.string().max(500).allow('').optional(),
+    hourlyRate: Joi.number().min(0).optional(),
+    isExternal: Joi.boolean().default(false).optional(),
+    organization: Joi.string().max(200).allow('').optional(),
+    isActive: Joi.boolean().default(true).optional(),
+  }),
+
+  update: Joi.object({
+    name: Joi.string().min(2).max(100).trim().optional(),
+    email: Joi.string().email().optional(),
+    phone: commonSchemas.phone.optional(),
+    expertise: Joi.array().items(Joi.string().max(50)).min(1).optional(),
+    bio: Joi.string().max(2000).allow('').optional(),
+    certification: Joi.string().max(500).allow('').optional(),
+    hourlyRate: Joi.number().min(0).optional(),
+    isExternal: Joi.boolean().optional(),
+    organization: Joi.string().max(200).allow('').optional(),
+    isActive: Joi.boolean().optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    expertise: Joi.string().max(50).optional(),
+    isExternal: Joi.boolean().optional(),
+    isActive: Joi.boolean().optional(),
+    sortBy: Joi.string().valid('name', 'createdAt', 'hourlyRate').default('name'),
+    order: Joi.string().valid('asc', 'desc').default('asc'),
+  }),
+};
+
+/**
+ * Overtime Request validation schemas
+ */
+export const overtimeSchemas = {
+  create: Joi.object({
+    date: commonSchemas.isoDate.required().messages({
+      'any.required': 'Overtime date is required',
+    }),
+    startTime: commonSchemas.isoDate.required().messages({
+      'any.required': 'Start time is required',
+    }),
+    endTime: commonSchemas.isoDate.required().messages({
+      'any.required': 'End time is required',
+    }),
+    requestedHours: Joi.number().min(0.25).max(12).required().messages({
+      'number.min': 'Minimum overtime is 15 minutes (0.25 hours)',
+      'number.max': 'Maximum overtime per day is 12 hours',
+      'any.required': 'Requested hours is required',
+    }),
+    reason: Joi.string().min(10).max(500).trim().required().messages({
+      'string.min': 'Reason must be at least 10 characters',
+      'string.max': 'Reason cannot exceed 500 characters',
+      'any.required': 'Reason is required',
+    }),
+    project: Joi.string().max(200).allow('').optional(),
+    taskDescription: Joi.string().max(1000).allow('').optional(),
+    attachments: Joi.array().items(
+      Joi.object({
+        type: Joi.string().valid('document', 'image', 'link').required(),
+        url: Joi.string().uri().required(),
+      })
+    ).max(10).optional(),
+  }).custom((value, helpers) => {
+    // Validate end time is after start time
+    if (new Date(value.endTime) <= new Date(value.startTime)) {
+      return helpers.error('any.invalid', {
+        message: 'End time must be after start time',
+      });
+    }
+
+    // Calculate duration and validate against requested hours
+    const durationMs = new Date(value.endTime) - new Date(value.startTime);
+    const durationHours = durationMs / (1000 * 60 * 60);
+
+    if (Math.abs(durationHours - value.requestedHours) > 0.5) {
+      return helpers.error('any.invalid', {
+        message: 'Requested hours must match the duration between start and end time (within 30 minutes)',
+      });
+    }
+
+    // Validate date is not in the past (more than 7 days)
+    const overtimeDate = new Date(value.date);
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    if (overtimeDate < sevenDaysAgo) {
+      return helpers.error('any.invalid', {
+        message: 'Cannot create overtime request for dates more than 7 days in the past',
+      });
+    }
+
+    return value;
+  }),
+
+  update: Joi.object({
+    date: commonSchemas.isoDate.optional(),
+    startTime: commonSchemas.isoDate.optional(),
+    endTime: commonSchemas.isoDate.optional(),
+    requestedHours: Joi.number().min(0.25).max(12).optional(),
+    reason: Joi.string().min(10).max(500).trim().optional(),
+    project: Joi.string().max(200).allow('').optional(),
+    taskDescription: Joi.string().max(1000).allow('').optional(),
+    attachments: Joi.array().items(
+      Joi.object({
+        type: Joi.string().valid('document', 'image', 'link').required(),
+        url: Joi.string().uri().required(),
+      })
+    ).max(10).optional(),
+  }).min(1).messages({
+    'object.min': 'At least one field must be provided for update',
+  }).custom((value, helpers) => {
+    // Validate end time is after start time if both are provided
+    if (value.startTime && value.endTime) {
+      if (new Date(value.endTime) <= new Date(value.startTime)) {
+        return helpers.error('any.invalid', {
+          message: 'End time must be after start time',
+        });
+      }
+
+      // Calculate duration and validate against requested hours if provided
+      const durationMs = new Date(value.endTime) - new Date(value.startTime);
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      if (value.requestedHours && Math.abs(durationHours - value.requestedHours) > 0.5) {
+        return helpers.error('any.invalid', {
+          message: 'Requested hours must match the duration between start and end time (within 30 minutes)',
+        });
+      }
+    }
+
+    return value;
+  }),
+
+  approveReject: Joi.object({
+    comments: Joi.string().max(500).allow('').optional().messages({
+      'string.max': 'Comments cannot exceed 500 characters',
+    }),
+    approvedHours: Joi.number().min(0.25).max(12).optional().messages({
+      'number.min': 'Approved hours must be at least 0.25',
+      'number.max': 'Approved hours cannot exceed 12',
+    }),
+    reason: Joi.string().min(5).max(500).allow('').optional().messages({
+      'string.min': 'Reason must be at least 5 characters',
+      'string.max': 'Reason cannot exceed 500 characters',
+    }),
+  }),
+
+  rejectOnly: Joi.object({
+    reason: Joi.string().min(5).max(500).trim().required().messages({
+      'string.min': 'Rejection reason must be at least 5 characters',
+      'string.max': 'Reason cannot exceed 500 characters',
+      'any.required': 'Rejection reason is required',
+    }),
+  }),
+
+  cancel: Joi.object({
+    reason: Joi.string().max(500).allow('').optional().messages({
+      'string.max': 'Cancellation reason cannot exceed 500 characters',
+    }),
+  }),
+
+  list: Joi.object({
+    ...commonSchemas.pagination,
+    search: Joi.string().max(100).allow('').optional(),
+    status: Joi.string().valid('pending', 'approved', 'rejected', 'cancelled').optional(),
+    employee: Joi.string().optional(),
+    startDate: commonSchemas.isoDate.optional(),
+    endDate: commonSchemas.isoDate.optional(),
+    sortBy: Joi.string().valid('date', 'createdAt', 'employeeName', 'status', 'requestedHours').default('date'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }).custom((value, helpers) => {
+    // Validate date range
+    if (value.startDate && value.endDate) {
+      if (new Date(value.startDate) > new Date(value.endDate)) {
+        return helpers.error('any.invalid', {
+          message: 'Start date must be before end date',
+        });
+      }
+    }
+
+    return value;
+  }),
+
+  stats: Joi.object({
+    startDate: commonSchemas.isoDate.optional(),
+    endDate: commonSchemas.isoDate.optional(),
+    employee: Joi.string().optional(),
+  }).custom((value, helpers) => {
+    // Validate date range
+    if (value.startDate && value.endDate) {
+      if (new Date(value.startDate) > new Date(value.endDate)) {
+        return helpers.error('any.invalid', {
+          message: 'Start date must be before end date',
+        });
+      }
+    }
+
+    return value;
+  }),
+};
+
+/**
  * NoSQL injection protection
  * Sanitizes MongoDB operators from query objects
  */
@@ -1163,5 +2161,16 @@ export default {
   leaveSchemas,
   shiftSchemas,
   timesheetSchemas,
+  departmentSchemas,
+  designationSchemas,
+  policySchemas,
+  holidaySchemas,
+  overtimeSchemas,
+  promotionSchemas,
+  resignationSchemas,
+  terminationSchemas,
+  trainingSchemas,
+  trainingTypeSchemas,
+  trainerSchemas,
   sanitizeMongoQuery,
 };

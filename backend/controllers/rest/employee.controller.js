@@ -7,9 +7,9 @@
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { ObjectId } from 'mongodb';
 import { client, getTenantCollections } from '../../config/db.js';
+import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
     asyncHandler,
-    buildConflictError,
     buildNotFoundError,
     buildValidationError
 } from '../../middleware/errorHandler.js';
@@ -21,10 +21,14 @@ import {
     sendCreated,
     sendSuccess
 } from '../../utils/apiResponse.js';
-import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
-import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
-import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
+import {
+    canUserDeleteAvatar,
+    getSystemDefaultAvatarUrl
+} from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
+import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
+import { devError, devLog } from '../../utils/logger.js';
+import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * Generate secure random password for new employees
@@ -79,11 +83,9 @@ const normalizeEmployeeDates = (data) => {
     normalized.joiningDate = parseDateField(normalized.joiningDate, 'joiningDate');
   }
 
+  // Handle personal object (canonical fields only)
   if (normalized.personal && typeof normalized.personal === 'object') {
     normalized.personal = { ...normalized.personal };
-    if ('birthday' in normalized.personal) {
-      normalized.personal.birthday = parseDateField(normalized.personal.birthday, 'personal.birthday');
-    }
     if (normalized.personal.passport && typeof normalized.personal.passport === 'object') {
       normalized.personal.passport = { ...normalized.personal.passport };
       if ('issueDate' in normalized.personal.passport) {
@@ -124,11 +126,10 @@ const ensureEmployeeDateLogic = (data, existingEmployee = null) => {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+  // Use canonical dateOfBirth field (at root level)
   const dob =
     data?.dateOfBirth ||
-    data?.personal?.birthday ||
     existingEmployee?.dateOfBirth ||
-    existingEmployee?.personal?.birthday ||
     null;
 
   if (dob instanceof Date && dob > todayStart) {
@@ -151,13 +152,14 @@ const formatEmployeeDates = (employee) => {
   if (!employee) return employee;
   const formatted = { ...employee };
 
+  // Format canonical root level date fields
   formatted.dateOfBirth = formatDDMMYYYY(formatted.dateOfBirth);
   formatted.dateOfJoining = formatDDMMYYYY(formatted.dateOfJoining);
   formatted.joiningDate = formatDDMMYYYY(formatted.joiningDate);
 
+  // Format personal object dates (canonical fields only: passport)
   if (formatted.personal && typeof formatted.personal === 'object') {
     formatted.personal = { ...formatted.personal };
-    formatted.personal.birthday = formatDDMMYYYY(formatted.personal.birthday);
     if (formatted.personal.passport && typeof formatted.personal.passport === 'object') {
       formatted.personal.passport = { ...formatted.personal.passport };
       formatted.personal.passport.issueDate = formatDDMMYYYY(formatted.personal.passport.issueDate);
@@ -195,7 +197,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const { page, limit, search, department, designation, status, sortBy, order } = query;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status });
+  devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -229,7 +231,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
     ];
   }
 
-  console.log('[Employee Controller] MongoDB filter:', filter);
+  devLog('[Employee Controller] MongoDB filter:', filter);
 
   // Get total count
   const total = await collections.employees.countDocuments(filter);
@@ -264,6 +266,27 @@ export const getEmployees = asyncHandler(async (req, res) => {
             then: { $toObjectId: '$designationId' },
             else: null
           }
+        },
+        reportingToObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
+            then: { $toObjectId: '$reportingTo' },
+            else: null
+          }
+        },
+        shiftObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
+            then: { $toObjectId: '$shiftId' },
+            else: null
+          }
+        },
+        batchObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
+            then: { $toObjectId: '$batchId' },
+            else: null
+          }
         }
       }
     },
@@ -284,17 +307,121 @@ export const getEmployees = asyncHandler(async (req, res) => {
       }
     },
     {
+      $lookup: {
+        from: 'employees',
+        let: { reportingToObjId: '$reportingToObjId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$_id', '$$reportingToObjId'] },
+              isDeleted: { $ne: true }
+            }
+          }
+        ],
+        as: 'reportingToInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'shifts',
+        localField: 'shiftObjId',
+        foreignField: '_id',
+        as: 'shiftInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'batches',
+        localField: 'batchObjId',
+        foreignField: '_id',
+        as: 'batchInfo'
+      }
+    },
+    {
       $addFields: {
         department: { $arrayElemAt: ['$departmentInfo', 0] },
-        designation: { $arrayElemAt: ['$designationInfo', 0] }
+        designation: { $arrayElemAt: ['$designationInfo', 0] },
+        reportingToManager: { $arrayElemAt: ['$reportingToInfo', 0] },
+        shiftData: { $arrayElemAt: ['$shiftInfo', 0] },
+        batchData: { $arrayElemAt: ['$batchInfo', 0] },
+        // Assign default avatar for employees without profile image
+        profileImage: {
+          $cond: {
+            if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
+            then: '$profileImage',
+            else: getSystemDefaultAvatarUrl()
+          }
+        },
+        // Add avatarUrl field for frontend compatibility (same as profileImage)
+        avatarUrl: {
+          $cond: {
+            if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
+            then: '$profileImage',
+            else: getSystemDefaultAvatarUrl()
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        // Reporting Manager Name from populated manager
+        reportingManagerName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Shift information from populated shift
+        shiftName: { $ifNull: ['$shiftData.name', null] },
+        shiftColor: { $ifNull: ['$shiftData.color', null] },
+        shiftTiming: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            then: {
+              $concat: [
+                { $ifNull: ['$shiftData.startTime', ''] },
+                ' - ',
+                { $ifNull: ['$shiftData.endTime', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Batch information from populated batch
+        batchName: { $ifNull: ['$batchData.name', null] },
+        batchShiftName: { $ifNull: ['$batchData.currentShiftName', null] },
+        batchShiftTiming: { $ifNull: ['$batchData.currentShiftTiming', null] },
+        batchShiftColor: { $ifNull: ['$batchData.currentShiftColor', null] },
+        // Flatten personal info to root level for frontend compatibility
+        passport: '$personal.passport',
+        religion: '$personal.religion',
+        maritalStatus: '$personal.maritalStatus',
+        employmentOfSpouse: '$personal.employmentOfSpouse',
+        noOfChildren: '$personal.noOfChildren'
       }
     },
     {
       $project: {
         departmentObjId: 0,
         designationObjId: 0,
+        reportingToObjId: 0,
+        shiftObjId: 0,
+        batchObjId: 0,
         departmentInfo: 0,
         designationInfo: 0,
+        reportingToInfo: 0,
+        reportingToManager: 0,
+        shiftInfo: 0,
+        batchInfo: 0,
+        shiftData: 0,
+        batchData: 0,
         salary: 0,
         bank: 0,
         emergencyContacts: 0,
@@ -342,7 +469,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] getEmployeeById - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] getEmployeeById - id:', id, 'companyId:', user.companyId);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -413,9 +540,108 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        shiftObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
+            then: { $toObjectId: '$shiftId' },
+            else: null
+          }
+        },
+        batchObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
+            then: { $toObjectId: '$batchId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'shifts',
+        localField: 'shiftObjId',
+        foreignField: '_id',
+        as: 'shiftInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'batches',
+        localField: 'batchObjId',
+        foreignField: '_id',
+        as: 'batchInfo'
+      }
+    },
+    {
+      $addFields: {
         department: { $arrayElemAt: ['$departmentInfo', 0] },
         designation: { $arrayElemAt: ['$designationInfo', 0] },
-        reportingTo: { $arrayElemAt: ['$reportingToInfo', 0] }
+        reportingToManager: { $arrayElemAt: ['$reportingToInfo', 0] },
+        shiftData: { $arrayElemAt: ['$shiftInfo', 0] },
+        batchData: { $arrayElemAt: ['$batchInfo', 0] },
+        // Assign default avatar for employees without profile image
+        profileImage: {
+          $cond: {
+            if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
+            then: '$profileImage',
+            else: getSystemDefaultAvatarUrl()
+          }
+        },
+        // Add avatarUrl field for frontend compatibility (same as profileImage)
+        avatarUrl: {
+          $cond: {
+            if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
+            then: '$profileImage',
+            else: getSystemDefaultAvatarUrl()
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        // Reporting Manager Name from populated manager
+        reportingManagerName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Shift information from populated shift
+        shiftName: { $ifNull: ['$shiftData.name', null] },
+        shiftColor: { $ifNull: ['$shiftData.color', null] },
+        shiftTiming: {
+          $cond: {
+            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            then: {
+              $concat: [
+                { $ifNull: ['$shiftData.startTime', ''] },
+                ' - ',
+                { $ifNull: ['$shiftData.endTime', ''] }
+              ]
+            },
+            else: null
+          }
+        },
+        // Batch information from populated batch
+        batchName: { $ifNull: ['$batchData.name', null] },
+        batchShiftName: { $ifNull: ['$batchData.currentShiftName', null] },
+        batchShiftTiming: { $ifNull: ['$batchData.currentShiftTiming', null] },
+        batchShiftColor: { $ifNull: ['$batchData.currentShiftColor', null] },
+        // Keep reportingTo as just the ID for consistency
+        reportingTo: '$reportingTo',
+        // Flatten personal info to root level for frontend compatibility
+        passport: '$personal.passport',
+        religion: '$personal.religion',
+        maritalStatus: '$personal.maritalStatus',
+        employmentOfSpouse: '$personal.employmentOfSpouse',
+        noOfChildren: '$personal.noOfChildren'
       }
     },
     {
@@ -423,9 +649,16 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         departmentObjId: 0,
         designationObjId: 0,
         reportingToObjId: 0,
+        shiftObjId: 0,
+        batchObjId: 0,
         departmentInfo: 0,
         designationInfo: 0,
-        reportingToInfo: 0
+        reportingToInfo: 0,
+        reportingToManager: 0,
+        shiftInfo: 0,
+        batchInfo: 0,
+        shiftData: 0,
+        batchData: 0
       }
     }
   ];
@@ -457,8 +690,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const employeeData = req.body;
 
-  console.log('[Employee Controller] createEmployee - companyId:', user.companyId);
-  console.log('[Employee Controller] employeeData:', JSON.stringify(employeeData, null, 2));
+  devLog('[Employee Controller] createEmployee - companyId:', user.companyId);
+  devLog('[Employee Controller] employeeData:', JSON.stringify(employeeData, null, 2));
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -466,34 +699,34 @@ export const createEmployee = asyncHandler(async (req, res) => {
   // Extract permissions data if present
   const { permissionsData, ...restEmployeeData } = employeeData;
 
-  // Normalize data - handle both flat and nested structures from frontend
+  // Normalize data - use canonical schema structure (root level fields only)
+  // Canonical schema: email, phone, dateOfBirth, gender, address at root level
+  // personal object contains: passport, nationality, religion, maritalStatus, employmentOfSpouse, noOfChildren only
   const normalizedData = {
     ...restEmployeeData,
-    // Extract email from either root level or contact object
-    email: restEmployeeData.email || restEmployeeData.contact?.email,
-    // Extract phone from either root level or contact object
-    phone: restEmployeeData.phone || restEmployeeData.contact?.phone,
-    // Build contact object if not provided
-    contact: restEmployeeData.contact || {
-      email: restEmployeeData.email,
-      phone: restEmployeeData.phone || '',
-    },
-    // Handle nested personal structure
-    dateOfBirth: restEmployeeData.dateOfBirth || restEmployeeData.personal?.birthday,
-    gender: restEmployeeData.gender || restEmployeeData.personal?.gender,
-    address: restEmployeeData.address || restEmployeeData.personal?.address,
+    // Extract email from root level or contact object (for backward compatibility)
+    // Use ?? instead of || to preserve empty strings
+    email: restEmployeeData.email ?? restEmployeeData.contact?.email,
+    // Extract phone from root level or contact object (for backward compatibility)
+    phone: restEmployeeData.phone ?? restEmployeeData.contact?.phone,
+    // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
+    dateOfBirth: restEmployeeData.dateOfBirth ?? restEmployeeData.personal?.birthday,
+    // Extract gender from root level or personal.gender (for backward compatibility)
+    gender: restEmployeeData.gender ?? restEmployeeData.personal?.gender,
+    // Extract address from root level or personal.address (for backward compatibility)
+    address: restEmployeeData.address ?? restEmployeeData.personal?.address,
   };
 
   const normalizedWithDates = normalizeEmployeeDates(normalizedData);
   ensureEmployeeDateLogic(normalizedWithDates);
 
-  // Check if email already exists
+  // Check if email already exists (use root level email field)
   const existingEmployee = await collections.employees.findOne({
-    'contact.email': normalizedWithDates.email
+    email: normalizedWithDates.email
   });
 
   if (existingEmployee) {
-    throw buildConflictError('Employee', `email: ${normalizedData.email}`);
+    throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
   }
 
   // Check if employee code already exists (if provided)
@@ -503,29 +736,55 @@ export const createEmployee = asyncHandler(async (req, res) => {
     });
 
     if (existingCode) {
-    throw buildConflictError('Employee', `employee code: ${normalizedWithDates.employeeId}`);
-  }
+      throw buildValidationError('employeeId', 'This employee ID is already in use. Please use a different ID.');
+    }
   }
 
   // Generate secure password
   const password = generateSecurePassword(12);
-  console.log('[Employee Controller] Generated password for employee');
+  devLog('[Employee Controller] Generated password for employee');
 
-  // Determine role for Clerk
+  // Determine role for Clerk (case-insensitive)
   let clerkRole = 'employee';
-  if (normalizedWithDates.account?.role === 'HR' || normalizedWithDates.account?.role === 'hr') {
+  const accountRole = normalizedWithDates.account?.role?.toLowerCase();
+  if (accountRole === 'hr') {
     clerkRole = 'hr';
-  } else if (normalizedWithDates.account?.role === 'Admin' || normalizedWithDates.account?.role === 'admin') {
+  } else if (accountRole === 'admin') {
     clerkRole = 'admin';
   }
 
-  // Generate username from email if not provided
-  const username = normalizedWithDates.account?.userName || normalizedWithDates.email.split('@')[0];
+  // Generate username from email (must be 4-64 characters for Clerk)
+  let username = normalizedWithDates.email.split('@')[0];
+
+  // Ensure username meets Clerk's minimum length requirement (4 characters)
+  if (username.length < 4) {
+    // Pad with first name or random characters to meet minimum length
+    const firstName = normalizedWithDates.firstName?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+    const lastName = normalizedWithDates.lastName?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+
+    // Try: email + first few chars of first name
+    username = username + firstName.substring(0, 4 - username.length);
+
+    // If still too short, add last name chars
+    if (username.length < 4) {
+      username = username + lastName.substring(0, 4 - username.length);
+    }
+
+    // If still too short, pad with random numbers
+    if (username.length < 4) {
+      username = username + Math.floor(1000 + Math.random() * 9000).toString().substring(0, 4 - username.length);
+    }
+  }
+
+  // Ensure username doesn't exceed maximum length (64 characters)
+  if (username.length > 64) {
+    username = username.substring(0, 64);
+  }
 
   // Create Clerk user
   let clerkUserId;
   try {
-    console.log('[Employee Controller] Creating Clerk user with username:', username);
+    devLog('[Employee Controller] Creating Clerk user with username:', username);
     const createdUser = await clerkClient.users.createUser({
       emailAddress: [normalizedWithDates.email],
       username: username,
@@ -536,10 +795,10 @@ export const createEmployee = asyncHandler(async (req, res) => {
       },
     });
     clerkUserId = createdUser.id;
-    console.log('[Employee Controller] Clerk user created:', clerkUserId);
+    devLog('[Employee Controller] Clerk user created:', clerkUserId);
   } catch (clerkError) {
-    console.error('[Employee Controller] Failed to create Clerk user:', clerkError);
-    console.error('[Employee Controller] Clerk error details:', {
+    devError('[Employee Controller] Failed to create Clerk user:', clerkError);
+    devError('[Employee Controller] Clerk error details:', {
       code: clerkError.code,
       message: clerkError.message,
       errors: clerkError.errors,
@@ -549,21 +808,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
     // Parse Clerk errors and return field-specific errors
     if (clerkError.errors && Array.isArray(clerkError.errors)) {
       for (const error of clerkError.errors) {
-        console.error('[Employee Controller] Clerk error code:', error.code, 'message:', error.message);
-
-        // Username already taken
-        if (error.code === 'form_identifier_exists' || error.code === 'username_taken') {
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: 'USERNAME_TAKEN',
-              message: 'Username is already taken. Please choose another.',
-              field: 'userName',
-              details: error.message,
-              requestId: getRequestId(req)
-            }
-          });
-        }
+        devError('[Employee Controller] Clerk error code:', error.code, 'message:', error.message);
 
         // Email already exists in Clerk
         if (error.code === 'form_identifier_exists' && error.message.toLowerCase().includes('email')) {
@@ -617,12 +862,32 @@ export const createEmployee = asyncHandler(async (req, res) => {
       password: password, // Store password (for reference)
       role: normalizedWithDates.account?.role || 'Employee',
     },
+    // Assign default avatar if no profile image provided
+    // Support both avatarUrl (from frontend) and profileImage (from API)
+    profileImage: normalizedData.avatarUrl || normalizedData.profileImage || getSystemDefaultAvatarUrl(),
+    profileImagePath: normalizedData.profileImagePath || null,
     createdAt: new Date(),
     updatedAt: new Date(),
     createdBy: user.userId,
     updatedBy: user.userId,
     status: normalizeStatus(normalizedWithDates.status || 'Active')
   };
+
+  // ✅ CRITICAL: Handle nested objects correctly
+  // Remove nested contact (email, phone already at root)
+  delete employeeToInsert.contact;
+
+  // Handle personal object: keep passport, religion, maritalStatus, employmentOfSpouse, noOfChildren
+  // but remove duplicated fields (gender, birthday, address) that are now at root level
+  if (employeeToInsert.personal && typeof employeeToInsert.personal === 'object') {
+    const cleanPersonal = { ...employeeToInsert.personal };
+    // Remove fields that have root-level equivalents
+    delete cleanPersonal.gender;
+    delete cleanPersonal.birthday;
+    delete cleanPersonal.address;
+    // Keep the cleaned personal object with passport, religion, maritalStatus, etc.
+    employeeToInsert.personal = cleanPersonal;
+  }
 
   // Create employee
   const result = await collections.employees.insertOne(employeeToInsert);
@@ -631,9 +896,9 @@ export const createEmployee = asyncHandler(async (req, res) => {
     // Rollback: Delete Clerk user if database insert fails
     try {
       await clerkClient.users.deleteUser(clerkUserId);
-      console.log('[Employee Controller] Rolled back Clerk user creation');
+      devLog('[Employee Controller] Rolled back Clerk user creation');
     } catch (rollbackError) {
-      console.error('[Employee Controller] Failed to rollback Clerk user:', rollbackError);
+      devError('[Employee Controller] Failed to rollback Clerk user:', rollbackError);
     }
     throw new Error('Failed to create employee');
   }
@@ -648,9 +913,9 @@ export const createEmployee = asyncHandler(async (req, res) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      console.log('[Employee Controller] Permissions created for employee');
+      devLog('[Employee Controller] Permissions created for employee');
     } catch (permError) {
-      console.error('[Employee Controller] Failed to create permissions:', permError);
+      devError('[Employee Controller] Failed to create permissions:', permError);
       // Continue anyway - permissions can be added later
     }
   }
@@ -674,9 +939,9 @@ export const createEmployee = asyncHandler(async (req, res) => {
       lastName: normalizedWithDates.lastName,
       companyName: normalizedWithDates.companyName || 'Your Company',
     });
-    console.log('[Employee Controller] Credentials email sent to:', normalizedWithDates.email);
+    devLog('[Employee Controller] Credentials email sent to:', normalizedWithDates.email);
   } catch (emailError) {
-    console.error('[Employee Controller] Failed to send email:', emailError);
+    devError('[Employee Controller] Failed to send email:', emailError);
     // Continue anyway - employee is created
   }
 
@@ -699,7 +964,7 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const updateData = req.body;
 
-  console.log('[Employee Controller] updateEmployee - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] updateEmployee - id:', id, 'companyId:', user.companyId);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -716,15 +981,16 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  // Check email uniqueness if email is being updated
-  if (updateData.contact?.email && updateData.contact.email !== employee.contact?.email) {
+  // Check email uniqueness if email is being updated (use canonical email field)
+  const newEmail = updateData.email || updateData.contact?.email;
+  if (newEmail && newEmail !== employee.email) {
     const existingEmployee = await collections.employees.findOne({
-      'contact.email': updateData.contact.email,
+      email: newEmail,
       _id: { $ne: new ObjectId(id) }
     });
 
     if (existingEmployee) {
-      throw buildConflictError('Employee', `email: ${updateData.contact.email}`);
+      throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
     }
   }
 
@@ -736,16 +1002,50 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     });
 
     if (existingCode) {
-      throw buildConflictError('Employee', `employee code: ${updateData.employeeId}`);
+      throw buildValidationError('employeeId', 'This employee ID is already in use. Please use a different ID.');
     }
   }
 
-  const normalizedUpdateData = normalizeEmployeeDates(updateData);
+  // Normalize update data - extract nested fields to root level
+  const normalizedData = {
+    ...updateData,
+    // Extract email from root level or contact object (for backward compatibility)
+    // Use ?? instead of || to preserve empty strings
+    email: updateData.email ?? updateData.contact?.email,
+    // Extract phone from root level or contact object (for backward compatibility)
+    phone: updateData.phone ?? updateData.contact?.phone,
+    // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
+    dateOfBirth: updateData.dateOfBirth ?? updateData.personal?.birthday,
+    // Extract gender from root level or personal.gender (for backward compatibility)
+    gender: updateData.gender ?? updateData.personal?.gender,
+    // Extract address from root level or personal.address (for backward compatibility)
+    address: updateData.address ?? updateData.personal?.address,
+    // Map avatarUrl to profileImage for frontend compatibility
+    profileImage: updateData.avatarUrl ?? updateData.profileImage,
+  };
+
+  const normalizedUpdateData = normalizeEmployeeDates(normalizedData);
   ensureEmployeeDateLogic(normalizedUpdateData, employee);
 
   // Update audit fields
   normalizedUpdateData.updatedAt = new Date();
   normalizedUpdateData.updatedBy = user.userId;
+
+  // ✅ CRITICAL: Handle nested objects correctly
+  // Remove nested contact (email, phone already at root)
+  delete normalizedUpdateData.contact;
+
+  // Handle personal object: keep passport, religion, maritalStatus, employmentOfSpouse, noOfChildren
+  // but remove duplicated fields (gender, birthday, address) that are now at root level
+  if (normalizedUpdateData.personal && typeof normalizedUpdateData.personal === 'object') {
+    const cleanPersonal = { ...normalizedUpdateData.personal };
+    // Remove fields that have root-level equivalents
+    delete cleanPersonal.gender;
+    delete cleanPersonal.birthday;
+    delete cleanPersonal.address;
+    // Keep the cleaned personal object with passport, religion, maritalStatus, etc.
+    normalizedUpdateData.personal = cleanPersonal;
+  }
 
   // Update employee
   const result = await collections.employees.updateOne(
@@ -779,7 +1079,7 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] deleteEmployee - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] deleteEmployee - id:', id, 'companyId:', user.companyId);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -837,7 +1137,7 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
   const { reassignTo } = req.body;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] reassignAndDeleteEmployee - id:', id, 'reassignTo:', reassignTo, 'companyId:', user.companyId);
+  devLog('[Employee Controller] reassignAndDeleteEmployee - id:', id, 'reassignTo:', reassignTo, 'companyId:', user.companyId);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid employee ID format');
@@ -974,7 +1274,7 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
 export const getMyProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Employee Controller] getMyProfile - userId:', user.userId, 'companyId:', user.companyId);
+  devLog('[Employee Controller] getMyProfile - userId:', user.userId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -992,7 +1292,12 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   const { salary, bank, emergencyContacts, ...sanitizedEmployee } = employee;
   const formattedEmployee = formatEmployeeDates(sanitizedEmployee);
 
-  return sendSuccess(res, formattedEmployee);
+  // Assign default avatar if employee has no profile image
+  if (!sanitizedEmployee.profileImage || sanitizedEmployee.profileImage.trim() === '') {
+    sanitizedEmployee.profileImage = getSystemDefaultAvatarUrl();
+  }
+
+  return sendSuccess(res, sanitizedEmployee);
 });
 
 /**
@@ -1004,7 +1309,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const updateData = req.body;
 
-  console.log('[Employee Controller] updateMyProfile - userId:', user.userId, 'companyId:', user.companyId);
+  devLog('[Employee Controller] updateMyProfile - userId:', user.userId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -1026,7 +1331,8 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     'address',
     'emergencyContact',
     'socialProfiles',
-    'profileImage'
+    'profileImage',
+    'avatarUrl'  // Support frontend avatarUrl field
   ];
 
   const sanitizedUpdate = {};
@@ -1035,6 +1341,12 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
       sanitizedUpdate[field] = updateData[field];
     }
   });
+
+  // Map avatarUrl to profileImage for compatibility
+  if (sanitizedUpdate.avatarUrl !== undefined) {
+    sanitizedUpdate.profileImage = sanitizedUpdate.avatarUrl;
+    delete sanitizedUpdate.avatarUrl;
+  }
 
   const normalizedUpdate = normalizeEmployeeDates(sanitizedUpdate);
   ensureEmployeeDateLogic(normalizedUpdate, employee);
@@ -1069,7 +1381,7 @@ export const getEmployeeReportees = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] getEmployeeReportees - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] getEmployeeReportees - id:', id, 'companyId:', user.companyId);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -1104,7 +1416,7 @@ export const getEmployeeReportees = asyncHandler(async (req, res) => {
 export const getEmployeeStatsByDepartment = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Employee Controller] getEmployeeStatsByDepartment - companyId:', user.companyId);
+  devLog('[Employee Controller] getEmployeeStatsByDepartment - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -1165,7 +1477,7 @@ export const searchEmployees = asyncHandler(async (req, res) => {
   const { q } = req.query;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] searchEmployees - query:', q, 'companyId:', user.companyId);
+  devLog('[Employee Controller] searchEmployees - query:', q, 'companyId:', user.companyId);
 
   if (!q || q.trim().length < 2) {
     throw buildValidationError('q', 'Search query must be at least 2 characters');
@@ -1206,9 +1518,9 @@ export const searchEmployees = asyncHandler(async (req, res) => {
  */
 export const checkDuplicates = asyncHandler(async (req, res) => {
   const user = extractUser(req);
-  const { email, phone, userName } = req.body;
+  const { email, phone } = req.body;
 
-  console.log('[Employee Controller] checkDuplicates - email:', email, 'phone:', phone, 'userName:', userName, 'companyId:', user.companyId);
+  devLog('[Employee Controller] checkDuplicates - email:', email, 'phone:', phone, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -1221,7 +1533,7 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
     });
 
     if (emailExists > 0) {
-      console.log('[Employee Controller] checkDuplicates - email already exists');
+      devLog('[Employee Controller] checkDuplicates - email already exists');
       return res.status(409).json({
         done: false,
         error: 'Email already registered',
@@ -1239,36 +1551,13 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
     });
 
     if (phoneExists > 0) {
-      console.log('[Employee Controller] checkDuplicates - phone already exists');
+      devLog('[Employee Controller] checkDuplicates - phone already exists');
       return res.status(409).json({
         done: false,
         error: 'Phone number already registered',
         field: 'phone',
         message: 'This phone number is already registered in the system'
       });
-    }
-  }
-
-  // Check for duplicate username in Clerk
-  if (userName) {
-    try {
-      console.log('[Employee Controller] checkDuplicates - checking Clerk username:', userName);
-      const existingUsers = await clerkClient.users.getUserList({
-        username: [userName]
-      });
-
-      if (existingUsers && existingUsers.data && existingUsers.data.length > 0) {
-        console.log('[Employee Controller] checkDuplicates - username already exists in Clerk');
-        return res.status(409).json({
-          done: false,
-          error: 'Username is already taken',
-          field: 'userName',
-          message: 'This username is already taken. Please choose another.'
-        });
-      }
-    } catch (clerkError) {
-      // Log but don't fail - Clerk check is optional
-      console.error('[Employee Controller] checkDuplicates - Clerk username check failed:', clerkError.message);
     }
   }
 
@@ -1284,7 +1573,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { employees } = req.body;
 
-  console.log('[Employee Controller] bulkUploadEmployees - count:', employees?.length, 'companyId:', user.companyId);
+  devLog('[Employee Controller] bulkUploadEmployees - count:', employees?.length, 'companyId:', user.companyId);
 
   if (!employees || !Array.isArray(employees) || employees.length === 0) {
     throw buildValidationError('employees', 'At least one employee is required');
@@ -1361,9 +1650,9 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
           },
         });
         clerkUserId = createdUser.id;
-        console.log('[Employee Controller] Bulk upload - Clerk user created for:', email);
+        devLog('[Employee Controller] Bulk upload - Clerk user created for:', email);
       } catch (clerkError) {
-        console.error('[Employee Controller] Bulk upload - Failed to create Clerk user for:', email, clerkError);
+        devError('[Employee Controller] Bulk upload - Failed to create Clerk user for:', email, clerkError);
         results.failed.push({
           email: email,
           reason: `Clerk user creation failed: ${clerkError.message}`
@@ -1407,7 +1696,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         lastName: empData.lastName,
         companyName: empData.companyName || 'Your Company',
       }).catch(emailError => {
-        console.error('[Employee Controller] Bulk upload - Failed to send email to:', email, emailError);
+        devError('[Employee Controller] Bulk upload - Failed to send email to:', email, emailError);
       });
 
       results.success.push({
@@ -1435,7 +1724,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
 export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Employee Controller] syncMyEmployeeRecord - userId:', user.userId, 'companyId:', user.companyId);
+  devLog('[Employee Controller] syncMyEmployeeRecord - userId:', user.userId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -1454,7 +1743,7 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   try {
     clerkUser = await clerkClient.users.getUser(user.userId);
   } catch (clerkError) {
-    console.error('[Employee Controller] Failed to fetch user from Clerk:', clerkError);
+    devError('[Employee Controller] Failed to fetch user from Clerk:', clerkError);
     throw buildNotFoundError('User profile in Clerk');
   }
 
@@ -1470,7 +1759,7 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
 
   // Check if email already exists (link to existing employee)
   const emailExists = await collections.employees.findOne({
-    'contact.email': email,
+    email: email,
     isDeleted: { $ne: true }
   });
 
@@ -1507,10 +1796,6 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
     fullName: `${firstName} ${lastName}`.trim() || `User ${user.userId.substring(0, 8)}`,
     email: email,
     phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || '',
-    contact: {
-      email: email,
-      phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || ''
-    },
     departmentId: departmentId,
     designationId: designationId,
     employmentType: 'Full-time',
@@ -1554,7 +1839,7 @@ export const uploadEmployeeProfileImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] uploadEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] uploadEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
 
   // Check if file was uploaded
   if (!req.file) {
@@ -1629,7 +1914,7 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Employee Controller] deleteEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
+  devLog('[Employee Controller] deleteEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -1646,6 +1931,18 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
+  // Check if the current avatar is the system default - prevent deletion
+  const currentAvatar = employee.profileImage || employee.profileImagePath;
+  const deleteCheck = canUserDeleteAvatar(currentAvatar);
+
+  if (!deleteCheck.canDelete) {
+    throw buildError(
+      400,
+      deleteCheck.reason || 'Cannot delete this avatar',
+      'CANNOT_DELETE_DEFAULT_AVATAR'
+    );
+  }
+
   // Delete old image if exists
   let deletedPath = null;
   if (employee.profileImagePath) {
@@ -1653,13 +1950,15 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
     deleteUploadedFile(employee.profileImagePath);
   }
 
-  // Update employee to remove image
+  // Assign system default avatar instead of null
+  const defaultAvatarUrl = getSystemDefaultAvatarUrl();
+
   const result = await collections.employees.updateOne(
     { _id: new ObjectId(id) },
     {
       $set: {
-        profileImagePath: null,
-        profileImage: null,
+        profileImagePath: null, // Default avatar is served as static, not uploaded
+        profileImage: defaultAvatarUrl,
         updatedAt: new Date(),
         updatedBy: user.userId
       }
@@ -1681,8 +1980,9 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     deleted: !!deletedPath,
-    previousPath: deletedPath
-  }, 'Profile image deleted successfully');
+    previousPath: deletedPath,
+    reassignedTo: defaultAvatarUrl
+  }, 'Profile image deleted and reassigned to default avatar');
 });
 
 /**
@@ -1693,7 +1993,7 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
 export const serveEmployeeProfileImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  console.log('[Employee Controller] serveEmployeeProfileImage - id:', id);
+  devLog('[Employee Controller] serveEmployeeProfileImage - id:', id);
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {

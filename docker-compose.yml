@@ -6,6 +6,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: production
     container_name: manage-rtc-backend
     restart: unless-stopped
     ports:
@@ -16,32 +17,48 @@ services:
       - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/hrms}
       - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
       - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_JWT_KEY=${CLERK_JWT_KEY}
       - JWT_KEY=${JWT_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ENABLE_CACHING=true
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+      - backend_temp:/app/temp
     depends_on:
-      - mongo
-      - redis
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - hrms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Frontend (React)
   frontend:
     build:
       context: ./react
       dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:-http://localhost:5000}
+        - REACT_APP_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
     container_name: manage-rtc-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "3000:80"
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:-http://localhost:5000}
       - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:5000/api}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - hrms-network
 
@@ -61,6 +78,12 @@ services:
       - mongo_config:/data/configdb
     networks:
       - hrms-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Redis Cache
   redis:
@@ -74,6 +97,12 @@ services:
       - redis_data:/data
     networks:
       - hrms-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # Nginx (Reverse Proxy) - Optional
   nginx:
@@ -87,17 +116,30 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
     networks:
       - hrms-network
+    profiles:
+      - with-nginx
 
 volumes:
   backend_uploads:
+    driver: local
+  backend_logs:
+    driver: local
+  backend_temp:
+    driver: local
   mongo_data:
+    driver: local
   mongo_config:
+    driver: local
   redis_data:
+    driver: local
   ssl:
+    driver: local
 
 networks:
   hrms-network:

@@ -4,7 +4,9 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, requireRole } from '../../middleware/auth.js';
+import { validate, validateBody, validateQuery } from '../../middleware/validate.js';
+import { promotionSchemas } from '../../middleware/validate.js';
 import promotionController from '../../controllers/rest/promotion.controller.js';
 
 const router = express.Router();
@@ -15,64 +17,71 @@ router.use(authenticate);
 /**
  * @route   GET /api/promotions
  * @desc    Get all promotions
- * @access  Private
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.get('/', promotionController.getPromotions);
+router.get('/', requireRole('admin', 'hr', 'superadmin'), validateQuery(promotionSchemas.list), promotionController.getPromotions);
+
+/**
+ * @route   GET /api/promotions/stats
+ * @desc    Get promotion statistics
+ * @access  Private (Admin, HR, Superadmin)
+ */
+router.get('/stats', requireRole('admin', 'hr', 'superadmin'), promotionController.getPromotionStats);
 
 /**
  * @route   GET /api/promotions/departments
  * @desc    Get departments for promotion selection
- * @access  Private
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.get('/departments', promotionController.getDepartments);
+router.get('/departments', requireRole('admin', 'hr', 'superadmin'), promotionController.getDepartments);
 
 /**
  * @route   GET /api/promotions/designations
  * @desc    Get designations for promotion selection
- * @access  Private
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.get('/designations', promotionController.getDesignationsForPromotion);
+router.get('/designations', requireRole('admin', 'hr', 'superadmin'), promotionController.getDesignationsForPromotion);
 
 /**
  * @route   GET /api/promotions/:id
  * @desc    Get single promotion by ID
- * @access  Private
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.get('/:id', promotionController.getPromotionById);
+router.get('/:id', requireRole('admin', 'hr', 'superadmin'), promotionController.getPromotionById);
 
 /**
  * @route   POST /api/promotions
  * @desc    Create new promotion
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.post('/', promotionController.createPromotion);
+router.post('/', requireRole('admin', 'hr', 'superadmin'), validateBody(promotionSchemas.create), promotionController.createPromotion);
 
 /**
  * @route   PUT /api/promotions/:id
  * @desc    Update promotion
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id', promotionController.updatePromotion);
+router.put('/:id', requireRole('admin', 'hr', 'superadmin'), validateBody(promotionSchemas.update), promotionController.updatePromotion);
 
 /**
  * @route   PUT /api/promotions/:id/apply
  * @desc    Apply promotion
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id/apply', promotionController.applyPromotion);
+router.put('/:id/apply', requireRole('admin', 'hr', 'superadmin'), promotionController.applyPromotion);
 
 /**
  * @route   PUT /api/promotions/:id/cancel
  * @desc    Cancel promotion
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id/cancel', promotionController.cancelPromotion);
+router.put('/:id/cancel', requireRole('admin', 'hr', 'superadmin'), validateBody(promotionSchemas.cancel), promotionController.cancelPromotion);
 
 /**
  * @route   DELETE /api/promotions/:id
  * @desc    Delete promotion (soft delete)
- * @access  Private (Admin)
+ * @access  Private (Admin, Superadmin)
  */
-router.delete('/:id', promotionController.deletePromotion);
+router.delete('/:id', requireRole('admin', 'superadmin'), promotionController.deletePromotion);
 
 export default router;

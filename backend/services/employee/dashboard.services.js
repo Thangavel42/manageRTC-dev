@@ -15,7 +15,7 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
         { userId: employeeId },
         {
           projection: {
-            _id: 0,
+            _id: 1,
             employeeId: 1,
             firstName: 1,
             lastName: 1,
@@ -26,7 +26,7 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
             contact: 1,
             reportOffice: 1,
             managerId: 1,
-            avatar: 1,
+            profileImage: 1, // Changed from avatar to profileImage
             timeZone: 1,
           },
         }
@@ -42,10 +42,17 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
       return { done: false, error: "Company timezone not found" };
     }
 
+    // Add avatar field with default fallback for frontend compatibility
+    const employeeData = {
+      ...employee,
+      // Map profileImage to avatar for frontend compatibility
+      avatar: employee.profileImage || "/assets/img/profiles/profile.png",
+    };
+
     return {
       done: true,
       data: {
-        ...employee,
+        ...employeeData,
         companyTimeZone: companyDetails.timeZone,
       },
     };
@@ -485,7 +492,7 @@ export const startBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      _id: new ObjectId(employeeId),
+      userId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
@@ -498,7 +505,7 @@ export const startBreak = async (companyId, employeeId) => {
     const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const attendance = await collections.attendance.findOne({
-      employeeId: new ObjectId(employeeId),
+      userId: employeeId,
       date: todayCompany,
     });
 
@@ -539,7 +546,7 @@ export const resumeBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      _id: new ObjectId(employeeId),
+      userId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
@@ -552,7 +559,7 @@ export const resumeBreak = async (companyId, employeeId) => {
     const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const attendance = await collections.attendance.findOne({
-      employeeId: new ObjectId(employeeId),
+      userId: employeeId,
       date: todayCompany,
     });
 
@@ -685,7 +692,9 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
 
     for (const rec of attendanceRecords) {
       const recordDate = DateTime.fromJSDate(rec.date).setZone(timeZone);
-      const work = rec.totalProductiveDuration || 0;
+      // totalProductiveHours is stored as string in hours, convert to minutes
+      const totalHours = parseFloat(rec.totalProductiveHours || 0);
+      const work = totalHours * 60; // Convert to minutes
       const brk = rec.totalBreakMins || 0;
 
       // Today's stats
@@ -1106,8 +1115,9 @@ export const getTeamMembers = async (companyId, employeeId) => {
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
     }
+    // Find employees who report to this employee (using reportingTo field)
     const pipeline = [
-      { $match: { leadId: employee.leadId } },
+      { $match: { reportingTo: employee._id } },
       {
         $project: {
           _id: 1,
@@ -1287,7 +1297,7 @@ export const getMeetings = async (companyId, employeeId, filter) => {
 
     const meetings = await collections.meetings
       .find({
-        leadId: employee.leadId,
+        leadId: employee._id,
         startTime: { $gte: startDate, $lte: endDate },
       })
       .toArray();
@@ -1369,17 +1379,16 @@ export const getTodaysBirthday = async (companyId, employeeId) => {
 export const getLastDayTimmings = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empId = new ObjectId(employeeId);
 
     const timezoneDoc = await collections.details.findOne({});
     const tz = (timezoneDoc && timezoneDoc.timeZone) || "UTC";
 
-    const employee = await collections.employees.findOne({ _id: empId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee)
       return { done: false, error: "Employee not found in this company." };
 
     const attendance = await collections.attendance
-      .find({ employeeId: empId })
+      .find({ userId: employeeId })
       .sort({ punchIn: -1 })
       .limit(1)
       .next();

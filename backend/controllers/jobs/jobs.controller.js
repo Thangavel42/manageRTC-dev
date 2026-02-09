@@ -1,18 +1,19 @@
 import { ObjectId } from "mongodb";
-import { 
-  getJobsStats as getJobsStatsService, 
-  getJobsList as getJobsListService, 
-  getJobDetails as getJobDetailsService, 
-  createJob as createJobService, 
-  updateJob as updateJobService, 
-  deleteJob as deleteJobService, 
-  bulkDeleteJobs as bulkDeleteJobsService, 
-  updateJobStatus as updateJobStatusService, 
-  getJobCategories as getJobCategoriesService, 
+import {
+  getJobsStats as getJobsStatsService,
+  getJobsList as getJobsListService,
+  getJobDetails as getJobDetailsService,
+  createJob as createJobService,
+  updateJob as updateJobService,
+  deleteJob as deleteJobService,
+  bulkDeleteJobs as bulkDeleteJobsService,
+  updateJobStatus as updateJobStatusService,
+  getJobCategories as getJobCategoriesService,
   getJobTypes as getJobTypesService,
   exportJobsPDF as exportJobsPDFService,
   exportJobsExcel as exportJobsExcelService
 } from "../../services/jobs/jobs.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 
 // Get jobs statistics
@@ -35,7 +36,7 @@ export const getJobsStats = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in getJobsStats controller:", error);
+    devError("Error in getJobsStats controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -67,7 +68,7 @@ export const getJobsList = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in getJobsList controller:", error);
+    devError("Error in getJobsList controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -95,7 +96,7 @@ export const getJobDetails = async (req, res) => {
       res.status(404).json(result);
     }
   } catch (error) {
-    console.error("Error in getJobDetails controller:", error);
+    devError("Error in getJobDetails controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -127,7 +128,7 @@ export const createJob = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in createJob controller:", error);
+    devError("Error in createJob controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -156,7 +157,7 @@ export const updateJob = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in updateJob controller:", error);
+    devError("Error in updateJob controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -184,7 +185,7 @@ export const deleteJob = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in deleteJob controller:", error);
+    devError("Error in deleteJob controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -220,7 +221,7 @@ export const bulkDeleteJobs = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in bulkDeleteJobs controller:", error);
+    devError("Error in bulkDeleteJobs controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -256,7 +257,7 @@ export const updateJobStatus = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in updateJobStatus controller:", error);
+    devError("Error in updateJobStatus controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -275,7 +276,7 @@ export const getJobCategories = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in getJobCategories controller:", error);
+    devError("Error in getJobCategories controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -294,7 +295,7 @@ export const getJobTypes = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in getJobTypes controller:", error);
+    devError("Error in getJobTypes controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -331,7 +332,7 @@ export const exportJobsPDF = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in exportJobsPDF controller:", error);
+    devError("Error in exportJobsPDF controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"
@@ -368,7 +369,7 @@ export const exportJobsExcel = async (req, res) => {
       res.status(400).json(result);
     }
   } catch (error) {
-    console.error("Error in exportJobsExcel controller:", error);
+    devError("Error in exportJobsExcel controller:", error);
     res.status(500).json({
       done: false,
       message: "Internal server error"

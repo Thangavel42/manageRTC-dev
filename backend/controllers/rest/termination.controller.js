@@ -14,6 +14,7 @@ import {
   sendCreated,
   extractUser
 } from '../../utils/apiResponse.js';
+import { broadcastTerminationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 import {
   getTerminationStats,
   getTerminations,
@@ -92,6 +93,7 @@ export const getTerminationById = asyncHandler(async (req, res) => {
 export const createTermination = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const terminationData = req.body;
+  const io = getSocketIO(req);
 
   const result = await addTermination(user.companyId, terminationData, user.userId);
 
@@ -100,6 +102,11 @@ export const createTermination = asyncHandler(async (req, res) => {
       throw buildValidationError('fields', result.message, result.errors);
     }
     throw buildConflictError(result.message);
+  }
+
+  // Broadcast termination created event
+  if (io && result.data) {
+    broadcastTerminationEvents.created(io, user.companyId, result.data);
   }
 
   return sendCreated(res, result.data || { message: 'Termination created' }, 'Termination created successfully');
@@ -114,6 +121,7 @@ export const updateTerminationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Termination ID is required');
@@ -129,6 +137,11 @@ export const updateTerminationById = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Termination', id);
     }
     throw buildConflictError(result.message);
+  }
+
+  // Broadcast termination updated event
+  if (io && result.data) {
+    broadcastTerminationEvents.updated(io, user.companyId, result.data);
   }
 
   return sendSuccess(res, result.data || updateData, 'Termination updated successfully');
@@ -164,6 +177,7 @@ export const deleteTerminations = asyncHandler(async (req, res) => {
 export const processTerminationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Termination ID is required');
@@ -178,6 +192,11 @@ export const processTerminationById = asyncHandler(async (req, res) => {
     throw buildConflictError(result.message);
   }
 
+  // Broadcast termination processed event
+  if (io && result.data) {
+    broadcastTerminationEvents.processed(io, user.companyId, result.data);
+  }
+
   return sendSuccess(res, null, 'Termination processed successfully');
 });
 
@@ -190,6 +209,7 @@ export const cancelTerminationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Termination ID is required');
@@ -202,6 +222,11 @@ export const cancelTerminationById = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Termination', id);
     }
     throw buildConflictError(result.message);
+  }
+
+  // Broadcast termination updated event (cancellation is an update)
+  if (io && result.data) {
+    broadcastTerminationEvents.updated(io, user.companyId, result.data);
   }
 
   return sendSuccess(res, null, 'Termination cancelled successfully');

@@ -5,6 +5,7 @@ import {
   getAssetCategories,
   updateAssetCategory,
 } from '../../services/assets/assetCategory.services.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const authorize = (socket, allowed = []) => {
   const role = (socket.role || '').toLowerCase();
@@ -50,7 +51,7 @@ const assetCategorySocketController = (socket, io) => {
         });
         io.to(roomForCompany(companyId)).emit('admin/asset-categories/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed category list:', e);
+        devError('Failed to broadcast refreshed category list:', e);
       }
 
       socket.emit('admin/asset-categories/create-response', res);
@@ -79,7 +80,7 @@ const assetCategorySocketController = (socket, io) => {
         });
         io.to(roomForCompany(companyId)).emit('admin/asset-categories/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed category list after update:', e);
+        devError('Failed to broadcast refreshed category list after update:', e);
       }
 
       socket.emit('admin/asset-categories/update-response', { done: true });
@@ -107,7 +108,7 @@ const assetCategorySocketController = (socket, io) => {
         });
         io.to(roomForCompany(companyId)).emit('admin/asset-categories/list-update', fresh);
       } catch (e) {
-        console.error('Failed to broadcast refreshed category list after delete:', e);
+        devError('Failed to broadcast refreshed category list after delete:', e);
       }
 
       socket.emit('admin/asset-categories/delete-response', { done: true });

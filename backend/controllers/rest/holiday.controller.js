@@ -20,6 +20,7 @@ import {
   updateHoliday,
   deleteHoliday
 } from '../../services/hr/hrm.holidays.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * @desc    Get all holidays
@@ -29,14 +30,14 @@ import {
 export const getAllHolidays = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Holiday Controller] getAllHolidays - companyId:', user.companyId);
+  devLog('[Holiday Controller] getAllHolidays - companyId:', user.companyId);
 
   const result = await displayHoliday(user.companyId);
 
-  console.log('[Holiday Controller] displayHoliday result:', { done: result.done, dataLength: result.data?.length, message: result.message });
+  devLog('[Holiday Controller] displayHoliday result:', { done: result.done, dataLength: result.data?.length, message: result.message });
 
   if (!result.done) {
-    console.error('[Holiday Controller] Error fetching holidays:', result.message);
+    devError('[Holiday Controller] Error fetching holidays:', result.message);
     throw new Error(result.message || 'Failed to fetch holidays');
   }
 

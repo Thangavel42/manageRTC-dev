@@ -6,7 +6,6 @@
 
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
-import logger from '../../utils/logger.js';
 import { extractUser } from '../../utils/apiResponse.js';
 import {
   buildNotFoundError,
@@ -20,6 +19,7 @@ import {
   buildPagination
 } from '../../utils/apiResponse.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const parseDateField = (value, fieldName) => {
   if (value === undefined || value === null || value === '') return null;
@@ -59,7 +59,7 @@ export const getAllPolicies = asyncHandler(async (req, res) => {
 
   const user = extractUser(req);
 
-  console.log('[Policy Controller] getAllPolicies - companyId:', user.companyId);
+  devLog('[Policy Controller] getAllPolicies - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -117,7 +117,7 @@ export const getAllPolicies = asyncHandler(async (req, res) => {
 export const getPolicyStats = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Policy Controller] getPolicyStats - companyId:', user.companyId);
+  devLog('[Policy Controller] getPolicyStats - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -151,7 +151,7 @@ export const getPolicyById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Policy Controller] getPolicyById - id:', id, 'companyId:', user.companyId);
+  devLog('[Policy Controller] getPolicyById - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -177,7 +177,7 @@ export const createPolicy = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { policyName, policyDescription, effectiveDate, applyToAll, assignTo } = req.body;
 
-  console.log('[Policy Controller] createPolicy - companyId:', user.companyId);
+  devLog('[Policy Controller] createPolicy - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -254,7 +254,7 @@ export const updatePolicy = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { policyName, policyDescription, effectiveDate, applyToAll, assignTo } = req.body;
 
-  console.log('[Policy Controller] updatePolicy - id:', id, 'companyId:', user.companyId);
+  devLog('[Policy Controller] updatePolicy - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -342,7 +342,7 @@ export const deletePolicy = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Policy Controller] deletePolicy - id:', id, 'companyId:', user.companyId);
+  devLog('[Policy Controller] deletePolicy - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -372,7 +372,7 @@ export const searchPolicies = asyncHandler(async (req, res) => {
   const { q } = req.query;
   const user = extractUser(req);
 
-  console.log('[Policy Controller] searchPolicies - query:', q, 'companyId:', user.companyId);
+  devLog('[Policy Controller] searchPolicies - query:', q, 'companyId:', user.companyId);
 
   if (!q || !q.trim()) {
     throw buildValidationError('q', 'Search query is required');

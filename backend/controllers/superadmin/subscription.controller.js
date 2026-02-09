@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import * as subscriptionsService from "../../services/superadmin/subscriptions.services.js";
 
 const Broadcast = async (io) => {
@@ -18,7 +19,7 @@ const subscriptionsController = (socket, io) => {
   socket.on("superadmin/subscriptions/fetch-list", async () => {
     try {
     const res = await subscriptionsService.fetchSubscriptions();
-      console.log("Subscription list", res);
+      devLog("Subscription list", res);
     socket.emit("superadmin/subscriptions/fetch-list-response", res);
     } catch (error) {
       socket.emit("superadmin/subscriptions/fetch-list-response", {
@@ -32,7 +33,7 @@ const subscriptionsController = (socket, io) => {
   socket.on("superadmin/subscriptions/fetch-stats", async () => {
     try {
   const res = await subscriptionsService.fetchSubscriptionStats();
-      console.log("Subscription stats", res);
+      devLog("Subscription stats", res);
   socket.emit("superadmin/subscriptions/fetch-stats-response", res);
     } catch (error) {
       socket.emit("superadmin/subscriptions/fetch-stats-response", {
@@ -44,15 +45,15 @@ const subscriptionsController = (socket, io) => {
 
   // Handle invoice download
   socket.on("superadmin/subscriptions/download-invoice", async (data) => {
-    console.log("Received download-invoice request with data:", data);
+    devLog("Received download-invoice request with data:", data);
     
     try {
-      console.log("Generating PDF...");
+      devLog("Generating PDF...");
       const result = await subscriptionsService.generateInvoicePDF(data);
-      console.log("PDF generation result:", result);
+      devLog("PDF generation result:", result);
       
       if (result.done) {
-        console.log("Sending PDF URL to client:", result.data.pdfUrl);
+        devLog("Sending PDF URL to client:", result.data.pdfUrl);
         socket.emit("superadmin/subscriptions/download-invoice-response", {
           done: true,
           data: {
@@ -62,18 +63,18 @@ const subscriptionsController = (socket, io) => {
         
         // Schedule cleanup after 1 hour
         setTimeout(() => {
-          console.log("Cleaning up PDF file:", result.data.pdfPath);
+          devLog("Cleaning up PDF file:", result.data.pdfPath);
           subscriptionsService.cleanupInvoicePDFs();
         }, 60 * 60 * 1000);
       } else {
-        console.error("PDF generation failed:", result.error);
+        devError("PDF generation failed:", result.error);
         socket.emit("superadmin/subscriptions/download-invoice-response", {
           done: false,
           error: result.error
         });
       }
     } catch (error) {
-      console.error("Error in download-invoice handler:", error);
+      devError("Error in download-invoice handler:", error);
       socket.emit("superadmin/subscriptions/download-invoice-response", {
         done: false,
         error: error.message

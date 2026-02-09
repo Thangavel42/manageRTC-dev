@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { Company } from "../../models/superadmin/package.schema.js";
 import * as companiesService from "../../services/superadmin/companies.services.js";
 
@@ -18,7 +19,7 @@ const companiesController = (socket, io) => {
   socket.on("superadmin/companies/fetch-packages", async () => {
     try {
       let res = await companiesService.fetchPackages();
-      console.log(res);
+      devLog(res);
       socket.emit("superadmin/companies/fetch-packages-response", res);
     } catch (error) {
       socket.emit("superadmin/companies/fetch-packages-response", {
@@ -30,11 +31,11 @@ const companiesController = (socket, io) => {
 
   socket.on("superadmin/companies/add-company", async (data) => {
     try {
-      console.log(data);
+      devLog(data);
       try {
         const companyDoc = new Company(data);
         await companyDoc.validate(); // throws if invalid
-        console.log("Adding to db");
+        devLog("Adding to db");
 
         let res = await companiesService.addCompany(data, socket.user.sub);
         socket.emit("superadmin/companies/add-company-response", res);
@@ -42,7 +43,7 @@ const companiesController = (socket, io) => {
           await Broadcast(io);
         }
       } catch (validationError) {
-        console.log("Error in super.admin/company/addcompany schema issue:", validationError.message);
+        devLog("Error in super.admin/company/addcompany schema issue:", validationError.message);
         socket.emit("superadmin/companies/add-company-response", {
           done: false,
           error: validationError.message || "Validation failed",
@@ -59,7 +60,7 @@ const companiesController = (socket, io) => {
   socket.on("superadmin/companies/fetch-companylist", async (args) => {
     try {
       let res = await companiesService.fetchCompanylist(args);
-      console.log("Company list", res);
+      devLog("Company list", res);
       socket.emit("superadmin/companies/fetch-companylist-response", res);
     } catch (error) {
       socket.emit("superadmin/companies/fetch-companylist-response", {
@@ -72,7 +73,7 @@ const companiesController = (socket, io) => {
   socket.on("superadmin/companies/fetch-companystats", async () => {
     try {
       let res = await companiesService.fetchCompanystats();
-      console.log("Company stats", res);
+      devLog("Company stats", res);
       socket.emit("superadmin/companies/fetch-companystats-response", res);
     } catch (error) {
       socket.emit("superadmin/companies/fetch-companystats-response", {
@@ -83,8 +84,8 @@ const companiesController = (socket, io) => {
   });
 
   socket.on("superadmin/companies/delete-company", async (companyid) => {
-    console.log("Super Admin is trying to delete company");
-    console.log("Received delete company id:", companyid); // Debugging
+    devLog("Super Admin is trying to delete company");
+    devLog("Received delete company id:", companyid); // Debugging
     // Validate the form
     try {
       let res = await companiesService.deleteCompany(companyid); // Ensure `await` is used
@@ -130,9 +131,9 @@ const companiesController = (socket, io) => {
 
   socket.on("superadmin/companies/edit-company", async (form) => {
     try {
-      console.log(form);
-      console.log("sjbsjb");
-      console.log("eee");
+      devLog(form);
+      devLog("sjbsjb");
+      devLog("eee");
       let res = await companiesService.updateCompany(form); // Ensure `await` is used
       socket.emit("superadmin/companies/edit-company-response", res);
       if (res.done) {

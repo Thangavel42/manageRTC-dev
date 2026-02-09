@@ -20,6 +20,7 @@ import {
   sendSuccess
 } from '../../utils/apiResponse.js';
 import { broadcastOvertimeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
+import logger from '../../utils/logger.js';
 
 /**
  * Helper: Get employee by clerk user ID
@@ -40,7 +41,7 @@ export const getOvertimeRequests = asyncHandler(async (req, res) => {
   const { page, limit, search, status, employee, startDate, endDate, sortBy, order } = req.query;
   const user = extractUser(req);
 
-  console.log('[Overtime Controller] getOvertimeRequests - companyId:', user.companyId);
+  logger.debug('[Overtime Controller] getOvertimeRequests called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -120,7 +121,7 @@ export const getOvertimeRequestById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid overtime request ID format');
   }
 
-  console.log('[Overtime Controller] getOvertimeRequestById - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Overtime Controller] getOvertimeRequestById called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -146,7 +147,7 @@ export const getMyOvertimeRequests = asyncHandler(async (req, res) => {
   const { page, limit, status, startDate, endDate } = req.query;
   const user = extractUser(req);
 
-  console.log('[Overtime Controller] getMyOvertimeRequests - companyId:', user.companyId);
+  logger.debug('[Overtime Controller] getMyOvertimeRequests called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -208,7 +209,7 @@ export const createOvertimeRequest = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const overtimeData = req.body;
 
-  console.log('[Overtime Controller] createOvertimeRequest - companyId:', user.companyId);
+  logger.debug('[Overtime Controller] createOvertimeRequest called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -308,7 +309,7 @@ export const approveOvertimeRequest = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid overtime request ID format');
   }
 
-  console.log('[Overtime Controller] approveOvertimeRequest - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Overtime Controller] approveOvertimeRequest called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -376,7 +377,7 @@ export const rejectOvertimeRequest = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid overtime request ID format');
   }
 
-  console.log('[Overtime Controller] rejectOvertimeRequest - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Overtime Controller] rejectOvertimeRequest called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -426,20 +427,20 @@ export const rejectOvertimeRequest = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Cancel overtime request
- * @route   POST /api/overtime/:id/cancel
- * @access  Private (All authenticated users)
+ * @desc    Update overtime request
+ * @route   PUT /api/overtime/:id
+ * @access  Private (Owner can edit pending requests)
  */
-export const cancelOvertimeRequest = asyncHandler(async (req, res) => {
+export const updateOvertimeRequest = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const overtimeData = req.body;
   const user = extractUser(req);
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid overtime request ID format');
   }
 
-  console.log('[Overtime Controller] cancelOvertimeRequest - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Overtime Controller] updateOvertimeRequest called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -457,8 +458,124 @@ export const cancelOvertimeRequest = asyncHandler(async (req, res) => {
   const employee = await getEmployeeByClerkId(collections, user.userId);
 
   if (!employee || employee.employeeId !== overtimeRequest.employeeId) {
-    // Allow admins to cancel any overtime
-    const isAdmin = user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin';
+    // Allow admins to edit any overtime (case-insensitive)
+    const userRole = user.role?.toLowerCase();
+    const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
+    if (!isAdmin) {
+      throw buildForbiddenError('You can only edit your own overtime requests');
+    }
+  }
+
+  // Check if overtime can be edited
+  if (overtimeRequest.status !== 'pending') {
+    throw buildConflictError(`Cannot edit ${overtimeRequest.status} overtime requests. Only pending requests can be edited.`);
+  }
+
+  // Validate and prepare update data
+  const updateData = {
+    updatedAt: new Date()
+  };
+
+  if (overtimeData.reason !== undefined) {
+    updateData.reason = overtimeData.reason;
+  }
+
+  if (overtimeData.project !== undefined) {
+    updateData.project = overtimeData.project;
+  }
+
+  if (overtimeData.taskDescription !== undefined) {
+    updateData.taskDescription = overtimeData.taskDescription;
+  }
+
+  if (overtimeData.attachments !== undefined) {
+    updateData.attachments = overtimeData.attachments;
+  }
+
+  // If date/time is being updated, recalculate hours
+  if (overtimeData.date || overtimeData.startTime || overtimeData.endTime) {
+    const date = new Date(overtimeData.date || overtimeRequest.date);
+    const startTime = new Date(overtimeData.startTime || overtimeRequest.startTime);
+    const endTime = new Date(overtimeData.endTime || overtimeRequest.endTime);
+
+    if (endTime <= startTime) {
+      throw buildValidationError('endTime', 'End time must be after start time');
+    }
+
+    const durationMs = endTime - startTime;
+    const durationHours = durationMs / (1000 * 60 * 60);
+
+    if (durationHours < 0.25) {
+      throw buildValidationError('duration', 'Minimum overtime is 15 minutes');
+    }
+
+    if (durationHours > 12) {
+      throw buildValidationError('duration', 'Maximum overtime per day is 12 hours');
+    }
+
+    updateData.date = date;
+    updateData.startTime = startTime;
+    updateData.endTime = endTime;
+    updateData.requestedHours = durationHours;
+  }
+
+  // Update overtime request
+  const result = await collections.overtimeRequests.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updateData }
+  );
+
+  if (result.matchedCount === 0) {
+    throw buildNotFoundError('Overtime request', id);
+  }
+
+  // Get updated overtime request
+  const updatedRequest = await collections.overtimeRequests.findOne({ _id: new ObjectId(id) });
+
+  // Broadcast Socket.IO event
+  const io = getSocketIO(req);
+  if (io) {
+    broadcastOvertimeEvents.updated(io, user.companyId, updatedRequest, user.userId);
+  }
+
+  return sendSuccess(res, updatedRequest, 'Overtime request updated successfully');
+});
+
+/**
+ * @desc    Cancel overtime request
+ * @route   POST /api/overtime/:id/cancel
+ * @access  Private (All authenticated users)
+ */
+export const cancelOvertimeRequest = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const user = extractUser(req);
+
+  if (!ObjectId.isValid(id)) {
+    throw buildValidationError('id', 'Invalid overtime request ID format');
+  }
+
+  logger.debug('[Overtime Controller] cancelOvertimeRequest called', { id, companyId: user.companyId });
+
+  // Get tenant collections
+  const collections = getTenantCollections(user.companyId);
+
+  const overtimeRequest = await collections.overtimeRequests.findOne({
+    _id: new ObjectId(id),
+    isDeleted: { $ne: true }
+  });
+
+  if (!overtimeRequest) {
+    throw buildNotFoundError('Overtime request', id);
+  }
+
+  // Get Employee record to verify ownership
+  const employee = await getEmployeeByClerkId(collections, user.userId);
+
+  if (!employee || employee.employeeId !== overtimeRequest.employeeId) {
+    // Allow admins to cancel any overtime (case-insensitive)
+    const userRole = user.role?.toLowerCase();
+    const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
     if (!isAdmin) {
       throw buildForbiddenError('You can only cancel your own overtime requests');
     }
@@ -516,7 +633,7 @@ export const getPendingOvertimeRequests = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
   const user = extractUser(req);
 
-  console.log('[Overtime Controller] getPendingOvertimeRequests - companyId:', user.companyId);
+  logger.debug('[Overtime Controller] getPendingOvertimeRequests called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -554,7 +671,7 @@ export const getOvertimeStats = asyncHandler(async (req, res) => {
   const { startDate, endDate, employee } = req.query;
   const user = extractUser(req);
 
-  console.log('[Overtime Controller] getOvertimeStats - companyId:', user.companyId);
+  logger.debug('[Overtime Controller] getOvertimeStats called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -620,7 +737,7 @@ export const deleteOvertimeRequest = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid overtime request ID format');
   }
 
-  console.log('[Overtime Controller] deleteOvertimeRequest - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Overtime Controller] deleteOvertimeRequest called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -668,6 +785,7 @@ export default {
   getOvertimeRequestById,
   getMyOvertimeRequests,
   createOvertimeRequest,
+  updateOvertimeRequest,
   approveOvertimeRequest,
   rejectOvertimeRequest,
   cancelOvertimeRequest,

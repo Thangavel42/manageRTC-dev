@@ -1,22 +1,21 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
-import Table from "../../core/common/dataTable/index";
-import { all_routes } from "../router/all_routes";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import CommonSelect from "../../core/common/commonSelect";
-import EmployeeNameCell from "../../core/common/EmployeeNameCell";
 import { DatePicker } from "antd";
-import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import Footer from "../../core/common/footer";
-import { useSocket } from "../../SocketContext";
-import { toast } from "react-toastify";
-import { useModalCleanup } from "../../core/hooks/useModalCleanup";
 import dayjs, { Dayjs } from "dayjs";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 import { Socket } from "socket.io-client";
+import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../core/common/commonSelect";
+import Table from "../../core/common/dataTable/index";
+import EmployeeNameCell from "../../core/common/EmployeeNameCell";
+import Footer from "../../core/common/footer";
+import { useModalCleanup } from "../../core/hooks/useModalCleanup";
 import PromotionDetailsModal from "../../core/modals/PromotionDetailsModal";
+import { useSocket } from "../../SocketContext";
+import { all_routes } from "../router/all_routes";
 // REST API Hooks for Promotions and Employees
-import { usePromotionsREST } from "../../hooks/usePromotionsREST";
 import { useEmployeesREST } from "../../hooks/useEmployeesREST";
+import { usePromotionsREST, type Promotion as APIPromotion } from "../../hooks/usePromotionsREST";
 
 interface Employee {
   id: string;
@@ -44,6 +43,8 @@ interface Designation {
 
 interface Promotion {
   _id: string;
+  promotionId: string; // Required field
+  employeeId: string; // Required field
   employee: {
     id: string;
     name: string;
@@ -51,6 +52,8 @@ interface Promotion {
     employeeId?: string; // Add employeeId to the interface
   };
   promotionFrom: {
+    departmentId: string;
+    designationId: string;
     department: {
       id: string;
       name: string;
@@ -61,6 +64,8 @@ interface Promotion {
     };
   };
   promotionTo: {
+    departmentId: string;
+    designationId: string;
     department: {
       id: string;
       name: string;
@@ -74,6 +79,9 @@ interface Promotion {
   promotionType?: string;
   reason?: string;
   notes?: string;
+  status: 'pending' | 'approved' | 'applied' | 'cancelled' | 'rejected'; // Required field
+  createdAt: string; // Required field
+  updatedAt: string; // Required field
 }
 
 interface PromotionStats {
@@ -143,8 +151,8 @@ const Promotion = () => {
   // State for deletion
   const [deletingPromotionId, setDeletingPromotionId] = useState<string | null>(null);
 
-  // State for viewing promotion details
-  const [viewingPromotion, setViewingPromotion] = useState<Promotion | null>(null);
+  // State for viewing promotion details - use API type
+  const [viewingPromotion, setViewingPromotion] = useState<APIPromotion | null>(null);
 
   // Validation errors for Add Promotion
   const [addErrors, setAddErrors] = useState({
@@ -330,13 +338,46 @@ const Promotion = () => {
   // Sync REST API data to local state
   useEffect(() => {
     const transformedPromotions = (apiPromotions || []).map(promo => ({
-      ...promo,
+      _id: promo._id,
+      promotionId: promo.promotionId,
+      employeeId: promo.employeeId,
+      status: promo.status,
+      createdAt: promo.createdAt,
+      updatedAt: promo.updatedAt,
+      promotionDate: promo.promotionDate,
+      promotionType: promo.promotionType,
+      reason: promo.reason,
+      notes: promo.notes,
       employee: promo.employeeId ? {
         id: promo.employeeId,
         name: promo.employeeName || 'Unknown',
         image: '',
         employeeId: promo.employeeId,
       } : { id: '', name: 'Unknown', image: '', employeeId: '' },
+      promotionFrom: {
+        departmentId: promo.promotionFrom?.departmentId || '',
+        designationId: promo.promotionFrom?.designationId || '',
+        department: {
+          id: promo.promotionFrom?.departmentId || '',
+          name: promo.promotionFrom?.department || '',
+        },
+        designation: {
+          id: promo.promotionFrom?.designationId || '',
+          name: promo.promotionFrom?.designation || '',
+        },
+      },
+      promotionTo: {
+        departmentId: promo.promotionTo?.departmentId || '',
+        designationId: promo.promotionTo?.designationId || '',
+        department: {
+          id: promo.promotionTo?.departmentId || '',
+          name: promo.promotionTo?.department || '',
+        },
+        designation: {
+          id: promo.promotionTo?.designationId || '',
+          name: promo.promotionTo?.designation || '',
+        },
+      },
     }));
 
     setPromotions(transformedPromotions as any);
@@ -781,6 +822,19 @@ const Promotion = () => {
     }
   };
 
+  // Handle view promotion details
+  const handleViewClick = (promotion: Promotion) => {
+    console.log("[Promotion] View clicked:", promotion);
+    // Find the original API promotion data
+    const apiPromo = apiPromotions.find(p => p._id === promotion._id);
+    if (apiPromo) {
+      setViewingPromotion(apiPromo);
+    } else {
+      console.error("[Promotion] Could not find API promotion data");
+      toast.error("Unable to load promotion details");
+    }
+  };
+
   const handleUpdatePromotion = async () => {
     console.log("[Promotion] handleUpdatePromotion called", { editForm, editingPromotion });
 
@@ -892,12 +946,6 @@ const Promotion = () => {
   const handleDeleteClick = (promotionId: string) => {
     console.log("[Promotion] Delete clicked:", promotionId);
     setDeletingPromotionId(promotionId);
-  };
-
-  // Handle view promotion details
-  const handleViewClick = (promotion: Promotion) => {
-    console.log("[Promotion] View clicked:", promotion);
-    setViewingPromotion(promotion);
   };
 
   const confirmDelete = async () => {

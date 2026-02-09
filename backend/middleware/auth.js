@@ -96,7 +96,8 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Extract role and companyId from user metadata (same as Socket.IO)
-    let role = user.publicMetadata?.role || 'public';
+    // Normalize role to lowercase for consistent case-insensitive comparisons
+    let role = (user.publicMetadata?.role || 'public')?.toLowerCase();
     // Check for both 'companyId' and 'company' field names in metadata
     let companyId = user.publicMetadata?.companyId || user.publicMetadata?.company || null;
     let employeeId = user.publicMetadata?.employeeId || null;
@@ -204,11 +205,14 @@ export const authenticate = async (req, res, next) => {
 /**
  * requireRole - Role-based authorization middleware
  * Checks if authenticated user has one of the required roles
+ * All role comparisons are case-insensitive
  *
  * @param {...string} roles - Allowed roles
  * @returns {Function} Express middleware function
  */
 export const requireRole = (...roles) => {
+  // Normalize all required roles to lowercase for case-insensitive comparison
+  const normalizedRoles = roles.map(r => r?.toLowerCase());
   return (req, res, next) => {
     // First ensure user is authenticated
     if (!req.user) {
@@ -222,12 +226,12 @@ export const requireRole = (...roles) => {
       });
     }
 
-    // Check if user has one of the required roles
-    if (!roles.includes(req.user.role)) {
+    // Check if user has one of the required roles (case-insensitive)
+    if (!normalizedRoles.includes(req.user.role?.toLowerCase())) {
       console.warn('[Authorization Failed]', {
         userId: req.user.userId,
         userRole: req.user.role,
-        requiredRoles: roles,
+        requiredRoles: normalizedRoles,
         requestId: req.id,
       });
 
@@ -266,8 +270,8 @@ export const requireCompany = (req, res, next) => {
     requestId: req.id,
   });
 
-  // Superadmin doesn't need company
-  if (req.user && req.user.role === 'superadmin') {
+  // Superadmin doesn't need company (case-insensitive check)
+  if (req.user && req.user.role?.toLowerCase() === 'superadmin') {
     console.log('[RequireCompany] Superadmin bypass', { requestId: req.id });
     return next();
   }

@@ -65,8 +65,9 @@ jest.mock('@clerk/express', () => ({
 }));
 
 // Mock Socket.IO broadcaster
-jest.mock('../../utils/socketBroadcaster.js', () => ({
+// Note: This module may not exist yet - the mock is here for when it's created
+jest.mock('../utils/socketBroadcaster.js', () => ({
   broadcastToCompany: jest.fn(),
   broadcastToUser: jest.fn(),
   broadcastToAll: jest.fn()
-}));
+}), { virtual: true });

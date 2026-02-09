@@ -15,6 +15,7 @@ import {
     validateLeaveDates
 } from '../../../utils/leaveDaysCalculator.js';
 import { broadcastHolidayEvents, getSocketIO } from '../../../utils/socketBroadcaster.js';
+import { devLog, devDebug, devWarn, devError } from '../../../utils/logger.js';
 
 const DATE_FORMAT_REGEX = /^\d{2}-\d{2}-\d{4}$/;
 
@@ -304,7 +305,7 @@ export const createHoliday = asyncHandler(async (req, res) => {
   });
 
   const savedHoliday = await holiday.save();
-  console.log('[Holiday Controller] Holiday created:', savedHoliday.holidayId);
+  devLog('[Holiday Controller] Holiday created:', savedHoliday.holidayId);
 
   const populatedHoliday = await Holiday.findById(savedHoliday._id)
     .populate('holidayTypeId', 'name');
@@ -417,7 +418,7 @@ export const updateHoliday = asyncHandler(async (req, res) => {
   holiday.updatedAt = new Date();
   const updatedHoliday = await holiday.save();
 
-  console.log('[Holiday Controller] Holiday updated:', updatedHoliday.holidayId);
+  devLog('[Holiday Controller] Holiday updated:', updatedHoliday.holidayId);
 
   const populatedHoliday = await Holiday.findById(updatedHoliday._id)
     .populate('holidayTypeId', 'name');
@@ -462,7 +463,7 @@ export const deleteHoliday = asyncHandler(async (req, res) => {
   holiday.updatedAt = new Date();
   const deletedHoliday = await holiday.save();
 
-  console.log('[Holiday Controller] Holiday soft deleted:', deletedHoliday.holidayId);
+  devLog('[Holiday Controller] Holiday soft deleted:', deletedHoliday.holidayId);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);

@@ -4,9 +4,9 @@
  * Real-time updates still use Socket.IO listeners
  */
 
-import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { get, post, put, del, buildParams, ApiResponse } from '../services/api';
+import { useCallback, useState } from 'react';
+import { ApiResponse, buildParams, del, get, post, put } from '../services/api';
 
 export interface Resignation {
   _id?: string;
@@ -31,6 +31,7 @@ export interface Resignation {
   rejectionReason?: string;
   processedAt?: string;
   created_at?: string;
+  notes?: string;
 }
 
 export interface ResignationStats {
@@ -39,7 +40,7 @@ export interface ResignationStats {
 }
 
 export interface ResignationFilters {
-  type?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thismonth' | 'lastmonth' | 'thisyear';
+  type?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thismonth' | 'lastmonth' | 'thisyear' | 'alltime';
   startDate?: string;
   endDate?: string;
 }

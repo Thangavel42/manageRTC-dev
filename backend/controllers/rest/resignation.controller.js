@@ -15,6 +15,7 @@ import {
   extractUser,
   getRequestId
 } from '../../utils/apiResponse.js';
+import { broadcastResignationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 import {
   getResignationStats,
   getResignations,
@@ -96,6 +97,7 @@ export const getResignationById = asyncHandler(async (req, res) => {
 export const createResignation = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const resignationData = req.body;
+  const io = getSocketIO(req);
 
   // Add creator info
   resignationData.created_by = {
@@ -112,6 +114,11 @@ export const createResignation = asyncHandler(async (req, res) => {
     throw buildConflictError(result.message);
   }
 
+  // Broadcast resignation created event
+  if (io && result.data) {
+    broadcastResignationEvents.created(io, user.companyId, result.data);
+  }
+
   return sendCreated(res, result.data || { message: 'Resignation created' }, 'Resignation created successfully');
 });
 
@@ -124,6 +131,7 @@ export const updateResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Resignation ID is required');
@@ -139,6 +147,11 @@ export const updateResignationById = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Resignation', id);
     }
     throw buildConflictError(result.message);
+  }
+
+  // Broadcast resignation updated event
+  if (io && result.data) {
+    broadcastResignationEvents.updated(io, user.companyId, result.data);
   }
 
   return sendSuccess(res, result.data || updateData, 'Resignation updated successfully');
@@ -174,6 +187,7 @@ export const deleteResignations = asyncHandler(async (req, res) => {
 export const approveResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Resignation ID is required');
@@ -188,6 +202,11 @@ export const approveResignationById = asyncHandler(async (req, res) => {
     throw buildConflictError(result.message);
   }
 
+  // Broadcast resignation approved event
+  if (io && result.data) {
+    broadcastResignationEvents.approved(io, user.companyId, result.data);
+  }
+
   return sendSuccess(res, null, 'Resignation approved successfully');
 });
 
@@ -200,6 +219,7 @@ export const rejectResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Resignation ID is required');
@@ -214,6 +234,11 @@ export const rejectResignationById = asyncHandler(async (req, res) => {
     throw buildConflictError(result.message);
   }
 
+  // Broadcast resignation rejected event
+  if (io && result.data) {
+    broadcastResignationEvents.rejected(io, user.companyId, result.data, reason);
+  }
+
   return sendSuccess(res, null, 'Resignation rejected successfully');
 });
 
@@ -225,6 +250,7 @@ export const rejectResignationById = asyncHandler(async (req, res) => {
 export const processResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+  const io = getSocketIO(req);
 
   if (!id) {
     throw buildValidationError('id', 'Resignation ID is required');
@@ -237,6 +263,11 @@ export const processResignationById = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Resignation', id);
     }
     throw buildConflictError(result.message);
+  }
+
+  // Broadcast resignation processed/withdrawn event
+  if (io && result.data) {
+    broadcastResignationEvents.withdrawn(io, user.companyId, result.data);
   }
 
   return sendSuccess(res, null, 'Resignation processed successfully');

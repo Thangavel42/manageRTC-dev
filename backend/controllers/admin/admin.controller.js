@@ -1,5 +1,6 @@
 import * as adminService from "../../services/admin/admin.services.js";
 import { ObjectId } from "mongodb";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const adminController = (socket, io) => {
   // Check if we're in development mode
@@ -15,7 +16,7 @@ const adminController = (socket, io) => {
     // SECURITY: Validate companyId format (should be alphanumeric, reasonable length)
     const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!companyIdRegex.test(socket.companyId)) {
-      console.error(
+      devError(
         `Invalid company ID format: ${socket.companyId} for user ${socket.user.sub}`
       );
       throw new Error("Invalid company ID format");
@@ -23,7 +24,7 @@ const adminController = (socket, io) => {
 
     // SECURITY: Check if user actually belongs to this company
     if (socket.userMetadata?.companyId !== socket.companyId) {
-      console.error(
+      devError(
         `Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
       );
       throw new Error("Unauthorized: Company ID mismatch");
@@ -41,7 +42,7 @@ const adminController = (socket, io) => {
       }
 
       if (!socket.checkRateLimit()) {
-        console.warn(`Rate limit exceeded for user ${socket.user.sub}`);
+        devWarn(`Rate limit exceeded for user ${socket.user.sub}`);
         const eventName = args[0] || "unknown";
         socket.emit(`${eventName}-response`, {
           done: false,
@@ -266,7 +267,7 @@ const adminController = (socket, io) => {
 
       socket.emit("admin/dashboard/get-todos-response", result);
     } catch (error) {
-      console.error(`[GET TODOS] Error:`, error);
+      devError(`[GET TODOS] Error:`, error);
       socket.emit("admin/dashboard/get-todos-response", {
         done: false,
         error: error.message,
@@ -284,7 +285,7 @@ const adminController = (socket, io) => {
 
       socket.emit("admin/dashboard/get-todo-statistics-response", result);
     } catch (error) {
-      console.error(`[GET TODO STATISTICS] Error:`, error);
+      devError(`[GET TODO STATISTICS] Error:`, error);
       socket.emit("admin/dashboard/get-todo-statistics-response", {
         done: false,
         error: error.message,
@@ -448,18 +449,18 @@ const adminController = (socket, io) => {
     const userId = socket.user.sub;
     const year = data.year || new Date().getFullYear();
 
-    console.log(`[ADMIN DASHBOARD] Getting all data for year: ${year}, companyId: ${companyId}`);
+    devLog(`[ADMIN DASHBOARD] Getting all data for year: ${year}, companyId: ${companyId}`);
 
     // Helper to wrap service calls with individual error handling
     const safeServiceCall = async (serviceName, serviceCall) => {
       try {
         const result = await serviceCall;
         const elapsed = Date.now() - startTime;
-        console.log(`[ADMIN DASHBOARD] ✓ ${serviceName} loaded in ${elapsed}ms`);
+        devLog(`[ADMIN DASHBOARD] ✓ ${serviceName} loaded in ${elapsed}ms`);
         return { success: true, data: result.data };
       } catch (error) {
         const elapsed = Date.now() - startTime;
-        console.error(`[ADMIN DASHBOARD] ✗ ${serviceName} failed after ${elapsed}ms:`, error.message);
+        devError(`[ADMIN DASHBOARD] ✗ ${serviceName} failed after ${elapsed}ms:`, error.message);
         return { success: false, error: error.message, data: null };
       }
     };
@@ -486,12 +487,12 @@ const adminController = (socket, io) => {
     ]);
 
     const totalTime = Date.now() - startTime;
-    console.log(`[ADMIN DASHBOARD] Total load time: ${totalTime}ms`);
+    devLog(`[ADMIN DASHBOARD] Total load time: ${totalTime}ms`);
 
     // Check which services failed
     const failedServices = results.filter(r => !r.success);
     if (failedServices.length > 0) {
-      console.warn(`[ADMIN DASHBOARD] ${failedServices.length} services failed:`, failedServices.map(f => f.error));
+      devWarn(`[ADMIN DASHBOARD] ${failedServices.length} services failed:`, failedServices.map(f => f.error));
     }
 
     // Build response with partial data even if some services failed
@@ -546,7 +547,7 @@ const adminController = (socket, io) => {
     "admin/dashboard/add-todo",
     withRateLimit(async (todoData) => {
       try {
-        console.log("Add todo request received:", {
+        devLog("Add todo request received:", {
           todoData,
           socketId: socket.id,
         });
@@ -555,7 +556,7 @@ const adminController = (socket, io) => {
 
         // SECURITY: Input validation
         if (!todoData || typeof todoData !== "object") {
-          console.error("Invalid todo data:", todoData);
+          devError("Invalid todo data:", todoData);
           throw new Error("Invalid todo data");
         }
 
@@ -573,7 +574,7 @@ const adminController = (socket, io) => {
           tag: todoData.tag ? todoData.tag.trim().substring(0, 50) : "",
           priority: (() => {
             const priority = todoData.priority?.toLowerCase();
-            console.log("Priority validation:", {
+            devLog("Priority validation:", {
               original: todoData.priority,
               lowercase: priority,
             });
@@ -582,7 +583,7 @@ const adminController = (socket, io) => {
               ? todoData.priority.charAt(0).toUpperCase() +
                 todoData.priority.slice(1).toLowerCase()
               : "Medium";
-            console.log("Priority result:", result);
+            devLog("Priority result:", result);
             return result;
           })(),
           dueDate:
@@ -594,7 +595,7 @@ const adminController = (socket, io) => {
             : null,
         };
 
-        console.log("Calling adminService.addTodo with:", {
+        devLog("Calling adminService.addTodo with:", {
           companyId,
           userId,
           sanitizedTodoData,
@@ -604,7 +605,7 @@ const adminController = (socket, io) => {
           userId,
           sanitizedTodoData
         );
-        console.log("Add todo service result:", result);
+        devLog("Add todo service result:", result);
 
         socket.emit("admin/dashboard/add-todo-response", result);
 
@@ -619,7 +620,7 @@ const adminController = (socket, io) => {
           updatedTodos
         );
       } catch (error) {
-        console.error("Error adding todo:", error);
+        devError("Error adding todo:", error);
         socket.emit("admin/dashboard/add-todo-response", {
           done: false,
           error: "Failed to add todo. Please try again.",
@@ -711,7 +712,7 @@ const adminController = (socket, io) => {
           updatedTodos
         );
       } catch (error) {
-        console.error("Error updating todo:", error);
+        devError("Error updating todo:", error);
         socket.emit("admin/dashboard/update-todo-response", {
           done: false,
           error: "Failed to update todo. Please try again.",
@@ -751,7 +752,7 @@ const adminController = (socket, io) => {
         updatedTodos
       );
     } catch (error) {
-      console.error("Error deleting todo:", error);
+      devError("Error deleting todo:", error);
       socket.emit("admin/dashboard/delete-todo-response", {
         done: false,
         error: "Failed to delete todo. Please try again.",
@@ -764,10 +765,10 @@ const adminController = (socket, io) => {
     "admin/dashboard/delete-todo-permanently",
     withRateLimit(async (todoId) => {
       try {
-        console.log(`[DELETE TODO] Attempting to delete todo: ${todoId}`);
+        devLog(`[DELETE TODO] Attempting to delete todo: ${todoId}`);
         const companyId = validateCompanyAccess(socket);
         const userId = socket.user.sub;
-        console.log(`[DELETE TODO] CompanyId: ${companyId}, UserId: ${userId}`);
+        devLog(`[DELETE TODO] CompanyId: ${companyId}, UserId: ${userId}`);
 
         // SECURITY: Input validation
         if (!todoId || typeof todoId !== "string") {
@@ -792,7 +793,7 @@ const adminController = (socket, io) => {
           userId,
           "all"
         );
-        console.log(
+        devLog(
           `[DELETE TODO] Broadcasting ${
             updatedTodos.data?.length || 0
           } todos to admin room`
@@ -802,7 +803,7 @@ const adminController = (socket, io) => {
           updatedTodos
         );
       } catch (error) {
-        console.error(`[DELETE TODO] Error deleting todo:`, error);
+        devError(`[DELETE TODO] Error deleting todo:`, error);
         socket.emit("admin/dashboard/delete-todo-permanently-response", {
           done: false,
           error: "Failed to delete todo. Please try again.",
@@ -1073,7 +1074,7 @@ const adminController = (socket, io) => {
       const invoices = await Invoice.find({});
       io.emit("admin/invoices/list-update", { done: true, data: invoices });
     } catch (err) {
-      console.error("Error creating invoice:", err);
+      devError("Error creating invoice:", err);
       callback({ done: false, error: "Failed to create invoice" });
     }
   });

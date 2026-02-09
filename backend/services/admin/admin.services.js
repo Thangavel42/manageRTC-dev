@@ -759,12 +759,21 @@ export const getRecentInvoices = async (
       invoiceMatchFilter.createdAt = yearFilter;
     }
 
-    // Add invoice type filter
+    // Add invoice type filter - Support all invoice status types
+    // FIX: Added support for "pending" and "overdue" in addition to "paid" and "unpaid"
     if (invoiceType && invoiceType !== "all") {
-      if (invoiceType === "paid") {
-        invoiceMatchFilter.status = { $regex: /^paid$/i };
-      } else if (invoiceType === "unpaid") {
-        invoiceMatchFilter.status = { $regex: /^unpaid$/i };
+      const invoiceStatusMap = {
+        paid: /^paid$/i,
+        unpaid: /^unpaid$/i,
+        pending: /^pending$/i,
+        overdue: /^overdue$/i,
+      };
+
+      const statusPattern = invoiceStatusMap[invoiceType];
+      if (statusPattern) {
+        invoiceMatchFilter.status = { $regex: statusPattern };
+      } else {
+        console.warn(`Unknown invoice type filter: ${invoiceType}. Defaulting to all invoices.`);
       }
     }
 

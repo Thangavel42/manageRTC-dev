@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { SocialFeedService } from "../../services/socialfeed/socialFeed.services.js";
 import { clerkClient, verifyToken } from "@clerk/express";
 import dotenv from "dotenv";
@@ -55,7 +56,7 @@ export const authenticateUser = async (req, res, next) => {
     let userMetadata = { ...user.publicMetadata };
     if (isDevelopment && !userMetadata.companyId) {
       userMetadata.companyId = "dev_company_123";
-      console.log(
+      devLog(
         `[Development] Setting default companyId for user ${user.id}`
       );
     }
@@ -67,7 +68,7 @@ export const authenticateUser = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Authentication error:", error);
+    devError("Authentication error:", error);
     return res.status(401).json({
       done: false,
       error: "Authentication failed",
@@ -100,7 +101,7 @@ export const socialFeedController = {
         pagination: result.pagination,
       });
     } catch (error) {
-      console.error("Error fetching social feed posts:", error);
+      devError("Error fetching social feed posts:", error);
       res.status(500).json({
         done: false,
         error: error.message || "Failed to fetch social feed posts",
@@ -141,7 +142,7 @@ export const socialFeedController = {
         pagination: result.pagination,
       });
     } catch (error) {
-      console.error("Error fetching user posts:", error);
+      devError("Error fetching user posts:", error);
       res.status(500).json({
         done: false,
         error: error.message || "Failed to fetch user posts",
@@ -177,7 +178,7 @@ export const socialFeedController = {
         201
       );
     } catch (error) {
-      console.error("Error creating post:", error);
+      devError("Error creating post:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -219,7 +220,7 @@ export const socialFeedController = {
         "Post updated successfully"
       );
     } catch (error) {
-      console.error("Error updating post:", error);
+      devError("Error updating post:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -242,7 +243,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
-      console.error("Error deleting post:", error);
+      devError("Error deleting post:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -269,7 +270,7 @@ export const socialFeedController = {
         "Like updated successfully"
       );
     } catch (error) {
-      console.error("Error toggling like:", error);
+      devError("Error toggling like:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -302,7 +303,7 @@ export const socialFeedController = {
         "Comment added successfully"
       );
     } catch (error) {
-      console.error("Error adding comment:", error);
+      devError("Error adding comment:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -331,7 +332,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
-      console.error("Error deleting comment:", error);
+      devError("Error deleting comment:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -354,7 +355,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
-      console.error("Error toggling bookmark:", error);
+      devError("Error toggling bookmark:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -380,7 +381,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, hashtags);
     } catch (error) {
-      console.error("Error fetching trending hashtags:", error);
+      devError("Error fetching trending hashtags:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -407,7 +408,7 @@ export const socialFeedController = {
         pagination: result.pagination,
       });
     } catch (error) {
-      console.error("Error fetching bookmarked posts:", error);
+      devError("Error fetching bookmarked posts:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -434,7 +435,7 @@ export const socialFeedController = {
         "Post save status updated successfully"
       );
     } catch (error) {
-      console.error("Error toggling save post:", error);
+      devError("Error toggling save post:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -465,7 +466,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching saved posts:", error);
+      devError("Error fetching saved posts:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -483,7 +484,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, trendingHashtags);
     } catch (error) {
-      console.error("Error fetching trending hashtags:", error);
+      devError("Error fetching trending hashtags:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -502,7 +503,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, suggestedUsers);
     } catch (error) {
-      console.error("Error fetching suggested users:", error);
+      devError("Error fetching suggested users:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -521,7 +522,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, result);
     } catch (error) {
-      console.error("Error following user:", error);
+      devError("Error following user:", error);
       return createHttpErrorResponse(
         res,
         400,
@@ -540,7 +541,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, result);
     } catch (error) {
-      console.error("Error unfollowing user:", error);
+      devError("Error unfollowing user:", error);
       return createHttpErrorResponse(
         res,
         400,
@@ -570,7 +571,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching followers:", error);
+      devError("Error fetching followers:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -600,7 +601,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching following:", error);
+      devError("Error fetching following:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -629,7 +630,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching all feeds:", error);
+      devError("Error fetching all feeds:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -659,7 +660,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching user feeds:", error);
+      devError("Error fetching user feeds:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -688,7 +689,7 @@ export const socialFeedController = {
         },
       });
     } catch (error) {
-      console.error("Error fetching files:", error);
+      devError("Error fetching files:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -720,7 +721,7 @@ export const socialFeedController = {
         query: req.query.query.trim(),
       });
     } catch (error) {
-      console.error("Error searching posts:", error);
+      devError("Error searching posts:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -759,7 +760,7 @@ export const socialFeedController = {
         "Reply added successfully"
       );
     } catch (error) {
-      console.error("Error adding reply:", error);
+      devError("Error adding reply:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -798,7 +799,7 @@ export const socialFeedController = {
         "Reply like toggled successfully"
       );
     } catch (error) {
-      console.error("Error toggling reply like:", error);
+      devError("Error toggling reply like:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -837,7 +838,7 @@ export const socialFeedController = {
         pagination: result.pagination,
       });
     } catch (error) {
-      console.error("Error getting comment replies:", error);
+      devError("Error getting comment replies:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -856,7 +857,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, userProfile);
     } catch (error) {
-      console.error("Error getting user profile:", error);
+      devError("Error getting user profile:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -872,7 +873,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, { totalPosts });
     } catch (error) {
-      console.error("Error getting total posts count:", error);
+      devError("Error getting total posts count:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -888,7 +889,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, { totalBookmarks });
     } catch (error) {
-      console.error("Error getting total bookmarks count:", error);
+      devError("Error getting total bookmarks count:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -906,7 +907,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, employees);
     } catch (error) {
-      console.error("Error getting company employees:", error);
+      devError("Error getting company employees:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -925,7 +926,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, topPosters);
     } catch (error) {
-      console.error("Error getting top posters:", error);
+      devError("Error getting top posters:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -949,7 +950,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, updatedPost);
     } catch (error) {
-      console.error("Error editing post:", error);
+      devError("Error editing post:", error);
       return createHttpErrorResponse(
         res,
         500,
@@ -970,7 +971,7 @@ export const socialFeedController = {
       );
       return createHttpSuccessResponse(res, trendingHashtags);
     } catch (error) {
-      console.error("Error getting trending hashtags:", error);
+      devError("Error getting trending hashtags:", error);
       return createHttpErrorResponse(
         res,
         500,

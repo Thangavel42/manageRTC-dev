@@ -663,6 +663,22 @@ export const broadcastOvertimeEvents = {
   },
 
   /**
+   * Broadcast overtime request updated event
+   */
+  updated: (io, companyId, overtimeRequest, updatedBy) => {
+    broadcastToCompany(io, companyId, 'overtime:updated', {
+      overtimeId: overtimeRequest.overtimeId,
+      _id: overtimeRequest._id,
+      employee: overtimeRequest.employee,
+      employeeName: overtimeRequest.employeeName,
+      date: overtimeRequest.date,
+      requestedHours: overtimeRequest.requestedHours,
+      status: overtimeRequest.status,
+      updatedBy,
+    });
+  },
+
+  /**
    * Broadcast overtime request approved event
    */
   approved: (io, companyId, overtimeRequest, approvedBy) => {
@@ -1408,6 +1424,99 @@ export const broadcastDesignationEvents = {
 };
 
 /**
+ * Timesheet event broadcasters
+ */
+export const broadcastTimesheetEvents = {
+  /**
+   * Broadcast timesheet created event
+   */
+  created: (io, companyId, timesheet) => {
+    broadcastToCompany(io, companyId, 'timesheet:created', {
+      timesheetId: timesheet.timesheetId,
+      _id: timesheet._id,
+      employeeId: timesheet.employeeId,
+      weekStartDate: timesheet.weekStartDate,
+      weekEndDate: timesheet.weekEndDate,
+      totalHours: timesheet.totalHours,
+      status: timesheet.status,
+      createdBy: timesheet.createdBy,
+    });
+  },
+
+  /**
+   * Broadcast timesheet updated event
+   */
+  updated: (io, companyId, timesheet) => {
+    broadcastToCompany(io, companyId, 'timesheet:updated', {
+      timesheetId: timesheet.timesheetId,
+      _id: timesheet._id,
+      employeeId: timesheet.employeeId,
+      weekStartDate: timesheet.weekStartDate,
+      totalHours: timesheet.totalHours,
+      status: timesheet.status,
+      updatedBy: timesheet.updatedBy,
+    });
+  },
+
+  /**
+   * Broadcast timesheet submitted event
+   */
+  submitted: (io, companyId, timesheet) => {
+    // Notify admins/managers about pending approval
+    io.to(`company_${companyId}`).emit('timesheet:submitted', {
+      timesheetId: timesheet.timesheetId,
+      _id: timesheet._id,
+      employeeId: timesheet.employeeId,
+      weekStartDate: timesheet.weekStartDate,
+      totalHours: timesheet.totalHours,
+      submittedBy: timesheet.submittedBy,
+      submittedAt: timesheet.submittedAt,
+    });
+  },
+
+  /**
+   * Broadcast timesheet approved event
+   */
+  approved: (io, companyId, timesheet) => {
+    // Notify employee about approval
+    broadcastToUser(io, timesheet.employeeId, 'timesheet:approved', {
+      timesheetId: timesheet.timesheetId,
+      _id: timesheet._id,
+      weekStartDate: timesheet.weekStartDate,
+      totalHours: timesheet.totalHours,
+      approvedBy: timesheet.approvedBy,
+      approvedAt: timesheet.approvedAt,
+      comments: timesheet.approvalComments,
+    });
+  },
+
+  /**
+   * Broadcast timesheet rejected event
+   */
+  rejected: (io, companyId, timesheet) => {
+    // Notify employee about rejection
+    broadcastToUser(io, timesheet.employeeId, 'timesheet:rejected', {
+      timesheetId: timesheet.timesheetId,
+      _id: timesheet._id,
+      weekStartDate: timesheet.weekStartDate,
+      rejectedBy: timesheet.rejectedBy,
+      rejectedAt: timesheet.rejectedAt,
+      reason: timesheet.rejectionReason,
+    });
+  },
+
+  /**
+   * Broadcast timesheet deleted event
+   */
+  deleted: (io, companyId, timesheetId) => {
+    broadcastToCompany(io, companyId, 'timesheet:deleted', {
+      timesheetId,
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
+
+/**
  * Holiday event broadcasters
  */
 export const broadcastHolidayEvents = {
@@ -1444,6 +1553,223 @@ export const broadcastHolidayEvents = {
     broadcastToCompany(io, companyId, 'holiday:deleted', {
       holidayId: holiday.holidayId,
       name: holiday.name,
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
+
+/**
+ * Promotion event broadcasters
+ */
+export const broadcastPromotionEvents = {
+  /**
+   * Broadcast promotion created event
+   */
+  created: (io, companyId, promotion) => {
+    broadcastToCompany(io, companyId, 'promotion:created', {
+      promotionId: promotion._id,
+      employeeId: promotion.employeeId,
+      promotionTo: promotion.promotionTo,
+      promotionDate: promotion.promotionDate,
+      status: promotion.status,
+      createdBy: promotion.createdBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast promotion updated event
+   */
+  updated: (io, companyId, promotion) => {
+    broadcastToCompany(io, companyId, 'promotion:updated', {
+      promotionId: promotion._id,
+      employeeId: promotion.employeeId,
+      promotionTo: promotion.promotionTo,
+      status: promotion.status,
+      updatedBy: promotion.updatedBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast promotion applied event
+   */
+  applied: (io, companyId, promotion, employee) => {
+    // Notify company
+    broadcastToCompany(io, companyId, 'promotion:applied', {
+      promotionId: promotion._id,
+      employeeId: promotion.employeeId,
+      employeeName: employee?.fullName || employee?.name,
+      promotionFrom: promotion.promotionFrom,
+      promotionTo: promotion.promotionTo,
+      promotionDate: promotion.promotionDate,
+      appliedAt: promotion.appliedAt,
+      salaryChange: promotion.salaryChange,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Notify the employee
+    if (employee?.clerkUserId) {
+      broadcastToUser(io, employee.clerkUserId, 'promotion:your_promotion_applied', {
+        promotionId: promotion._id,
+        newDepartment: promotion.promotionTo.departmentId,
+        newDesignation: promotion.promotionTo.designationId,
+        salaryChange: promotion.salaryChange,
+        promotionDate: promotion.promotionDate,
+      });
+    }
+  },
+
+  /**
+   * Broadcast promotion cancelled event
+   */
+  cancelled: (io, companyId, promotion) => {
+    broadcastToCompany(io, companyId, 'promotion:cancelled', {
+      promotionId: promotion._id,
+      employeeId: promotion.employeeId,
+      status: promotion.status,
+      cancellationReason: promotion.cancellationReason,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast promotion deleted event
+   */
+  deleted: (io, companyId, promotionId, deletedBy) => {
+    broadcastToCompany(io, companyId, 'promotion:deleted', {
+      promotionId,
+      deletedBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
+
+/**
+ * Resignation event broadcasters
+ */
+export const broadcastResignationEvents = {
+  /**
+   * Broadcast resignation created event
+   */
+  created: (io, companyId, resignation) => {
+    broadcastToCompany(io, companyId, 'resignation:created', {
+      resignationId: resignation._id,
+      employeeId: resignation.employeeId,
+      noticeDate: resignation.noticeDate,
+      lastWorkingDate: resignation.lastWorkingDate,
+      status: resignation.status,
+      createdBy: resignation.createdBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast resignation updated event
+   */
+  updated: (io, companyId, resignation) => {
+    broadcastToCompany(io, companyId, 'resignation:updated', {
+      resignationId: resignation._id,
+      employeeId: resignation.employeeId,
+      status: resignation.status,
+      updatedBy: resignation.updatedBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast resignation approved event
+   */
+  approved: (io, companyId, resignation, employee) => {
+    broadcastToCompany(io, companyId, 'resignation:approved', {
+      resignationId: resignation._id,
+      employeeId: resignation.employeeId,
+      employeeName: employee?.fullName || employee?.name,
+      lastWorkingDate: resignation.lastWorkingDate,
+      approvedAt: resignation.approvedAt,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast resignation rejected event
+   */
+  rejected: (io, companyId, resignation, reason) => {
+    broadcastToCompany(io, companyId, 'resignation:rejected', {
+      resignationId: resignation._id,
+      employeeId: resignation.employeeId,
+      status: resignation.status,
+      reason,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast resignation withdrawn event
+   */
+  withdrawn: (io, companyId, resignation) => {
+    broadcastToCompany(io, companyId, 'resignation:withdrawn', {
+      resignationId: resignation._id,
+      employeeId: resignation.employeeId,
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
+
+/**
+ * Termination event broadcasters
+ */
+export const broadcastTerminationEvents = {
+  /**
+   * Broadcast termination created event
+   */
+  created: (io, companyId, termination) => {
+    broadcastToCompany(io, companyId, 'termination:created', {
+      terminationId: termination._id,
+      employeeId: termination.employeeId,
+      terminationDate: termination.terminationDate,
+      terminationType: termination.terminationType,
+      status: termination.status,
+      createdBy: termination.createdBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast termination updated event
+   */
+  updated: (io, companyId, termination) => {
+    broadcastToCompany(io, companyId, 'termination:updated', {
+      terminationId: termination._id,
+      employeeId: termination.employeeId,
+      status: termination.status,
+      updatedBy: termination.updatedBy,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast termination processed event
+   */
+  processed: (io, companyId, termination, employee) => {
+    broadcastToCompany(io, companyId, 'termination:processed', {
+      terminationId: termination._id,
+      employeeId: termination.employeeId,
+      employeeName: employee?.fullName || employee?.name,
+      terminationDate: termination.terminationDate,
+      terminationType: termination.terminationType,
+      processedAt: termination.processedAt,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  /**
+   * Broadcast termination deleted event
+   */
+  deleted: (io, companyId, terminationId, deletedBy) => {
+    broadcastToCompany(io, companyId, 'termination:deleted', {
+      terminationId,
+      deletedBy,
       timestamp: new Date().toISOString(),
     });
   },
@@ -1584,5 +1910,9 @@ export default {
   broadcastPipelineEvents,
   broadcastDashboardEvents,
   broadcastDesignationEvents,
+  broadcastTimesheetEvents,
+  broadcastPromotionEvents,
+  broadcastResignationEvents,
+  broadcastTerminationEvents,
   getSocketIO,
 };

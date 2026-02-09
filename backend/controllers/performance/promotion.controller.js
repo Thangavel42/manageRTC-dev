@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import * as promotionService from '../../services/performance/promotion.services.js';
 
 const toErr = (e) => ({ done: false, error: e?.message || String(e) });
@@ -14,7 +15,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:create', async (data) => {
     try {
-      console.log('[PromotionController] promotion:create received', { socketId: socket.id, data });
+      devLog('[PromotionController] promotion:create received', { socketId: socket.id, data });
 
       const result = await promotionService.createPromotion(companyId, data);
 
@@ -25,7 +26,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:create:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:create', { error: error.message });
+      devError('[PromotionController] Error in promotion:create', { error: error.message });
       socket.emit('promotion:create:response', toErr(error));
     }
   });
@@ -36,7 +37,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getAll', async (filters = {}) => {
     try {
-      console.log('[PromotionController] promotion:getAll received', {
+      devLog('[PromotionController] promotion:getAll received', {
         socketId: socket.id,
         filters,
       });
@@ -45,7 +46,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:getAll:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getAll', { error: error.message });
+      devError('[PromotionController] Error in promotion:getAll', { error: error.message });
       socket.emit('promotion:getAll:response', toErr(error));
     }
   });
@@ -56,7 +57,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getById', async (promotionId) => {
     try {
-      console.log('[PromotionController] promotion:getById received', {
+      devLog('[PromotionController] promotion:getById received', {
         socketId: socket.id,
         promotionId,
       });
@@ -65,7 +66,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:getById:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getById', { error: error.message });
+      devError('[PromotionController] Error in promotion:getById', { error: error.message });
       socket.emit('promotion:getById:response', toErr(error));
     }
   });
@@ -76,7 +77,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:update', async ({ promotionId, update }) => {
     try {
-      console.log('[PromotionController] promotion:update received', {
+      devLog('[PromotionController] promotion:update received', {
         socketId: socket.id,
         promotionId,
         update,
@@ -91,7 +92,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:update:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:update', { error: error.message });
+      devError('[PromotionController] Error in promotion:update', { error: error.message });
       socket.emit('promotion:update:response', toErr(error));
     }
   });
@@ -102,7 +103,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:delete', async ({ promotionId }) => {
     try {
-      console.log('[PromotionController] promotion:delete received', {
+      devLog('[PromotionController] promotion:delete received', {
         socketId: socket.id,
         promotionId,
       });
@@ -116,7 +117,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:delete:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:delete', { error: error.message });
+      devError('[PromotionController] Error in promotion:delete', { error: error.message });
       socket.emit('promotion:delete:response', toErr(error));
     }
   });
@@ -127,7 +128,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getDepartments', async () => {
     try {
-      console.log('[PromotionController] promotion:getDepartments received', {
+      devLog('[PromotionController] promotion:getDepartments received', {
         socketId: socket.id,
       });
 
@@ -135,7 +136,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:getDepartments:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getDepartments', {
+      devError('[PromotionController] Error in promotion:getDepartments', {
         error: error.message,
       });
       socket.emit('promotion:getDepartments:response', toErr(error));
@@ -148,7 +149,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getEmployeesByDepartment', async (departmentId) => {
     try {
-      console.log(
+      devLog(
         '[PromotionController] promotion:getEmployeesByDepartment received with departmentId:',
         departmentId,
         'type:',
@@ -157,14 +158,14 @@ const promotionController = (socket, io) => {
 
       const result = await promotionService.getEmployeesByDepartment(companyId, departmentId);
 
-      console.log(
+      devLog(
         '[PromotionController] Sending promotion:getEmployeesByDepartment:response:',
         result.data?.length,
         'records'
       );
       socket.emit('promotion:getEmployeesByDepartment:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getEmployeesByDepartment', {
+      devError('[PromotionController] Error in promotion:getEmployeesByDepartment', {
         error: error.message,
       });
       socket.emit('promotion:getEmployeesByDepartment:response', toErr(error));
@@ -177,13 +178,13 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getEmployees', async () => {
     try {
-      console.log('[PromotionController] promotion:getEmployees received', { socketId: socket.id });
+      devLog('[PromotionController] promotion:getEmployees received', { socketId: socket.id });
 
       const result = await promotionService.getEmployeesForPromotion(companyId);
 
       socket.emit('promotion:getEmployees:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getEmployees', {
+      devError('[PromotionController] Error in promotion:getEmployees', {
         error: error.message,
       });
       socket.emit('promotion:getEmployees:response', toErr(error));
@@ -196,7 +197,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getDesignations', async () => {
     try {
-      console.log('[PromotionController] promotion:getDesignations received', {
+      devLog('[PromotionController] promotion:getDesignations received', {
         socketId: socket.id,
       });
 
@@ -204,7 +205,7 @@ const promotionController = (socket, io) => {
 
       socket.emit('promotion:getDesignations:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getDesignations', {
+      devError('[PromotionController] Error in promotion:getDesignations', {
         error: error.message,
       });
       socket.emit('promotion:getDesignations:response', toErr(error));
@@ -217,7 +218,7 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getDesignationsByDepartment', async (departmentId) => {
     try {
-      console.log(
+      devLog(
         '[PromotionController] promotion:getDesignationsByDepartment received with departmentId:',
         departmentId,
         'type:',
@@ -226,14 +227,14 @@ const promotionController = (socket, io) => {
 
       const result = await promotionService.getDesignationsByDepartment(companyId, departmentId);
 
-      console.log(
+      devLog(
         '[PromotionController] Sending promotion:getDesignationsByDepartment:response:',
         result.data?.length,
         'records'
       );
       socket.emit('promotion:getDesignationsByDepartment:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getDesignationsByDepartment', {
+      devError('[PromotionController] Error in promotion:getDesignationsByDepartment', {
         error: error.message,
       });
       socket.emit('promotion:getDesignationsByDepartment:response', toErr(error));
@@ -246,17 +247,17 @@ const promotionController = (socket, io) => {
    */
   socket.on('promotion:getEmployeeDetails', async ({ employeeId }) => {
     try {
-      console.log(
+      devLog(
         '[PromotionController] promotion:getEmployeeDetails received with employeeId:',
         employeeId
       );
 
       const result = await promotionService.getEmployeeDetails(companyId, employeeId);
 
-      console.log('[PromotionController] Sending promotion:getEmployeeDetails:response');
+      devLog('[PromotionController] Sending promotion:getEmployeeDetails:response');
       socket.emit('promotion:getEmployeeDetails:response', result);
     } catch (error) {
-      console.error('[PromotionController] Error in promotion:getEmployeeDetails', {
+      devError('[PromotionController] Error in promotion:getEmployeeDetails', {
         error: error.message,
       });
       socket.emit('promotion:getEmployeeDetails:response', toErr(error));

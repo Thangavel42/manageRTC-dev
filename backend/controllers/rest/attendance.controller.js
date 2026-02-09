@@ -26,6 +26,7 @@ import {
   convertToExcel,
   convertToPDF
 } from '../../utils/attendanceReportGenerator.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * Helper: Get employee by clerk user ID
@@ -46,7 +47,7 @@ export const getAttendances = asyncHandler(async (req, res) => {
   const { page, limit, search, status, employee, startDate, endDate, sortBy, order } = req.query;
   const user = extractUser(req);
 
-  console.log('[Attendance Controller] getAttendances - companyId:', user.companyId);
+  devLog('[Attendance Controller] getAttendances - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -125,7 +126,7 @@ export const getAttendanceById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid attendance ID format');
   }
 
-  console.log('[Attendance Controller] getAttendanceById - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] getAttendanceById - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -151,7 +152,7 @@ export const createAttendance = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const attendanceData = req.body;
 
-  console.log('[Attendance Controller] createAttendance - companyId:', user.companyId);
+  devLog('[Attendance Controller] createAttendance - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -243,7 +244,7 @@ export const updateAttendance = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid attendance ID format');
   }
 
-  console.log('[Attendance Controller] updateAttendance - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] updateAttendance - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -334,7 +335,7 @@ export const deleteAttendance = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid attendance ID format');
   }
 
-  console.log('[Attendance Controller] deleteAttendance - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] deleteAttendance - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -386,7 +387,7 @@ export const getMyAttendance = asyncHandler(async (req, res) => {
   const { page, limit, startDate, endDate, status } = req.query;
   const user = extractUser(req);
 
-  console.log('[Attendance Controller] getMyAttendance - companyId:', user.companyId);
+  devLog('[Attendance Controller] getMyAttendance - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -442,7 +443,7 @@ export const getAttendanceByDateRange = asyncHandler(async (req, res) => {
     throw buildValidationError('startDate/endDate', 'Both startDate and endDate are required');
   }
 
-  console.log('[Attendance Controller] getAttendanceByDateRange - companyId:', user.companyId);
+  devLog('[Attendance Controller] getAttendanceByDateRange - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -489,7 +490,7 @@ export const getAttendanceByEmployee = asyncHandler(async (req, res) => {
     throw buildValidationError('employeeId', 'Employee ID is required and must be a string');
   }
 
-  console.log('[Attendance Controller] getAttendanceByEmployee - employeeId:', employeeId, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] getAttendanceByEmployee - employeeId:', employeeId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -538,7 +539,7 @@ export const getAttendanceStats = asyncHandler(async (req, res) => {
   const { startDate, endDate, employee } = req.query;
   const user = extractUser(req);
 
-  console.log('[Attendance Controller] getAttendanceStats - companyId:', user.companyId);
+  devLog('[Attendance Controller] getAttendanceStats - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -597,7 +598,7 @@ export const bulkAttendanceAction = asyncHandler(async (req, res) => {
   const { action, attendanceIds, data } = req.body;
   const user = extractUser(req);
 
-  console.log('[Attendance Controller] bulkAttendanceAction - companyId:', user.companyId);
+  devLog('[Attendance Controller] bulkAttendanceAction - companyId:', user.companyId);
 
   if (!action || !attendanceIds || !Array.isArray(attendanceIds)) {
     throw buildValidationError('action/attendanceIds', 'Action and attendanceIds array are required');
@@ -746,7 +747,7 @@ export const requestRegularization = asyncHandler(async (req, res) => {
     throw buildValidationError('reason', 'Reason is required for regularization request');
   }
 
-  console.log('[Attendance Controller] requestRegularization - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] requestRegularization - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -763,7 +764,8 @@ export const requestRegularization = asyncHandler(async (req, res) => {
   // Get Employee record
   const employee = await getEmployeeByClerkId(collections, user.userId);
   if (!employee || employee.employeeId !== attendance.employeeId) {
-    const isAdmin = user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin';
+    const userRole = user.role?.toLowerCase();
+    const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
     if (!isAdmin) {
       throw buildConflictError('You can only request regularization for your own attendance');
     }
@@ -819,7 +821,7 @@ export const approveRegularization = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid attendance ID format');
   }
 
-  console.log('[Attendance Controller] approveRegularization - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] approveRegularization - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -887,7 +889,7 @@ export const rejectRegularization = asyncHandler(async (req, res) => {
     throw buildValidationError('reason', 'Rejection reason is required');
   }
 
-  console.log('[Attendance Controller] rejectRegularization - id:', id, 'companyId:', user.companyId);
+  devLog('[Attendance Controller] rejectRegularization - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -945,7 +947,7 @@ export const getPendingRegularizations = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
   const user = extractUser(req);
 
-  console.log('[Attendance Controller] getPendingRegularizations - companyId:', user.companyId);
+  devLog('[Attendance Controller] getPendingRegularizations - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -988,7 +990,7 @@ export const generateReport = asyncHandler(async (req, res) => {
     throw buildValidationError('startDate/endDate', 'Start date and end date are required');
   }
 
-  console.log('[Attendance Controller] generateReport - companyId:', user.companyId);
+  devLog('[Attendance Controller] generateReport - companyId:', user.companyId);
 
   // Generate report data
   const reportData = await generateAttendanceReport(user.companyId, {
@@ -1039,7 +1041,7 @@ export const generateEmployeeReport = asyncHandler(async (req, res) => {
     throw buildValidationError('startDate/endDate', 'Start date and end date are required');
   }
 
-  console.log('[Attendance Controller] generateEmployeeReport - companyId:', user.companyId);
+  devLog('[Attendance Controller] generateEmployeeReport - companyId:', user.companyId);
 
   // Generate employee report data
   const reportData = await generateEmployeeAttendanceReport(
@@ -1083,7 +1085,7 @@ export const exportAttendance = asyncHandler(async (req, res) => {
   const start = startDate ? new Date(startDate) : new Date(new Date().setDate(1));
   const end = endDate ? new Date(endDate) : new Date();
 
-  console.log('[Attendance Controller] exportAttendance - companyId:', user.companyId);
+  devLog('[Attendance Controller] exportAttendance - companyId:', user.companyId);
 
   // Generate report data
   const reportData = await generateAttendanceReport(user.companyId, {

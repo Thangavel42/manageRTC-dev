@@ -1,4 +1,5 @@
  import * as resignationService from "../../services/hr/resignation.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
@@ -43,15 +44,15 @@ const resignationController = (socket, io) => {
 
   socket.on("hr/resignation/employees-by-department", async (departmentId) => {
     try {
-      console.log("Controller received employees-by-department with departmentId:", departmentId, "type:", typeof departmentId);
+      devLog("Controller received employees-by-department with departmentId:", departmentId, "type:", typeof departmentId);
       const res = await resignationService.getEmployeesByDepartment(
         companyId,
         departmentId
       );
-      console.log("Controller sending employees-by-department-response:", res.data?.length, "records");
+      devLog("Controller sending employees-by-department-response:", res.data?.length, "records");
       socket.emit("hr/resignation/employees-by-department-response", res);
     } catch (error) {
-      console.error("Error in employees-by-department:", error);
+      devError("Error in employees-by-department:", error);
       socket.emit("hr/resignation/employees-by-department-response", toErr(error));
     }
   });
@@ -78,7 +79,7 @@ const resignationController = (socket, io) => {
       );
       socket.emit("hr/resignation/add-resignation-response", res);
       if (res.done) {
-        console.log("Added");
+        devLog("Added");
         const updatedList = await resignationService.getResignations(
           companyId,
           {}

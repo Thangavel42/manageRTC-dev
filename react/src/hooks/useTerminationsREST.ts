@@ -38,7 +38,7 @@ export interface TerminationStats {
 }
 
 export interface TerminationFilters {
-  type?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thismonth' | 'lastmonth' | 'thisyear';
+  type?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thismonth' | 'lastmonth' | 'thisyear' | 'alltime';
   startDate?: string;
   endDate?: string;
 }

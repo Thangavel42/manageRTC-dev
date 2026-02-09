@@ -1,50 +1,16 @@
 import React from "react";
 import dayjs from "dayjs";
 import ImageWithBasePath from "../common/imageWithBasePath";
-
-interface Promotion {
-  _id: string;
-  employee: {
-    id: string;
-    name: string;
-    image?: string;
-  };
-  promotionFrom: {
-    department: {
-      id: string;
-      name: string;
-    };
-    designation: {
-      id: string;
-      name: string;
-    };
-  };
-  promotionTo: {
-    department: {
-      id: string;
-      name: string;
-    };
-    designation: {
-      id: string;
-      name: string;
-    };
-  };
-  promotionDate: string | Date;
-  promotionType?: string;
-  status?: string;
-  appliedAt?: string | Date | null;
-  reason?: string;
-  notes?: string;
-}
+import type { Promotion } from "../../hooks/usePromotionsREST";
 
 interface PromotionDetailsModalProps {
   promotion: Promotion | null;
   modalId?: string;
 }
 
-const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({ 
-  promotion, 
-  modalId = "view_promotion_details" 
+const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
+  promotion,
+  modalId = "view_promotion_details"
 }) => {
   // Always render modal structure, just show empty/loading state when no data
   if (!promotion) {
@@ -104,22 +70,13 @@ const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
               <div className="col-md-12 mb-4">
                 <div className="d-flex align-items-center">
                   <div className="avatar avatar-lg me-3">
-                    {promotion.employee.image && promotion.employee.image.trim() !== '' ? (
-                      <ImageWithBasePath
-                        src={promotion.employee.image}
-                        className="rounded-circle img-fluid"
-                        alt={promotion.employee.name}
-                        isLink={true}
-                      />
-                    ) : (
-                      <div className="avatar-title bg-primary-transparent rounded-circle text-primary">
-                        {promotion.employee.name?.charAt(0)?.toUpperCase() || 'U'}
-                      </div>
-                    )}
+                    <div className="avatar-title bg-primary-transparent rounded-circle text-primary">
+                      {promotion.employeeName?.charAt(0)?.toUpperCase() || promotion.employeeId?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
                   </div>
                   <div>
-                    <h5 className="mb-1">{promotion.employee.name}</h5>
-                    <p className="text-muted mb-0">{promotion.promotionTo.department.name}</p>
+                    <h5 className="mb-1">{promotion.employeeName || 'Employee'}</h5>
+                    <p className="text-muted mb-0">{promotion.promotionTo.department || promotion.promotionTo.departmentId}</p>
                   </div>
                 </div>
               </div>
@@ -133,27 +90,27 @@ const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Current Department</label>
                         <p className="fw-medium mb-0">
-                          {promotion.promotionFrom.department.name}
+                          {promotion.promotionFrom.department || promotion.promotionFrom.departmentId}
                         </p>
                       </div>
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Department To</label>
                         <p className="fw-medium mb-0 text-primary">
                           <i className="ti ti-arrow-right me-1" />
-                          {promotion.promotionTo.department.name}
+                          {promotion.promotionTo.department || promotion.promotionTo.departmentId}
                         </p>
                       </div>
 
                       {/* Row 2: Previous Designation | Promotion To */}
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Previous Designation</label>
-                        <p className="fw-medium mb-0">{promotion.promotionFrom.designation.name}</p>
+                        <p className="fw-medium mb-0">{promotion.promotionFrom.designation || promotion.promotionFrom.designationId}</p>
                       </div>
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Promotion To</label>
                         <p className="fw-medium mb-0 text-success">
                           <i className="ti ti-arrow-up me-1" />
-                          {promotion.promotionTo.designation.name}
+                          {promotion.promotionTo.designation || promotion.promotionTo.designationId}
                         </p>
                       </div>
 
@@ -177,7 +134,7 @@ const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
                         <div className="col-md-6 mb-3">
                           <label className="form-label text-muted mb-1">Status</label>
                           <p className="mb-0">
-                            <span className={`badge badge-soft-${promotion.status === 'applied' ? 'success' : promotion.status === 'pending' ? 'warning' : 'secondary'}`}>
+                            <span className={`badge badge-soft-${promotion.status === 'applied' ? 'success' : promotion.status === 'pending' ? 'warning' : promotion.status === 'approved' ? 'success' : promotion.status === 'rejected' ? 'danger' : 'secondary'}`}>
                               {promotion.status.charAt(0).toUpperCase() + promotion.status.slice(1)}
                             </span>
                           </p>

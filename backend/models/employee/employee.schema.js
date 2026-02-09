@@ -38,6 +38,54 @@ const addressSchema = new mongoose.Schema({
 }, { _id: false });
 
 /**
+ * Personal Information Sub-schema
+ * Additional personal details for employee profile
+ */
+const personalInfoSchema = new mongoose.Schema({
+  passport: {
+    number: {
+      type: String,
+      trim: true,
+      maxlength: 50
+    },
+    expiryDate: {
+      type: Date
+    },
+    country: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    }
+  },
+  nationality: {
+    type: String,
+    trim: true,
+    maxlength: 100
+  },
+  religion: {
+    type: String,
+    trim: true,
+    maxlength: 50
+  },
+  maritalStatus: {
+    type: String,
+    enum: ['Single', 'Married', 'Divorced', 'Widowed', 'Other'],
+    default: 'Single'
+  },
+  employmentOfSpouse: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  noOfChildren: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 50
+  }
+}, { _id: false });
+
+/**
  * Salary Sub-schema
  */
 const salarySchema = new mongoose.Schema({
@@ -188,6 +236,10 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     enum: ['Male', 'Female', 'Other', 'Prefer not to say']
   },
+
+  // Personal Information
+  personal: personalInfoSchema,
+
   address: addressSchema,
 
   // Employee Code
@@ -270,6 +322,12 @@ const employeeSchema = new mongoose.Schema({
   },
   shiftEffectiveDate: {
     type: Date
+  },
+  // Batch Assignment (for shift rotation groups)
+  batchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Batch',
+    index: true
   },
 
   // Salary Information
@@ -368,7 +426,7 @@ const employeeSchema = new mongoose.Schema({
   // User Role
   role: {
     type: String,
-    enum: ['superadmin', 'admin', 'hr', 'employee'],
+    enum: ['superadmin', 'admin', 'hr', 'manager', 'leads', 'employee'],
     default: 'employee'
   },
 

@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
+import logger from '../utils/logger.js';
 
 const uri =
   process.env.MONGODB_URI || 'mongodb+srv://admin:AdMin-2025@cluster0.iooxltd.mongodb.net/';
@@ -16,9 +17,9 @@ export const connectDB = async () => {
     try {
       await client.connect();
       isConnected = true;
-      console.log('Connected to MongoDB (Native Client) -> Done');
+      logger.info('Connected to MongoDB (Native Client)');
     } catch (error) {
-      console.error('Database Connection Error (Native Client) ->', error);
+      logger.error('Database Connection Error (Native Client)', { error: error.message });
       throw error;
     }
   }
@@ -37,24 +38,24 @@ export const connectDB = async () => {
         maxPoolSize: 10,
       });
       isMongooseConnected = true;
-      console.log(`Connected to MongoDB (Mongoose) -> Database: ${defaultDbName} -> Done`);
+      logger.info(`Connected to MongoDB (Mongoose) - Database: ${defaultDbName}`);
 
       // Handle connection events
       mongoose.connection.on('error', (err) => {
-        console.error('Mongoose connection error:', err);
+        logger.error('Mongoose connection error', { error: err.message });
       });
 
       mongoose.connection.on('disconnected', () => {
-        console.warn('Mongoose disconnected');
+        logger.warn('Mongoose disconnected');
         isMongooseConnected = false;
       });
 
       mongoose.connection.on('reconnected', () => {
-        console.log('Mongoose reconnected');
+        logger.info('Mongoose reconnected');
         isMongooseConnected = true;
       });
     } catch (error) {
-      console.error('Database Connection Error (Mongoose) ->', error);
+      logger.error('Database Connection Error (Mongoose)', { error: error.message });
       throw error;
     }
   }

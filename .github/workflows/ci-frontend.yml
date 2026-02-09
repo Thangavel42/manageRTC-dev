@@ -1,0 +1,232 @@
+name: CI - Frontend
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - "react/**"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - "react/**"
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint Frontend Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "react/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./react
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./react
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: Check code formatting
+        working-directory: ./react
+        run: npm run format:check --if-present || npx prettier --check "**/*.{ts,tsx,js,jsx,json,css,scss}" --ignore-path .gitignore
+        continue-on-error: true
+
+  type-check:
+    name: TypeScript Type Check
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "react/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./react
+        run: npm ci
+
+      - name: Run TypeScript check
+        working-directory: ./react
+        run: npx tsc --noEmit --skipLibCheck
+        continue-on-error: true
+
+  test:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    needs: [lint, type-check]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "react/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./react
+        run: npm ci
+
+      - name: Write test environment
+        working-directory: ./react
+        run: |
+          cat > .env.test << 'EOF'
+          REACT_APP_CLERK_PUBLISHABLE_KEY=test_key
+          REACT_APP_BACKEND_URL=http://localhost:5000
+          CI=true
+          EOF
+
+      - name: Run tests
+        working-directory: ./react
+        run: npm test --if-present -- --coverage --maxWorkers=2 --watchAll=false
+        env:
+          CI: true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./react/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: false
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "react/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./react
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: ./react
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+          command: test
+          working-directory: react
+
+      - name: Upload Snyk results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: react/snyk.sarif
+
+  build:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: "react/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: ./react
+        run: npm ci
+
+      - name: Write production environment
+        working-directory: ./react
+        run: |
+          cat > .env.production << 'EOF'
+          REACT_APP_CLERK_PUBLISHABLE_KEY=test_key
+          REACT_APP_BACKEND_URL=http://localhost:5000
+          EOF
+
+      - name: Create production build
+        working-directory: ./react
+        run: npm run build
+        env:
+          CI: false
+
+      - name: Check build output
+        working-directory: ./react
+        run: |
+          if [ ! -f "build/index.html" ]; then
+            echo "Build failed: index.html not found"
+            exit 1
+          fi
+          echo "Build successful"
+          ls -la build/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: react/build/
+          retention-days: 7
+
+      - name: Analyze bundle size
+        working-directory: ./react
+        run: |
+          if [ -d "build" ]; then
+            echo "## Build Size Analysis" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            du -sh build/ >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            find build/ -name "*.js" -exec du -h {} \; | sort -rh | head -10 >> $GITHUB_STEP_SUMMARY
+          fi
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [lint, type-check, test, security-scan, build]
+    if: always()
+
+    steps:
+      - name: Check workflow status
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::notice::Frontend CI failed"
+            exit 1
+          fi
+          echo "::notice::Frontend CI passed successfully"

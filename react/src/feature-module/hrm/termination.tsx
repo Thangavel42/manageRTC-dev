@@ -1,20 +1,17 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
-import Table from "../../core/common/dataTable/index";
-import { all_routes } from "../router/all_routes";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import CommonSelect from "../../core/common/commonSelect";
-import EmployeeNameCell from "../../core/common/EmployeeNameCell";
 import { DatePicker } from "antd";
-import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import { useSocket } from "../../SocketContext";
-import { Socket } from "socket.io-client";
 import { format, parse } from "date-fns";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Modal } from "antd";
 import dayjs from "dayjs";
-import TerminationDetailsModal from "../../core/modals/TerminationDetailsModal";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { Socket } from "socket.io-client";
+import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../core/common/commonSelect";
+import Table from "../../core/common/dataTable/index";
+import EmployeeNameCell from "../../core/common/EmployeeNameCell";
+import TerminationDetailsModal from "../../core/modals/TerminationDetailsModal";
+import { useSocket } from "../../SocketContext";
+import { all_routes } from "../router/all_routes";
 // REST API Hook for Terminations
 import { useTerminationsREST } from "../../hooks/useTerminationsREST";
 
@@ -31,7 +28,7 @@ type TerminationRow = {
   noticeDate: string;
   terminationDate: string; // already formatted by backend like "12 Sep 2025"
   terminationId: string;
-  status?: string; // Workflow status: pending, processed, cancelled
+  status: string; // Workflow status: pending, processed, cancelled - Required for Termination type compatibility
   lastWorkingDate?: string;
   processedBy?: string;
   processedAt?: string;
@@ -318,297 +315,6 @@ const Termination = () => {
     }
   }, [rows]);
 
-  const onAddResponse = useCallback((res: any) => {
-    console.log("[Termination] ===== onAddResponse CALLED =====");
-    console.log("[Termination] onAddResponse received:", res);
-    console.log("[Termination] Response done:", res?.done);
-    console.log("[Termination] Response message:", res?.message);
-    setIsSubmitting(false);
-
-    if (res?.done) {
-      toast.success("Termination added successfully");
-
-      // Reset form on success
-      setAddForm({
-        employeeId: "",
-        employeeName: "",
-        departmentId: "",
-        departmentName: "",
-        reason: "",
-        terminationType: "Lack of skills",
-        noticeDate: "",
-        terminationDate: "",
-      });
-
-      // Clear errors
-      setAddErrors({
-        departmentId: "",
-        employeeId: "",
-        reason: "",
-        terminationType: "",
-        noticeDate: "",
-        terminationDate: "",
-      });
-
-      // Clear employee options
-      setEmployeeOptions([]);
-
-      // Refresh the list
-      if (socket) {
-        socket.emit("hr/termination/terminationlist", { type: filterType, ...customRange });
-        socket.emit("hr/termination/termination-details");
-      }
-
-      // Close modal
-      console.log("[Termination] Attempting to close modal");
-      setTimeout(() => {
-        const modalElement = document.getElementById("new_termination");
-        console.log("[Termination] Modal element found:", !!modalElement);
-        if (modalElement) {
-          let modalClosed = false;
-
-          // Try Bootstrap if available
-          if ((window as any).bootstrap?.Modal) {
-            try {
-              let modal = (window as any).bootstrap.Modal.getInstance(modalElement);
-
-              if (!modal) {
-                console.log("[Termination] Creating new modal instance");
-                modal = new (window as any).bootstrap.Modal(modalElement);
-              }
-
-              console.log("[Termination] Calling modal.hide()");
-              modal.hide();
-              modalClosed = true;
-            } catch (error) {
-              console.error("[Termination] Bootstrap modal error:", error);
-            }
-          }
-
-          // Fallback: Force close manually
-          if (!modalClosed) {
-            console.log("[Termination] Using fallback modal close");
-            modalElement.classList.remove("show");
-            modalElement.setAttribute("aria-hidden", "true");
-            modalElement.style.display = "none";
-          }
-
-          // Force cleanup of backdrop and body classes
-          setTimeout(() => {
-            console.log("[Termination] Forcing cleanup of modal backdrop");
-            document.body.classList.remove("modal-open");
-            const backdrops = document.getElementsByClassName("modal-backdrop");
-            while (backdrops.length > 0) {
-              backdrops[0].parentNode?.removeChild(backdrops[0]);
-            }
-          }, 100);
-        }
-      }, 100);
-    } else {
-      console.error("[Termination] Failed to add termination:", res?.message);
-
-      // Handle backend validation errors inline
-      if (res?.errors && typeof res.errors === 'object') {
-        const backendErrors: any = {};
-        Object.keys(res.errors).forEach(key => {
-          if (key in addErrors) {
-            backendErrors[key] = res.errors[key];
-          }
-        });
-        setAddErrors(prev => ({ ...prev, ...backendErrors }));
-      }
-
-      // Show toast for general error message
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange, addErrors]);
-
-  const onUpdateResponse = useCallback((res: any) => {
-    console.log("[Termination] onUpdateResponse received:", res);
-    setIsSubmitting(false);
-
-    if (res?.done) {
-      toast.success("Termination updated successfully");
-
-      // Reset form on success
-      setEditForm({
-        employeeId: "",
-        employeeName: "",
-        departmentId: "",
-        departmentName: "",
-        terminationType: "Lack of skills",
-        noticeDate: "",
-        reason: "",
-        terminationDate: "",
-        terminationId: "",
-      });
-
-      // Clear errors
-      setEditErrors({
-        departmentId: "",
-        employeeId: "",
-        reason: "",
-        terminationType: "",
-        noticeDate: "",
-        terminationDate: "",
-      });
-
-      // Clear employee options
-      setEmployeeOptions([]);
-
-      // Refresh the list
-      if (socket) {
-        socket.emit("hr/termination/terminationlist", { type: filterType, ...customRange });
-        socket.emit("hr/termination/termination-details");
-      }
-
-      // Close modal
-      console.log("[Termination] Attempting to close edit modal");
-      setTimeout(() => {
-        const modalElement = document.getElementById("edit_termination");
-        console.log("[Termination] Edit modal element found:", !!modalElement);
-        if (modalElement) {
-          let modalClosed = false;
-
-          // Try Bootstrap if available
-          if ((window as any).bootstrap?.Modal) {
-            try {
-              let modal = (window as any).bootstrap.Modal.getInstance(modalElement);
-
-              if (!modal) {
-                console.log("[Termination] Creating new edit modal instance");
-                modal = new (window as any).bootstrap.Modal(modalElement);
-              }
-
-              console.log("[Termination] Calling edit modal.hide()");
-              modal.hide();
-              modalClosed = true;
-            } catch (error) {
-              console.error("[Termination] Bootstrap edit modal error:", error);
-            }
-          }
-
-          // Fallback: Force close manually
-          if (!modalClosed) {
-            console.log("[Termination] Using fallback edit modal close");
-            modalElement.classList.remove("show");
-            modalElement.setAttribute("aria-hidden", "true");
-            modalElement.style.display = "none";
-          }
-
-          // Force cleanup of backdrop and body classes
-          setTimeout(() => {
-            console.log("[Termination] Forcing cleanup of edit modal backdrop");
-            document.body.classList.remove("modal-open");
-            const backdrops = document.getElementsByClassName("modal-backdrop");
-            while (backdrops.length > 0) {
-              backdrops[0].parentNode?.removeChild(backdrops[0]);
-            }
-          }, 100);
-        }
-      }, 100);
-    } else {
-      console.error("[Termination] Failed to update termination:", res?.message);
-
-      // Handle backend validation errors inline
-      if (res?.errors && typeof res.errors === 'object') {
-        const backendErrors: any = {};
-        Object.keys(res.errors).forEach(key => {
-          if (key in editErrors) {
-            backendErrors[key] = res.errors[key];
-          }
-        });
-        setEditErrors(prev => ({ ...prev, ...backendErrors }));
-      }
-
-      // Show toast for general error message
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange, editErrors]);
-
-  const onDeleteResponse = useCallback((res: any) => {
-    console.log("[Termination] ===== onDeleteResponse CALLED =====");
-    console.log("[Termination] Response:", res);
-
-    if (res?.done) {
-      toast.success("Termination deleted successfully");
-      setSelectedKeys([]);
-      setDeletingTerminationId(null);
-
-      // Refresh the termination list and stats
-      if (socket) {
-        socket.emit("hr/termination/terminationlist", { type: filterType, ...customRange });
-        socket.emit("hr/termination/termination-details");
-        // Refresh employee list to show updated status (Active)
-        socket.emit("hrm/employees/get-employee-stats");
-        console.log("[Termination] Emitted employee refresh after deletion");
-      }
-
-      // Close modal (robust)
-      console.log("[Termination] Attempting to close delete modal");
-      const modalElement = document.getElementById("delete_modal");
-      console.log("[Termination] Modal element found:", !!modalElement);
-
-      let closed = false;
-      if (modalElement) {
-        console.log("[Termination] Checking for Bootstrap Modal instance");
-        const modal = window.bootstrap?.Modal?.getInstance(modalElement);
-        console.log("[Termination] Modal instance found:", !!modal);
-
-        if (modal) {
-          console.log("[Termination] Calling modal.hide()");
-          modal.hide();
-          closed = true;
-          console.log("[Termination] Modal.hide() called successfully");
-        }
-      }
-
-      // Fallback: forcibly remove modal classes and backdrop if still open
-      if (!closed && modalElement) {
-        console.log("[Termination] Using fallback modal close");
-        modalElement.classList.remove("show");
-        modalElement.setAttribute("aria-hidden", "true");
-        modalElement.style.display = "none";
-        document.body.classList.remove("modal-open");
-        // Remove backdrop
-        const backdrops = document.getElementsByClassName("modal-backdrop");
-        console.log("[Termination] Backdrops found:", backdrops.length);
-        while (backdrops.length > 0) {
-          backdrops[0].parentNode?.removeChild(backdrops[0]);
-        }
-        console.log("[Termination] Fallback close completed");
-      }
-
-      console.log("[Termination] Delete response handling completed");
-    } else {
-      console.error("Failed to delete termination:", res?.message);
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange]);
-
-  // Process response handler
-  const onProcessResponse = useCallback((res: any) => {
-    if (res?.done) {
-      toast.success(res.message || "Termination processed successfully");
-    } else {
-      toast.error(res?.message || "Failed to process termination");
-    }
-  }, []);
-
-  // Cancel response handler
-  const onCancelResponse = useCallback((res: any) => {
-    if (res?.done) {
-      toast.success(res.message || "Termination cancelled successfully");
-    } else {
-      toast.error(res?.message || "Failed to cancel termination");
-    }
-  }, []);
 
   // fetchers (using REST API) - Define BEFORE socket listeners
   const fetchList = useCallback(
@@ -683,6 +389,7 @@ const Termination = () => {
       terminationType: termination.terminationType || 'Lack of skills',
       noticeDate: termination.noticeDate || '',
       terminationDate: termination.terminationDate || '',
+      status: termination.status || 'pending',
     }));
 
     setRows(transformedTerminations);

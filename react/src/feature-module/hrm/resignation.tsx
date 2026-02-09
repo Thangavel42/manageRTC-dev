@@ -1,20 +1,19 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
-import Table from "../../core/common/dataTable/index";
-import { all_routes } from "../router/all_routes";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import CommonSelect from "../../core/common/commonSelect";
-import EmployeeNameCell from "../../core/common/EmployeeNameCell";
 import { DatePicker } from "antd";
-import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import { useSocket } from "../../SocketContext";
-import { Socket } from "socket.io-client";
 import { format, parse } from "date-fns";
 import dayjs from "dayjs";
-import ResignationDetailsModal from "../../core/modals/ResignationDetailsModal";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { Socket } from "socket.io-client";
+import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../core/common/commonSelect";
+import Table from "../../core/common/dataTable/index";
+import EmployeeNameCell from "../../core/common/EmployeeNameCell";
+import ResignationDetailsModal from "../../core/modals/ResignationDetailsModal";
+import { useSocket } from "../../SocketContext";
+import { all_routes } from "../router/all_routes";
 // REST API Hook for Resignations
-import { useResignationsREST } from "../../hooks/useResignationsREST";
+import { useResignationsREST, type Resignation as APIResignation } from "../../hooks/useResignationsREST";
 
 type ResignationRow = {
   employeeName: string;
@@ -28,10 +27,12 @@ type ResignationRow = {
   noticeDate: string;
   resignationDate: string; // already formatted by backend like "12 Sep 2025"
   resignationId: string;
-  resignationStatus?: string; // Workflow status: pending, approved, rejected, withdrawn
+  status: string; // Required for Resignation type compatibility
+  resignationStatus?: 'pending' | 'approved' | 'rejected' | 'withdrawn'; // Workflow status: pending, approved, rejected, withdrawn
   effectiveDate?: string;
   approvedBy?: string;
   approvedAt?: string;
+  notes?: string;
 };
 
 type ResignationStats = {
@@ -79,8 +80,8 @@ const Resignation = () => {
   }>({});
   const [editing, setEditing] = useState<any>(null);
 
-  // State for viewing resignation details
-  const [viewingResignation, setViewingResignation] = useState<ResignationRow | null>(null);
+  // State for viewing resignation details - use API type
+  const [viewingResignation, setViewingResignation] = useState<APIResignation | null>(null);
 
   // Controlled edit form data
   const [editForm, setEditForm] = useState({
@@ -333,241 +334,6 @@ const Resignation = () => {
     }
   }, [rows]);
 
-  const onAddResponse = useCallback((res: any) => {
-    console.log("[Resignation] onAddResponse received:", res);
-    setIsSubmitting(false);
-
-    if (res?.done) {
-      toast.success("Resignation added successfully");
-
-      // Reset form on success
-      setAddForm({
-        employeeId: "",
-        departmentId: "",
-        reason: "",
-        noticeDate: "",
-        resignationDate: "",
-      });
-
-      // Clear errors
-      setAddErrors({
-        departmentId: "",
-        employeeId: "",
-        reason: "",
-        noticeDate: "",
-        resignationDate: "",
-      });
-
-      // Clear employee options
-      setEmployeeOptions([]);
-
-      // Refresh the list
-      if (socket) {
-        socket.emit("hr/resignation/resignationlist", { type: filterType, ...customRange });
-        socket.emit("hr/resignation/resignation-details");
-      }
-
-      // Close modal with improved reliability
-      console.log("[Resignation] Attempting to close modal");
-      setTimeout(() => {
-        const modalElement = document.getElementById("new_resignation");
-        console.log("[Resignation] Modal element found:", !!modalElement);
-        if (modalElement) {
-          let modalClosed = false;
-
-          // Try Bootstrap if available
-          if (window.bootstrap?.Modal) {
-            try {
-              let modal = window.bootstrap.Modal.getInstance(modalElement);
-
-              if (!modal) {
-                console.log("[Resignation] Creating new modal instance");
-                modal = new window.bootstrap.Modal(modalElement);
-              }
-
-              console.log("[Resignation] Calling modal.hide()");
-              modal.hide();
-              modalClosed = true;
-            } catch (error) {
-              console.error("[Resignation] Bootstrap modal error:", error);
-            }
-          }
-
-          // Fallback: Force close manually
-          if (!modalClosed) {
-            console.log("[Resignation] Using fallback modal close");
-            modalElement.classList.remove("show");
-            modalElement.setAttribute("aria-hidden", "true");
-            modalElement.style.display = "none";
-          }
-
-          // Force cleanup of backdrop and body classes
-          setTimeout(() => {
-            console.log("[Resignation] Forcing cleanup of modal backdrop");
-            document.body.classList.remove("modal-open");
-            const backdrops = document.getElementsByClassName("modal-backdrop");
-            while (backdrops.length > 0) {
-              backdrops[0].parentNode?.removeChild(backdrops[0]);
-            }
-          }, 100);
-        }
-      }, 100);
-    } else {
-      console.error("Failed to add resignation:", res?.message);
-
-      // Handle backend validation errors inline
-      if (res?.errors && typeof res.errors === 'object') {
-        // Map backend errors to form fields
-        const backendErrors: any = {};
-        Object.keys(res.errors).forEach(key => {
-          if (key in addErrors) {
-            backendErrors[key] = res.errors[key];
-          }
-        });
-        setAddErrors(prev => ({ ...prev, ...backendErrors }));
-      }
-
-      // Show toast for general error message
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange]);
-
-  const onUpdateResponse = useCallback((res: any) => {
-    setIsSubmitting(false);
-
-    if (res?.done) {
-      toast.success("Resignation updated successfully");
-
-      // Reset form on success
-      setEditForm({
-        employeeId: "",
-        departmentId: "",
-        reason: "",
-        noticeDate: "",
-        resignationDate: "",
-        resignationId: "",
-      });
-
-      // Clear errors
-      setEditErrors({
-        departmentId: "",
-        employeeId: "",
-        reason: "",
-        noticeDate: "",
-        resignationDate: "",
-      });
-
-      // Clear employee options
-      setEmployeeOptions([]);
-
-      // Refresh the list
-      if (socket) {
-        socket.emit("hr/resignation/resignationlist", { type: filterType, ...customRange });
-        socket.emit("hr/resignation/resignation-details");
-      }
-
-      // Close modal properly
-      const modalElement = document.getElementById("edit_resignation");
-      if (modalElement) {
-        let modalClosed = false;
-
-        if (window.bootstrap?.Modal) {
-          try {
-            const modal = window.bootstrap.Modal.getInstance(modalElement);
-            if (modal) {
-              modal.hide();
-              modalClosed = true;
-            } else {
-              const newModal = new window.bootstrap.Modal(modalElement);
-              newModal.hide();
-              modalClosed = true;
-            }
-          } catch (error) {
-            console.error("[Resignation] Bootstrap modal error:", error);
-          }
-        }
-
-        // Fallback: Force close manually
-        if (!modalClosed) {
-          modalElement.classList.remove("show");
-          modalElement.setAttribute("aria-hidden", "true");
-          modalElement.style.display = "none";
-          document.body.classList.remove("modal-open");
-          const backdrops = document.getElementsByClassName("modal-backdrop");
-          while (backdrops.length > 0) {
-            backdrops[0].parentNode?.removeChild(backdrops[0]);
-          }
-        }
-      }
-    } else {
-      console.error("Failed to update resignation:", res?.message);
-
-      // Handle backend validation errors inline
-      if (res?.errors && typeof res.errors === 'object') {
-        // Map backend errors to form fields
-        const backendErrors: any = {};
-        Object.keys(res.errors).forEach(key => {
-          if (key in editErrors) {
-            backendErrors[key] = res.errors[key];
-          }
-        });
-        setEditErrors(prev => ({ ...prev, ...backendErrors }));
-      }
-
-      // Show toast for general error message
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange]);
-
-  const onDeleteResponse = useCallback((res: any) => {
-    if (res?.done) {
-      toast.success("Resignation deleted successfully");
-      setSelectedKeys([]);
-      setDeletingResignationId(null);
-
-      // Refresh the resignation list and stats
-      if (socket) {
-        socket.emit("hr/resignation/resignationlist", { type: filterType, ...customRange });
-        socket.emit("hr/resignation/resignation-details");
-        // Refresh employee list to show updated status (Active)
-        socket.emit("hrm/employees/get-employee-stats");
-        console.log("[Resignation] Emitted employee refresh after deletion");
-      }
-
-      // Close modal (robust)
-      const modalElement = document.getElementById("delete_modal");
-      let closed = false;
-      if (modalElement) {
-        const modal = window.bootstrap?.Modal?.getInstance(modalElement);
-        if (modal) {
-          modal.hide();
-          closed = true;
-        }
-      }
-      // Fallback: forcibly remove modal classes and backdrop if still open
-      if (!closed && modalElement) {
-        modalElement.classList.remove("show");
-        modalElement.setAttribute("aria-hidden", "true");
-        modalElement.style.display = "none";
-        document.body.classList.remove("modal-open");
-        // Remove backdrop
-        const backdrops = document.getElementsByClassName("modal-backdrop");
-        while (backdrops.length > 0) {
-          backdrops[0].parentNode?.removeChild(backdrops[0]);
-        }
-      }
-    } else {
-      console.error("Failed to delete resignation:", res?.message);
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-  }, [socket, filterType, customRange]);
-
   // fetchers (using REST API)
   const fetchList = useCallback(
     async (type: string, range?: { startDate?: string; endDate?: string }) => {
@@ -673,6 +439,7 @@ const Resignation = () => {
       reason: resignation.reason || '',
       noticeDate: resignation.noticeDate || '',
       resignationDate: resignation.resignationDate || '',
+      status: resignation.status || resignation.resignationStatus || 'pending',
     }));
 
     setRows(transformedResignations);
@@ -1023,7 +790,14 @@ const Resignation = () => {
   // Handle view resignation details
   const handleViewClick = (resignation: ResignationRow) => {
     console.log("[Resignation] View clicked:", resignation);
-    setViewingResignation(resignation);
+    // Find the original API resignation data
+    const apiResignation = apiResignations.find(r => r.resignationId === resignation.resignationId || r._id === resignation.resignationId);
+    if (apiResignation) {
+      setViewingResignation(apiResignation);
+    } else {
+      console.error("[Resignation] Could not find API resignation data");
+      toast.error("Unable to load resignation details");
+    }
   };
 
   // Handle approve resignation (using REST API)

@@ -1,0 +1,20 @@
+            </div>
+            <ToastContainer />
+            {/* /Page Wrapper */}
+            {/* Inline Edit Employee Modal */}
+            <InlineEditEmployeeModal
+                employee={editingEmployee}
+                onUpdate={(updatedEmployee) => {
+                    setEmployee(updatedEmployee as any);
+                    setEditingEmployee(null);
+                    toast.success("Employee updated successfully!");
+                }}
+                getModalContainer={getModalContainer}
+                employeesREST={employeesREST}
+                departments={departments}
+                designations={designations}
+                batches={batches}
+                allShifts={allShifts}
+                fetchDesignations={fetchDesignations}
+                navigate={navigate}
+            />

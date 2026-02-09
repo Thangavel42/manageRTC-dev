@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
+import cacheManager from "../../utils/cacheManager.js";
+import logger from "../../utils/logger.js";
 
 export const addPolicy = async (companyId, hrId, policyData) => {
   try {
@@ -77,6 +79,10 @@ export const addPolicy = async (companyId, hrId, policyData) => {
       createdBy: hrId,
       createdAt: new Date(),
     });
+
+    // Invalidate policy cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'policies');
+    logger.info('[addPolicy] Cache invalidated', { companyId });
 
     return {
       done: true,
@@ -231,6 +237,8 @@ export const displayPolicy = async (companyId, hrId = 1, filters = {}) => {
 
     const policies = await collections.policy.aggregate(pipeline).toArray();
 
+    logger.debug('[displayPolicy] Found policies', { companyId, count: policies.length });
+
     return {
       done: true,
       filters: filters,
@@ -240,7 +248,7 @@ export const displayPolicy = async (companyId, hrId = 1, filters = {}) => {
         : "No policies found matching criteria",
     };
   } catch (error) {
-    console.error("Error in displayPolicy:", error);
+    logger.error('[displayPolicy] Error', { error: error.message });
     return {
       done: false,
       error: `Failed to fetch policies: ${error.message}`,
@@ -330,6 +338,10 @@ export const updatePolicy = async (companyId, hrId = 1, payload) => {
       return { done: false, error: "Policy not found" };
     }
 
+    // Invalidate policy cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'policies');
+    logger.info('[updatePolicy] Cache invalidated', { companyId, policyId: payload.policyId });
+
     return {
       done: true,
       data: { policyId: payload.policyId, ...payload.updateData },
@@ -360,6 +372,10 @@ export const deletePolicy = async (companyId, hrId = 1, policyId) => {
     if (result.deletedCount === 0) {
       return { done: false, error: "Policy not found" };
     }
+
+    // Invalidate policy cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'policies');
+    logger.info('[deletePolicy] Cache invalidated', { companyId, policyId });
 
     return {
       done: true,

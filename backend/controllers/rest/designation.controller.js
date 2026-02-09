@@ -14,6 +14,36 @@ import logger from '../../utils/logger.js';
 import { getSocketIO, broadcastDesignationEvents } from '../../utils/socketBroadcaster.js';
 
 /**
+ * Helper function to check if user has required role
+ * @param {Object} user - User object from request
+ * @param {string[]} allowedRoles - Array of allowed roles
+ * @returns {boolean} - True if user has access
+ */
+const ensureRole = (user, allowedRoles = []) => {
+  const role = user?.role?.toLowerCase();
+  return allowedRoles.includes(role);
+};
+
+/**
+ * Helper function to send 403 Forbidden response
+ */
+const sendForbidden = (res, message = 'You do not have permission to access this resource') => {
+  return res.status(403).json({
+    success: false,
+    error: { message }
+  });
+};
+
+/**
+ * Helper to extract user info from request
+ */
+const extractUser = (req) => ({
+  userId: req.user?.userId,
+  companyId: req.user?.companyId,
+  role: req.user?.role
+});
+
+/**
  * Get all designations with optional filtering
  * REST API: GET /api/designations
  */
@@ -102,6 +132,7 @@ export const getDesignationById = async (req, res) => {
  */
 export const createDesignation = async (req, res) => {
   try {
+    const user = extractUser(req);
     const companyId = req.user?.companyId;
     const hrId = req.user?.userId;
     const payload = req.body;
@@ -111,6 +142,11 @@ export const createDesignation = async (req, res) => {
         success: false,
         error: { message: 'Authentication required' }
       });
+    }
+
+    // Role check: Only admin, hr, superadmin can create designations
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can create designations');
     }
 
     const result = await addDesignation(companyId, hrId, payload);
@@ -152,6 +188,7 @@ export const createDesignation = async (req, res) => {
 export const updateDesignationById = async (req, res) => {
   try {
     const { id } = req.params;
+    const user = extractUser(req);
     const companyId = req.user?.companyId;
     const hrId = req.user?.userId;
     const payload = { ...req.body, designationId: id };
@@ -161,6 +198,11 @@ export const updateDesignationById = async (req, res) => {
         success: false,
         error: { message: 'Authentication required' }
       });
+    }
+
+    // Role check: Only admin, hr, superadmin can update designations
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can update designations');
     }
 
     const result = await updateDesignation(companyId, hrId, payload);
@@ -203,6 +245,7 @@ export const updateDesignationStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const user = extractUser(req);
     const companyId = req.user?.companyId;
     const hrId = req.user?.userId;
 
@@ -211,6 +254,11 @@ export const updateDesignationStatus = async (req, res) => {
         success: false,
         error: { message: 'Authentication required' }
       });
+    }
+
+    // Role check: Only admin, hr, superadmin can update designation status
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can update designation status');
     }
 
     if (!status) {
@@ -261,6 +309,7 @@ export const deleteDesignationById = async (req, res) => {
   try {
     const { id } = req.params;
     const { reassignTo } = req.body;
+    const user = extractUser(req);
     const companyId = req.user?.companyId;
     const hrId = req.user?.userId;
 
@@ -269,6 +318,11 @@ export const deleteDesignationById = async (req, res) => {
         success: false,
         error: { message: 'Authentication required' }
       });
+    }
+
+    // Role check: Only admin and superadmin can delete designations
+    if (!ensureRole(user, ['admin', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin can delete designations');
     }
 
     let result;

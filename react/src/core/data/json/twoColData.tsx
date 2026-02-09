@@ -17,36 +17,37 @@ export const TowColData = [
             icon: 'smart-home',
             base: 'dashboard',
             materialicons: 'home',
+            roles: ['admin', 'hr', 'manager', 'leads', 'employee'],
             subMenus: [
               {
                 menuValue: 'Admin Dashboard',
                 route: routes.adminDashboard,
                 base: 'index',
-                roles: ['admin'],
+                roles: ['admin', 'manager'],
               },
               {
                 menuValue: 'Employee Dashboard',
                 route: routes.employeeDashboard,
                 base: 'employee',
-                roles: ['public'],
+                roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
               },
               {
                 menuValue: 'Deals Dashboard',
                 route: routes.dealsDashboard,
                 base: 'deals',
-                roles: ['public'],
+                roles: ['admin', 'hr', 'manager', 'leads'],
               },
               {
                 menuValue: 'Leads Dashboard',
                 route: routes.leadsDashboard,
                 base: 'leads',
-                roles: ['public'],
+                roles: ['admin', 'hr', 'manager', 'leads'],
               },
               {
                 menuValue: 'HR Dashboard',
                 route: routes.hrDashboard,
                 base: 'hr',
-                roles: ['hr'],
+                roles: ['hr', 'manager', 'leads'],
               },
             ],
           },
@@ -177,6 +178,7 @@ export const TowColData = [
             icon: 'user-star',
             base: 'super-admin',
             materialicons: 'home',
+            roles: ['superadmin'],
             subMenus: [
               {
                 menuValue: 'Dashboard',

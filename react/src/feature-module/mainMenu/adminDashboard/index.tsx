@@ -1,22 +1,27 @@
-import { useUser } from '@clerk/clerk-react';
-import jsPDF from 'jspdf';
-import { Calendar } from 'primereact/calendar';
-import { Chart } from 'primereact/chart';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import ReactApexChart from 'react-apexcharts';
-import { Link } from 'react-router-dom';
-import 'slick-carousel/slick/slick-theme.css';
-import 'slick-carousel/slick/slick.css';
-import { Socket } from 'socket.io-client';
-import * as XLSX from 'xlsx';
-import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
-import Footer from '../../../core/common/footer';
-import ImageWithBasePath from '../../../core/common/imageWithBasePath';
-import RequestModals from '../../../core/modals/requestModal';
-import TodoModal from '../../../core/modals/todoModal';
-import { useAdminDashboardREST } from '../../../hooks/useAdminDashboardREST';
-import { useSocket } from '../../../SocketContext';
-import { all_routes } from '../../router/all_routes';
+import { useUser } from "@clerk/clerk-react";
+import jsPDF from "jspdf";
+import { Calendar } from "primereact/calendar";
+import { Chart } from "primereact/chart";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactApexChart from "react-apexcharts";
+import { Link } from "react-router-dom";
+import "slick-carousel/slick/slick-theme.css";
+import "slick-carousel/slick/slick.css";
+import { Socket } from "socket.io-client";
+import * as XLSX from "xlsx";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import RequestModals from "../../../core/modals/requestModal";
+import TodoModal from "../../../core/modals/todoModal";
+import { useAdminDashboardREST } from "../../../hooks/useAdminDashboardREST";
+import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
+// Role-Based Components
+import { AdminOnly } from "../../../core/components/RoleBasedRenderer";
+import ErrorBoundary from "../../../core/components/ErrorBoundary";
+import { PageLoading } from "../../../core/components/LoadingStates";
 interface DashboardData {
   pendingItems?: {
     approvals: number;
@@ -190,6 +195,9 @@ const AdminDashboard = () => {
     fetchTaskStatistics,
     fetchEmployeesByDepartment,
   } = useAdminDashboardREST();
+
+  // REST API Hook for current user profile (for avatar display)
+  const { profile } = useUserProfileREST();
 
   // Local state (synced with REST data)
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
@@ -1196,53 +1204,15 @@ const AdminDashboard = () => {
   };
 
   if (loading || !isLoaded) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div
-            className="d-flex justify-content-center align-items-center"
-            style={{ height: '400px' }}
-          >
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div className="alert alert-danger" role="alert">
-            <h4 className="alert-heading">Error!</h4>
-            <p>{error}</p>
-            {!socket && (
-              <div className="mt-3">
-                <strong>Troubleshooting:</strong>
-                <ul className="mb-0 mt-2">
-                  <li>Check that your backend server is running on port 5000</li>
-                  <li>Verify Socket.IO is properly configured</li>
-                  <li>Ensure your Clerk user has proper metadata (role, companyId)</li>
-                  <li>Check browser console for detailed connection errors</li>
-                </ul>
-              </div>
-            )}
-            <button className="btn btn-primary mt-3" onClick={() => window.location.reload()}>
-              Refresh Page
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <PageLoading message="Loading Admin Dashboard..." />;
   }
 
   return (
-    <>
-      {/* Page Wrapper */}
-      <div className="page-wrapper">
+    <ErrorBoundary>
+      <AdminOnly>
+        <>
+          {/* Page Wrapper */}
+          <div className="page-wrapper">
         <div className="content">
           {/* Breadcrumb */}
           <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
@@ -1329,9 +1299,13 @@ const AdminDashboard = () => {
             <div className="card-body d-flex align-items-center justify-content-between flex-wrap pb-1">
               <div className="d-flex align-items-center mb-3">
                 <span className="avatar avatar-xl flex-shrink-0">
-                  {isSignedIn && user ? (
+                  {isSignedIn && (profile || user) ? (
                     <img
-                      src={getUserImage()}
+                      src={
+                        (profile as any)?.companyLogo || // For admin: company logo
+                        user?.imageUrl || // Fallback to Clerk user image
+                        "assets/img/profiles/avatar-31.jpg"
+                      }
                       alt="Profile"
                       className="rounded-circle"
                       onError={handleImageError}
@@ -3606,7 +3580,9 @@ const AdminDashboard = () => {
           await fetchAllDashboardData({ year: date.getFullYear() });
         }}
       />
-    </>
+      </>
+    </AdminOnly>
+  </ErrorBoundary>
   );
 };
 

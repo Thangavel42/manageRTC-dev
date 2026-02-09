@@ -1,4 +1,5 @@
 import * as terminationService from "../../services/hr/termination.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
@@ -88,7 +89,7 @@ const terminationController = (socket, io) => {
           companyId,
           {}
         );
-        console.log("updatessssss", updatedList);
+        devLog("updatessssss", updatedList);
         // Send success response to the requesting socket
         socket.emit("hr/termination/update-termination-response", res);
         socket.emit("hr/termination/terminationlist-response", updatedList);

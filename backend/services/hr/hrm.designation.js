@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { client, getTenantCollections } from "../../config/db.js";
 import { AppError, buildValidationError } from "../../middleware/errorHandler.js";
+import cacheManager from "../../utils/cacheManager.js";
+import logger from "../../utils/logger.js";
 
 const normalizeStatus = (status) => {
   if (!status) return "Active";
@@ -65,8 +67,7 @@ export const addDesignation = async (companyId, hrId, payload) => {
     });
 
     if (existingDesignation) {
-      console.log("Hello");
-
+      logger.warn('[addDesignation] Duplicate designation', { companyId, designation: payload.designation, departmentId: payload.departmentId });
       return {
         done: false,
         error: "Designation already exists in this department",
@@ -81,6 +82,10 @@ export const addDesignation = async (companyId, hrId, payload) => {
       createdAt: new Date(),
     });
 
+    // Invalidate designation cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'designations');
+    logger.info('[addDesignation] Cache invalidated', { companyId });
+
     return {
       done: true,
       data: {
@@ -90,7 +95,7 @@ export const addDesignation = async (companyId, hrId, payload) => {
       message: "Designation added successfully",
     };
   } catch (error) {
-    console.log("Error in addDesignation:", error);
+    logger.error('[addDesignation] Error', { error: error.message });
     return {
       done: false,
       error: `Failed to add designation: ${error.message}`,
@@ -201,6 +206,10 @@ export const deleteDesignation = async (companyId, hrId, designationId, reassign
     await session.endSession();
   }
 
+  // Invalidate designation cache for this company
+  cacheManager.invalidateCompanyCache(companyId, 'designations');
+  logger.info('[deleteDesignation] Cache invalidated', { companyId, designationId });
+
   return {
     done: true,
     data: { deletedDesignation: designation.designation },
@@ -238,14 +247,12 @@ export const displayDesignations = async (companyId, hrId, filters) => {
       try {
         query.departmentId = new ObjectId(filters.departmentId);
       } catch (err) {
-        console.error("Invalid departmentId format:", filters.departmentId);
+        logger.error('[displayDesignations] Invalid departmentId format', { departmentId: filters.departmentId });
         return { done: false, error: "Invalid department ID format" };
       }
     }
 
-    console.log("Query from desingation", query);
-
-    console.log("Filters from desingation", filters);
+    logger.debug('[displayDesignations] Query and filters', { query, filters });
 
     const pipeline = [
       { $match: query },
@@ -352,7 +359,7 @@ export const displayDesignations = async (companyId, hrId, filters) => {
       .aggregate(pipeline)
       .toArray();
 
-    console.log("Designations with employee count:", JSON.stringify(designations, null, 2));
+    logger.debug('[displayDesignations] Found designations', { companyId, count: designations.length });
 
     return {
       done: true,
@@ -362,7 +369,7 @@ export const displayDesignations = async (companyId, hrId, filters) => {
         : "No designations found matching filters",
     };
   } catch (error) {
-    console.error("Error in displayDesignations:", error);
+    logger.error('[displayDesignations] Error', { error: error.message });
     return {
       done: false,
       error: `Failed to fetch designations: ${error.message}`,
@@ -457,12 +464,16 @@ export const updateDesignation = async (companyId, hrId, payload) => {
       return { done: false, error: "No changes made to designation" };
     }
 
+    // Invalidate designation cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'designations');
+    logger.info('[updateDesignation] Cache invalidated', { companyId, designationId: payload.designationId });
+
     return {
       done: true,
       message: "Designation updated successfully",
     };
   } catch (error) {
-    console.error("Error updating designation:", error);
+    logger.error('[updateDesignation] Error', { error: error.message });
     return {
       done: false,
       error: "Internal server error",

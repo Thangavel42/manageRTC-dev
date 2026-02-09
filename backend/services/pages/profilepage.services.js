@@ -217,19 +217,184 @@ export const getProfileById = async (companyId, profileId) => {
 };
 
 // Get current user profile
-export const getCurrentUserProfile = async (companyId, userId) => {
+export const getCurrentUserProfile = async (companyId, userId, clerkUserData = null) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[ProfileService] getCurrentUserProfile", { companyId, userId });
+    console.log("[ProfileService] getCurrentUserProfile", { companyId, userId, clerkUserData });
 
-    const profile = await collections.profile.findOne({
+    let profile = await collections.profile.findOne({
       userId: userId,
       companyId,
       isDeleted: { $ne: true }
     });
 
+    // FALLBACK: If not found in profile collection, check employees collection
     if (!profile) {
-      return { done: false, error: "Profile not found" };
+      console.log("[ProfileService] Profile not found in profile collection, checking employees collection");
+      const employee = await collections.employees.findOne({
+        clerkUserId: userId,
+        companyId,
+        isDeleted: { $ne: true }
+      });
+
+      if (employee) {
+        console.log("[ProfileService] Found employee record, converting to profile format");
+        // Convert employee record to profile format
+        profile = {
+          _id: employee._id,
+          userId: employee.clerkUserId,
+          companyId: employee.companyId || companyId,
+          firstName: employee.firstName || '',
+          lastName: employee.lastName || '',
+          email: employee.email || employee.contact?.email || '',
+          phone: employee.phone || employee.contact?.phone || '',
+          dateOfBirth: employee.dateOfBirth || null,
+          gender: employee.gender || '',
+          profilePhoto: employee.profileImage || employee.profilePhoto || '',
+          employeeId: employee.employeeId || '',
+          department: employee.department?.department || employee.departmentId || '',
+          designation: employee.designation?.designation || employee.designationId || '',
+          joiningDate: employee.joiningDate || employee.employmentDetails?.joiningDate || null,
+          salary: employee.salary || 0,
+          role: employee.role || employee.account?.role || 'employee',
+          status: employee.status || employee.employmentStatus || 'Active',
+          address: {
+            street: employee.address?.street || employee.personal?.address?.street || '',
+            city: employee.address?.city || employee.personal?.address?.city || '',
+            state: employee.address?.state || employee.personal?.address?.state || '',
+            country: employee.address?.country || employee.personal?.address?.country || '',
+            postalCode: employee.address?.postalCode || employee.personal?.address?.postalCode || ''
+          },
+          emergencyContact: {
+            name: employee.emergencyContact?.name || employee.emergencyContacts?.[0]?.name || '',
+            phone: employee.emergencyContact?.phone || employee.emergencyContacts?.[0]?.phone || '',
+            relationship: employee.emergencyContact?.relationship || employee.emergencyContacts?.[0]?.relationship || ''
+          },
+          socialLinks: {
+            linkedin: employee.socialProfiles?.linkedin || employee.socialLinks?.linkedin || '',
+            twitter: employee.socialProfiles?.twitter || employee.socialLinks?.twitter || '',
+            facebook: employee.socialProfiles?.facebook || employee.socialLinks?.facebook || '',
+            instagram: employee.socialProfiles?.instagram || employee.socialLinks?.instagram || ''
+          },
+          skills: employee.skills || [],
+          bio: employee.bio || '',
+          documents: employee.documents || [],
+          createdAt: employee.createdAt || new Date(),
+          updatedAt: employee.updatedAt || new Date(),
+          isDeleted: employee.isDeleted || false
+        };
+        console.log("[ProfileService] Employee converted to profile format:", profile);
+      }
+    }
+
+    // If profile doesn't exist and clerk user data is provided, create a default profile
+    if (!profile && clerkUserData) {
+      console.log("[ProfileService] Profile not found, creating from Clerk user data", { clerkUserData });
+
+      // Helper function to extract name from various sources
+      const extractName = () => {
+        // Try firstName/lastName first
+        if (clerkUserData.firstName && clerkUserData.lastName) {
+          return {
+            firstName: clerkUserData.firstName,
+            lastName: clerkUserData.lastName
+          };
+        }
+
+        // Try fullName
+        if (clerkUserData.fullName) {
+          const nameParts = clerkUserData.fullName.split(' ');
+          return {
+            firstName: nameParts[0] || '',
+            lastName: nameParts.slice(1).join(' ') || ''
+          };
+        }
+
+        // Try username
+        if (clerkUserData.username) {
+          const nameParts = clerkUserData.username.split(/[._-]/);
+          return {
+            firstName: nameParts[0] || '',
+            lastName: nameParts.slice(1).join(' ') || ''
+          };
+        }
+
+        // Fall back to email username
+        const email = clerkUserData.emailAddresses?.[0]?.emailAddress || clerkUserData.email || '';
+        if (email) {
+          const emailUsername = email.split('@')[0];
+          const nameParts = emailUsername.split(/[._-]/);
+          return {
+            firstName: nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1) : '',
+            lastName: nameParts.slice(1).join(' ') ? nameParts.slice(1).map((n) => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') : ''
+          };
+        }
+
+        return { firstName: '', lastName: '' };
+      };
+
+      const names = extractName();
+
+      const defaultProfile = {
+        userId: userId,
+        companyId,
+        firstName: names.firstName,
+        lastName: names.lastName,
+        email: clerkUserData.emailAddresses?.[0]?.emailAddress || clerkUserData.email || '',
+        phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || '',
+        profilePhoto: clerkUserData.imageUrl || clerkUserData.profilePhoto || '',
+        role: clerkUserData.publicMetadata?.role || 'employee',
+        status: 'Active',
+        // Initialize empty fields
+        dateOfBirth: null,
+        gender: '',
+        employeeId: '',
+        department: clerkUserData.publicMetadata?.department || '',
+        designation: clerkUserData.publicMetadata?.designation || '',
+        joiningDate: null,
+        salary: 0,
+        // Address
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          country: '',
+          postalCode: ''
+        },
+        // Emergency contact
+        emergencyContact: {
+          name: '',
+          phone: '',
+          relationship: ''
+        },
+        // Social links
+        socialLinks: {
+          linkedin: '',
+          twitter: '',
+          facebook: '',
+          instagram: ''
+        },
+        // Skills and bio
+        skills: [],
+        bio: '',
+        // Documents
+        documents: [],
+        // Timestamps
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isDeleted: false
+      };
+
+      const result = await collections.profile.insertOne(defaultProfile);
+      console.log("[ProfileService] Created default profile", { result });
+
+      if (result.insertedId) {
+        profile = await collections.profile.findOne({ _id: result.insertedId });
+      }
+    }
+
+    if (!profile) {
+      return { done: false, error: "Profile not found. Please provide Clerk user data to create a profile." };
     }
 
     // Ensure dates are properly converted
@@ -388,24 +553,181 @@ export const updateCurrentUserProfile = async (companyId, userId, updateData) =>
     delete updateFields.userId;
     delete updateFields.companyId;
 
-    const result = await collections.profile.updateOne(
-      { userId: userId, companyId, isDeleted: { $ne: true } },
-      { $set: updateFields },
-      { upsert: true } // Create if doesn't exist
-    );
-
-    // Return updated profile
-    const updatedProfile = await collections.profile.findOne({
+    // First check if profile exists in profile collection
+    const existingProfile = await collections.profile.findOne({
       userId: userId,
-      companyId
+      companyId,
+      isDeleted: { $ne: true }
     });
 
+    if (existingProfile) {
+      // Update existing profile in profile collection
+      const result = await collections.profile.updateOne(
+        { userId: userId, companyId, isDeleted: { $ne: true } },
+        { $set: updateFields }
+      );
+
+      // Return updated profile
+      const updatedProfile = await collections.profile.findOne({
+        userId: userId,
+        companyId
+      });
+
+      const processedProfile = {
+        ...updatedProfile,
+        createdAt: updatedProfile.createdAt ? new Date(updatedProfile.createdAt) : null,
+        updatedAt: updatedProfile.updatedAt ? new Date(updatedProfile.updatedAt) : null,
+        dateOfBirth: updatedProfile.dateOfBirth ? new Date(updatedProfile.dateOfBirth) : null,
+        joiningDate: updatedProfile.joiningDate ? new Date(updatedProfile.joiningDate) : null
+      };
+
+      return { done: true, data: processedProfile };
+    }
+
+    // FALLBACK: Check if employee exists in employees collection
+    const existingEmployee = await collections.employees.findOne({
+      clerkUserId: userId,
+      companyId,
+      isDeleted: { $ne: true }
+    });
+
+    if (existingEmployee) {
+      console.log("[ProfileService] Updating employee record instead of profile");
+
+      // Convert profile update fields to employee update fields
+      const employeeUpdateFields = {
+        updatedAt: new Date()
+      };
+
+      // Map profile fields to employee fields
+      if (updateData.firstName !== undefined) employeeUpdateFields.firstName = updateData.firstName;
+      if (updateData.lastName !== undefined) employeeUpdateFields.lastName = updateData.lastName;
+      if (updateData.email !== undefined) {
+        employeeUpdateFields.email = updateData.email;
+        employeeUpdateFields['contact.email'] = updateData.email;
+      }
+      if (updateData.phone !== undefined) {
+        employeeUpdateFields.phone = updateData.phone;
+        employeeUpdateFields['contact.phone'] = updateData.phone;
+      }
+      if (updateData.dateOfBirth !== undefined) employeeUpdateFields.dateOfBirth = updateData.dateOfBirth;
+      if (updateData.gender !== undefined) employeeUpdateFields.gender = updateData.gender;
+      if (updateData.profilePhoto !== undefined) employeeUpdateFields.profileImage = updateData.profilePhoto;
+      if (updateData.employeeId !== undefined) employeeUpdateFields.employeeId = updateData.employeeId;
+      if (updateData.department !== undefined) employeeUpdateFields.departmentId = updateData.department;
+      if (updateData.designation !== undefined) employeeUpdateFields.designationId = updateData.designation;
+      if (updateData.joiningDate !== undefined) employeeUpdateFields.joiningDate = updateData.joiningDate;
+      if (updateData.bio !== undefined) employeeUpdateFields.bio = updateData.bio;
+      if (updateData.skills !== undefined) employeeUpdateFields.skills = updateData.skills;
+
+      // Handle address update for employee
+      if (updateData.address) {
+        employeeUpdateFields.address = {
+          street: updateData.address.street || "",
+          city: updateData.address.city || "",
+          state: updateData.address.state || "",
+          country: updateData.address.country || "",
+          postalCode: updateData.address.postalCode || ""
+        };
+      }
+
+      // Handle emergency contact for employee
+      if (updateData.emergencyContact) {
+        employeeUpdateFields.emergencyContact = {
+          name: updateData.emergencyContact.name || "",
+          phone: updateData.emergencyContact.phone || "",
+          relationship: updateData.emergencyContact.relationship || ""
+        };
+      }
+
+      // Handle social profiles for employee
+      if (updateData.socialLinks) {
+        employeeUpdateFields.socialProfiles = {
+          linkedin: updateData.socialLinks.linkedin || "",
+          twitter: updateData.socialLinks.twitter || "",
+          facebook: updateData.socialLinks.facebook || "",
+          instagram: updateData.socialLinks.instagram || ""
+        };
+      }
+
+      // Update employee record
+      await collections.employees.updateOne(
+        { clerkUserId: userId, companyId, isDeleted: { $ne: true } },
+        { $set: employeeUpdateFields }
+      );
+
+      // Get updated employee and convert to profile format
+      const updatedEmployee = await collections.employees.findOne({
+        clerkUserId: userId,
+        companyId
+      });
+
+      // Convert employee to profile format for response
+      const processedProfile = {
+        _id: updatedEmployee._id,
+        userId: updatedEmployee.clerkUserId,
+        companyId: updatedEmployee.companyId || companyId,
+        firstName: updatedEmployee.firstName || '',
+        lastName: updatedEmployee.lastName || '',
+        email: updatedEmployee.email || updatedEmployee.contact?.email || '',
+        phone: updatedEmployee.phone || updatedEmployee.contact?.phone || '',
+        dateOfBirth: updatedEmployee.dateOfBirth ? new Date(updatedEmployee.dateOfBirth) : null,
+        gender: updatedEmployee.gender || '',
+        profilePhoto: updatedEmployee.profileImage || '',
+        employeeId: updatedEmployee.employeeId || '',
+        department: updatedEmployee.department?.department || updatedEmployee.departmentId || '',
+        designation: updatedEmployee.designation?.designation || updatedEmployee.designationId || '',
+        joiningDate: updatedEmployee.joiningDate ? new Date(updatedEmployee.joiningDate) : null,
+        role: updatedEmployee.role || updatedEmployee.account?.role || 'employee',
+        status: updatedEmployee.status || 'Active',
+        address: {
+          street: updatedEmployee.address?.street || '',
+          city: updatedEmployee.address?.city || '',
+          state: updatedEmployee.address?.state || '',
+          country: updatedEmployee.address?.country || '',
+          postalCode: updatedEmployee.address?.postalCode || ''
+        },
+        emergencyContact: {
+          name: updatedEmployee.emergencyContact?.name || '',
+          phone: updatedEmployee.emergencyContact?.phone || '',
+          relationship: updatedEmployee.emergencyContact?.relationship || ''
+        },
+        socialLinks: {
+          linkedin: updatedEmployee.socialProfiles?.linkedin || '',
+          twitter: updatedEmployee.socialProfiles?.twitter || '',
+          facebook: updatedEmployee.socialProfiles?.facebook || '',
+          instagram: updatedEmployee.socialProfiles?.instagram || ''
+        },
+        skills: updatedEmployee.skills || [],
+        bio: updatedEmployee.bio || '',
+        createdAt: updatedEmployee.createdAt ? new Date(updatedEmployee.createdAt) : null,
+        updatedAt: updatedEmployee.updatedAt ? new Date(updatedEmployee.updatedAt) : null,
+        isDeleted: updatedEmployee.isDeleted || false
+      };
+
+      return { done: true, data: processedProfile };
+    }
+
+    // If neither exists, create new profile in profile collection
+    console.log("[ProfileService] No existing profile or employee found, creating new profile");
+    const newProfile = {
+      userId: userId,
+      companyId: companyId,
+      ...updateFields,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isDeleted: false
+    };
+
+    const result = await collections.profile.insertOne(newProfile);
+
     const processedProfile = {
-      ...updatedProfile,
-      createdAt: updatedProfile.createdAt ? new Date(updatedProfile.createdAt) : null,
-      updatedAt: updatedProfile.updatedAt ? new Date(updatedProfile.updatedAt) : null,
-      dateOfBirth: updatedProfile.dateOfBirth ? new Date(updatedProfile.dateOfBirth) : null,
-      joiningDate: updatedProfile.joiningDate ? new Date(updatedProfile.joiningDate) : null
+      ...newProfile,
+      _id: result.insertedId,
+      createdAt: newProfile.createdAt ? new Date(newProfile.createdAt) : null,
+      updatedAt: newProfile.updatedAt ? new Date(newProfile.updatedAt) : null,
+      dateOfBirth: newProfile.dateOfBirth ? new Date(newProfile.dateOfBirth) : null,
+      joiningDate: newProfile.joiningDate ? new Date(newProfile.joiningDate) : null
     };
 
     return { done: true, data: processedProfile };

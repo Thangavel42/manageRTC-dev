@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import { all_routes } from "../router/all_routes";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 type PasswordField = "password" | "confirmPassword";
@@ -8,6 +9,7 @@ const currentYear = new Date().getFullYear();
 const LockScreen = () => {
   const routes = all_routes;
   const navigation = useNavigate();
+  const { user, isLoaded } = useUser();
 
   const navigationPath = () => {
     navigation(routes.login);
@@ -23,6 +25,23 @@ const LockScreen = () => {
       [field]: !prevState[field],
     }));
   };
+
+  // Get user avatar with fallback
+  const getUserAvatar = () => {
+    if (!isLoaded) return "assets/img/profiles/avatar-12.jpg";
+    return user?.imageUrl || "assets/img/profiles/avatar-12.jpg";
+  };
+
+  // Get user name with fallback
+  const getUserName = () => {
+    if (!isLoaded) return "User";
+    return (
+      user?.fullName ||
+      `${user?.firstName || ""} ${user?.lastName || ""}`.trim() ||
+      "User"
+    );
+  };
+
   return (
     <div className="container">
       <div className="row justify-content-center">
@@ -41,11 +60,11 @@ const LockScreen = () => {
                   <div className=" mb-4 text-center">
                     <h2 className="mb-2">Welcome back! </h2>
                     <ImageWithBasePath
-                      src="assets/img/profiles/avatar-12.jpg"
-                      alt="img"
+                      src={getUserAvatar()}
+                      alt="Profile"
                       className="img-fluid avatar avatar-xxl rounded-pill my-3"
                     />
-                    <h6 className="text-dark">Adrian Davies</h6>
+                    <h6 className="text-dark">{getUserName()}</h6>
                   </div>
                   <div className="mb-3 ">
                     <label className="form-label">Password</label>

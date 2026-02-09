@@ -201,11 +201,14 @@ const ProfileManagement = () => {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
-      render: (role: string) => (
-        <Tag color={role === 'admin' ? 'red' : role === 'hr' ? 'orange' : 'blue'}>
-          {role.toUpperCase()}
-        </Tag>
-      )
+      render: (role: string) => {
+        const normalizedRole = role?.toLowerCase();
+        return (
+          <Tag color={normalizedRole === 'admin' ? 'red' : normalizedRole === 'hr' ? 'orange' : 'blue'}>
+            {role?.toUpperCase() || 'EMPLOYEE'}
+          </Tag>
+        );
+      }
     },
     {
       title: 'Status',

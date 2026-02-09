@@ -6,18 +6,34 @@
 
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
-import logger from '../../utils/logger.js';
-import { extractUser } from '../../utils/apiResponse.js';
 import {
-  buildNotFoundError,
-  buildConflictError,
-  asyncHandler
+  asyncHandler,
+  buildNotFoundError
 } from '../../middleware/errorHandler.js';
-import {
-  sendSuccess,
-  sendCreated
-} from '../../utils/apiResponse.js';
 import { deleteDepartment as deleteDepartmentService } from '../../services/hr/hrm.department.js';
+import { extractUser, sendCreated, sendSuccess } from '../../utils/apiResponse.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+
+/**
+ * Helper function to check if user has required role
+ * @param {Object} user - User object from extractUser
+ * @param {string[]} allowedRoles - Array of allowed roles
+ * @returns {boolean} - True if user has access
+ */
+const ensureRole = (user, allowedRoles = []) => {
+  const role = user?.role?.toLowerCase();
+  return allowedRoles.includes(role);
+};
+
+/**
+ * Helper function to send 403 Forbidden response
+ */
+const sendForbidden = (res, message = 'You do not have permission to access this resource') => {
+  return res.status(403).json({
+    success: false,
+    error: { message }
+  });
+};
 
 /**
  * Get all departments with optional filters
@@ -29,11 +45,11 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
     const query = req.validatedQuery || req.query;
     const { status, search, sortBy = 'department', sortOrder = 'asc', page = 1, limit = 100 } = query;
 
-    console.log('[Department Controller] Fetching departments with query:', { status, search, sortBy, sortOrder, page, limit });
+    devLog('[Department Controller] Fetching departments with query:', { status, search, sortBy, sortOrder, page, limit });
 
     // Get user info
     const user = extractUser(req);
-    console.log('[Department Controller] User info:', { userId: user.userId, companyId: user.companyId, role: user.role });
+    devLog('[Department Controller] User info:', { userId: user.userId, companyId: user.companyId, role: user.role });
 
     // Get tenant collections using companyId
     const collections = getTenantCollections(user.companyId);
@@ -47,7 +63,7 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
       ];
     }
 
-    console.log('[Department Controller] MongoDB query:', mongoQuery);
+    devLog('[Department Controller] MongoDB query:', mongoQuery);
 
     // Build sort
     const sort = {};
@@ -165,7 +181,7 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
       ])
       .toArray();
 
-    console.log('[Department Controller] Found', departments.length, 'departments out of', total, 'total');
+    devLog('[Department Controller] Found', departments.length, 'departments out of', total, 'total');
 
     // Get stats
     const allDepartments = await collections.departments.find({}).toArray();
@@ -199,7 +215,7 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('[Department Controller] Error fetching departments:', error);
+    devError('[Department Controller] Error fetching departments:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to fetch departments', details: error.message }
@@ -231,7 +247,7 @@ export const getDepartmentById = asyncHandler(async (req, res) => {
     return sendSuccess(res, department, 'Department retrieved successfully');
 
   } catch (error) {
-    logger.error('[Department Controller] Error fetching department:', error);
+    devError('[Department Controller] Error fetching department:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to fetch department' }
@@ -248,7 +264,12 @@ export const createDepartment = asyncHandler(async (req, res) => {
     const departmentData = req.body;
     const user = extractUser(req);
 
-    console.log('[Department Controller] createDepartment - companyId:', user.companyId);
+    // Role check: Only admin, hr, superadmin can create departments
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can create departments');
+    }
+
+    devLog('[Department Controller] createDepartment - companyId:', user.companyId);
 
     // Get tenant collections
     const collections = getTenantCollections(user.companyId);
@@ -299,7 +320,7 @@ export const createDepartment = asyncHandler(async (req, res) => {
     return sendCreated(res, department, 'Department created successfully');
 
   } catch (error) {
-    logger.error('[Department Controller] Error creating department:', error);
+    devError('[Department Controller] Error creating department:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to create department' }
@@ -317,7 +338,12 @@ export const updateDepartment = asyncHandler(async (req, res) => {
     const updateData = req.body;
     const user = extractUser(req);
 
-    console.log('[Department Controller] updateDepartment - id:', id, 'companyId:', user.companyId);
+    // Role check: Only admin, hr, superadmin can update departments
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can update departments');
+    }
+
+    devLog('[Department Controller] updateDepartment - id:', id, 'companyId:', user.companyId);
 
     // Get tenant collections
     const collections = getTenantCollections(user.companyId);
@@ -366,7 +392,7 @@ export const updateDepartment = asyncHandler(async (req, res) => {
     return sendSuccess(res, updatedDepartment, 'Department updated successfully');
 
   } catch (error) {
-    logger.error('[Department Controller] Error updating department:', error);
+    devError('[Department Controller] Error updating department:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to update department' }
@@ -383,7 +409,12 @@ export const deleteDepartment = asyncHandler(async (req, res) => {
   const { reassignTo } = req.body || {};
   const user = extractUser(req);
 
-  console.log('[Department Controller] deleteDepartment - id:', id, 'companyId:', user.companyId);
+  // Role check: Only admin and superadmin can delete departments
+  if (!ensureRole(user, ['admin', 'superadmin'])) {
+    return sendForbidden(res, 'Only Admin can delete departments');
+  }
+
+  devLog('[Department Controller] deleteDepartment - id:', id, 'companyId:', user.companyId);
 
   const result = await deleteDepartmentService(user.companyId, user.userId, id, reassignTo);
 
@@ -404,7 +435,12 @@ export const updateDepartmentStatus = asyncHandler(async (req, res) => {
     const { status } = req.body;
     const user = extractUser(req);
 
-    console.log('[Department Controller] updateDepartmentStatus - id:', id, 'status:', status, 'companyId:', user.companyId);
+    // Role check: Only admin, hr, superadmin can update department status
+    if (!ensureRole(user, ['admin', 'hr', 'superadmin'])) {
+      return sendForbidden(res, 'Only Admin and HR can update department status');
+    }
+
+    devLog('[Department Controller] updateDepartmentStatus - id:', id, 'status:', status, 'companyId:', user.companyId);
 
     if (!status || !['Active', 'Inactive'].includes(status)) {
       return res.status(400).json({
@@ -437,7 +473,7 @@ export const updateDepartmentStatus = asyncHandler(async (req, res) => {
     return sendSuccess(res, department, `Department status updated to ${status}`);
 
   } catch (error) {
-    logger.error('[Department Controller] Error updating department status:', error);
+    devError('[Department Controller] Error updating department status:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to update department status' }
@@ -454,7 +490,7 @@ export const searchDepartments = asyncHandler(async (req, res) => {
     const { q } = req.query;
     const user = extractUser(req);
 
-    console.log('[Department Controller] searchDepartments - query:', q, 'companyId:', user.companyId);
+    devLog('[Department Controller] searchDepartments - query:', q, 'companyId:', user.companyId);
 
     if (!q || typeof q !== 'string') {
       return res.status(400).json({
@@ -482,7 +518,7 @@ export const searchDepartments = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('[Department Controller] Error searching departments:', error);
+    devError('[Department Controller] Error searching departments:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to search departments' }
@@ -498,7 +534,7 @@ export const getDepartmentStats = asyncHandler(async (req, res) => {
   try {
     const user = extractUser(req);
 
-    console.log('[Department Controller] getDepartmentStats - companyId:', user.companyId);
+    devLog('[Department Controller] getDepartmentStats - companyId:', user.companyId);
 
     // Get tenant collections
     const collections = getTenantCollections(user.companyId);
@@ -519,7 +555,7 @@ export const getDepartmentStats = asyncHandler(async (req, res) => {
     return sendSuccess(res, stats, 'Department statistics retrieved successfully');
 
   } catch (error) {
-    logger.error('[Department Controller] Error fetching department stats:', error);
+    devError('[Department Controller] Error fetching department stats:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Failed to fetch department statistics' }

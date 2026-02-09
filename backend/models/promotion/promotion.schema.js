@@ -23,19 +23,27 @@ const promotionSchema = new mongoose.Schema({
   // Promotion details
   promotionTo: {
     departmentId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
       required: true
     },
     designationId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Designation',
       required: true
     }
   },
 
   // Current position (before promotion)
   promotionFrom: {
-    departmentId: String,
-    designationId: String
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department'
+    },
+    designationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Designation'
+    }
   },
 
   // When the promotion takes effect

@@ -1,5 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
+import cacheManager from "../../utils/cacheManager.js";
+import logger from "../../utils/logger.js";
 
 const normalizeStatus = (status) => {
   if (!status) return "Active";
@@ -16,12 +18,29 @@ export const getHolidayTypes = async (companyId) => {
       return { done: false, message: "Missing companyId" };
     }
 
+    // Try to get from cache first
+    const cacheKey = `holidayTypes:${companyId}`;
+    const cachedTypes = cacheManager.get(cacheKey);
+    if (cachedTypes) {
+      logger.debug('[getHolidayTypes] Cache hit', { companyId });
+      return {
+        done: true,
+        data: cachedTypes,
+        message: cachedTypes.length
+          ? "Holiday types fetched successfully (cached)"
+          : "No holiday types found",
+      };
+    }
+
     const collections = getTenantCollections(companyId);
 
     const holidayTypes = await collections.holidayTypes
       .find({})
       .sort({ createdAt: 1 })
       .toArray();
+
+    // Cache the results (1 hour - LONG TTL for holiday types)
+    cacheManager.set(cacheKey, holidayTypes, cacheManager.TTL.LONG);
 
     return {
       done: true,
@@ -31,6 +50,7 @@ export const getHolidayTypes = async (companyId) => {
         : "No holiday types found",
     };
   } catch (error) {
+    logger.error('[getHolidayTypes] Error', { error: error.message });
     return {
       done: false,
       message: `Failed to fetch holiday types: ${error.message}`,
@@ -101,6 +121,10 @@ export const addHolidayType = async (companyId, hrId, holidayTypeData) => {
     };
 
     const result = await collections.holidayTypes.insertOne(holidayTypeDocument);
+
+    // Invalidate holiday types cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidayTypes');
+    logger.info('[addHolidayType] Cache invalidated', { companyId });
 
     return {
       done: true,
@@ -192,6 +216,10 @@ export const updateHolidayType = async (companyId, hrId, payload) => {
       return { done: false, message: "Holiday type not found" };
     }
 
+    // Invalidate holiday types cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidayTypes');
+    logger.info('[updateHolidayType] Cache invalidated', { companyId, typeId });
+
     return {
       done: true,
       data: { _id: typeId, ...updateDoc },
@@ -237,6 +265,10 @@ export const deleteHolidayType = async (companyId, typeId) => {
       return { done: false, message: "Holiday type not found" };
     }
 
+    // Invalidate holiday types cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'holidayTypes');
+    logger.info('[deleteHolidayType] Cache invalidated', { companyId, typeId });
+
     return {
       done: true,
       data: { typeId },
@@ -265,7 +297,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
     const existingCount = await collections.holidayTypes.countDocuments({});
 
     if (existingCount > 0) {
-      console.log(`[Holiday Types Service] Types already exist for company ${companyId}: ${existingCount} types`);
+      logger.info('[initializeDefaultHolidayTypes] Types already exist', { companyId, count: existingCount });
       return {
         done: true, // Return success since types exist
         data: [],
@@ -273,7 +305,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
       };
     }
 
-    console.log(`[Holiday Types Service] Initializing default types for company ${companyId}`);
+    logger.info('[initializeDefaultHolidayTypes] Initializing defaults', { companyId });
 
     // Default holiday types
     const defaultTypes = [
@@ -303,7 +335,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
         ordered: false
       });
 
-      console.log(`[Holiday Types Service] Successfully inserted ${Object.keys(result.insertedIds).length} default types`);
+      logger.info('[initializeDefaultHolidayTypes] Inserted defaults', { companyId, count: Object.keys(result.insertedIds).length });
 
       return {
         done: true,
@@ -315,7 +347,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
       const finalCount = await collections.holidayTypes.countDocuments({});
 
       if (finalCount >= defaultTypes.length) {
-        console.log(`[Holiday Types Service] Types were created by concurrent request. Final count: ${finalCount}`);
+        logger.info('[initializeDefaultHolidayTypes] Types created by concurrent request', { companyId, count: finalCount });
         return {
           done: true,
           data: [],
@@ -326,7 +358,7 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
       throw insertError;
     }
   } catch (error) {
-    console.error(`[Holiday Types Service] Error initializing defaults:`, error);
+    logger.error('[initializeDefaultHolidayTypes] Error', { error: error.message });
     return {
       done: false,
       message: `Failed to initialize default holiday types: ${error.message}`,

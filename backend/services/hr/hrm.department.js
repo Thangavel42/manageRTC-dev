@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { client, getTenantCollections } from "../../config/db.js";
 import { AppError, buildValidationError } from "../../middleware/errorHandler.js";
+import cacheManager from "../../utils/cacheManager.js";
+import logger from "../../utils/logger.js";
 
 const normalizeStatus = (status) => {
   if (!status) return "Active";
@@ -53,6 +55,18 @@ export const allDepartments = async (companyId, hrId) => {
       };
     }
 
+    // Try to get from cache first
+    const cacheKey = `departments:active:${companyId}`;
+    const cachedDepartments = cacheManager.get(cacheKey);
+    if (cachedDepartments) {
+      logger.debug('[allDepartments] Cache hit', { companyId });
+      return {
+        done: true,
+        data: cachedDepartments,
+        message: "Departments fetched successfully (cached)",
+      };
+    }
+
     const collections = getTenantCollections(companyId);
     // const hrExists = await collections.hr.countDocuments({ userId: hrId });
     // if (!hrExists) return { done: false, error: "HR not found" };
@@ -61,12 +75,16 @@ export const allDepartments = async (companyId, hrId) => {
       .find({ status: { $regex: "^Active$", $options: "i" } }, { projection: { department: 1, _id: 1, status: 1 } })
       .toArray();
 
+    // Cache the results (15 minutes - MEDIUM TTL)
+    cacheManager.set(cacheKey, result, cacheManager.TTL.MEDIUM);
+
     return {
       done: true,
       data: result,
       message: "Departments fetched successfully",
     };
   } catch (error) {
+    logger.error('[allDepartments] Error', { error: error.message });
     return {
       done: false,
       error: `Failed to fetch departments: ${error.message}`,
@@ -75,7 +93,7 @@ export const allDepartments = async (companyId, hrId) => {
 };
 
 export const addDepartment = async (companyId, hrId, payload) => {
-  console.log("in add depart");
+  logger.debug('[addDepartment] Starting', { companyId });
   try {
     if (!companyId || !payload) {
       return { done: false, error: "Missing required fields" };
@@ -91,13 +109,13 @@ export const addDepartment = async (companyId, hrId, payload) => {
     // Escape special regex characters and trim whitespace
     const departmentName = payload.department.trim();
     const escapedName = departmentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
+
     const departmentExists = await collections.departments.countDocuments({
       department: { $regex: new RegExp(`^${escapedName}$`, "i") },
     });
-    
-    console.log("Checking for duplicate department:", departmentName, "Found:", departmentExists);
-    
+
+    logger.debug('[addDepartment] Checking for duplicate', { departmentName, exists: departmentExists > 0 });
+
     if (departmentExists > 0) {
       return { done: false, error: "Department already exists" };
     }
@@ -110,14 +128,18 @@ export const addDepartment = async (companyId, hrId, payload) => {
     };
 
     const result = await collections.departments.insertOne(newDepartment);
+
+    // Invalidate department cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'departments');
+    logger.info('[addDepartment] Cache invalidated', { companyId });
+
     return {
       done: true,
       data: { _id: result.insertedId, ...newDepartment },
       message: "Department added successfully",
     };
   } catch (error) {
-    console.log(error);
-
+    logger.error('[addDepartment] Error', { error: error.message });
     return {
       done: false,
       error: "Internal server error",
@@ -132,7 +154,7 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
     }
 
     const collections = getTenantCollections(companyId);
-    console.log(Object.keys(collections));
+    logger.debug('[displayDepartment] Got collections', { companyId, keys: Object.keys(collections) });
 
     // const hrExists = await collections.hr.countDocuments({ userId: hrId });
     // if (!hrExists) return { done: false, message: "HR doesn't exist" };
@@ -249,14 +271,15 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
       .aggregate(pipeline)
       .toArray();
 
+    logger.debug('[displayDepartment] Found departments', { companyId, count: departments.length });
+
     return {
       done: true,
       data: departments,
       message: "Departments retrieved successfully",
     };
   } catch (error) {
-    console.log(error);
-
+    logger.error('[displayDepartment] Error', { error: error.message });
     return {
       done: false,
       error: "Internal server error",
@@ -352,6 +375,10 @@ export const updateDepartment = async (companyId, hrId, payload) => {
       return { done: false, error: "Department not found" };
     }
 
+    // Invalidate department cache for this company
+    cacheManager.invalidateCompanyCache(companyId, 'departments');
+    logger.info('[updateDepartment] Cache invalidated', { companyId, departmentId });
+
     return {
       done: true,
       message: "Department updated successfully",
@@ -430,7 +457,6 @@ export const deleteDepartment = async (companyId, hrId, departmentId, reassignTo
             {
               $set: {
                 departmentId: targetIdStr,
-                department: targetDepartment.department,
               },
             },
             { session }
@@ -472,6 +498,10 @@ export const deleteDepartment = async (companyId, hrId, departmentId, reassignTo
     } finally {
       await session.endSession();
     }
+
+  // Invalidate department cache for this company
+  cacheManager.invalidateCompanyCache(companyId, 'departments');
+  logger.info('[deleteDepartment] Cache invalidated', { companyId, departmentId });
 
   return {
     done: true,

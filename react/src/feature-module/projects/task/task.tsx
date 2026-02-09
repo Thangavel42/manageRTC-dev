@@ -330,8 +330,9 @@ const Task = () => {
     try {
       setError(null);
 
-      // Log employee filtering info if user is an employee
-      if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+      // Log employee filtering info if user is an employee (case-insensitive)
+      const userRole = profile?.role?.toLowerCase();
+      if (profile && (userRole === 'employee' || userRole === 'hr') && '_id' in profile) {
         console.log('[Task] Fetching projects for employee:', {
           _id: profile._id,
           employeeId: profile.employeeId,
@@ -865,9 +866,10 @@ const Task = () => {
     }
   }, [allEmployeeTasks, isEmployee]);
 
-  // Console log employee _id from profile
+  // Console log employee _id from profile (case-insensitive)
   useEffect(() => {
-    if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+    const userRole = profile?.role?.toLowerCase();
+    if (profile && (userRole === 'employee' || userRole === 'hr') && '_id' in profile) {
       console.log('============================================');
       console.log('[Task Page] Employee MongoDB _id:', profile._id);
       console.log('[Task Page] Employee ID:', profile.employeeId);

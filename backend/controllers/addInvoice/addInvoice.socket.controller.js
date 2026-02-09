@@ -1,9 +1,10 @@
-import { 
-  createAddInvoice, 
-  getAddInvoices, 
-  updateAddInvoice, 
-  deleteAddInvoice 
+import {
+  createAddInvoice,
+  getAddInvoices,
+  updateAddInvoice,
+  deleteAddInvoice
 } from "../../services/addInvoice/addInvoice.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const authorize = (socket, allowed = []) => {
   const role = (socket.role || "").toLowerCase();
@@ -13,7 +14,7 @@ const authorize = (socket, allowed = []) => {
 const roomForCompany = (companyId) => `company:${companyId}`;
 
 const addInvoiceSocketController = (socket, io) => {
-  console.log(`✅ addInvoice.socket.controller active for ${socket.id}`);
+  devLog(`✅ addInvoice.socket.controller active for ${socket.id}`);
 
   if (socket.companyId) {
     socket.join(roomForCompany(socket.companyId));

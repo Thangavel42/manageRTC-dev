@@ -1,4 +1,5 @@
 import { clerkClient } from '@clerk/express';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 export class ChatUsersController {
   constructor(socket, io) {
@@ -67,7 +68,7 @@ export class ChatUsersController {
       });
 
     } catch (error) {
-      console.error('Error in getCompanyUsers:', error);
+      devError('Error in getCompanyUsers:', error);
       this.socket.emit('error', { message: 'Failed to get company users' });
     }
   }

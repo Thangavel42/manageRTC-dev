@@ -173,8 +173,9 @@ const ProjectGrid = () => {
           filters.search = filterParams.search;
         }
 
-        // Log employee filtering info if user is an employee
-        if (profile && (profile.role === 'employee' || profile.role === 'hr') && '_id' in profile) {
+        // Log employee filtering info if user is an employee (case-insensitive)
+        const userRole = profile?.role?.toLowerCase();
+        if (profile && (userRole === 'employee' || userRole === 'hr') && '_id' in profile) {
           console.log('[Project] Fetching projects for employee:', {
             _id: profile._id,
             employeeId: profile.employeeId,

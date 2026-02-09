@@ -1,19 +1,20 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { ObjectId } from 'mongodb';
 import * as taskService from '../../services/task/task.services.js';
 
 const taskController = (socket, io) => {
   const validateCompanyAccess = (socket) => {
     if (!socket.companyId) {
-      console.error('[Task] Company ID not found in user metadata', { user: socket.user?.sub });
+      devError('[Task] Company ID not found in user metadata', { user: socket.user?.sub });
       throw new Error('Company ID not found in user metadata');
     }
     const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!companyIdRegex.test(socket.companyId)) {
-      console.error(`[Task] Invalid company ID format: ${socket.companyId}`);
+      devError(`[Task] Invalid company ID format: ${socket.companyId}`);
       throw new Error('Invalid company ID format');
     }
     if (socket.userMetadata?.companyId !== socket.companyId) {
-      console.error(
+      devError(
         `[Task] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
       );
       throw new Error('Unauthorized: Company ID mismatch');
@@ -21,11 +22,11 @@ const taskController = (socket, io) => {
     return socket.companyId;
   };
 
-  const isAuthorized = socket.userMetadata?.role === 'admin' || socket.userMetadata?.role === 'hr';
+  const isAuthorized = socket.userMetadata?.role?.toLowerCase() === 'admin' || socket.userMetadata?.role?.toLowerCase() === 'hr';
 
   socket.on('task:create', async (data) => {
     try {
-      console.log('[Task] task:create event', {
+      devLog('[Task] task:create event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -46,20 +47,20 @@ const taskController = (socket, io) => {
 
       const result = await taskService.createTask(companyId, taskData);
       if (!result.done) {
-        console.error('[Task] Failed to create task', { error: result.error });
+        devError('[Task] Failed to create task', { error: result.error });
       }
       socket.emit('task:create-response', result);
 
       io.to(`company_${companyId}`).emit('task:task-created', result);
     } catch (error) {
-      console.error('[Task] Error in task:create', { error: error.message });
+      devError('[Task] Error in task:create', { error: error.message });
       socket.emit('task:create-response', { done: false, error: error.message });
     }
   });
 
   socket.on('task:getAll', async (filters = {}) => {
     try {
-      console.log('[Task] task:getAll event', {
+      devLog('[Task] task:getAll event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -68,18 +69,18 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.getTasks(companyId, filters);
       if (!result.done) {
-        console.error('[Task] Failed to get tasks', { error: result.error });
+        devError('[Task] Failed to get tasks', { error: result.error });
       }
       socket.emit('task:getAll-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:getAll', { error: error.message });
+      devError('[Task] Error in task:getAll', { error: error.message });
       socket.emit('task:getAll-response', { done: false, error: error.message });
     }
   });
 
   socket.on('task:getById', async (taskId) => {
     try {
-      console.log('[Task] task:getById event', {
+      devLog('[Task] task:getById event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -88,11 +89,11 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.getTaskById(companyId, taskId);
       if (!result.done) {
-        console.error('[Task] Failed to get task', { error: result.error });
+        devError('[Task] Failed to get task', { error: result.error });
       }
       socket.emit('task:getById-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:getById', { error: error.message });
+      devError('[Task] Error in task:getById', { error: error.message });
       socket.emit('task:getById-response', { done: false, error: error.message });
     }
   });
@@ -102,7 +103,7 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.getTasksByProject(companyId, projectId, filters);
       if (!result.done) {
-        console.error('[Task] Failed to get project tasks', { error: result.error });
+        devError('[Task] Failed to get project tasks', { error: result.error });
       }
       // Wrap tasks in data.tasks structure for frontend compatibility
       const response = result.done
@@ -116,7 +117,7 @@ const taskController = (socket, io) => {
         : result;
       socket.emit('task:getByProject-response', response);
     } catch (error) {
-      console.error('[Task] Error in task:getByProject', { error: error.message });
+      devError('[Task] Error in task:getByProject', { error: error.message });
       socket.emit('task:getByProject-response', { done: false, error: error.message });
     }
   });
@@ -132,7 +133,7 @@ const taskController = (socket, io) => {
           return rest; // treat remaining fields as update object
         })();
 
-      console.log('[Task] task:update event', {
+      devLog('[Task] task:update event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -147,20 +148,20 @@ const taskController = (socket, io) => {
 
       const result = await taskService.updateTask(companyId, taskId, update);
       if (!result.done) {
-        console.error('[Task] Failed to update task', { error: result.error });
+        devError('[Task] Failed to update task', { error: result.error });
       }
       socket.emit('task:update-response', result);
 
       io.to(`company_${companyId}`).emit('task:task-updated', result);
     } catch (error) {
-      console.error('[Task] Error in task:update', { error: error.message });
+      devError('[Task] Error in task:update', { error: error.message });
       socket.emit('task:update-response', { done: false, error: error.message });
     }
   });
 
   socket.on('task:delete', async ({ taskId }) => {
     try {
-      console.log('[Task] task:delete event', {
+      devLog('[Task] task:delete event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -170,20 +171,20 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.deleteTask(companyId, taskId);
       if (!result.done) {
-        console.error('[Task] Failed to delete task', { error: result.error });
+        devError('[Task] Failed to delete task', { error: result.error });
       }
       socket.emit('task:delete-response', result);
 
       io.to(`company_${companyId}`).emit('task:task-deleted', result);
     } catch (error) {
-      console.error('[Task] Error in task:delete', { error: error.message });
+      devError('[Task] Error in task:delete', { error: error.message });
       socket.emit('task:delete-response', { done: false, error: error.message });
     }
   });
 
   socket.on('task:getStats', async (projectId = null) => {
     try {
-      console.log('[Task] task:getStats event', {
+      devLog('[Task] task:getStats event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -192,19 +193,19 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.getTaskStats(companyId, projectId);
       if (!result.done) {
-        console.error('[Task] Failed to get task stats', { error: result.error });
+        devError('[Task] Failed to get task stats', { error: result.error });
       }
       // include projectId in response to correlate on client
       socket.emit('task:getStats-response', { ...result, projectId });
     } catch (error) {
-      console.error('[Task] Error in task:getStats', { error: error.message });
+      devError('[Task] Error in task:getStats', { error: error.message });
       socket.emit('task:getStats-response', { done: false, error: error.message, projectId });
     }
   });
 
   socket.on('task:getKanbanData', async (data = {}) => {
     try {
-      console.log('[Task] task:getKanbanData event', {
+      devLog('[Task] task:getKanbanData event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -216,19 +217,19 @@ const taskController = (socket, io) => {
       const result = await taskService.getTasksForKanban(companyId, projectId, filters);
 
       if (!result.done) {
-        console.error('[Task] Failed to get kanban data', { error: result.error });
+        devError('[Task] Failed to get kanban data', { error: result.error });
       }
 
       socket.emit('task:getKanbanData-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:getKanbanData', { error: error.message });
+      devError('[Task] Error in task:getKanbanData', { error: error.message });
       socket.emit('task:getKanbanData-response', { done: false, error: error.message });
     }
   });
 
   socket.on('task:updateStatus', async (data) => {
     try {
-      console.log('[Task] task:updateStatus event', {
+      devLog('[Task] task:updateStatus event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -248,7 +249,7 @@ const taskController = (socket, io) => {
       const result = await taskService.updateTaskStatus(companyId, taskId, newStatus);
 
       if (!result.done) {
-        console.error('[Task] Failed to update task status', { error: result.error });
+        devError('[Task] Failed to update task status', { error: result.error });
       }
 
       socket.emit('task:updateStatus-response', result);
@@ -259,7 +260,7 @@ const taskController = (socket, io) => {
         updatedBy: socket.user?.sub,
       });
     } catch (error) {
-      console.error('[Task] Error in task:updateStatus', { error: error.message });
+      devError('[Task] Error in task:updateStatus', { error: error.message });
       socket.emit('task:updateStatus-response', { done: false, error: error.message });
     }
   });
@@ -267,7 +268,7 @@ const taskController = (socket, io) => {
   // Get Task Statistics
   socket.on('task:getStats', async (projectId = null) => {
     try {
-      console.log('[Task] task:getStats event', {
+      devLog('[Task] task:getStats event', {
         user: socket.user?.sub,
         companyId: socket.companyId,
         projectId,
@@ -276,12 +277,12 @@ const taskController = (socket, io) => {
       const result = await taskService.getTaskStats(companyId, projectId);
 
       if (!result.done) {
-        console.error('[Task] Failed to get task stats', { error: result.error });
+        devError('[Task] Failed to get task stats', { error: result.error });
       }
 
       socket.emit('task:getStats-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:getStats', { error: error.message });
+      devError('[Task] Error in task:getStats', { error: error.message });
       socket.emit('task:getStats-response', { done: false, error: error.message });
     }
   });
@@ -289,7 +290,7 @@ const taskController = (socket, io) => {
   // Get task statuses
   socket.on('task:getStatuses', async () => {
     try {
-      console.log('[Task] task:getStatuses event', {
+      devLog('[Task] task:getStatuses event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -297,11 +298,11 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.getTaskStatuses(companyId);
       if (!result.done) {
-        console.error('[Task] Failed to get task statuses', { error: result.error });
+        devError('[Task] Failed to get task statuses', { error: result.error });
       }
       socket.emit('task:getStatuses-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:getStatuses', { error: error.message });
+      devError('[Task] Error in task:getStatuses', { error: error.message });
       socket.emit('task:getStatuses-response', { done: false, error: error.message });
     }
   });
@@ -309,7 +310,7 @@ const taskController = (socket, io) => {
   // Create task status
   socket.on('task:addStatus', async (payload = {}) => {
     try {
-      console.log('[Task] task:addStatus event', {
+      devLog('[Task] task:addStatus event', {
         user: socket.user?.sub,
         companyId: socket.companyId,
         payload,
@@ -317,11 +318,11 @@ const taskController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await taskService.createTaskStatus(companyId, payload);
       if (!result.done) {
-        console.error('[Task] Failed to create task status', { error: result.error });
+        devError('[Task] Failed to create task status', { error: result.error });
       }
       socket.emit('task:addStatus-response', result);
     } catch (error) {
-      console.error('[Task] Error in task:addStatus', { error: error.message });
+      devError('[Task] Error in task:addStatus', { error: error.message });
       socket.emit('task:addStatus-response', { done: false, error: error.message });
     }
   });
@@ -329,7 +330,7 @@ const taskController = (socket, io) => {
   // Update task status board (the status itself, not a task's status)
   socket.on('task:updateStatusBoard', async (payload = {}) => {
     try {
-      console.log('[Task] task:updateStatusBoard event', {
+      devLog('[Task] task:updateStatusBoard event', {
         user: socket.user?.sub,
         companyId: socket.companyId,
         payload,
@@ -343,7 +344,7 @@ const taskController = (socket, io) => {
 
       const result = await taskService.updateStatusBoard(companyId, statusId, updateData);
       if (!result.done) {
-        console.error('[Task] Failed to update task status board', { error: result.error });
+        devError('[Task] Failed to update task status board', { error: result.error });
       }
       socket.emit('task:updateStatusBoard-response', result);
 
@@ -354,7 +355,7 @@ const taskController = (socket, io) => {
         updatedBy: socket.user?.sub,
       });
     } catch (error) {
-      console.error('[Task] Error in task:updateStatusBoard', { error: error.message });
+      devError('[Task] Error in task:updateStatusBoard', { error: error.message });
       socket.emit('task:updateStatusBoard-response', { done: false, error: error.message });
     }
   });

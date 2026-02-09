@@ -19,6 +19,7 @@ import {
   sendSuccess
 } from '../../utils/apiResponse.js';
 import { broadcastShiftEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * @desc    Get all shifts with pagination and filtering
@@ -30,7 +31,7 @@ export const getShifts = asyncHandler(async (req, res) => {
   const { page, limit, search, isActive, sortBy, order } = query;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] getShifts - companyId:', user.companyId, 'filters:', { page, limit, search, isActive });
+  devLog('[Shift Controller] getShifts - companyId:', user.companyId, 'filters:', { page, limit, search, isActive });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -94,7 +95,7 @@ export const getShiftById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] getShiftById - id:', id, 'companyId:', user.companyId);
+  devLog('[Shift Controller] getShiftById - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -121,7 +122,7 @@ export const getShiftById = asyncHandler(async (req, res) => {
 export const getDefaultShift = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Shift Controller] getDefaultShift - companyId:', user.companyId);
+  devLog('[Shift Controller] getDefaultShift - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -160,7 +161,7 @@ export const getDefaultShift = asyncHandler(async (req, res) => {
 export const getActiveShifts = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[Shift Controller] getActiveShifts - companyId:', user.companyId);
+  devLog('[Shift Controller] getActiveShifts - companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -186,8 +187,8 @@ export const createShift = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const shiftData = req.body;
 
-  console.log('[Shift Controller] createShift - companyId:', user.companyId);
-  console.log('[Shift Controller] shiftData:', JSON.stringify(shiftData, null, 2));
+  devLog('[Shift Controller] createShift - companyId:', user.companyId);
+  devLog('[Shift Controller] shiftData:', JSON.stringify(shiftData, null, 2));
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -257,7 +258,7 @@ export const updateShift = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const updateData = req.body;
 
-  console.log('[Shift Controller] updateShift - id:', id, 'companyId:', user.companyId);
+  devLog('[Shift Controller] updateShift - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -339,7 +340,7 @@ export const deleteShift = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] deleteShift - id:', id, 'companyId:', user.companyId);
+  devLog('[Shift Controller] deleteShift - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -406,7 +407,7 @@ export const assignShiftToEmployee = asyncHandler(async (req, res) => {
   const { employeeId, shiftId, effectiveDate } = req.body;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] assignShiftToEmployee - companyId:', user.companyId);
+  devLog('[Shift Controller] assignShiftToEmployee - companyId:', user.companyId);
 
   // Validate required fields
   if (!employeeId) {
@@ -496,7 +497,7 @@ export const bulkAssignShifts = asyncHandler(async (req, res) => {
   const { employeeIds, shiftId, effectiveDate } = req.body;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] bulkAssignShifts - companyId:', user.companyId);
+  devLog('[Shift Controller] bulkAssignShifts - companyId:', user.companyId);
 
   // Validate required fields
   if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
@@ -579,7 +580,7 @@ export const getEmployeeShift = asyncHandler(async (req, res) => {
   const { employeeId } = req.params;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] getEmployeeShift - employeeId:', employeeId, 'companyId:', user.companyId);
+  devLog('[Shift Controller] getEmployeeShift - employeeId:', employeeId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -646,7 +647,7 @@ export const removeShiftAssignment = asyncHandler(async (req, res) => {
   const { employeeId } = req.params;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] removeShiftAssignment - employeeId:', employeeId, 'companyId:', user.companyId);
+  devLog('[Shift Controller] removeShiftAssignment - employeeId:', employeeId, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -704,7 +705,7 @@ export const setDefaultShift = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  console.log('[Shift Controller] setDefaultShift - id:', id, 'companyId:', user.companyId);
+  devLog('[Shift Controller] setDefaultShift - id:', id, 'companyId:', user.companyId);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -775,7 +776,7 @@ export const setDefaultShift = asyncHandler(async (req, res) => {
 
     updatedEmployeesCount = updateResult.modifiedCount;
 
-    console.log(`[Shift Controller] Updated ${updatedEmployeesCount} employees from old default shift to new default shift`);
+    devLog(`[Shift Controller] Updated ${updatedEmployeesCount} employees from old default shift to new default shift`);
   }
 
   // Get updated shift

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { all_routes } from '../../router/all_routes'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Table from "../../../core/common/dataTable/index";
 import CommonSelect from '../../../core/common/commonSelect';
 import { designation_details } from '../../../core/data/json/designation_details';
@@ -50,6 +50,8 @@ const staticOptions = [
 ];
 
 const Designations = () => {
+  const navigate = useNavigate();
+
   // REST hooks for designations and departments
   const {
     designations,
@@ -979,6 +981,18 @@ const Designations = () => {
                         <div className="alert alert-danger">
                           {error} <button onClick={() => fetchDepartments()}>Retry</button>
                         </div>
+                      ) : departmentOptions.length === 0 ? (
+                        <div>
+                          <button
+                            type="button"
+                            className="btn btn-primary w-100"
+                            onClick={() => navigate("/departments")}
+                          >
+                            <i className="ti ti-plus me-2" />
+                            Create New Department
+                          </button>
+                          <small className="text-muted d-block mt-2">No departments available. Click to create one.</small>
+                        </div>
                       ) : (
                         <>
                           <CommonSelect
@@ -1099,26 +1113,42 @@ const Designations = () => {
                   <div className="col-md-12">
                     <div className="mb-3">
                       <label className="form-label">Department Name</label>
-                      <CommonSelect
-                        className="select"
-                        options={departmentOptions}
-                        defaultValue={departmentOptions.find(opt =>
-                          opt.value === editingDesignation?.departmentId
-                        )}
-                        onChange={(selectedOption) => {
-                          setEditingDesignation(prev =>
-                            prev ? { ...prev, departmentId: selectedOption?.value || "" } : prev
-                          );
-                          // Clear error when user selects a department
-                          if (editDepartmentIdError) {
-                            setEditDepartmentIdError(null);
-                          }
-                        }}
-                      />
-                      {editDepartmentIdError && (
-                        <div className="invalid-feedback d-block">
-                          {editDepartmentIdError}
+                      {departmentOptions.length === 0 ? (
+                        <div>
+                          <button
+                            type="button"
+                            className="btn btn-primary w-100"
+                            onClick={() => navigate("/departments")}
+                          >
+                            <i className="ti ti-plus me-2" />
+                            Create New Department
+                          </button>
+                          <small className="text-muted d-block mt-2">No departments available. Click to create one.</small>
                         </div>
+                      ) : (
+                        <>
+                          <CommonSelect
+                            className="select"
+                            options={departmentOptions}
+                            defaultValue={departmentOptions.find(opt =>
+                              opt.value === editingDesignation?.departmentId
+                            )}
+                            onChange={(selectedOption) => {
+                              setEditingDesignation(prev =>
+                                prev ? { ...prev, departmentId: selectedOption?.value || "" } : prev
+                              );
+                              // Clear error when user selects a department
+                              if (editDepartmentIdError) {
+                                setEditDepartmentIdError(null);
+                              }
+                            }}
+                          />
+                          {editDepartmentIdError && (
+                            <div className="invalid-feedback d-block">
+                              {editDepartmentIdError}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

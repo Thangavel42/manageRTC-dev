@@ -1,4 +1,5 @@
 import kanbanServices from "../../services/kaban/kaban.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const ALLOWED_ROLES = ["admin", "hr", "leads"];
 
@@ -22,7 +23,7 @@ const validateAccess = (socket) => {
 };
 
 const respondWithError = (socket, event, error) => {
-  console.error(`[Kanban] Error on ${event}:`, error);
+  devError(`[Kanban] Error on ${event}:`, error);
   socket.emit(event, {
     done: false,
     error: error.message || "Something went wrong",

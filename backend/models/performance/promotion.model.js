@@ -19,14 +19,14 @@ const promotionSchema = new mongoose.Schema({
   // promotionFrom is NEVER stored - always derived from employee's current dept/designation
   promotionTo: {
     departmentId: {
-      type: String,
-      required: true,
-      trim: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
+      required: true
     },
     designationId: {
-      type: String,
-      required: true,
-      trim: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Designation',
+      required: true
     }
   },
   

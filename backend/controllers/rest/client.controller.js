@@ -24,6 +24,7 @@ import {
   sendCreated,
   sendSuccess,
 } from '../../utils/apiResponse.js';
+<<<<<<< main
 import { getTenantModel } from '../../utils/mongooseMultiTenant.js';
 
 /**
@@ -34,15 +35,43 @@ const getClientModel = (companyId) => {
     return Client;
   }
   return getTenantModel(companyId, 'Client', Client.schema);
+=======
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+
+/**
+ * Helper function to check if user has required role
+ * @param {Object} user - User object from extractUser
+ * @param {string[]} allowedRoles - Array of allowed roles
+ * @returns {boolean} - True if user has access
+ */
+const ensureRole = (user, allowedRoles = []) => {
+  const role = user?.role?.toLowerCase();
+  return allowedRoles.includes(role);
+};
+
+/**
+ * Helper function to send 403 Forbidden response
+ */
+const sendForbidden = (res, message = 'You do not have permission to access this resource') => {
+  return res.status(403).json({
+    success: false,
+    error: { message }
+  });
+>>>>>>> main
 };
 
 /**
  * @desc    Get all clients with pagination and filtering
  * @route   GET /api/clients
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const getClients = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   // Use tenant collections for multi-tenant database access
   const collections = getTenantCollections(user.companyId);
@@ -77,11 +106,16 @@ export const getClients = asyncHandler(async (req, res) => {
 /**
  * @desc    Get single client by ID
  * @route   GET /api/clients/:id
- * @access  Private (All authenticated users)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const getClientById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -111,11 +145,16 @@ export const getClientById = asyncHandler(async (req, res) => {
 /**
  * @desc    Create new client
  * @route   POST /api/clients
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const createClient = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const clientData = req.body;
+
+  // Role check: Only admin, hr, manager, superadmin can create clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to create clients');
+  }
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -172,17 +211,24 @@ export const createClient = asyncHandler(async (req, res) => {
 /**
  * @desc    Update client
  * @route   PUT /api/clients/:id
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const updateClient = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
 
+<<<<<<< main
   console.log('=== UPDATE CLIENT DEBUG ===');
   console.log('Received req.body:', JSON.stringify(req.body, null, 2));
   console.log('socialLinks in req.body:', req.body.socialLinks);
   console.log('==========================');
+=======
+  // Role check: Only admin, hr, manager, superadmin can update clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to update clients');
+  }
+>>>>>>> main
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -249,11 +295,16 @@ export const updateClient = asyncHandler(async (req, res) => {
 /**
  * @desc    Delete client (soft delete)
  * @route   DELETE /api/clients/:id
- * @access  Private (Admin, Superadmin)
+ * @access  Private (Admin, Superadmin) - Employee, HR, Manager, Leads NOT allowed
  */
 export const deleteClient = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
+
+  // Role check: Only admin and superadmin can delete clients
+  if (!ensureRole(user, ['admin', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to delete clients');
+  }
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -323,11 +374,16 @@ export const deleteClient = asyncHandler(async (req, res) => {
 /**
  * @desc    Get clients by account manager
  * @route   GET /api/clients/account-manager/:managerId
- * @access  Private (All authenticated users)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const getClientsByAccountManager = asyncHandler(async (req, res) => {
   const { managerId } = req.params;
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(managerId)) {
@@ -347,11 +403,16 @@ export const getClientsByAccountManager = asyncHandler(async (req, res) => {
 /**
  * @desc    Get clients by status
  * @route   GET /api/clients/status/:status
- * @access  Private (All authenticated users)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const getClientsByStatus = asyncHandler(async (req, res) => {
   const { status } = req.params;
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   // Validate status
   const validStatuses = ['Active', 'Inactive', 'Prospect', 'Churned'];
@@ -375,11 +436,16 @@ export const getClientsByStatus = asyncHandler(async (req, res) => {
 /**
  * @desc    Get clients by tier
  * @route   GET /api/clients/tier/:tier
- * @access  Private (All authenticated users)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const getClientsByTier = asyncHandler(async (req, res) => {
   const { tier } = req.params;
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   // Validate tier
   const validTiers = ['Enterprise', 'Mid-Market', 'Small-Business', 'Startup'];
@@ -400,11 +466,16 @@ export const getClientsByTier = asyncHandler(async (req, res) => {
 /**
  * @desc    Search clients
  * @route   GET /api/clients/search
- * @access  Private (All authenticated users)
+ * @access  Private (Admin, HR, Manager, Leads, Superadmin) - Employee NOT allowed
  */
 export const searchClients = asyncHandler(async (req, res) => {
   const { q, page, limit } = req.query;
   const user = extractUser(req);
+
+  // Role check: Employee cannot access clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'leads', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access clients');
+  }
 
   if (!q || !q.trim()) {
     throw buildValidationError('q', 'Search query is required');
@@ -436,10 +507,15 @@ export const searchClients = asyncHandler(async (req, res) => {
 /**
  * @desc    Get client statistics
  * @route   GET /api/clients/stats
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const getClientStats = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+
+  // Role check: Only admin, hr, manager, superadmin can access client stats
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to access client statistics');
+  }
 
   // Get tenant-specific collections
   const collections = getTenantCollections(user.companyId);
@@ -503,12 +579,17 @@ export const getClientStats = asyncHandler(async (req, res) => {
 /**
  * @desc    Update deal statistics for a client
  * @route   PATCH /api/clients/:id/deal-stats
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const updateClientDealStats = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { won, value } = req.body;
   const user = extractUser(req);
+
+  // Role check: Only admin, hr, manager, superadmin can update deal stats
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to update client deal statistics');
+  }
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -552,10 +633,15 @@ export const updateClientDealStats = asyncHandler(async (req, res) => {
 /**
  * @desc    Export clients as PDF
  * @route   GET /api/clients/export/pdf
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const exportPDF = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+
+  // Role check: Only admin, hr, manager, superadmin can export clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to export clients');
+  }
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -568,7 +654,7 @@ export const exportPDF = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .toArray();
 
-  console.log('[ExportPDF] Found clients:', clients.length);
+  devLog('[ExportPDF] Found clients:', clients.length);
 
   // Create PDF document
   const doc = new PDFDocument();
@@ -631,11 +717,11 @@ export const exportPDF = asyncHandler(async (req, res) => {
 
   // Wait for file to be written
   writeStream.on('finish', () => {
-    console.log('[ExportPDF] PDF file created successfully');
+    devLog('[ExportPDF] PDF file created successfully');
     // Send the file as a download response
     res.download(filePath, fileName, (err) => {
       if (err) {
-        console.error('[ExportPDF] Error sending PDF file:', err);
+        devError('[ExportPDF] Error sending PDF file:', err);
       }
       // Optionally delete the temp file after sending
       // fs.unlinkSync(filePath);
@@ -643,7 +729,7 @@ export const exportPDF = asyncHandler(async (req, res) => {
   });
 
   writeStream.on('error', (err) => {
-    console.error('[ExportPDF] Error writing PDF file:', err);
+    devError('[ExportPDF] Error writing PDF file:', err);
     throw buildValidationError('export', 'Failed to generate PDF file');
   });
 });
@@ -651,10 +737,15 @@ export const exportPDF = asyncHandler(async (req, res) => {
 /**
  * @desc    Export clients as Excel
  * @route   GET /api/clients/export/excel
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Manager, Superadmin) - Employee, Leads NOT allowed
  */
 export const exportExcel = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+
+  // Role check: Only admin, hr, manager, superadmin can export clients
+  if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+    return sendForbidden(res, 'You do not have permission to export clients');
+  }
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -667,7 +758,7 @@ export const exportExcel = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .toArray();
 
-  console.log('[ExportExcel] Found clients:', clients.length);
+  devLog('[ExportExcel] Found clients:', clients.length);
 
   // For each client, count projects from the project collection
   const clientsWithProjects = await Promise.all(
@@ -737,12 +828,12 @@ export const exportExcel = asyncHandler(async (req, res) => {
   // Write Excel file
   await workbook.xlsx.writeFile(filePath);
 
-  console.log('[ExportExcel] Excel file created successfully');
+  devLog('[ExportExcel] Excel file created successfully');
 
   // Send the file as a download response
   res.download(filePath, fileName, (err) => {
     if (err) {
-      console.error('[ExportExcel] Error sending Excel file:', err);
+      devError('[ExportExcel] Error sending Excel file:', err);
     }
     // Optionally delete the temp file after sending
     // fs.unlinkSync(filePath);

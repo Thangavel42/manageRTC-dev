@@ -1,5 +1,6 @@
 import { ChatService } from '../../services/chat/chat.services.js';
 import { clerkClient } from '@clerk/express';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 export class ChatController {
   constructor(socket, io) {
@@ -95,7 +96,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in getConversations:', error);
+      devError('Error in getConversations:', error);
       this.socket.emit('error', { message: 'Failed to get conversations' });
     }
   }
@@ -126,7 +127,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in getMessages:', error);
+      devError('Error in getMessages:', error);
       this.socket.emit('error', { message: 'Failed to get messages' });
     }
   }
@@ -185,7 +186,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in sendMessage:', error);
+      devError('Error in sendMessage:', error);
       this.socket.emit('error', { message: 'Failed to send message' });
     }
   }
@@ -223,7 +224,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in markMessagesAsRead:', error);
+      devError('Error in markMessagesAsRead:', error);
       this.socket.emit('error', { message: 'Failed to mark messages as read' });
     }
   }
@@ -238,7 +239,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in getUnreadCount:', error);
+      devError('Error in getUnreadCount:', error);
       this.socket.emit('error', { message: 'Failed to get unread count' });
     }
   }
@@ -268,7 +269,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in searchChats:', error);
+      devError('Error in searchChats:', error);
       this.socket.emit('error', { message: 'Failed to search chats' });
     }
   }
@@ -286,7 +287,7 @@ export class ChatController {
         });
       }
     } catch (error) {
-      console.error('Error in updateOnlineStatus:', error);
+      devError('Error in updateOnlineStatus:', error);
     }
   }
 
@@ -335,7 +336,7 @@ export class ChatController {
         this.socket.emit('error', { message: result.error });
       }
     } catch (error) {
-      console.error('Error in startConversation:', error);
+      devError('Error in startConversation:', error);
       this.socket.emit('error', { message: 'Failed to start conversation' });
     }
   }
@@ -366,7 +367,7 @@ export class ChatController {
       this.socket.join(`conversation_${conversationId}`);
       this.socket.emit('joined_conversation', { conversationId });
     } catch (error) {
-      console.error('Error in joinConversation:', error);
+      devError('Error in joinConversation:', error);
       this.socket.emit('error', { message: 'Failed to join conversation' });
     }
   }
@@ -380,7 +381,7 @@ export class ChatController {
         this.socket.emit('left_conversation', { conversationId });
       }
     } catch (error) {
-      console.error('Error in leaveConversation:', error);
+      devError('Error in leaveConversation:', error);
     }
   }
 

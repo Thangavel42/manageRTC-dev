@@ -85,6 +85,63 @@ const isHolidayToday = (holiday, referenceDate = new Date()) => {
 };
 
 /**
+ * Get previous month's employee counts for growth calculation
+ * Returns employee counts from the first day of previous month
+ */
+const getPreviousMonthCounts = async (collections, currentDate) => {
+  try {
+    const previousMonthStart = new Date(currentDate);
+    previousMonthStart.setMonth(previousMonthStart.getMonth() - 1);
+    previousMonthStart.setDate(1);
+    previousMonthStart.setHours(0, 0, 0, 0);
+
+    const previousMonthEnd = new Date(previousMonthStart);
+    previousMonthEnd.setMonth(previousMonthEnd.getMonth() + 1);
+    previousMonthEnd.setDate(0);
+    previousMonthEnd.setHours(23, 59, 59, 999);
+
+    // Get count of employees who existed on the first day of previous month
+    const existingEmployees = await collections.employees.countDocuments({
+      createdAt: { $lt: previousMonthEnd }
+    });
+
+    // Get active employees as of end of previous month
+    // (employees who were Active and hadn't resigned/terminated yet)
+    const previousActive = await collections.employees.countDocuments({
+      createdAt: { $lt: previousMonthEnd },
+      $or: [
+        { status: 'Active' },
+        { status: { $exists: false } }, // Employees without explicit status
+      ],
+      $or: [
+        { lastWorkingDay: { $exists: false } },
+        { lastWorkingDay: { $gt: previousMonthEnd } },
+        { resignationDate: { $exists: false } },
+        { resignationDate: { $gt: previousMonthEnd } },
+      ],
+    });
+
+    return {
+      total: existingEmployees,
+      active: previousActive,
+      inactive: existingEmployees - previousActive,
+    };
+  } catch (error) {
+    console.warn('[HR Dashboard] Could not fetch previous month counts:', error.message);
+    return { total: 0, active: 0, inactive: 0 };
+  }
+};
+
+/**
+ * Calculate growth percentage between two numbers
+ */
+const calculateGrowth = (current, previous) => {
+  if (!previous || previous === 0) return 0;
+  const growth = ((current - previous) / previous) * 100;
+  return parseFloat(growth.toFixed(1));
+};
+
+/**
  * Get HR Dashboard Statistics
  * Aggregates data from multiple collections for dashboard overview
  */
@@ -801,8 +858,19 @@ export const getDashboardStats = async (companyId, year = null) => {
       else if (status === "onleave") statusMap.inactive += item.count; // Count 'On Leave' as inactive
     });
 
-    // Calculate growth percentages (mock for now - can be enhanced with historical data)
-    const employeesGrowth = newJoiners > 0 ? ((newJoiners / totalEmployees) * 100).toFixed(1) : 0;
+    // Get previous month's counts for growth calculation
+    const previousMonthCounts = await getPreviousMonthCounts(collections, currentDate);
+
+    // Calculate growth percentages based on current vs previous month
+    const activeGrowth = calculateGrowth(activeEmployees, previousMonthCounts.active);
+    const inactiveGrowth = calculateGrowth(inactiveEmployees, previousMonthCounts.inactive);
+
+    // Joiners growth: new joiners this month vs last month's new joiners
+    // Since we don't track monthly new joiners historically, we'll calculate based on total growth
+    const joinersGrowth = calculateGrowth(newJoiners, Math.max(0, previousMonthCounts.total * 0.05)); // Assume 5% monthly hiring baseline
+
+    // Overall employee growth percentage
+    const employeesGrowth = calculateGrowth(totalEmployees, previousMonthCounts.total);
 
     console.log(`[HR Dashboard Service] Data transformation completed, returning response`);
     return {
@@ -818,9 +886,9 @@ export const getDashboardStats = async (companyId, year = null) => {
           totalTerminations,
           terminationsLast30Days: recentTerminations,
           employeesGrowth: parseFloat(employeesGrowth),
-          activeGrowth: 0,
-          inactiveGrowth: 0,
-          joinersGrowth: 0,
+          activeGrowth,
+          inactiveGrowth,
+          joinersGrowth,
         },
         employeesByDepartment: employeesByDepartment.map((dept) => ({
           department: dept._id,

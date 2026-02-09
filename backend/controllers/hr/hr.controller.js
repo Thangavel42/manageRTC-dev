@@ -9,43 +9,44 @@ import holidayController from './holidays.controller.js';
 import holidayTypeController from './holidayTypes.controller.js';
 import resignationController from './resignation.controller.js';
 import terminationController from './termination.controller.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const hrDashboardController = (socket, io) => {
-  console.log('Setting up termination controller...');
+  devLog('Setting up termination controller...');
   terminationController(socket, io);
-  console.log('Setting up resignation controller...');
+  devLog('Setting up resignation controller...');
   resignationController(socket, io);
-  console.log('Attaching holidays controller...**********');
+  devLog('Attaching holidays controller...**********');
   holidayController(socket, io);
-  console.log('Attaching holiday types controller...**********');
+  devLog('Attaching holiday types controller...**********');
   try {
     holidayTypeController(socket, io);
   } catch (error) {
-    console.error('ERROR attaching holiday types controller:', error);
+    devError('ERROR attaching holiday types controller:', error);
   }
   const isDevelopment =
     process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'production';
 
   const validateHrAccess = (socket) => {
     if (!socket.companyId) {
-      console.error('[HR] Company ID not found in user metadata', {
+      devError('[HR] Company ID not found in user metadata', {
         user: socket.user?.sub,
       });
       throw new Error('Company ID not found in user metadata');
     }
     const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!companyIdRegex.test(socket.companyId)) {
-      console.error(`[HR] Invalid company ID format: ${socket.companyId}`);
+      devError(`[HR] Invalid company ID format: ${socket.companyId}`);
       throw new Error('Invalid company ID format');
     }
     if (socket.userMetadata?.companyId !== socket.companyId) {
-      console.error(
+      devError(
         `[HR] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
       );
       throw new Error('Unauthorized: Company ID mismatch');
     }
     // if (socket.userMetadata?.role !== "hr") {
-    //     console.error(`[HR] Unauthorized role: ${socket.userMetadata?.role}, HR role required`);
+    //     devError(`[HR] Unauthorized role: ${socket.userMetadata?.role}, HR role required`);
     //     throw new Error("Unauthorized: HR role required");
     // }
     return { companyId: socket.companyId, hrId: socket.user?.sub };
@@ -281,18 +282,18 @@ const hrDashboardController = (socket, io) => {
 
   socket.on('hr/departments/get', async () => {
     try {
-      console.log('[hr/departments/get] Event received with data:');
+      devLog('[hr/departments/get] Event received with data:');
 
       const { companyId, hrId } = validateHrAccess(socket);
-      console.log('[hr/departments/get] Access validated - companyId:', companyId, 'hrId:', hrId);
+      devLog('[hr/departments/get] Access validated - companyId:', companyId, 'hrId:', hrId);
 
       const response = await hrmDepartment.allDepartments(companyId, hrId);
-      console.log('[hr/departments/get] Service response:', response);
+      devLog('[hr/departments/get] Service response:', response);
 
       socket.emit('hr/departments/get-response', response);
-      // console.log("[hr/departments/get] Response emitted");
+      // devLog("[hr/departments/get] Response emitted");
     } catch (error) {
-      console.log('[hr/departments/get] Error:', error);
+      devLog('[hr/departments/get] Error:', error);
       socket.emit('hr/departments/get-response', {
         done: false,
         error: 'Unexpected error fetching departments',
@@ -331,7 +332,7 @@ const hrDashboardController = (socket, io) => {
           : null;
 
       const sanitizedFilter = { startDate, endDate, departmentId, status };
-      console.log('filters', sanitizedFilter);
+      devLog('filters', sanitizedFilter);
 
       const result = await hrServices.getEmployeesStats(companyId, hrId, sanitizedFilter);
 
@@ -380,7 +381,7 @@ const hrDashboardController = (socket, io) => {
 
       socket.emit('hrm/employees/get-employee-grid-stats-response', result);
     } catch (error) {
-      console.log(error);
+      devLog(error);
       socket.emit('hrm/employees/get-employee-frid-stats-response', {
         done: false,
         error: error.message || 'Unexpected error fetching employee stats',
@@ -586,7 +587,7 @@ const hrDashboardController = (socket, io) => {
     'hr/departments/add',
     withRateLimit(async (data) => {
       try {
-        console.log('Hee');
+        devLog('Hee');
         const { companyId, hrId } = validateHrAccess(socket);
         if (!data) {
           throw new Error('Data is required for creation');
@@ -597,7 +598,7 @@ const hrDashboardController = (socket, io) => {
         if (!departmentName) {
           throw new Error('Department name and display name are required');
         }
-        console.log('Hee');
+        devLog('Hee');
         let status = '';
         if (data.status) {
           status = String(data.status).trim().toLowerCase();
@@ -608,7 +609,7 @@ const hrDashboardController = (socket, io) => {
           department: departmentName,
           status: isValidStatus ? status : 'active',
         };
-        console.log('Hee');
+        devLog('Hee');
 
         const response = await hrmDepartment.addDepartment(companyId, hrId, payload);
         socket.emit('hr/departments/add-response', response);
@@ -616,7 +617,7 @@ const hrDashboardController = (socket, io) => {
           socket.emit('hr/departmentsStats/get', response);
         }
       } catch (error) {
-        console.log(error);
+        devLog(error);
 
         socket.emit('hr/departments/add-response', {
           done: false,
@@ -789,7 +790,7 @@ const hrDashboardController = (socket, io) => {
     'hrm/designations/add',
     withRateLimit(async (data) => {
       try {
-        console.log('Request in - design');
+        devLog('Request in - design');
         const { companyId, hrId } = validateHrAccess(socket);
 
         if (!data) {
@@ -821,7 +822,7 @@ const hrDashboardController = (socket, io) => {
         const response = await hrmDesignation.addDesignation(companyId, hrId, payload);
         socket.emit('hrm/designations/add-response', response);
       } catch (error) {
-        console.log(error);
+        devLog(error);
 
         socket.emit('hrm/designations/add-response', {
           done: false,
@@ -833,10 +834,10 @@ const hrDashboardController = (socket, io) => {
 
   socket.on('hrm/designations/get', async (filters) => {
     try {
-      console.log('[hrm/designations/get] Event received with filters:', filters);
+      devLog('[hrm/designations/get] Event received with filters:', filters);
 
       const { companyId, hrId } = validateHrAccess(socket);
-      console.log('[hrm/designations/get] Validated access - companyId:', companyId, 'hrId:', hrId);
+      devLog('[hrm/designations/get] Validated access - companyId:', companyId, 'hrId:', hrId);
 
       const sanitizedFilters = {};
       if (filters && typeof filters === 'object') {
@@ -852,24 +853,24 @@ const hrDashboardController = (socket, io) => {
           sanitizedFilters.departmentId = filters.department.trim();
         }
       }
-      console.log('[hrm/designations/get] Sanitized filters:', sanitizedFilters);
+      devLog('[hrm/designations/get] Sanitized filters:', sanitizedFilters);
 
       const result = await hrmDesignation.displayDesignations(companyId, hrId, sanitizedFilters);
-      // console.log("[hrm/designations/get] Service result:", result);
+      // devLog("[hrm/designations/get] Service result:", result);
 
       if (!result.done) {
-        console.error(
+        devError(
           '[hrm/designations/get] Service returned failure:',
           result.error || 'Failed to fetch designations'
         );
         throw new Error(result.error || 'Failed to fetch designations');
       }
 
-      console.log('Pushing Design');
+      devLog('Pushing Design');
       socket.emit('hrm/designations/get-response', result);
-      console.log('[hrm/designations/get] Response emitted');
+      devLog('[hrm/designations/get] Response emitted');
     } catch (error) {
-      console.error('[hrm/designations/get] Error:', error);
+      devError('[hrm/designations/get] Error:', error);
       socket.emit('hrm/designations/get-response', {
         done: false,
         error: error.message || 'Unexpected error fetching designations',
@@ -898,7 +899,7 @@ const hrDashboardController = (socket, io) => {
 
       socket.emit('hrm/designations/delete-response', result);
     } catch (error) {
-      console.error('[hrm/designations/delete] Error:', error);
+      devError('[hrm/designations/delete] Error:', error);
       socket.emit('hrm/designations/delete-response', {
         done: false,
         error: error.message || 'Unexpected error deleting department',
@@ -980,7 +981,7 @@ const hrDashboardController = (socket, io) => {
         message: result.message || 'Designation updated successfully',
       });
     } catch (error) {
-      console.error('[hrm/designations/update] Error:', error);
+      devError('[hrm/designations/update] Error:', error);
       socket.emit('hrm/designations/update-response', {
         done: false,
         error: error.message || 'Unexpected error updating designation',
@@ -992,11 +993,11 @@ const hrDashboardController = (socket, io) => {
 
   // Check for duplicate email, and phone - called before moving to permissions tab
   socket.on('hrm/employees/check-duplicates', async (data) => {
-    console.log('=== BACKEND: hrm/employees/check-duplicates called ===');
-    console.log('Received data:', data);
+    devLog('=== BACKEND: hrm/employees/check-duplicates called ===');
+    devLog('Received data:', data);
     try {
       const { companyId } = validateHrAccess(socket);
-      console.log('CompanyId:', companyId);
+      devLog('CompanyId:', companyId);
 
       if (!data || typeof data !== 'object') {
         throw new Error('Invalid request data');
@@ -1009,29 +1010,29 @@ const hrDashboardController = (socket, io) => {
       }
 
       // Check for duplicates (email, and optionally phone)
-      console.log('Calling checkDuplicates service...');
+      devLog('Calling checkDuplicates service...');
       const duplicateCheck = await hrmEmployee.checkDuplicates(companyId, email, phone);
 
-      console.log('=== BACKEND: Sending response ===', duplicateCheck);
+      devLog('=== BACKEND: Sending response ===', duplicateCheck);
       socket.emit('hrm/employees/check-duplicates-response', duplicateCheck);
     } catch (error) {
-      console.error('Error in hrm/employees/check-duplicates:', error);
+      devError('Error in hrm/employees/check-duplicates:', error);
       const errorResponse = {
         done: false,
         error: error.message || 'Error checking for duplicates',
       };
-      console.log('=== BACKEND: Sending error response ===', errorResponse);
+      devLog('=== BACKEND: Sending error response ===', errorResponse);
       socket.emit('hrm/employees/check-duplicates-response', errorResponse);
     }
   });
 
   // Validate employee data without saving - for inline error display
   socket.on('hrm/employees/validate', async (data) => {
-    console.log('=== hrm/employees/validate called ===');
-    console.log('Received data:', JSON.stringify(data, null, 2));
+    devLog('=== hrm/employees/validate called ===');
+    devLog('Received data:', JSON.stringify(data, null, 2));
     try {
       const { companyId, hrId } = validateHrAccess(socket);
-      console.log('Access validated - companyId:', companyId, 'hrId:', hrId);
+      devLog('Access validated - companyId:', companyId, 'hrId:', hrId);
 
       if (!data) {
         throw new Error('Employee data is required');
@@ -1051,13 +1052,13 @@ const hrDashboardController = (socket, io) => {
         permissions: permissionsData.permissions,
       };
 
-      console.log('Running validateEmployeeData...');
+      devLog('Running validateEmployeeData...');
       const validationError = validateEmployeeData(mergedData);
-      console.log('Validation result:', validationError || 'PASSED');
+      devLog('Validation result:', validationError || 'PASSED');
 
       if (validationError) {
         // Return validation error with field information
-        console.log('Emitting validation error response');
+        devLog('Emitting validation error response');
         socket.emit('hrm/employees/validate-response', {
           done: false,
           error: validationError,
@@ -1066,12 +1067,12 @@ const hrDashboardController = (socket, io) => {
       }
 
       // Check for duplicate email in the database
-      console.log('Checking for duplicates...');
+      devLog('Checking for duplicates...');
       const duplicateCheck = await hrmEmployee.checkDuplicates(
         companyId,
         employeeData.contact.email
       );
-      console.log('Duplicate check result:', duplicateCheck);
+      devLog('Duplicate check result:', duplicateCheck);
 
       if (!duplicateCheck.done) {
         socket.emit('hrm/employees/validate-response', duplicateCheck);
@@ -1079,13 +1080,13 @@ const hrDashboardController = (socket, io) => {
       }
 
       // Validation passed
-      console.log('Emitting validation success response');
+      devLog('Emitting validation success response');
       socket.emit('hrm/employees/validate-response', {
         done: true,
         message: 'Validation passed',
       });
     } catch (error) {
-      console.log('Error in hrm/employees/validate:', error);
+      devLog('Error in hrm/employees/validate:', error);
       socket.emit('hrm/employees/validate-response', {
         done: false,
         error: error.message || 'Unexpected error validating employee',
@@ -1097,7 +1098,7 @@ const hrDashboardController = (socket, io) => {
     'hrm/employees/add',
     withRateLimit(async (data) => {
       try {
-        console.log('assing employih 1');
+        devLog('assing employih 1');
         const { companyId, hrId } = validateHrAccess(socket);
         if (!data) {
           throw new Error('Employee data is required');
@@ -1122,7 +1123,7 @@ const hrDashboardController = (socket, io) => {
           throw new Error(validationError);
         }
 
-        console.log('assing employih going');
+        devLog('assing employih going');
         const response = await hrmEmployee.addEmployee(
           companyId,
           hrId,
@@ -1133,7 +1134,7 @@ const hrDashboardController = (socket, io) => {
 
         socket.emit('hrm/employees/add-response', response);
       } catch (error) {
-        console.log('Error in hrm/employees/add:', error);
+        devLog('Error in hrm/employees/add:', error);
         socket.emit('hrm/employees/add-response', {
           done: false,
           error: error.message || 'Unexpected error adding employee',
@@ -1163,7 +1164,7 @@ const hrDashboardController = (socket, io) => {
 
         socket.emit('hrm/employees/check-phone-response', response);
       } catch (error) {
-        console.error('Error in hrm/employees/check-phone:', error);
+        devError('Error in hrm/employees/check-phone:', error);
         socket.emit('hrm/employees/check-phone-response', {
           done: false,
           error: error.message || 'Unexpected error checking phone number',
@@ -1217,7 +1218,7 @@ const hrDashboardController = (socket, io) => {
           data: response,
         });
       } catch (error) {
-        console.log(error);
+        devLog(error);
         socket.emit('hrm/employees/check-lifecycle-status-response', {
           done: false,
           error: error.message || 'Unexpected error checking lifecycle status',
@@ -1251,7 +1252,7 @@ const hrDashboardController = (socket, io) => {
 
         socket.emit('hrm/employees/update-response', response);
       } catch (error) {
-        console.log(error);
+        devLog(error);
         socket.emit('hrm/employees/update-response', {
           done: false,
           error: error.message || 'Unexpected error updating employee',
@@ -1283,7 +1284,7 @@ const hrDashboardController = (socket, io) => {
           permissions: data.permissions,
         };
 
-        console.log('permissionPayload', permissionsPayload);
+        devLog('permissionPayload', permissionsPayload);
 
         const response = await hrmEmployee.updatePermissions(
           companyId,
@@ -1294,7 +1295,7 @@ const hrDashboardController = (socket, io) => {
 
         socket.emit('hrm/employees/update-permissions-response', response);
       } catch (error) {
-        console.log(error);
+        devLog(error);
 
         socket.emit('hrm/employees/update-permissions-response', {
           done: false,
@@ -1357,7 +1358,7 @@ const hrDashboardController = (socket, io) => {
         data: employeeInfoResult.data,
       });
     } catch (error) {
-      console.log(error);
+      devLog(error);
 
       socket.emit('employee/get-full-info-response', {
         done: false,
@@ -1370,11 +1371,11 @@ const hrDashboardController = (socket, io) => {
   socket.on(
     'hrm/employees/update-bank',
     withRateLimit(async (data) => {
-      console.log('=== UPDATE BANK DETAILS EVENT RECEIVED ===');
-      console.log('Raw data:', JSON.stringify(data, null, 2));
+      devLog('=== UPDATE BANK DETAILS EVENT RECEIVED ===');
+      devLog('Raw data:', JSON.stringify(data, null, 2));
       try {
         const { companyId, hrId } = validateHrAccess(socket);
-        console.log('Validated access - companyId:', companyId, 'hrId:', hrId);
+        devLog('Validated access - companyId:', companyId, 'hrId:', hrId);
 
         if (!data || typeof data !== 'object') {
           throw new Error('Bank update data is required');
@@ -1384,21 +1385,21 @@ const hrDashboardController = (socket, io) => {
         if (!employeeId) {
           throw new Error('Employee ID is required for bank update');
         }
-        console.log('Employee ID extracted:', employeeId);
+        devLog('Employee ID extracted:', employeeId);
 
         if (!data.bank) {
           throw new Error('Bank details are required');
         }
-        console.log('Bank data:', JSON.stringify(data.bank, null, 2));
+        devLog('Bank data:', JSON.stringify(data.bank, null, 2));
 
-        console.log('Calling updateBankDetails service...');
+        devLog('Calling updateBankDetails service...');
         const response = await hrmEmployee.updateBankDetails(companyId, hrId, data);
-        console.log('Service response:', JSON.stringify(response, null, 2));
+        devLog('Service response:', JSON.stringify(response, null, 2));
 
         socket.emit('hrm/employees/update-bank-response', response);
-        console.log('Response emitted to client');
+        devLog('Response emitted to client');
       } catch (error) {
-        console.error('Error in update-bank:', error);
+        devError('Error in update-bank:', error);
         socket.emit('hrm/employees/update-bank-response', {
           done: false,
           error: error.message || 'Unexpected error updating bank details',
@@ -1431,7 +1432,7 @@ const hrDashboardController = (socket, io) => {
 
         socket.emit('hrm/employees/update-personal-response', response);
       } catch (error) {
-        console.error('Error in update-personal:', error);
+        devError('Error in update-personal:', error);
         socket.emit('hrm/employees/update-personal-response', {
           done: false,
           error: error.message || 'Unexpected error updating personal info',
@@ -1444,11 +1445,11 @@ const hrDashboardController = (socket, io) => {
   socket.on(
     'hrm/employees/update-family',
     withRateLimit(async (data) => {
-      console.log('=== UPDATE FAMILY INFO EVENT RECEIVED ===');
-      console.log('Raw data:', JSON.stringify(data, null, 2));
+      devLog('=== UPDATE FAMILY INFO EVENT RECEIVED ===');
+      devLog('Raw data:', JSON.stringify(data, null, 2));
       try {
         const { companyId, hrId } = validateHrAccess(socket);
-        console.log('Validated access - companyId:', companyId, 'hrId:', hrId);
+        devLog('Validated access - companyId:', companyId, 'hrId:', hrId);
 
         if (!data || typeof data !== 'object') {
           throw new Error('Family info update data is required');
@@ -1457,21 +1458,21 @@ const hrDashboardController = (socket, io) => {
         if (!employeeId) {
           throw new Error('Employee ID is required for family info update');
         }
-        console.log('Employee ID extracted:', employeeId);
+        devLog('Employee ID extracted:', employeeId);
 
         if (!data.family) {
           throw new Error('Family details are required');
         }
-        console.log('Family data:', JSON.stringify(data.family, null, 2));
+        devLog('Family data:', JSON.stringify(data.family, null, 2));
 
-        console.log('Calling updateFamilyInfo service...');
+        devLog('Calling updateFamilyInfo service...');
         const response = await hrmEmployee.updateFamilyInfo(companyId, hrId, data);
-        console.log('Service response:', JSON.stringify(response, null, 2));
+        devLog('Service response:', JSON.stringify(response, null, 2));
 
         socket.emit('hrm/employees/update-family-response', response);
-        console.log('Response emitted to client');
+        devLog('Response emitted to client');
       } catch (error) {
-        console.error('Error in update-family:', error);
+        devError('Error in update-family:', error);
         socket.emit('hrm/employees/update-family-response', {
           done: false,
           error: error.message || 'Unexpected error updating family info',
@@ -1484,11 +1485,11 @@ const hrDashboardController = (socket, io) => {
   socket.on(
     'hrm/employees/update-education',
     withRateLimit(async (data) => {
-      console.log('=== UPDATE EDUCATION INFO EVENT RECEIVED ===');
-      console.log('Raw data:', JSON.stringify(data, null, 2));
+      devLog('=== UPDATE EDUCATION INFO EVENT RECEIVED ===');
+      devLog('Raw data:', JSON.stringify(data, null, 2));
       try {
         const { companyId, hrId } = validateHrAccess(socket);
-        console.log('Validated access - companyId:', companyId, 'hrId:', hrId);
+        devLog('Validated access - companyId:', companyId, 'hrId:', hrId);
 
         if (!data || typeof data !== 'object') {
           throw new Error('Education info update data is required');
@@ -1497,21 +1498,21 @@ const hrDashboardController = (socket, io) => {
         if (!employeeId) {
           throw new Error('Employee ID is required for education info update');
         }
-        console.log('Employee ID extracted:', employeeId);
+        devLog('Employee ID extracted:', employeeId);
 
         if (!data.educationDetails) {
           throw new Error('Education details are required');
         }
-        console.log('Education data:', JSON.stringify(data.educationDetails, null, 2));
+        devLog('Education data:', JSON.stringify(data.educationDetails, null, 2));
 
-        console.log('Calling updateEducationInfo service...');
+        devLog('Calling updateEducationInfo service...');
         const response = await hrmEmployee.updateEducationInfo(companyId, hrId, data);
-        console.log('Service response:', JSON.stringify(response, null, 2));
+        devLog('Service response:', JSON.stringify(response, null, 2));
 
         socket.emit('hrm/employees/update-education-response', response);
-        console.log('Response emitted to client');
+        devLog('Response emitted to client');
       } catch (error) {
-        console.error('Error in update-education:', error);
+        devError('Error in update-education:', error);
         socket.emit('hrm/employees/update-education-response', {
           done: false,
           error: error.message || 'Unexpected error updating education info',
@@ -1539,7 +1540,7 @@ const hrDashboardController = (socket, io) => {
         const response = await hrmEmployee.updateEmergencyContacts(companyId, hrId, data);
         socket.emit('hrm/employees/update-emergency-response', response);
       } catch (error) {
-        console.error('Error in update-emergency:', error);
+        devError('Error in update-emergency:', error);
         socket.emit('hrm/employees/update-emergency-response', {
           done: false,
           error: error.message || 'Unexpected error updating emergency info',
@@ -1567,7 +1568,7 @@ const hrDashboardController = (socket, io) => {
         const response = await hrmEmployee.updateExperienceInfo(companyId, hrId, data);
         socket.emit('hrm/employees/update-experience-response', response);
       } catch (error) {
-        console.error('Error in update-experience:', error);
+        devError('Error in update-experience:', error);
         socket.emit('hrm/employees/update-experience-response', {
           done: false,
           error: error.message || 'Unexpected error updating experience info',
@@ -1595,7 +1596,7 @@ const hrDashboardController = (socket, io) => {
         const response = await hrmEmployee.updateAboutInfo(companyId, hrId, data);
         socket.emit('hrm/employees/update-about-response', response);
       } catch (error) {
-        console.error('Error in update-about:', error);
+        devError('Error in update-about:', error);
         socket.emit('hrm/employees/update-about-response', {
           done: false,
           error: error.message || 'Unexpected error updating about info',
@@ -1609,15 +1610,15 @@ const hrDashboardController = (socket, io) => {
     'hr/dashboard/get-all-data',
     withRateLimit(async (data = {}) => {
       try {
-        console.log('[HR Dashboard] Received dashboard request', data);
+        devLog('[HR Dashboard] Received dashboard request', data);
         const { companyId } = validateHrAccess(socket);
         const year = data.year || new Date().getFullYear();
 
-        console.log(`[HR Dashboard] Fetching for companyId=${companyId}, year=${year}`);
+        devLog(`[HR Dashboard] Fetching for companyId=${companyId}, year=${year}`);
 
         const dashboardData = await hrDashboard.getDashboardStats(companyId, year);
 
-        console.log('[HR Dashboard] Service returned data:', dashboardData.done);
+        devLog('[HR Dashboard] Service returned data:', dashboardData.done);
 
         if (!dashboardData.done) {
           socket.emit('hr/dashboard/get-all-data-response', {
@@ -1628,9 +1629,9 @@ const hrDashboardController = (socket, io) => {
         }
 
         socket.emit('hr/dashboard/get-all-data-response', dashboardData);
-        console.log('[HR Dashboard] Response emitted successfully');
+        devLog('[HR Dashboard] Response emitted successfully');
       } catch (error) {
-        console.error('[HR Dashboard] Controller error:', error);
+        devError('[HR Dashboard] Controller error:', error);
         socket.emit('hr/dashboard/get-all-data-response', {
           done: false,
           error: error.message || 'Unexpected error fetching dashboard data',

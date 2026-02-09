@@ -103,6 +103,7 @@ const sendErrorDev = (err, req, res) => {
   console.error('[Error Details]', {
     code: err.code,
     message: err.message,
+    details: err.details || [],  // ✅ Now logging validation details!
     stack: err.stack,
     requestId: req.id
   });
@@ -177,6 +178,7 @@ export const errorHandler = (err, req, res, next) => {
   console.error('[Error Logged]', {
     code: error.code,
     message: error.message,
+    details: error.details || [],  // ✅ Now logging validation details!
     statusCode: error.statusCode,
     requestId: req.id,
     path: req.path,

@@ -196,6 +196,11 @@ export const useBatchesREST = () => {
       }
       return null;
     } catch (err: any) {
+      // Silently handle 404 - it's expected when there's no default batch
+      if (err?.response?.status === 404) {
+        setDefaultBatch(null);
+        return null;
+      }
       console.error('[useBatchesREST] Failed to fetch default batch:', err);
       return null;
     }
@@ -528,8 +533,10 @@ export const useBatchesREST = () => {
   // Initial data fetch
   useEffect(() => {
     fetchBatches();
-    fetchDefaultBatch();
-  }, []);
+    // Note: fetchDefaultBatch() is available but not called by default
+    // Call it explicitly when needed, as the backend endpoint may not exist
+    // fetchDefaultBatch();
+  }, [fetchBatches]);
 
   return {
     batches,

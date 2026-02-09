@@ -14,9 +14,10 @@ const Validate = () => {
       navigate(routes.login);
       return;
     }
-    
+
     // Get the role directly from the user object (not from state, as setState is async)
-    const userRole = user?.publicMetadata?.role || "";
+    // Normalize role to lowercase for case-insensitive comparison
+    const userRole = (user?.publicMetadata?.role || "")?.toLowerCase();
     setRole(userRole);
     setUserId(user?.id || "");
 
@@ -41,13 +42,20 @@ const Validate = () => {
       case "admin":
         navigate(routes.adminDashboard);
         break;
+      case "manager":
+        navigate(routes.adminDashboard);
+        break;
       case "hr":
         navigate(routes.hrDashboard);
         break;
       case "employee":
         navigate(routes.employeeDashboard);
         break;
+      case "leads":
+        navigate(routes.leadsDashboard);
+        break;
       default:
+        console.log("Unknown role, defaulting to admin dashboard:", userRole);
         navigate(routes.adminDashboard);
         break;
     }

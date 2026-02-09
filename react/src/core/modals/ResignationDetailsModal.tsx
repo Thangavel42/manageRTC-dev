@@ -1,32 +1,20 @@
 import React from "react";
 import dayjs from "dayjs";
 import ImageWithBasePath from "../common/imageWithBasePath";
-
-interface Resignation {
-  resignationId: string;
-  employeeName: string;
-  employeeId: string;
-  employeeImage?: string;
-  department: string;
-  departmentId: string;
-  designation?: string;
-  resignationDate: string; // ISO format or YYYY-MM-DD
-  noticeDate: string; // ISO format or YYYY-MM-DD (Last Working Date)
-  reason?: string;
-  notes?: string;
-}
+import type { Resignation } from "../../hooks/useResignationsREST";
 
 interface ResignationDetailsModalProps {
   resignation: Resignation | null;
   modalId?: string;
 }
 
-const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({ 
-  resignation, 
-  modalId = "view_resignation_details" 
+const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
+  resignation,
+  modalId = "view_resignation_details"
 }) => {
   // Extract just the name part if employeeName contains "ID - Name" format
-  const getDisplayName = (employeeName: string): string => {
+  const getDisplayName = (employeeName?: string): string => {
+    if (!employeeName) return "Unknown Employee";
     // Check if name contains " - " pattern (e.g., "EMP-8984 - Hari Haran")
     const parts = employeeName.split(' - ');
     if (parts.length > 1) {
@@ -111,7 +99,7 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                   </div>
                   <div>
                     <h5 className="mb-1">{displayName}</h5>
-                    <p className="text-muted mb-0">{resignation.department}</p>
+                    <p className="text-muted mb-0">{resignation.department || resignation.departmentId || 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -125,13 +113,13 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Employee ID</label>
                         <p className="fw-medium mb-0">
-                          {resignation.employeeId}
+                          {resignation.employeeId || resignation.employee_id || 'N/A'}
                         </p>
                       </div>
                       <div className="col-md-6 mb-3">
                         <label className="form-label text-muted mb-1">Department</label>
                         <p className="fw-medium mb-0">
-                          {resignation.department}
+                          {resignation.department || resignation.departmentId || 'N/A'}
                         </p>
                       </div>
 
@@ -158,6 +146,29 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                           {dayjs(resignation.resignationDate).format("DD MMM YYYY")}
                         </p>
                       </div>
+
+                      {/* Status if available */}
+                      {resignation.status && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Status</label>
+                          <p className="mb-0">
+                            <span className={`badge badge-soft-${resignation.status === 'approved' ? 'success' : resignation.status === 'pending' ? 'warning' : resignation.status === 'rejected' ? 'danger' : 'secondary'}`}>
+                              {resignation.status.charAt(0).toUpperCase() + resignation.status.slice(1)}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Effective Date if available */}
+                      {resignation.effectiveDate && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Effective Date</label>
+                          <p className="fw-medium mb-0">
+                            <i className="ti ti-calendar-check me-1 text-success" />
+                            {dayjs(resignation.effectiveDate).format("DD MMM YYYY")}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Row 4: Reason */}
                       {resignation.reason && (

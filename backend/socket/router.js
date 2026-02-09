@@ -116,6 +116,29 @@ const router = (socket, io, role) => {
       profileController(socket, io);
       break;
 
+    case 'manager':
+      hrDashboardController(socket, io);
+      leadController(socket, io);
+      activityController(socket, io);
+      projectController(socket, io);
+      taskController(socket, io);
+      projectNotesController(socket, io);
+      userSocketController(socket, io);
+      socialFeedSocketController(socket, io);
+      kanbanController(socket, io);
+      pipelineController(socket, io);
+      notesController(socket, io);
+      ticketsSocketController(socket, io);
+      profileController(socket, io);
+
+      performanceIndicatorController(socket, io);
+      performanceAppraisalController(socket, io);
+      performanceReviewController(socket, io);
+      goalTypeController(socket, io);
+      goalTrackingController(socket, io);
+      promotionController(socket, io);
+      break;
+
     case 'leads':
       leadController(socket, io);
       userSocketController(socket, io);
@@ -126,6 +149,7 @@ const router = (socket, io, role) => {
     case 'employee':
       employeeController(socket, io);
       projectController(socket, io);
+      profileController(socket, io);
       break;
 
     default:

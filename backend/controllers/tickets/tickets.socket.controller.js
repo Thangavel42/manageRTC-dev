@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { getTenantCollections } from '../../config/db.js';
 import * as ticketsService from '../../services/tickets/tickets.services.js';
 
@@ -8,7 +9,7 @@ const ticketsSocketController = (socket, io) => {
       const result = await ticketsService.getTicketsStats(socket.companyId);
       socket.emit('tickets/dashboard/get-stats-response', result);
     } catch (error) {
-      console.error('Error getting tickets stats:', error);
+      devError('Error getting tickets stats:', error);
       socket.emit('tickets/dashboard/get-stats-response', {
         done: false,
         error: error.message,
@@ -22,7 +23,7 @@ const ticketsSocketController = (socket, io) => {
       const result = await ticketsService.getTicketsList(socket.companyId, data);
       socket.emit('tickets/list/get-tickets-response', result);
     } catch (error) {
-      console.error('Error getting tickets list:', error);
+      devError('Error getting tickets list:', error);
       socket.emit('tickets/list/get-tickets-response', {
         done: false,
         error: error.message,
@@ -37,7 +38,7 @@ const ticketsSocketController = (socket, io) => {
       const result = await ticketsService.getTicketDetails(socket.companyId, ticketId);
       socket.emit('tickets/details/get-ticket-response', result);
     } catch (error) {
-      console.error('Error getting ticket details:', error);
+      devError('Error getting ticket details:', error);
       socket.emit('tickets/details/get-ticket-response', {
         done: false,
         error: error.message,
@@ -48,23 +49,23 @@ const ticketsSocketController = (socket, io) => {
   // Create new ticket
   socket.on('tickets/create-ticket', async (data) => {
     try {
-      console.log('Creating ticket with data:', data);
-      console.log('Company ID:', socket.companyId);
+      devLog('Creating ticket with data:', data);
+      devLog('Company ID:', socket.companyId);
 
       const result = await ticketsService.createTicket(socket.companyId, data);
-      console.log('Create ticket result:', result);
+      devLog('Create ticket result:', result);
 
       if (result.done) {
         // Broadcast to all connected clients in the company room
         const companyRoom = `company_${socket.companyId}`;
-        console.log('📡 Broadcasting ticket-created event to company room:', companyRoom);
+        devLog('📡 Broadcasting ticket-created event to company room:', companyRoom);
         io.to(companyRoom).emit('tickets/ticket-created', result);
-        console.log('✅ Ticket-created event broadcasted successfully');
+        devLog('✅ Ticket-created event broadcasted successfully');
       }
 
       socket.emit('tickets/create-ticket-response', result);
     } catch (error) {
-      console.error('Error creating ticket:', error);
+      devError('Error creating ticket:', error);
       socket.emit('tickets/create-ticket-response', {
         done: false,
         error: error.message,
@@ -75,29 +76,29 @@ const ticketsSocketController = (socket, io) => {
   // Update ticket
   socket.on('tickets/update-ticket', async (data) => {
     try {
-      console.log('🔄 UPDATE TICKET REQUEST RECEIVED:');
-      console.log('📦 Data received:', JSON.stringify(data, null, 2));
-      console.log('🏢 Company ID:', socket.companyId);
+      devLog('🔄 UPDATE TICKET REQUEST RECEIVED:');
+      devLog('📦 Data received:', JSON.stringify(data, null, 2));
+      devLog('🏢 Company ID:', socket.companyId);
 
       const { ticketId, updateData } = data;
-      console.log('🎫 Ticket ID:', ticketId);
-      console.log('📝 Update Data:', JSON.stringify(updateData, null, 2));
+      devLog('🎫 Ticket ID:', ticketId);
+      devLog('📝 Update Data:', JSON.stringify(updateData, null, 2));
 
       const result = await ticketsService.updateTicket(socket.companyId, ticketId, updateData);
-      console.log('✅ Update result:', JSON.stringify(result, null, 2));
+      devLog('✅ Update result:', JSON.stringify(result, null, 2));
 
       if (result.done) {
         // Broadcast to all connected clients in the company room
         const companyRoom = `company_${socket.companyId}`;
-        console.log('📡 Broadcasting ticket-updated event to company room:', companyRoom);
+        devLog('📡 Broadcasting ticket-updated event to company room:', companyRoom);
         io.to(companyRoom).emit('tickets/ticket-updated', result);
-        console.log('✅ Ticket-updated event broadcasted successfully');
+        devLog('✅ Ticket-updated event broadcasted successfully');
       }
 
       socket.emit('tickets/update-ticket-response', result);
-      console.log('📤 Sent response to client');
+      devLog('📤 Sent response to client');
     } catch (error) {
-      console.error('❌ Error updating ticket:', error);
+      devError('❌ Error updating ticket:', error);
       socket.emit('tickets/update-ticket-response', {
         done: false,
         error: error.message,
@@ -120,7 +121,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/add-comment-response', result);
     } catch (error) {
-      console.error('Error adding comment:', error);
+      devError('Error adding comment:', error);
       socket.emit('tickets/add-comment-response', {
         done: false,
         error: error.message,
@@ -137,17 +138,17 @@ const ticketsSocketController = (socket, io) => {
       if (result.done) {
         // Broadcast to all connected clients in the company room
         const companyRoom = `company_${socket.companyId}`;
-        console.log('📡 Broadcasting ticket-deleted event to company room:', companyRoom);
+        devLog('📡 Broadcasting ticket-deleted event to company room:', companyRoom);
         io.to(companyRoom).emit('tickets/ticket-deleted', {
           done: true,
           ticketId: ticketId,
         });
-        console.log('✅ Ticket-deleted event broadcasted successfully');
+        devLog('✅ Ticket-deleted event broadcasted successfully');
       }
 
       socket.emit('tickets/delete-ticket-response', result);
     } catch (error) {
-      console.error('Error deleting ticket:', error);
+      devError('Error deleting ticket:', error);
       socket.emit('tickets/delete-ticket-response', {
         done: false,
         error: error.message,
@@ -169,7 +170,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/bulk-delete-tickets-response', result);
     } catch (error) {
-      console.error('Error bulk deleting tickets:', error);
+      devError('Error bulk deleting tickets:', error);
       socket.emit('tickets/bulk-delete-tickets-response', {
         done: false,
         error: error.message,
@@ -183,7 +184,7 @@ const ticketsSocketController = (socket, io) => {
       const result = await ticketsService.getTicketCategories(socket.companyId);
       socket.emit('tickets/categories/get-categories-response', result);
     } catch (error) {
-      console.error('Error getting ticket categories:', error);
+      devError('Error getting ticket categories:', error);
       socket.emit('tickets/categories/get-categories-response', {
         done: false,
         error: error.message,
@@ -268,7 +269,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/employees/get-list-response', { done: true, data: list });
     } catch (error) {
-      console.error('Error fetching IT Support employees:', error);
+      devError('Error fetching IT Support employees:', error);
       socket.emit('tickets/employees/get-list-response', {
         done: false,
         error: error.message,
@@ -279,7 +280,7 @@ const ticketsSocketController = (socket, io) => {
   // Add ticket category
   socket.on('tickets/categories/add-category', async (data) => {
     try {
-      console.log('Adding ticket category with data:', data);
+      devLog('Adding ticket category with data:', data);
       const userId = socket.user?.sub || 'System';
 
       // Fetch employee info to get employeeId
@@ -300,7 +301,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/categories/add-category-response', result);
     } catch (error) {
-      console.error('Error adding ticket category:', error);
+      devError('Error adding ticket category:', error);
       socket.emit('tickets/categories/add-category-response', {
         done: false,
         error: error.message,
@@ -325,7 +326,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/categories/update-category-response', result);
     } catch (error) {
-      console.error('Error updating ticket category:', error);
+      devError('Error updating ticket category:', error);
       socket.emit('tickets/categories/update-category-response', {
         done: false,
         error: error.message,
@@ -349,7 +350,7 @@ const ticketsSocketController = (socket, io) => {
 
       socket.emit('tickets/categories/delete-category-response', result);
     } catch (error) {
-      console.error('Error deleting ticket category:', error);
+      devError('Error deleting ticket category:', error);
       socket.emit('tickets/categories/delete-category-response', {
         done: false,
         error: error.message,

@@ -55,10 +55,10 @@ export const ProfileImageUpload: React.FC<ProfileImageUploadProps> = ({
       return false;
     }
 
-    // Validate file size (2MB)
-    const maxSize = 2 * 1024 * 1024;
+    // Validate file size (4MB)
+    const maxSize = 4 * 1024 * 1024;
     if (file.size > maxSize) {
-      message.error('Image must be smaller than 2MB');
+      message.error('Image must be smaller than 4MB');
       return false;
     }
 

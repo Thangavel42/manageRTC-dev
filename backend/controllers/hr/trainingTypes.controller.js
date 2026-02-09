@@ -1,4 +1,5 @@
 import * as trainingTypesService from "../../services/hr/trainingTypes.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 const toErr = (e) => ({ done: false, message: e?.message || String(e) });
 
@@ -42,7 +43,7 @@ const trainingTypesController = (socket, io) => {
   socket.on("hr/trainingTypes/add-trainingTypes", async (trainingType) => {
     try {
       // trainingTypes should contain created_by if needed
-      console.log('Adding training type:', trainingType);
+      devLog('Adding training type:', trainingType);
       // return;
       const res = await trainingTypesService.addTrainingTypes(companyId, trainingType);
       socket.emit("hr/trainingTypes/add-trainingTypes-response", res);

@@ -106,13 +106,22 @@ const StackedSidebar = () => {
             <div className="sidebar-profile text-center rounded bg-light p-3 mb-4">
               <div className="avatar avatar-lg online mb-3">
                 <ImageWithBasePath
-                  src="assets/img/profiles/avatar-02.jpg"
-                  alt="Img"
+                  src={user?.imageUrl || "assets/img/profiles/avatar-02.jpg"}
+                  alt="Profile"
                   className="img-fluid rounded-circle"
                 />
               </div>
-              <h6 className="fs-12 fw-normal mb-1">Adrian Herman</h6>
-              <p className="fs-10">System Admin</p>
+              <h6 className="fs-12 fw-normal mb-1">
+                {user?.fullName || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User"}
+              </h6>
+              <p className="fs-10">
+                {getUserRole() === "admin" ? "Admin" :
+                 getUserRole() === "hr" ? "HR" :
+                 getUserRole() === "superadmin" ? "Super Admin" :
+                 getUserRole() === "manager" ? "Manager" :
+                 getUserRole() === "leads" ? "Leads" :
+                 "Employee"}
+              </p>
             </div>
             <div className="stack-menu">
               <div
@@ -123,7 +132,7 @@ const StackedSidebar = () => {
                 <div className="row g-2">
                   {TowColData.map((mainMenu, index) => (
                     <React.Fragment key={`main-${index}`}>
-                      {mainMenu.menu.map((title, i) => (
+                      {(mainMenu.menu as any[]).filter((title: any) => hasAccess(title?.roles)).map((title, i) => (
                         <div className="col-6" key={i}>
                           <Link
                             to="#"

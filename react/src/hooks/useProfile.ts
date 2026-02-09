@@ -12,7 +12,7 @@ export interface Profile {
   lastName: string;
   email: string;
   phone?: string;
-  dateOfBirth?: string;
+  dateOfBirth?: string | null;
   gender?: string;
   profilePhoto?: string;
   // Address information
@@ -27,10 +27,20 @@ export interface Profile {
   employeeId?: string;
   department?: string;
   designation?: string;
-  joiningDate?: string;
+  joiningDate?: string | null;
   salary?: number;
   role: string;
-  status: 'Active' | 'Inactive';
+  employmentType?: string;
+  status: 'Active' | 'Inactive' | 'Probation' | 'Resigned' | 'Terminated' | 'On Leave';
+  reportingManager?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    employeeId: string;
+    email: string;
+  } | null;
+  about?: string;
   // Contact information
   emergencyContact?: {
     name: string;
@@ -47,11 +57,32 @@ export interface Profile {
   // Skills and bio
   skills?: string[];
   bio?: string;
+  // Education
+  education?: Array<{
+    degree?: string;
+    institution?: string;
+    year?: number;
+    field?: string;
+  }>;
+  // Experience
+  experience?: Array<{
+    company?: string;
+    position?: string;
+    startDate?: string | Date;
+    endDate?: string | Date;
+    current?: boolean;
+  }>;
+  // Family
+  family?: Array<{
+    name?: string;
+    relationship?: string;
+    contact?: string;
+  }>;
   // Documents
   documents?: any[];
   // Timestamps
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
   isDeleted?: boolean;
 }
 

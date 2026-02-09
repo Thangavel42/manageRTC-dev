@@ -1,4 +1,5 @@
 import { getInvoices, createInvoice, updateInvoice, deleteInvoice, getInvoiceStats } from "../../services/invoice/invoice.services.js";
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 
 const authorize = (socket, allowed = []) => {
@@ -9,7 +10,7 @@ const authorize = (socket, allowed = []) => {
 const roomForCompany = (companyId) => `company:${companyId}`;
 
 const invoiceSocketController = (socket, io) => {
-  console.log(`✅ invoice.socket.controller active for ${socket.id}`);
+  devLog(`✅ invoice.socket.controller active for ${socket.id}`);
 
   // Make sure socket is in its company room (if not already handled globally)
   if (socket.companyId) {
@@ -43,7 +44,7 @@ const invoiceSocketController = (socket, io) => {
           const newStats = await getInvoiceStats(companyId);
           io.to(roomForCompany(companyId)).emit("admin/invoices/stats-update", { done: true, data: newStats });
         } catch (e) {
-          console.error("Failed to emit stats-update after create:", e);
+          devError("Failed to emit stats-update after create:", e);
         }
 
       // Ack to the creator if you want
@@ -69,7 +70,7 @@ socket.on("admin/invoices/update", async ({ invoiceId, updatedData }) => {
       const newStats = await getInvoiceStats(companyId);
       io.to(roomForCompany(companyId)).emit("admin/invoices/stats-update", { done: true, data: newStats });
     } catch (e) {
-      console.error("Failed to emit stats-update after update:", e);
+      devError("Failed to emit stats-update after update:", e);
     }
 
     socket.emit("admin/invoices/update-response", { done: true });
@@ -94,7 +95,7 @@ socket.on("admin/invoices/delete", async ({ invoiceId }) => {
       const newStats = await getInvoiceStats(companyId);
       io.to(roomForCompany(companyId)).emit("admin/invoices/stats-update", { done: true, data: newStats });
     } catch (e) {
-      console.error("Failed to emit stats-update after delete:", e);
+      devError("Failed to emit stats-update after delete:", e);
     }
 
     socket.emit("admin/invoices/delete-response", { done: true });
@@ -127,7 +128,7 @@ socket.on("admin/invoices/stats", async (_, callback) => {
     }
 
   } catch (err) {
-    console.error("Error in admin/invoices/stats:", err);
+    devError("Error in admin/invoices/stats:", err);
     if (typeof callback === "function") {
       callback({ done: false, error: err.message });
     } else {

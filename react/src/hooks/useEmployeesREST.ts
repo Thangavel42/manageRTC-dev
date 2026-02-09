@@ -458,26 +458,6 @@ export const useEmployeesREST = () => {
    * Check username availability
    * REST API: POST /api/employees/check-duplicates
    */
-  const checkUsernameAvailability = useCallback(async (userName: string): Promise<boolean> => {
-    try {
-      const response: ApiResponse = await post('/employees/check-duplicates', { userName });
-
-      // If response is successful and data.done is true, username is available
-      return response.success && response.data?.done === true;
-    } catch (err: any) {
-      const errorResponse = err.response?.data;
-
-      // 409 Conflict means username is taken
-      if (err.response?.status === 409 && errorResponse?.field === 'userName') {
-        return false;
-      }
-
-      // For other errors, log but return true (don't block form submission)
-      console.error('[useEmployeesREST] Username check error:', err);
-      return true;
-    }
-  }, []);
-
   /**
    * Check email availability
    * REST API: POST /api/employees/check-duplicates
@@ -1176,7 +1156,6 @@ export const useEmployeesREST = () => {
     searchEmployees,
     getDepartmentStats,
     checkDuplicates,
-    checkUsernameAvailability,
     checkEmailAvailability,
     checkLifecycleStatus,
     uploadProfileImage,

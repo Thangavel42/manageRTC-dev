@@ -15,6 +15,7 @@ import {
   sendSuccess
 } from '../../utils/apiResponse.js';
 import { getDashboardStats } from '../../services/hr/hrm.dashboard.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * @desc    Get HR Dashboard statistics
@@ -25,7 +26,7 @@ export const getHRDashboardStats = asyncHandler(async (req, res) => {
   const { year } = req.query;
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getHRDashboardStats - companyId:', user.companyId, 'year:', year);
+  devLog('[HR Dashboard Controller] getHRDashboardStats - companyId:', user.companyId, 'year:', year);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -49,7 +50,7 @@ export const getHRDashboardStats = asyncHandler(async (req, res) => {
 export const getHRDashboardSummary = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getHRDashboardSummary - companyId:', user.companyId);
+  devLog('[HR Dashboard Controller] getHRDashboardSummary - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -86,7 +87,7 @@ export const getUpcomingHolidays = asyncHandler(async (req, res) => {
   const { limit = 7 } = req.query;
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getUpcomingHolidays - companyId:', user.companyId);
+  devLog('[HR Dashboard Controller] getUpcomingHolidays - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -113,7 +114,7 @@ export const getEmployeeBirthdays = asyncHandler(async (req, res) => {
   const { month, year } = req.query;
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getEmployeeBirthdays - companyId:', user.companyId);
+  devLog('[HR Dashboard Controller] getEmployeeBirthdays - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -148,7 +149,7 @@ export const getEmployeeAnniversaries = asyncHandler(async (req, res) => {
   const { month, year } = req.query;
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getEmployeeAnniversaries - companyId:', user.companyId);
+  devLog('[HR Dashboard Controller] getEmployeeAnniversaries - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');
@@ -183,7 +184,7 @@ export const getCalendarEvents = asyncHandler(async (req, res) => {
   const { start, end } = req.query;
   const user = extractUser(req);
 
-  console.log('[HR Dashboard Controller] getCalendarEvents - companyId:', user.companyId);
+  devLog('[HR Dashboard Controller] getCalendarEvents - companyId:', user.companyId);
 
   if (!user.companyId) {
     throw buildValidationError('companyId', 'Company ID is required');

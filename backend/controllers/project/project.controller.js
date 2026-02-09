@@ -1,19 +1,20 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import * as employeeService from '../../services/employee/employee.services.js';
 import * as projectService from '../../services/project/project.services.js';
 
 const projectController = (socket, io) => {
   const validateCompanyAccess = (socket) => {
     if (!socket.companyId) {
-      console.error('[Project] Company ID not found in user metadata', { user: socket.user?.sub });
+      devError('[Project] Company ID not found in user metadata', { user: socket.user?.sub });
       throw new Error('Company ID not found in user metadata');
     }
     const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!companyIdRegex.test(socket.companyId)) {
-      console.error(`[Project] Invalid company ID format: ${socket.companyId}`);
+      devError(`[Project] Invalid company ID format: ${socket.companyId}`);
       throw new Error('Invalid company ID format');
     }
     if (socket.userMetadata?.companyId !== socket.companyId) {
-      console.error(
+      devError(
         `[Project] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
       );
       throw new Error('Unauthorized: Company ID mismatch');
@@ -21,11 +22,11 @@ const projectController = (socket, io) => {
     return socket.companyId;
   };
 
-  const isAuthorized = socket.userMetadata?.role === 'admin' || socket.userMetadata?.role === 'hr';
+  const isAuthorized = socket.userMetadata?.role?.toLowerCase() === 'admin' || socket.userMetadata?.role?.toLowerCase() === 'hr';
 
   socket.on('project:create', async (data) => {
     try {
-      console.log('[Project] project:create event', {
+      devLog('[Project] project:create event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -40,20 +41,20 @@ const projectController = (socket, io) => {
 
       const result = await projectService.createProject(companyId, { ...data, companyId });
       if (!result.done) {
-        console.error('[Project] Failed to create project', { error: result.error });
+        devError('[Project] Failed to create project', { error: result.error });
       }
       socket.emit('project:create-response', result);
 
       io.to(`company_${companyId}`).emit('project:project-created', result);
     } catch (error) {
-      console.error('[Project] Error in project:create', { error: error.message });
+      devError('[Project] Error in project:create', { error: error.message });
       socket.emit('project:create-response', { done: false, error: error.message });
     }
   });
 
   socket.on('project:getAll', async (filters = {}) => {
     try {
-      console.log('[Project] project:getAll event', {
+      devLog('[Project] project:getAll event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -62,19 +63,19 @@ const projectController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.getProjects(companyId, filters);
       if (!result.done) {
-        console.error('[Project] Failed to get projects', { error: result.error });
+        devError('[Project] Failed to get projects', { error: result.error });
       }
       socket.emit('project:getAll-response', result);
-      console.log('[Project] project:getAll-response sent', result);
+      devLog('[Project] project:getAll-response sent', result);
     } catch (error) {
-      console.error('[Project] Error in project:getAll', { error: error.message });
+      devError('[Project] Error in project:getAll', { error: error.message });
       socket.emit('project:getAll-response', { done: false, error: error.message });
     }
   });
 
   socket.on('project:getById', async (projectId) => {
     try {
-      console.log('[Project] project:getById event', {
+      devLog('[Project] project:getById event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -83,19 +84,19 @@ const projectController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.getProjectById(companyId, projectId);
       if (!result.done) {
-        console.error('[Project] Failed to get project', { error: result.error });
+        devError('[Project] Failed to get project', { error: result.error });
       }
-      console.log('[Project] project:getById-response sent', result);
+      devLog('[Project] project:getById-response sent', result);
       socket.emit('project:getById-response', result);
     } catch (error) {
-      console.error('[Project] Error in project:getById', { error: error.message });
+      devError('[Project] Error in project:getById', { error: error.message });
       socket.emit('project:getById-response', { done: false, error: error.message });
     }
   });
 
   socket.on('project:update', async ({ projectId, update }) => {
     try {
-      console.log('[Project] project:update event', {
+      devLog('[Project] project:update event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -106,20 +107,20 @@ const projectController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.updateProject(companyId, projectId, update);
       if (!result.done) {
-        console.error('[Project] Failed to update project', { error: result.error });
+        devError('[Project] Failed to update project', { error: result.error });
       }
       socket.emit('project:update-response', result);
 
       io.to(`company_${companyId}`).emit('project:project-updated', result);
     } catch (error) {
-      console.error('[Project] Error in project:update', { error: error.message });
+      devError('[Project] Error in project:update', { error: error.message });
       socket.emit('project:update-response', { done: false, error: error.message });
     }
   });
 
   socket.on('project:delete', async ({ projectId }) => {
     try {
-      console.log('[Project] project:delete event', {
+      devLog('[Project] project:delete event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -129,20 +130,20 @@ const projectController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.deleteProject(companyId, projectId);
       if (!result.done) {
-        console.error('[Project] Failed to delete project', { error: result.error });
+        devError('[Project] Failed to delete project', { error: result.error });
       }
       socket.emit('project:delete-response', result);
 
       io.to(`company_${companyId}`).emit('project:project-deleted', result);
     } catch (error) {
-      console.error('[Project] Error in project:delete', { error: error.message });
+      devError('[Project] Error in project:delete', { error: error.message });
       socket.emit('project:delete-response', { done: false, error: error.message });
     }
   });
 
   socket.on('project:getStats', async () => {
     try {
-      console.log('[Project] project:getStats event', {
+      devLog('[Project] project:getStats event', {
         user: socket.user?.sub,
         role: socket.userMetadata?.role,
         companyId: socket.companyId,
@@ -150,44 +151,44 @@ const projectController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.getProjectStats(companyId);
       if (!result.done) {
-        console.error('[Project] Failed to get project stats', { error: result.error });
+        devError('[Project] Failed to get project stats', { error: result.error });
       }
       socket.emit('project:getStats-response', result);
     } catch (error) {
-      console.error('[Project] Error in project:getStats', { error: error.message });
+      devError('[Project] Error in project:getStats', { error: error.message });
       socket.emit('project:getStats-response', { done: false, error: error.message });
     }
   });
 
   // socket.on("project:getClients", async () => {
   //   try {
-  //     console.log("[Project] project:getClients event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId });
+  //     devLog("[Project] project:getClients event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId });
   //     const companyId = validateCompanyAccess(socket);
   //     const result = await projectService.getProjectClients(companyId);
   //     if (!result.done) {
-  //       console.error("[Project] Failed to get project clients", { error: result.error });
+  //       devError("[Project] Failed to get project clients", { error: result.error });
   //     }
   //     socket.emit("project:getClients-response", result);
   //   } catch (error) {
-  //     console.error("[Project] Error in project:getClients", { error: error.message });
+  //     devError("[Project] Error in project:getClients", { error: error.message });
   //     socket.emit("project:getClients-response", { done: false, error: error.message });
   //   }
   // });
 
   socket.on('project/export-pdf', async () => {
     try {
-      console.log('Received project export-pdf request');
+      devLog('Received project export-pdf request');
 
       if (!socket.companyId) {
         throw new Error('Company ID not found in user metadata');
       }
 
-      console.log('Generating PDF...');
+      devLog('Generating PDF...');
       const result = await projectService.exportProjectsPDF(socket.companyId);
-      console.log('PDF generation result:', result);
+      devLog('PDF generation result:', result);
 
       if (result.done) {
-        console.log('Sending PDF URL to client:', result.data.pdfUrl);
+        devLog('Sending PDF URL to client:', result.data.pdfUrl);
         socket.emit('project/export-pdf-response', {
           done: true,
           data: {
@@ -197,19 +198,19 @@ const projectController = (socket, io) => {
 
         setTimeout(
           () => {
-            console.log('Cleaning up PDF file:', result.data.pdfPath);
+            devLog('Cleaning up PDF file:', result.data.pdfPath);
           },
           60 * 60 * 1000
         );
       } else {
-        console.error('PDF generation failed:', result.error);
+        devError('PDF generation failed:', result.error);
         socket.emit('project/export-pdf-response', {
           done: false,
           error: result.error,
         });
       }
     } catch (error) {
-      console.error('Error in project export-pdf handler:', error);
+      devError('Error in project export-pdf handler:', error);
       socket.emit('project/export-pdf-response', {
         done: false,
         error: error.message,
@@ -219,18 +220,18 @@ const projectController = (socket, io) => {
 
   socket.on('project/export-excel', async () => {
     try {
-      console.log('Received project export-excel request');
+      devLog('Received project export-excel request');
 
       if (!socket.companyId) {
         throw new Error('Company ID not found in user metadata');
       }
 
-      console.log('Generating Excel...');
+      devLog('Generating Excel...');
       const result = await projectService.exportProjectsExcel(socket.companyId);
-      console.log('Excel generation result:', result);
+      devLog('Excel generation result:', result);
 
       if (result.done) {
-        console.log('Sending Excel URL to client:', result.data.excelUrl);
+        devLog('Sending Excel URL to client:', result.data.excelUrl);
         socket.emit('project/export-excel-response', {
           done: true,
           data: {
@@ -240,19 +241,19 @@ const projectController = (socket, io) => {
 
         setTimeout(
           () => {
-            console.log('Cleaning up Excel file:', result.data.excelPath);
+            devLog('Cleaning up Excel file:', result.data.excelPath);
           },
           60 * 60 * 1000
         );
       } else {
-        console.error('Excel generation failed:', result.error);
+        devError('Excel generation failed:', result.error);
         socket.emit('project/export-excel-response', {
           done: false,
           error: result.error,
         });
       }
     } catch (error) {
-      console.error('Error in project export-excel handler:', error);
+      devError('Error in project export-excel handler:', error);
       socket.emit('project/export-excel-response', {
         done: false,
         error: error.message,
@@ -262,7 +263,7 @@ const projectController = (socket, io) => {
 
   socket.on('project:getAllData', async (filters = {}) => {
     try {
-      console.log('[Project] Received project:getAllData event');
+      devLog('[Project] Received project:getAllData event');
       const companyId = validateCompanyAccess(socket);
 
       const [projects, stats, clients, employees] = await Promise.all([
@@ -272,8 +273,8 @@ const projectController = (socket, io) => {
         employeeService.getAllEmployees(companyId),
       ]);
 
-      console.log('[Project] getAllData - clients:', clients);
-      console.log('[Project] getAllData - employees count:', employees?.length);
+      devLog('[Project] getAllData - clients:', clients);
+      devLog('[Project] getAllData - employees count:', employees?.length);
 
       // Transform employees to { value, label, position } format
       const transformedEmployees = (employees || []).map((emp) => ({
@@ -287,7 +288,7 @@ const projectController = (socket, io) => {
         department: emp.department || 'N/A',
       }));
 
-      console.log(
+      devLog(
         '[Project] Sending getAllData response with clients:',
         clients.data?.length,
         'employees:',
@@ -304,7 +305,7 @@ const projectController = (socket, io) => {
         },
       });
     } catch (error) {
-      console.error('[Project] Error in project:getAllData', {
+      devError('[Project] Error in project:getAllData', {
         error: error.message,
         stack: error.stack,
       });
@@ -315,15 +316,15 @@ const projectController = (socket, io) => {
   // Get team members for a specific project
   socket.on('project:getTeamMembers', async ({ projectId }) => {
     try {
-      console.log('[Project] project:getTeamMembers event --- ', projectId);
+      devLog('[Project] project:getTeamMembers event --- ', projectId);
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.getProjectTeamMembers(companyId, projectId);
       if (!result.done) {
-        console.error('[Project] Failed to get project team members', { error: result.error });
+        devError('[Project] Failed to get project team members', { error: result.error });
       }
       socket.emit('project:getTeamMembers-response', result);
     } catch (error) {
-      console.error('[Project] Error in project:getTeamMembers', { error: error.message });
+      devError('[Project] Error in project:getTeamMembers', { error: error.message });
       socket.emit('project:getTeamMembers-response', { done: false, error: error.message });
     }
   });
@@ -331,15 +332,15 @@ const projectController = (socket, io) => {
   // Alias: Get members for a project
   socket.on('project:getMembers', async ({ projectId }) => {
     try {
-      console.log('[Project] project:getMembers event --- ', projectId);
+      devLog('[Project] project:getMembers event --- ', projectId);
       const companyId = validateCompanyAccess(socket);
       const result = await projectService.getProjectTeamMembers(companyId, projectId);
       if (!result.done) {
-        console.error('[Project] Failed to get project members', { error: result.error });
+        devError('[Project] Failed to get project members', { error: result.error });
       }
       socket.emit('project:getMembers-response', result);
     } catch (error) {
-      console.error('[Project] Error in project:getMembers', { error: error.message });
+      devError('[Project] Error in project:getMembers', { error: error.message });
       socket.emit('project:getMembers-response', { done: false, error: error.message });
     }
   });

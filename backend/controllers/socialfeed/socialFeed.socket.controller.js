@@ -1,3 +1,4 @@
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { SocialFeedService } from '../../services/socialfeed/socialFeed.services.js';
 import {
   broadcastToCompany,
@@ -41,7 +42,7 @@ const socialFeedSocketController = (socket, io) => {
       broadcastToCompany(io, socket.companyId, 'socialfeed:newPost', newPost, 'New post created');
       createSuccessResponse(socket, 'socialfeed:create-post', newPost, 'Post created successfully');
     } catch (error) {
-      console.error('Error creating post:', error);
+      devError('Error creating post:', error);
       createErrorResponse(
         socket,
         'socialfeed:create-post',
@@ -78,7 +79,7 @@ const socialFeedSocketController = (socket, io) => {
         'Like updated successfully'
       );
     } catch (error) {
-      console.error('Error toggling like:', error);
+      devError('Error toggling like:', error);
       createErrorResponse(
         socket,
         'socialfeed:toggle-like',
@@ -122,7 +123,7 @@ const socialFeedSocketController = (socket, io) => {
         'Comment added successfully'
       );
     } catch (error) {
-      console.error('Error adding comment:', error);
+      devError('Error adding comment:', error);
       createErrorResponse(
         socket,
         'socialfeed:add-comment',
@@ -154,7 +155,7 @@ const socialFeedSocketController = (socket, io) => {
       );
       createSuccessResponse(socket, 'socialfeed:delete-post', result, 'Post deleted successfully');
     } catch (error) {
-      console.error('Error deleting post:', error);
+      devError('Error deleting post:', error);
       createErrorResponse(
         socket,
         'socialfeed:delete-post',
@@ -198,7 +199,7 @@ const socialFeedSocketController = (socket, io) => {
         'Comment deleted successfully'
       );
     } catch (error) {
-      console.error('Error deleting comment:', error);
+      devError('Error deleting comment:', error);
       createErrorResponse(
         socket,
         'socialfeed:delete-comment',
@@ -227,7 +228,7 @@ const socialFeedSocketController = (socket, io) => {
         'Bookmark updated successfully'
       );
     } catch (error) {
-      console.error('Error toggling bookmark:', error);
+      devError('Error toggling bookmark:', error);
       createErrorResponse(
         socket,
         'socialfeed:toggle-bookmark',
@@ -237,7 +238,7 @@ const socialFeedSocketController = (socket, io) => {
   });
 
   socket.on('socialfeed:add-reply', async (data) => {
-    console.log(`[socialfeed:add-reply] Received data:`, data);
+    devLog(`[socialfeed:add-reply] Received data:`, data);
 
     try {
       const postIdValidation = validatePostId(data.postId);
@@ -248,7 +249,7 @@ const socialFeedSocketController = (socket, io) => {
 
       const commentIdValidation = validateCommentId(data.commentId);
       if (!commentIdValidation.isValid) {
-        console.error(`[socialfeed:add-reply] Comment ID validation failed:`, {
+        devError(`[socialfeed:add-reply] Comment ID validation failed:`, {
           commentId: data.commentId,
           validation: commentIdValidation,
         });
@@ -284,7 +285,7 @@ const socialFeedSocketController = (socket, io) => {
         'Reply added successfully'
       );
     } catch (error) {
-      console.error('Error adding reply:', error);
+      devError('Error adding reply:', error);
       createErrorResponse(socket, 'socialfeed:add-reply', error.message || 'Failed to add reply');
     }
   });
@@ -324,7 +325,7 @@ const socialFeedSocketController = (socket, io) => {
         'Comment like updated successfully'
       );
     } catch (error) {
-      console.error('Error toggling comment like:', error);
+      devError('Error toggling comment like:', error);
       createErrorResponse(
         socket,
         'socialfeed:toggle-comment-like',
@@ -361,7 +362,7 @@ const socialFeedSocketController = (socket, io) => {
         'Post save status updated successfully'
       );
     } catch (error) {
-      console.error('Error toggling save post:', error);
+      devError('Error toggling save post:', error);
       createErrorResponse(
         socket,
         'socialfeed:toggle-save-post',
@@ -412,7 +413,7 @@ const socialFeedSocketController = (socket, io) => {
         'Reply like updated successfully'
       );
     } catch (error) {
-      console.error('Error toggling reply like:', error);
+      devError('Error toggling reply like:', error);
       createErrorResponse(
         socket,
         'socialfeed:toggle-reply-like',
@@ -422,7 +423,7 @@ const socialFeedSocketController = (socket, io) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`User ${socket.id} disconnected from social feed`);
+    devLog(`User ${socket.id} disconnected from social feed`);
     if (socket.companyId) {
       socket.leave(`socialfeed:${socket.companyId}`);
     }

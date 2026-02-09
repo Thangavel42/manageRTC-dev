@@ -361,9 +361,94 @@ export const devLogger = winston.createLogger({
   ]
 });
 
+/**
+ * Check if current environment is development
+ * @returns {boolean} True if in development mode
+ */
+export const isDevelopment = () => process.env.NODE_ENV === 'development';
+
+/**
+ * Check if current environment is production
+ * @returns {boolean} True if in production mode
+ */
+export const isProduction = () => process.env.NODE_ENV === 'production';
+
+/**
+ * Check if current environment is test
+ * @returns {boolean} True if in test mode
+ */
+export const isTest = () => process.env.NODE_ENV === 'test';
+
+/**
+ * Check if debug logging is enabled
+ * @returns {boolean} True if debug output should be shown
+ */
+export const isDebug = () => isDevelopment() || process.env.DEBUG === 'true' || process.env.LOG_LEVEL === 'debug';
+
+/**
+ * Development-only console log helper
+ * Only outputs in development or when DEBUG=true
+ * Use this to replace direct console.log calls
+ *
+ * @param {string} message - Message to log
+ * @param {...any} args - Additional arguments
+ */
+export const devLog = (message, ...args) => {
+  if (isDebug()) {
+    console.log(`[DEV] ${message}`, ...args);
+  }
+};
+
+/**
+ * Development-only console debug helper
+ * Only outputs in development or when DEBUG=true
+ *
+ * @param {string} message - Message to log
+ * @param {...any} args - Additional arguments
+ */
+export const devDebug = (message, ...args) => {
+  if (isDebug()) {
+    console.debug(`[DEBUG] ${message}`, ...args);
+  }
+};
+
+/**
+ * Development-only console warn helper
+ * Outputs in all environments but marked as development
+ *
+ * @param {string} message - Message to log
+ * @param {...any} args - Additional arguments
+ */
+export const devWarn = (message, ...args) => {
+  if (isDebug()) {
+    console.warn(`[DEV-WARN] ${message}`, ...args);
+  } else {
+    // In production, still log warnings but without the DEV prefix
+    logger.warn(message, args);
+  }
+};
+
+/**
+ * Development-only console error helper
+ * Always logs errors in all environments
+ *
+ * @param {string} message - Message to log
+ * @param {...any} args - Additional arguments
+ */
+export const devError = (message, ...args) => {
+  console.error(message, ...args);
+  // Also log to winston for file storage
+  logger.error(message, args);
+};
+
 // Development check
-if (process.env.NODE_ENV === 'development') {
+if (isDevelopment()) {
   logger.debug('Logging initialized at debug level');
+  logger.debug('Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    LOG_LEVEL: process.env.LOG_LEVEL,
+    DEBUG: process.env.DEBUG
+  });
 }
 
 export default logger;

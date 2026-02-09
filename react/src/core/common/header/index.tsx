@@ -54,8 +54,8 @@ const Header = (): JSX.Element => {
   };
 
   const getUserImage = () => {
-    if (!user) return "assets/img/profiles/avatar-12.jpg";
-    return user.imageUrl || "assets/img/profiles/avatar-12.jpg";
+    if (!user) return "assets/img/profiles/profile.png";
+    return user.imageUrl || "assets/img/profiles/profile.png";
   };
 
   const getUserRole = (): string => {
@@ -680,12 +680,12 @@ const Header = (): JSX.Element => {
                             alt="Company"
                             className="img-fluid rounded-circle"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                              (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                             }}
                           />
                         ) : (
                           <ImageWithBasePath
-                            src="assets/img/profiles/avatar-12.jpg"
+                            src="assets/img/profiles/profile.png"
                             alt="Company"
                             className="img-fluid rounded-circle"
                           />
@@ -698,7 +698,7 @@ const Header = (): JSX.Element => {
                             alt="Profile"
                             className="img-fluid rounded-circle"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                              (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                             }}
                           />
                         ) : isSignedIn && user?.imageUrl ? (
@@ -707,12 +707,12 @@ const Header = (): JSX.Element => {
                             alt="Profile"
                             className="img-fluid rounded-circle"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                              (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                             }}
                           />
                         ) : (
                           <ImageWithBasePath
-                            src="assets/img/profiles/avatar-12.jpg"
+                            src="assets/img/profiles/profile.png"
                             alt="Profile"
                             className="img-fluid rounded-circle"
                           />
@@ -724,12 +724,12 @@ const Header = (): JSX.Element => {
                           alt="Profile"
                           className="img-fluid rounded-circle"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                            (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                           }}
                         />
                       ) : (
                         <ImageWithBasePath
-                          src="assets/img/profiles/avatar-12.jpg"
+                          src="assets/img/profiles/profile.png"
                           alt="Profile"
                           className="img-fluid rounded-circle"
                         />
@@ -754,12 +754,12 @@ const Header = (): JSX.Element => {
                                   alt="Company Logo"
                                   className="img-fluid rounded-circle"
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                                    (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                                   }}
                                 />
                               ) : (
                                 <ImageWithBasePath
-                                  src="assets/img/profiles/avatar-12.jpg"
+                                  src="assets/img/profiles/profile.png"
                                   alt="Company"
                                   className="img-fluid rounded-circle"
                                 />
@@ -772,7 +772,7 @@ const Header = (): JSX.Element => {
                                   alt="Profile"
                                   className="img-fluid rounded-circle"
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                                    (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                                   }}
                                 />
                               ) : isSignedIn && user?.imageUrl ? (
@@ -781,12 +781,12 @@ const Header = (): JSX.Element => {
                                   alt="Profile"
                                   className="img-fluid rounded-circle"
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                                    (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                                   }}
                                 />
                               ) : (
                                 <ImageWithBasePath
-                                  src="assets/img/profiles/avatar-12.jpg"
+                                  src="assets/img/profiles/profile.png"
                                   alt="Profile"
                                   className="img-fluid rounded-circle"
                                 />
@@ -797,12 +797,12 @@ const Header = (): JSX.Element => {
                                 src={getUserImage()}
                                 alt="Profile"
                                 onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+                                  (e.target as HTMLImageElement).src = "assets/img/profiles/profile.png";
                                 }}
                               />
                             ) : (
                               <ImageWithBasePath
-                                src="assets/img/profiles/avatar-12.jpg"
+                                src="assets/img/profiles/profile.png"
                                 alt="Profile"
                                 className="img-fluid rounded-circle"
                               />

@@ -21,6 +21,9 @@ import {
 } from '../../utils/apiResponse.js';
 import { broadcastLeaveEvents, getSocketIO, broadcastToCompany } from '../../utils/socketBroadcaster.js';
 import { generateId } from '../../utils/idGenerator.js';
+import { withTransactionRetry } from '../../utils/transactionHelper.js';
+import logger from '../../utils/logger.js';
+import { logLeaveEvent } from '../../utils/logger.js';
 
 /**
  * Helper: Check for overlapping leave requests
@@ -99,7 +102,7 @@ export const getLeaves = asyncHandler(async (req, res) => {
   const { page, limit, search, status, leaveType, employee, startDate, endDate, sortBy, order } = req.query;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] getLeaves - companyId:', user.companyId);
+  logger.debug('[Leave Controller] getLeaves', { companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -190,7 +193,7 @@ export const getLeaveById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] getLeaveById - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Leave Controller] getLeaveById', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -216,7 +219,8 @@ export const createLeave = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const leaveData = req.body;
 
-  console.log('[Leave Controller] createLeave - companyId:', user.companyId);
+  logger.info('[Leave Controller] createLeave', { companyId: user.companyId });
+        logLeaveEvent('create', result.data, user);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -309,7 +313,7 @@ export const updateLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] updateLeave - id:', id, 'companyId:', user.companyId);
+  logger.info('[Leave Controller] updateLeave', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -387,7 +391,7 @@ export const deleteLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] deleteLeave - id:', id, 'companyId:', user.companyId);
+  logger.info('[Leave Controller] deleteLeave', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -444,7 +448,7 @@ export const getMyLeaves = asyncHandler(async (req, res) => {
   const { page, limit, status, leaveType } = req.query;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] getMyLeaves - companyId:', user.companyId);
+  logger.debug('[Leave Controller] getMyLeaves', { companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -507,7 +511,7 @@ export const getLeavesByStatus = asyncHandler(async (req, res) => {
     throw buildValidationError('status', `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
   }
 
-  console.log('[Leave Controller] getLeavesByStatus - status:', status, 'companyId:', user.companyId);
+  logger.debug('[Leave Controller] getLeavesByStatus called', { status, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -549,76 +553,91 @@ export const approveLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] approveLeave - id:', id, 'companyId:', user.companyId);
+  logger.info('[Leave Controller] approveLeave', { id, companyId: user.companyId });
+        logLeaveEvent('approve', result.leave, user);
 
-  // Get tenant collections
-  const collections = getTenantCollections(user.companyId);
-
-  const leave = await collections.leaves.findOne({
-    _id: new ObjectId(id),
-    isDeleted: { $ne: true }
-  });
-
-  if (!leave) {
-    throw buildNotFoundError('Leave request', id);
-  }
-
-  // Check if leave can be approved
-  if (leave.status !== 'pending') {
-    throw buildConflictError('Can only approve pending leave requests');
-  }
-
-  // Approve leave
-  const updateObj = {
-    status: 'approved',
-    approvedBy: user.userId,
-    approvedAt: new Date(),
-    approvalComments: comments || '',
-    updatedAt: new Date()
-  };
-
-  await collections.leaves.updateOne(
-    { _id: new ObjectId(id) },
-    { $set: updateObj }
-  );
-
-  // Update employee leave balance
-  const employee = await collections.employees.findOne({
-    employeeId: leave.employeeId
-  });
-
-  if (employee && employee.leaveBalances) {
-    const balanceIndex = employee.leaveBalances.findIndex(
-      b => b.type === leave.leaveType
+  // Use transaction for atomic leave approval and balance update
+  const result = await withTransactionRetry(user.companyId, async (collections, session) => {
+    // Find leave within transaction
+    const leave = await collections.leaves.findOne(
+      { _id: new ObjectId(id), isDeleted: { $ne: true } },
+      { session }
     );
 
-    if (balanceIndex !== -1) {
-      employee.leaveBalances[balanceIndex].used += leave.duration;
-      employee.leaveBalances[balanceIndex].balance -= leave.duration;
+    if (!leave) {
+      throw buildNotFoundError('Leave request', id);
+    }
 
-      await collections.employees.updateOne(
-        { employeeId: leave.employeeId },
-        { $set: { leaveBalances: employee.leaveBalances } }
+    // Check if leave can be approved
+    if (leave.status !== 'pending') {
+      throw buildConflictError('Can only approve pending leave requests');
+    }
+
+    // Prepare update object
+    const updateObj = {
+      status: 'approved',
+      approvedBy: user.userId,
+      approvedAt: new Date(),
+      approvalComments: comments || '',
+      updatedAt: new Date()
+    };
+
+    // Update leave status within transaction
+    await collections.leaves.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateObj },
+      { session }
+    );
+
+    // Update employee leave balance within transaction
+    const employee = await collections.employees.findOne(
+      { employeeId: leave.employeeId },
+      { session }
+    );
+
+    let updatedLeaveBalances = null;
+    if (employee && employee.leaveBalances) {
+      const balanceIndex = employee.leaveBalances.findIndex(
+        b => b.type === leave.leaveType
       );
 
-      // Broadcast balance update
-      const io = getSocketIO(req);
-      if (io) {
-        broadcastLeaveEvents.balanceUpdated(io, user.companyId, employee._id, employee.leaveBalances);
+      if (balanceIndex !== -1) {
+        // Create a copy to avoid mutation
+        updatedLeaveBalances = employee.leaveBalances.map(b => ({ ...b }));
+        updatedLeaveBalances[balanceIndex].used += leave.duration;
+        updatedLeaveBalances[balanceIndex].balance -= leave.duration;
+
+        // Update employee leave balance
+        await collections.employees.updateOne(
+          { employeeId: leave.employeeId },
+          { $set: { leaveBalances: updatedLeaveBalances } },
+          { session }
+        );
       }
+    }
+
+    // Get updated leave
+    const updatedLeave = await collections.leaves.findOne(
+      { _id: new ObjectId(id) },
+      { session }
+    );
+
+    return { leave: updatedLeave, employee, employeeLeaveBalances: updatedLeaveBalances };
+  });
+
+  // Broadcast events outside transaction (after commit)
+  const io = getSocketIO(req);
+  if (io) {
+    // Broadcast leave approval
+    broadcastLeaveEvents.approved(io, user.companyId, result.leave, user.userId);
+
+    // Broadcast balance update if changed
+    if (result.employeeLeaveBalances) {
+      broadcastLeaveEvents.balanceUpdated(io, user.companyId, result.employee._id, result.employeeLeaveBalances);
     }
   }
 
-  // Get updated leave
-  const updatedLeave = await collections.leaves.findOne({ _id: new ObjectId(id) });
-
-  // Broadcast Socket.IO event
-  const io = getSocketIO(req);
-  if (io) {
-    broadcastLeaveEvents.approved(io, user.companyId, updatedLeave, user.userId);
-  }
-
-  return sendSuccess(res, updatedLeave, 'Leave request approved successfully');
+  return sendSuccess(res, result.leave, 'Leave request approved successfully');
 });
 
 /**
@@ -639,46 +658,50 @@ export const rejectLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] rejectLeave - id:', id, 'companyId:', user.companyId);
+  logger.info('[Leave Controller] rejectLeave', { id, companyId: user.companyId });
+        logLeaveEvent('reject', updatedLeave, user);
 
-  // Get tenant collections
-  const collections = getTenantCollections(user.companyId);
+  // Use transaction for consistent leave rejection
+  const updatedLeave = await withTransactionRetry(user.companyId, async (collections, session) => {
+    // Find leave within transaction
+    const leave = await collections.leaves.findOne(
+      { _id: new ObjectId(id), isDeleted: { $ne: true } },
+      { session }
+    );
 
-  const leave = await collections.leaves.findOne({
-    _id: new ObjectId(id),
-    isDeleted: { $ne: true }
+    if (!leave) {
+      throw buildNotFoundError('Leave request', id);
+    }
+
+    // Check if leave can be rejected
+    if (leave.status !== 'pending') {
+      throw buildConflictError('Can only reject pending leave requests');
+    }
+
+    // Prepare update object
+    const updateObj = {
+      status: 'rejected',
+      rejectedBy: user.userId,
+      rejectedAt: new Date(),
+      rejectionReason: reason,
+      updatedAt: new Date()
+    };
+
+    // Update leave status within transaction
+    await collections.leaves.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateObj },
+      { session }
+    );
+
+    // Get updated leave
+    return await collections.leaves.findOne(
+      { _id: new ObjectId(id) },
+      { session }
+    );
   });
 
-  if (!leave) {
-    throw buildNotFoundError('Leave request', id);
-  }
-
-  // Check if leave can be rejected
-  if (leave.status !== 'pending') {
-    throw buildConflictError('Can only reject pending leave requests');
-  }
-
-  // Reject leave
-  const updateObj = {
-    status: 'rejected',
-    rejectedBy: user.userId,
-    rejectedAt: new Date(),
-    rejectionReason: reason,
-    updatedAt: new Date()
-  };
-
-  await collections.leaves.updateOne(
-    { _id: new ObjectId(id) },
-    { $set: updateObj }
-  );
-
-  // Note: No balance restoration needed for pending leave rejection
-  // Balance is only deducted on approval, so pending rejection doesn't affect balance
-
-  // Get updated leave
-  const updatedLeave = await collections.leaves.findOne({ _id: new ObjectId(id) });
-
-  // Broadcast Socket.IO event
+  // Broadcast event outside transaction (after commit)
   const io = getSocketIO(req);
   if (io) {
     broadcastLeaveEvents.rejected(io, user.companyId, updatedLeave, user.userId, reason);
@@ -701,7 +724,7 @@ export const cancelLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid leave ID format');
   }
 
-  console.log('[Leave Controller] cancelLeave - id:', id, 'companyId:', user.companyId);
+  logger.debug('[Leave Controller] cancelLeave called', { id, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -719,8 +742,9 @@ export const cancelLeave = asyncHandler(async (req, res) => {
   const employee = await getEmployeeByClerkId(collections, user.userId);
 
   if (!employee || employee.employeeId !== leave.employeeId) {
-    // Allow admins to cancel any leave
-    const isAdmin = user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin';
+    // Allow admins to cancel any leave (case-insensitive)
+    const userRole = user.role?.toLowerCase();
+    const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
     if (!isAdmin) {
       throw buildConflictError('You can only cancel your own leave requests');
     }
@@ -810,7 +834,7 @@ export const getLeaveBalance = asyncHandler(async (req, res) => {
   const { leaveType } = req.query;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] getLeaveBalance - companyId:', user.companyId);
+  logger.debug('[Leave Controller] getLeaveBalance called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -848,7 +872,7 @@ export const getTeamLeaves = asyncHandler(async (req, res) => {
   const { page, limit, status, leaveType, department } = req.query;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] getTeamLeaves - companyId:', user.companyId);
+  logger.debug('[Leave Controller] getTeamLeaves called', { companyId: user.companyId, userId: user.userId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -876,17 +900,18 @@ export const getTeamLeaves = asyncHandler(async (req, res) => {
     filter.leaveType = leaveType;
   }
 
-  // Get team members based on role
+  // Get team members based on role (case-insensitive)
   let teamEmployeeIds = [];
+  const userRole = user.role?.toLowerCase();
 
-  if (user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin') {
+  if (userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin') {
     // Admins/HR can see all employees
     const allEmployees = await collections.employees.find({
       companyId: user.companyId,
       isDeleted: { $ne: true }
     }).toArray();
     teamEmployeeIds = allEmployees.map(emp => emp.employeeId);
-  } else if (user.role === 'manager') {
+  } else if (userRole === 'manager') {
     // Managers can see their department employees
     const deptFilter = {
       companyId: user.companyId,
@@ -942,7 +967,7 @@ export const uploadAttachment = asyncHandler(async (req, res) => {
   const { leaveId } = req.params;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] uploadAttachment - leaveId:', leaveId);
+  logger.debug('[Leave Controller] uploadAttachment called', { leaveId, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -961,8 +986,9 @@ export const uploadAttachment = asyncHandler(async (req, res) => {
   // Get Employee record
   const employee = await getEmployeeByClerkId(collections, user.userId);
 
-  // Check authorization - employee can only upload to their own leaves, admins can upload to any
-  const isAdmin = user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin';
+  // Check authorization - employee can only upload to their own leaves, admins can upload to any (case-insensitive)
+  const userRole = user.role?.toLowerCase();
+  const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
   if (leave.employeeId !== employee?.employeeId && !isAdmin) {
     throw buildForbiddenError('Not authorized to upload attachments for this leave');
   }
@@ -1044,7 +1070,7 @@ export const deleteAttachment = asyncHandler(async (req, res) => {
   const { leaveId, attachmentId } = req.params;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] deleteAttachment - leaveId:', leaveId, 'attachmentId:', attachmentId);
+  logger.debug('[Leave Controller] deleteAttachment called', { leaveId, attachmentId, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -1063,8 +1089,9 @@ export const deleteAttachment = asyncHandler(async (req, res) => {
   // Get Employee record
   const employee = await getEmployeeByClerkId(collections, user.userId);
 
-  // Check authorization
-  const isAdmin = user.role === 'admin' || user.role === 'hr' || user.role === 'superadmin';
+  // Check authorization (case-insensitive)
+  const userRole = user.role?.toLowerCase();
+  const isAdmin = userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin';
   if (leave.employeeId !== employee?.employeeId && !isAdmin) {
     throw buildForbiddenError('Not authorized to delete attachments from this leave');
   }
@@ -1086,7 +1113,7 @@ export const deleteAttachment = asyncHandler(async (req, res) => {
 
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
-    console.log('[Leave Controller] File deleted:', filePath);
+    logger.info('[Leave Controller] File deleted', { filePath });
   }
 
   // Remove attachment from database
@@ -1120,7 +1147,7 @@ export const getAttachments = asyncHandler(async (req, res) => {
   const { leaveId } = req.params;
   const user = extractUser(req);
 
-  console.log('[Leave Controller] getAttachments - leaveId:', leaveId);
+  logger.debug('[Leave Controller] getAttachments called', { leaveId, companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);

@@ -201,11 +201,12 @@ export const useUserProfileREST = (): UseUserProfileRESTReturn => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn]);
 
-  // Role helpers
-  const isAdmin = profile?.role === 'admin';
-  const isHR = profile?.role === 'hr';
-  const isEmployee = profile?.role === 'employee';
-  const isSuperadmin = profile?.role === 'superadmin';
+  // Role helpers (case-insensitive)
+  const userRole = profile?.role?.toLowerCase();
+  const isAdmin = userRole === 'admin';
+  const isHR = userRole === 'hr';
+  const isEmployee = userRole === 'employee';
+  const isSuperadmin = userRole === 'superadmin';
 
   return {
     profile,

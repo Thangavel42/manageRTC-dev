@@ -1583,13 +1583,13 @@ const EmployeeDashboard = () => {
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Phone Number</span>
                     <p className="text-gray-9">
-                      {dashboardData?.employeeDetails?.contact.phone}
+                      {dashboardData?.employeeDetails?.contact?.phone}
                     </p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Email Address</span>
                     <p className="text-gray-9">
-                      {dashboardData?.employeeDetails?.contact.email}
+                      {dashboardData?.employeeDetails?.contact?.email}
                     </p>
                   </div>
                   <div className="mb-3">
