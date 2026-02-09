@@ -225,6 +225,27 @@ export const useTasksREST = () => {
     }
   }, []);
 
+  const getEmployeeProjectTasks = useCallback(async (projectId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response: ApiResponse<Task[]> = await get(`/tasks/my/project/${projectId}`);
+
+      if (response.success && response.data) {
+        setTasks(response.data);
+      }
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.error?.message ||
+        err.message ||
+        'Failed to fetch employee project tasks';
+      setError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Socket.IO real-time listeners
   useEffect(() => {
     if (!socket) return;
@@ -276,6 +297,7 @@ export const useTasksREST = () => {
     updateStatus,
     getTasksByProject,
     getMyTasks,
+    getEmployeeProjectTasks,
   };
 };
 

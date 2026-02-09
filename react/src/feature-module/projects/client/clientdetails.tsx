@@ -1,40 +1,29 @@
-import React, { useState, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { label } from "yet-another-react-lightbox/*";
-import CommonSelect from "../../../core/common/commonSelect";
-import CommonTextEditor from "../../../core/common/textEditor";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useClients } from "../../../hooks/useClients";
-import { message } from "antd";
-import EditClient from "./edit_client";
-import Footer from "../../../core/common/footer";
+import { message } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import CommonSelect from '../../../core/common/commonSelect';
+import Footer from '../../../core/common/footer';
+import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import CommonTextEditor from '../../../core/common/textEditor';
+import { Client, useClientsREST } from '../../../hooks/useClientsREST';
+import { Project, useProjectsREST } from '../../../hooks/useProjectsREST';
+import { all_routes } from '../../router/all_routes';
+import EditClient from './edit_client';
 
-type PasswordField = "password" | "confirmPassword";
-
-interface Client {
-  _id: string;
-  name: string;
-  company: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  logo?: string;
-  status: "Active" | "Inactive";
-  contractValue?: number;
-  projects?: number;
-  createdAt: string;
-  updatedAt: string;
-}
+type PasswordField = 'password' | 'confirmPassword';
 
 const ClientDetails = () => {
   const { clientId } = useParams<{ clientId: string }>();
-  const { getClientById, loading, error } = useClients();
+  const { getClientById, loading, error } = useClientsREST();
+  const { projects: allProjects, fetchProjects } = useProjectsREST();
+  const navigate = useNavigate();
 
   const [client, setClient] = useState<Client | null>(null);
   const [loadingClient, setLoadingClient] = useState(true);
   const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [clientProjects, setClientProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   const [passwordVisibility, setPasswordVisibility] = useState({
     password: false,
@@ -54,100 +43,144 @@ const ClientDetails = () => {
       setSelectedClient(client);
       // Store client data for the edit modal
       (window as any).currentEditClient = client;
-      console.log(
-        "[ClientDetails] Dispatching edit event with client:",
-        client
-      );
+      console.log('[ClientDetails] Dispatching edit event with client:', client);
       // Dispatch custom event that edit_client.tsx is listening for
-      window.dispatchEvent(
-        new CustomEvent("edit-client", { detail: { client } })
-      );
+      window.dispatchEvent(new CustomEvent('edit-client', { detail: { client } }));
     } else {
-      console.log("[ClientDetails] No client data available for edit");
-      message.error("Client data not loaded yet. Please try again.");
+      console.log('[ClientDetails] No client data available for edit');
+      message.error('Client data not loaded yet. Please try again.');
     }
   };
 
   // Fetch client details on component mount
-  useEffect(() => {
-    const fetchClientDetails = async () => {
-      console.log("ClientDetails: clientId from URL params:", clientId);
+  const loadClient = useCallback(async () => {
+    if (!clientId) {
+      console.log('[ClientDetails] No clientId in URL params');
+      setLoadingClient(false);
+      return;
+    }
 
-      if (clientId) {
-        setLoadingClient(true);
-        try {
-          console.log("ClientDetails: Fetching client with ID:", clientId);
-          const clientData = await getClientById(clientId);
-          console.log("ClientDetails: Received client data:", clientData);
+    setLoadingClient(true);
+    setClient(null);
 
-          if (clientData) {
-            setClient(clientData);
-            console.log("ClientDetails: Client set successfully");
-          } else {
-            console.log("ClientDetails: No client data received");
-            message.error("Client not found");
-          }
-        } catch (error) {
-          console.error("ClientDetails: Error fetching client details:", error);
-          message.error("Failed to load client details");
-        } finally {
-          setLoadingClient(false);
-        }
+    try {
+      console.log('[ClientDetails] Fetching client with ID:', clientId);
+      const clientData = await getClientById(clientId);
+      console.log('[ClientDetails] Received client data:', clientData);
+
+      if (clientData) {
+        setClient(clientData);
+        console.log('[ClientDetails] Client set successfully:', {
+          id: clientData._id,
+          name: clientData.name,
+          company: clientData.company,
+        });
+
+        // Fetch projects for this client
+        await loadClientProjects(clientData.name);
       } else {
-        console.log("ClientDetails: No clientId in URL params");
-        // If no clientId in URL, try to get from localStorage or show error
-        const storedClientId = localStorage.getItem("selectedClientId");
-        console.log(
-          "ClientDetails: Stored client ID from localStorage:",
-          storedClientId
-        );
+        console.log('[ClientDetails] No client data received');
+        message.error('Client not found');
+      }
+    } catch (error: any) {
+      console.error('[ClientDetails] Error fetching client details:', error);
+      console.error('[ClientDetails] Error message:', error?.message);
+      console.error('[ClientDetails] Error response:', error?.response?.data);
+      message.error(error?.message || 'Failed to load client details');
+    } finally {
+      setLoadingClient(false);
+    }
+  }, [clientId, getClientById]);
 
-        if (storedClientId) {
-          try {
-            const clientData = await getClientById(storedClientId);
-            if (clientData) {
-              setClient(clientData);
-            }
-          } catch (error) {
-            console.error(
-              "ClientDetails: Error fetching stored client:",
-              error
-            );
-          }
-        }
-        setLoadingClient(false);
+  // Load projects for the client
+  const loadClientProjects = useCallback(
+    async (clientName: string) => {
+      setLoadingProjects(true);
+      try {
+        console.log('[ClientDetails] Fetching projects for client:', clientName);
+        await fetchProjects({ client: clientName });
+      } catch (error) {
+        console.error('[ClientDetails] Error fetching projects:', error);
+      } finally {
+        setLoadingProjects(false);
+      }
+    },
+    [fetchProjects]
+  );
+
+  // Filter projects by client name
+  useEffect(() => {
+    if (client && allProjects) {
+      const filtered = allProjects.filter((project) => project.client === client.name);
+      setClientProjects(filtered);
+      console.log('[ClientDetails] Filtered projects:', filtered.length);
+    }
+  }, [client, allProjects]);
+
+  useEffect(() => {
+    loadClient();
+  }, [loadClient]);
+
+  // Listen for client updates
+  useEffect(() => {
+    const handleClientUpdated = () => {
+      console.log('[ClientDetails] Client updated event received, reloading...');
+      loadClient();
+    };
+
+    window.addEventListener('client-updated', handleClientUpdated);
+
+    return () => {
+      window.removeEventListener('client-updated', handleClientUpdated);
+    };
+  }, [loadClient]);
+
+  // Listen for project updates
+  useEffect(() => {
+    const handleProjectUpdate = () => {
+      console.log('[ClientDetails] Project update event received, reloading projects...');
+      if (client) {
+        loadClientProjects(client.name);
       }
     };
 
-    fetchClientDetails();
-  }, [clientId, getClientById]);
+    window.addEventListener('project-created', handleProjectUpdate);
+    window.addEventListener('project-updated', handleProjectUpdate);
+    window.addEventListener('project-deleted', handleProjectUpdate);
+
+    return () => {
+      window.removeEventListener('project-created', handleProjectUpdate);
+      window.removeEventListener('project-updated', handleProjectUpdate);
+      window.removeEventListener('project-deleted', handleProjectUpdate);
+    };
+  }, [client, loadClientProjects]);
 
   const tags = [
-    { value: "Select", label: "Select" },
-    { value: "Internal", label: "Internal" },
-    { value: "Projects", label: "Projects" },
-    { value: "Meetings", label: "Meetings" },
-    { value: "Reminder", label: "Reminder" },
+    { value: 'Select', label: 'Select' },
+    { value: 'Internal', label: 'Internal' },
+    { value: 'Projects', label: 'Projects' },
+    { value: 'Meetings', label: 'Meetings' },
+    { value: 'Reminder', label: 'Reminder' },
   ];
   const priority = [
-    { value: "Select", label: "Select" },
-    { value: "High", label: "High" },
-    { value: "Medium", label: "Medium" },
-    { value: "Low", label: "Low" },
+    { value: 'Select', label: 'Select' },
+    { value: 'High', label: 'High' },
+    { value: 'Medium', label: 'Medium' },
+    { value: 'Low', label: 'Low' },
   ];
   const addassignee = [
-    { value: "Select", label: "Select" },
-    { value: "Sophie", label: "Sophie" },
-    { value: "Cameron", label: "Cameron" },
-    { value: "Doris", label: "Doris" },
-    { value: "Rufana", label: "Rufana" },
+    { value: 'Select', label: 'Select' },
+    { value: 'Sophie', label: 'Sophie' },
+    { value: 'Cameron', label: 'Cameron' },
+    { value: 'Doris', label: 'Doris' },
+    { value: 'Rufana', label: 'Rufana' },
   ];
   const statusChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Completed", label: "Completed" },
-    { value: "Pending", label: "Pending" },
-    { value: "Onhold", label: "Onhold" },
-    { value: "Inprogress", label: "Inprogress" },
+    { value: 'Select', label: 'Select' },
+    { value: 'Completed', label: 'Completed' },
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Onhold', label: 'Onhold' },
+    { value: 'Inprogress', label: 'Inprogress' },
   ];
 
   // Show loading state
@@ -204,10 +237,7 @@ const ClientDetails = () => {
           <div className="alert alert-danger m-3">
             <h6>Error loading client details</h6>
             <p className="mb-0">{error}</p>
-            <button
-              className="btn btn-primary mt-2"
-              onClick={() => window.location.reload()}
-            >
+            <button className="btn btn-primary mt-2" onClick={() => window.location.reload()}>
               Retry
             </button>
           </div>
@@ -274,33 +304,25 @@ const ClientDetails = () => {
                 <div className="card-body p-0">
                   <span className="avatar avatar-xl avatar-rounded border border-2 border-white m-auto d-flex mb-2">
                     <ImageWithBasePath
-                      src={client?.logo || "assets/img/users/user-13.jpg"}
+                      src={client?.logo || 'assets/img/users/user-13.jpg'}
                       className="w-auto h-auto"
-                      alt={client?.name || "Client"}
-                      isLink={
-                        client?.logo
-                          ? client.logo.startsWith("https://")
-                          : false
-                      }
+                      alt={client?.name || 'Client'}
+                      isLink={client?.logo ? client.logo.startsWith('https://') : false}
                     />
                   </span>
                   <div className="text-center px-3 pb-3 border-bottom">
                     <div className="mb-3">
                       <h5 className="d-flex align-items-center justify-content-center mb-1">
-                        {client?.name || "Loading..."}
+                        {client?.name || 'Loading...'}
                         <i className="ti ti-discount-check-filled text-success ms-1" />
                       </h5>
-                      <p className="text-dark mb-1">
-                        {client?.company || "Loading..."}
-                      </p>
+                      <p className="text-dark mb-1">{client?.company || 'Loading...'}</p>
                       <span
                         className={`badge fw-medium ${
-                          client?.status === "Active"
-                            ? "badge-soft-success"
-                            : "badge-soft-danger"
+                          client?.status === 'Active' ? 'badge-soft-success' : 'badge-soft-danger'
                         }`}
                       >
-                        {client?.status || "Loading..."}
+                        {client?.status || 'Loading...'}
                       </span>
                     </div>
                     <div>
@@ -310,7 +332,9 @@ const ClientDetails = () => {
                           Client ID
                         </span>
                         <p className="text-dark">
-                          {client?._id?.slice(-8).toUpperCase() || "Loading..."}
+                          {client?.clientId
+                            ? client.clientId.toUpperCase()
+                            : client?._id?.slice(-8).toUpperCase() || 'Loading...'}
                         </p>
                       </div>
                       <div className="d-flex align-items-center justify-content-between">
@@ -320,24 +344,18 @@ const ClientDetails = () => {
                         </span>
                         <p className="text-dark">
                           {client?.createdAt
-                            ? new Date(client.createdAt).toLocaleDateString(
-                                "en-GB",
-                                {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                }
-                              )
-                            : "Loading..."}
+                            ? new Date(client.createdAt).toLocaleDateString('en-GB', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              })
+                            : 'Loading...'}
                         </p>
                       </div>
-                      <div className="row gx-2 mt-3">
+                      <div className="row gx-2 mt-3" style={{ display: 'none' }}>
                         <div className="col-6">
                           <div>
-                            <Link
-                              to={all_routes.voiceCall}
-                              className="btn btn-dark w-100"
-                            >
+                            <Link to={all_routes.voiceCall} className="btn btn-dark w-100">
                               <i className="ti ti-phone-call me-1" />
                               Call
                             </Link>
@@ -345,10 +363,7 @@ const ClientDetails = () => {
                         </div>
                         <div className="col-6">
                           <div>
-                            <Link
-                              to={all_routes.chat}
-                              className="btn btn-primary w-100"
-                            >
+                            <Link to={all_routes.chat} className="btn btn-primary w-100">
                               <i className="ti ti-message-heart me-1" />
                               Message
                             </Link>
@@ -379,20 +394,15 @@ const ClientDetails = () => {
                         <i className="ti ti-phone me-2" />
                         Phone
                       </span>
-                      <p className="text-dark">
-                        {client?.phone || "Not provided"}
-                      </p>
+                      <p className="text-dark">{client?.phone || 'Not provided'}</p>
                     </div>
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <span className="d-inline-flex align-items-center">
                         <i className="ti ti-mail-check me-2" />
                         Email
                       </span>
-                      <Link
-                        to="to"
-                        className="text-info d-inline-flex align-items-center"
-                      >
-                        {client?.email || "Not provided"}
+                      <Link to="to" className="text-info d-inline-flex align-items-center">
+                        {client?.email || 'Not provided'}
                         <i className="ti ti-copy text-dark ms-2" />
                       </Link>
                     </div>
@@ -401,55 +411,81 @@ const ClientDetails = () => {
                         <i className="ti ti-map-pin-check me-2" />
                         Address
                       </span>
-                      <p className="text-dark text-end">
-                        {client?.address || "Not provided"}
-                      </p>
+                      <p className="text-dark text-end">{client?.address || 'Not provided'}</p>
                     </div>
                   </div>
                   <div className="p-3">
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <h6>Social Links</h6>
-                      <Link to="to" className="btn btn-icon btn-sm">
+                      <Link
+                        to="#"
+                        className="btn btn-icon btn-sm"
+                        data-bs-toggle="modal"
+                        data-inert={true}
+                        data-bs-target="#edit_client"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleEditClient();
+                        }}
+                      >
                         <i className="ti ti-edit" />
                       </Link>
                     </div>
                     <div className="d-flex align-items-center">
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-01.svg"
-                          alt="Img"
-                        />
-                      </Link>
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-06.svg"
-                          alt="Img"
-                        />
-                      </Link>
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-02.svg"
-                          alt="Img"
-                        />
-                      </Link>
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-03.svg"
-                          alt="Img"
-                        />
-                      </Link>
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-04.svg"
-                          alt="Img"
-                        />
-                      </Link>
-                      <Link to="to" className="me-2">
-                        <ImageWithBasePath
-                          src="assets/img/social/social-05.svg"
-                          alt="Img"
-                        />
-                      </Link>
+                      {client?.socialLinks?.instagram && (
+                        <Link
+                          to={client.socialLinks.instagram}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="me-2 btn btn-icon btn-sm btn-outline-danger rounded-circle"
+                          title="Instagram"
+                        >
+                          <i className="ti ti-brand-instagram" />
+                        </Link>
+                      )}
+                      {client?.socialLinks?.facebook && (
+                        <Link
+                          to={client.socialLinks.facebook}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="me-2 btn btn-icon btn-sm btn-outline-primary rounded-circle"
+                          title="Facebook"
+                        >
+                          <i className="ti ti-brand-facebook" />
+                        </Link>
+                      )}
+                      {client?.socialLinks?.linkedin && (
+                        <Link
+                          to={client.socialLinks.linkedin}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="me-2 btn btn-icon btn-sm btn-outline-info rounded-circle"
+                          title="LinkedIn"
+                        >
+                          <i className="ti ti-brand-linkedin" />
+                        </Link>
+                      )}
+                      {client?.socialLinks?.whatsapp && (
+                        <Link
+                          to={
+                            client.socialLinks.whatsapp.startsWith('http')
+                              ? client.socialLinks.whatsapp
+                              : `https://wa.me/${client.socialLinks.whatsapp.replace(/[^0-9]/g, '')}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="me-2 btn btn-icon btn-sm btn-outline-success rounded-circle"
+                          title="WhatsApp"
+                        >
+                          <i className="ti ti-brand-whatsapp" />
+                        </Link>
+                      )}
+                      {!client?.socialLinks?.instagram &&
+                        !client?.socialLinks?.facebook &&
+                        !client?.socialLinks?.linkedin &&
+                        !client?.socialLinks?.whatsapp && (
+                          <span className="text-muted">No social links added</span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -486,7 +522,7 @@ const ClientDetails = () => {
                         Projects
                       </Link>
                     </li>
-                    <li className="nav-item" role="presentation">
+                    <li className="nav-item" role="presentation" style={{ display: 'none' }}>
                       <Link
                         className="nav-link fw-medium d-flex align-items-center justify-content-center"
                         to="#bottom-justified-tab3"
@@ -498,7 +534,7 @@ const ClientDetails = () => {
                         Tasks
                       </Link>
                     </li>
-                    <li className="nav-item" role="presentation">
+                    <li className="nav-item" role="presentation" style={{ display: 'none' }}>
                       <Link
                         className="nav-link fw-medium d-flex align-items-center justify-content-center"
                         to="#bottom-justified-tab4"
@@ -510,7 +546,7 @@ const ClientDetails = () => {
                         Invoices
                       </Link>
                     </li>
-                    <li className="nav-item" role="presentation">
+                    <li className="nav-item" role="presentation" style={{ display: 'none' }}>
                       <Link
                         className="nav-link fw-medium d-flex align-items-center justify-content-center"
                         to="#bottom-justified-tab5"
@@ -522,7 +558,7 @@ const ClientDetails = () => {
                         Notes
                       </Link>
                     </li>
-                    <li className="nav-item" role="presentation">
+                    <li className="nav-item" role="presentation" style={{ display: 'none' }}>
                       <Link
                         className="nav-link fw-medium d-flex align-items-center justify-content-center"
                         to="#bottom-justified-tab6"
@@ -537,15 +573,8 @@ const ClientDetails = () => {
                   </ul>
                 </div>
                 <div className="tab-content custom-accordion-items client-accordion">
-                  <div
-                    className="tab-pane active show"
-                    id="bottom-justified-tab1"
-                    role="tabpanel"
-                  >
-                    <div
-                      className="accordion accordions-items-seperate"
-                      id="accordionExample"
-                    >
+                  <div className="tab-pane active show" id="bottom-justified-tab1" role="tabpanel">
+                    <div className="accordion accordions-items-seperate" id="accordionExample">
                       <div className="accordion-item">
                         <div className="accordion-header" id="headingOne">
                           <div
@@ -566,212 +595,166 @@ const ClientDetails = () => {
                           data-bs-parent="#accordionExample"
                         >
                           <div className="accordion-body pb-0">
-                            <div className="row">
-                              <div className="col-xxl-6 col-lg-12 col-md-F6">
-                                <div className="card">
-                                  <div className="card-body">
-                                    <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
-                                      <Link
-                                        to={all_routes.project}
-                                        className="flex-shrink-0 me-2"
-                                      >
-                                        <ImageWithBasePath
-                                          src="assets/img/social/project-01.svg"
-                                          alt="Img"
-                                        />
-                                      </Link>
-                                      <div>
-                                        <h6 className="mb-1">
-                                          <Link to={all_routes.project}>
-                                            Hospital Administration
-                                          </Link>
-                                        </h6>
-                                        <div className="d-flex align-items-center">
-                                          <span>8 tasks</span>
-                                          <span className="mx-1">
-                                            <i className="ti ti-point-filled text-primary" />
-                                          </span>
-                                          <span>15 &nbsp;Completed</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="row">
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Deadline
-                                          </span>
-                                          <p className="text-dark">
-                                            31 July 2025
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Value
-                                          </span>
-                                          <p className="text-dark">$549987</p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Project Lead
-                                          </span>
-                                          <h6 className="fw-normal d-flex align-items-center">
+                            {loadingProjects ? (
+                              <div className="text-center py-5">
+                                <div className="spinner-border text-primary" role="status">
+                                  <span className="visually-hidden">Loading projects...</span>
+                                </div>
+                                <p className="mt-2">Loading projects...</p>
+                              </div>
+                            ) : clientProjects.length === 0 ? (
+                              <div className="text-center py-5">
+                                <i
+                                  className="ti ti-folder-off"
+                                  style={{ fontSize: '48px', color: '#ccc' }}
+                                />
+                                <p className="text-muted mt-2">No projects found for this client</p>
+                              </div>
+                            ) : (
+                              <div className="row">
+                                {clientProjects.map((project) => (
+                                  <div key={project._id} className="col-xxl-6 col-lg-12 col-md-6">
+                                    <div
+                                      className="card"
+                                      onClick={() =>
+                                        navigate(
+                                          all_routes.projectdetails.replace(
+                                            ':projectId',
+                                            project._id
+                                          )
+                                        )
+                                      }
+                                      style={{
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        border: '2px solid transparent',
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.borderColor = '#0d6efd')
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.borderColor = 'transparent')
+                                      }
+                                    >
+                                      <div className="card-body">
+                                        <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
+                                          <div className="flex-shrink-0 me-2">
                                             <ImageWithBasePath
-                                              className="avatar avatar-xs rounded-circle me-1"
-                                              src="assets/img/profiles/avatar-01.jpg"
+                                              src="assets/img/social/project-01.svg"
                                               alt="Img"
                                             />
-                                            Leona
-                                          </h6>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="bg-light p-2">
-                                      <div className="row align-items-center">
-                                        <div className="col-6">
-                                          <span className="fw-medium d-flex align-items-center">
-                                            <i className="ti ti-clock text-primary me-2" />
-                                            Total 565 Hrs
-                                          </span>
-                                        </div>
-                                        <div className="col-6">
+                                          </div>
                                           <div>
-                                            <div className="d-flex align-items-center justify-content-between mb-1">
-                                              <small className="text-dark">
-                                                495 Hrs
-                                              </small>
-                                              <small className="text-dark">
-                                                70 Hrs
-                                              </small>
-                                            </div>
-                                            <div className="progress  progress-xs">
-                                              <div
-                                                className="progress-bar bg-warning"
-                                                role="progressbar"
-                                                style={{ width: "75%" }}
-                                              />
-                                              <div
-                                                className="progress-bar bg-success"
-                                                role="progressbar"
-                                                style={{ width: "25%" }}
-                                              />
+                                            <h6 className="mb-1">{project.name}</h6>
+                                            <div className="d-flex align-items-center">
+                                              <span
+                                                className={`badge badge-${
+                                                  project.status === 'Active'
+                                                    ? 'success'
+                                                    : project.status === 'Completed'
+                                                      ? 'info'
+                                                      : project.status === 'On Hold'
+                                                        ? 'warning'
+                                                        : 'danger'
+                                                }`}
+                                              >
+                                                {project.status}
+                                              </span>
+                                              <span className="mx-2">
+                                                <i className="ti ti-point-filled text-primary" />
+                                              </span>
+                                              <span
+                                                className={`badge badge-${
+                                                  project.priority === 'High'
+                                                    ? 'danger'
+                                                    : project.priority === 'Medium'
+                                                      ? 'warning'
+                                                      : 'info'
+                                                }`}
+                                              >
+                                                {project.priority}
+                                              </span>
                                             </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="col-xxl-6 col-lg-12 col-md-6">
-                                <div className="card">
-                                  <div className="card-body">
-                                    <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
-                                      <Link
-                                        to={all_routes.project}
-                                        className="flex-shrink-0 me-2"
-                                      >
-                                        <ImageWithBasePath
-                                          src="assets/img/social/project-02.svg"
-                                          alt="Img"
-                                        />
-                                      </Link>
-                                      <div>
-                                        <h6 className="mb-1">
-                                          <Link to={all_routes.project}>
-                                            Video Calling App
-                                          </Link>
-                                        </h6>
-                                        <div className="d-flex align-items-center">
-                                          <span>22 tasks</span>
-                                          <span className="mx-1">
-                                            <i className="ti ti-point-filled text-primary" />
-                                          </span>
-                                          <span>15 Completed</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="row">
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Deadline
-                                          </span>
-                                          <p className="text-dark">
-                                            16 Jan 2025
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Value
-                                          </span>
-                                          <p className="text-dark">$279987</p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Project Lead
-                                          </span>
-                                          <h6 className="fw-normal d-flex align-items-center">
-                                            <ImageWithBasePath
-                                              className="avatar avatar-xs rounded-circle me-1"
-                                              src="assets/img/profiles/avatar-02.jpg"
-                                              alt="Img"
-                                            />
-                                            Mathis
-                                          </h6>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="bg-light p-2">
-                                      <div className="row align-items-center">
-                                        <div className="col-6">
-                                          <span className="fw-medium d-flex align-items-center">
-                                            <i className="ti ti-clock text-primary me-2" />
-                                            Total 700 Hrs
-                                          </span>
-                                        </div>
-                                        <div className="col-6">
-                                          <div>
-                                            <div className="d-flex align-items-center justify-content-between mb-1">
-                                              <small className="text-dark">
-                                                605 Hrs
-                                              </small>
-                                              <small className="text-dark">
-                                                95 Hrs
-                                              </small>
+                                        <div className="row">
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Deadline</span>
+                                              <p className="text-dark">
+                                                {project.dueDate
+                                                  ? new Date(project.dueDate).toLocaleDateString(
+                                                      'en-US',
+                                                      {
+                                                        day: 'numeric',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                      }
+                                                    )
+                                                  : 'Not set'}
+                                              </p>
                                             </div>
-                                            <div className="progress  progress-xs">
-                                              <div
-                                                className="progress-bar bg-warning"
-                                                role="progressbar"
-                                                style={{ width: "75%" }}
-                                              />
-                                              <div
-                                                className="progress-bar bg-success"
-                                                role="progressbar"
-                                                style={{ width: "25%" }}
-                                              />
+                                          </div>
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Budget</span>
+                                              <p className="text-dark">
+                                                {project.projectValue || project.budget
+                                                  ? `$${(project.projectValue || project.budget)?.toLocaleString()}`
+                                                  : 'Not set'}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Progress</span>
+                                              <div className="d-flex align-items-center">
+                                                <div
+                                                  className="progress flex-fill me-2"
+                                                  style={{ height: '6px' }}
+                                                >
+                                                  <div
+                                                    className="progress-bar bg-success"
+                                                    role="progressbar"
+                                                    style={{ width: `${project.progress}%` }}
+                                                  />
+                                                </div>
+                                                <span className="text-dark">
+                                                  {project.progress}%
+                                                </span>
+                                              </div>
                                             </div>
                                           </div>
                                         </div>
+                                        {project.description && (
+                                          <div className="mb-2">
+                                            <span className="mb-1 d-block text-muted">
+                                              Description
+                                            </span>
+                                            <p
+                                              className="text-dark mb-0"
+                                              style={{
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                              }}
+                                            >
+                                              {project.description}
+                                            </p>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
-                                </div>
+                                ))}
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div className="accordion-item">
+                      <div className="accordion-item" style={{ display: 'none' }}>
                         <div className="accordion-header" id="headingTwo">
                           <div
                             className="accordion-button collapsed"
@@ -797,18 +780,13 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 d-flex align-items-center rating-select">
                                         <i className="ti ti-star-filled filled" />
                                       </span>
                                       <div className="strike-info">
-                                        <h4 className="fs-14">
-                                          Patient appointment booking
-                                        </h4>
+                                        <h4 className="fs-14">Patient appointment booking</h4>
                                       </div>
                                     </div>
                                   </div>
@@ -899,18 +877,14 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 rating-select d-flex align-items-center">
                                         <i className="ti ti-star" />
                                       </span>
                                       <div className="strike-info">
                                         <h4 className="fs-14">
-                                          Appointment booking with payment
-                                          gateway
+                                          Appointment booking with payment gateway
                                         </h4>
                                       </div>
                                     </div>
@@ -1002,10 +976,7 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 rating-select d-flex align-items-center">
                                         <i className="ti ti-star" />
@@ -1114,9 +1085,7 @@ const ClientDetails = () => {
                                         <i className="ti ti-star" />
                                       </span>
                                       <div className="strike-info">
-                                        <h4 className="fs-14">
-                                          Private chat module
-                                        </h4>
+                                        <h4 className="fs-14">Private chat module</h4>
                                       </div>
                                     </div>
                                   </div>
@@ -1206,7 +1175,7 @@ const ClientDetails = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="accordion-item">
+                      <div className="accordion-item" style={{ display: 'none' }}>
                         <div className="accordion-header" id="headingThree">
                           <div
                             className="accordion-button collapsed"
@@ -1252,13 +1221,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Phase 2 Completion
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Phase 2 Completion</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-123{" "}
-                                          </Link>{" "}
+                                            #INV-123{' '}
+                                          </Link>{' '}
                                           11 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -1276,16 +1243,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -1300,13 +1261,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Advance for Project
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Advance for Project</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-124{" "}
-                                          </Link>{" "}
+                                            #INV-124{' '}
+                                          </Link>{' '}
                                           14 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -1324,16 +1283,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Hold
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -1353,8 +1306,8 @@ const ClientDetails = () => {
                                         </h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-125{" "}
-                                          </Link>{" "}
+                                            #INV-125{' '}
+                                          </Link>{' '}
                                           15 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -1372,16 +1325,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -1396,13 +1343,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Added New Functionality
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Added New Functionality</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-126{" "}
-                                          </Link>{" "}
+                                            #INV-126{' '}
+                                          </Link>{' '}
                                           16 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -1420,16 +1365,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -1444,13 +1383,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Phase 1 Completion
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Phase 1 Completion</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-127{" "}
-                                          </Link>{" "}
+                                            #INV-127{' '}
+                                          </Link>{' '}
                                           17 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -1468,16 +1405,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         unpaid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -1493,7 +1424,7 @@ const ClientDetails = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="accordion-item">
+                      <div className="accordion-item" style={{ display: 'none' }}>
                         <div className="accordion-header" id="headingFour">
                           <div
                             className="accordion-button collapsed"
@@ -1535,9 +1466,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        15 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">15 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -1549,19 +1478,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -1574,11 +1497,9 @@ const ClientDetails = () => {
                                       Changes &amp; design
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -1588,9 +1509,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        16 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">16 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -1602,19 +1521,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -1627,11 +1540,9 @@ const ClientDetails = () => {
                                       Phase 1 Completion
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -1641,9 +1552,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        17 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">17 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -1655,19 +1564,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -1680,11 +1583,9 @@ const ClientDetails = () => {
                                       Phase 2 Completion
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -1692,10 +1593,7 @@ const ClientDetails = () => {
                               </div>
                               <div className="col-md-12">
                                 <div className="text-center">
-                                  <Link
-                                    to="#"
-                                    className="btn btn-primary btn-sm"
-                                  >
+                                  <Link to="#" className="btn btn-primary btn-sm">
                                     Load More
                                   </Link>
                                 </div>
@@ -1704,7 +1602,7 @@ const ClientDetails = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="accordion-item">
+                      <div className="accordion-item" style={{ display: 'none' }}>
                         <div className="accordion-header" id="headingFive">
                           <div
                             className="accordion-button collapsed"
@@ -1741,42 +1639,27 @@ const ClientDetails = () => {
                                     </Link>
                                     <ul className="dropdown-menu dropdown-menu-end p-3">
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Docs
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Pdf
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Image
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Folder
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Xml
                                         </Link>
                                       </li>
@@ -1839,9 +1722,7 @@ const ClientDetails = () => {
                                     <td>7.6 MB</td>
                                     <td>Doc</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Mar 15, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Mar 15, 2025</p>
                                       <span>05:00:14 PM</span>
                                     </td>
                                     <td>
@@ -1887,19 +1768,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -1940,9 +1815,7 @@ const ClientDetails = () => {
                                     <td>7.4 MB</td>
                                     <td>PDF</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Jan 8, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Jan 8, 2025</p>
                                       <span>08:20:13 PM</span>
                                     </td>
                                     <td>
@@ -1981,19 +1854,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -2034,9 +1901,7 @@ const ClientDetails = () => {
                                     <td>6.1 MB</td>
                                     <td>Image</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Aug 6, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Aug 6, 2025</p>
                                       <span>04:10:12 PM</span>
                                     </td>
                                     <td>
@@ -2095,19 +1960,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -2148,9 +2007,7 @@ const ClientDetails = () => {
                                     <td>5.2 MB</td>
                                     <td>Folder</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Jan 6, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Jan 6, 2025</p>
                                       <span>03:40:14 PM</span>
                                     </td>
                                     <td>
@@ -2196,19 +2053,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -2249,9 +2100,7 @@ const ClientDetails = () => {
                                     <td>8 MB</td>
                                     <td>Xml</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Oct 12, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Oct 12, 2025</p>
                                       <span>05:00:14 PM</span>
                                     </td>
                                     <td>
@@ -2304,19 +2153,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -2334,11 +2177,7 @@ const ClientDetails = () => {
                       </div>
                     </div>
                   </div>
-                  <div
-                    className="tab-pane"
-                    id="bottom-justified-tab2"
-                    role="tabpanel"
-                  >
+                  <div className="tab-pane" id="bottom-justified-tab2" role="tabpanel">
                     <div className="accordion accordions-items-seperate">
                       <div className="accordion-item">
                         <div className="accordion-header" id="headingOne2">
@@ -2359,208 +2198,162 @@ const ClientDetails = () => {
                           aria-labelledby="headingOne2"
                         >
                           <div className="accordion-body pb-0">
-                            <div className="row">
-                              <div className="col-xxl-6 col-lg-12 col-md-6">
-                                <div className="card">
-                                  <div className="card-body">
-                                    <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
-                                      <Link
-                                        to={all_routes.project}
-                                        className="flex-shrink-0 me-2"
-                                      >
-                                        <ImageWithBasePath
-                                          src="assets/img/social/project-01.svg"
-                                          alt="Img"
-                                        />
-                                      </Link>
-                                      <div>
-                                        <h6 className="mb-1">
-                                          <Link to={all_routes.project}>
-                                            Hospital Administration
-                                          </Link>
-                                        </h6>
-                                        <div className="d-flex align-items-center">
-                                          <span>8 tasks</span>
-                                          <span className="mx-1">
-                                            <i className="ti ti-point-filled text-primary" />
-                                          </span>
-                                          <span>15 &nbsp;Completed</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="row">
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Deadline
-                                          </span>
-                                          <p className="text-dark">
-                                            31 July 2025
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Value
-                                          </span>
-                                          <p className="text-dark">$549987</p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Project Lead
-                                          </span>
-                                          <h6 className="fw-normal d-flex align-items-center">
+                            {loadingProjects ? (
+                              <div className="text-center py-5">
+                                <div className="spinner-border text-primary" role="status">
+                                  <span className="visually-hidden">Loading projects...</span>
+                                </div>
+                                <p className="mt-2">Loading projects...</p>
+                              </div>
+                            ) : clientProjects.length === 0 ? (
+                              <div className="text-center py-5">
+                                <i
+                                  className="ti ti-folder-off"
+                                  style={{ fontSize: '48px', color: '#ccc' }}
+                                />
+                                <p className="text-muted mt-2">No projects found for this client</p>
+                              </div>
+                            ) : (
+                              <div className="row">
+                                {clientProjects.map((project) => (
+                                  <div key={project._id} className="col-xxl-6 col-lg-12 col-md-6">
+                                    <div
+                                      className="card"
+                                      onClick={() =>
+                                        navigate(
+                                          all_routes.projectdetails.replace(
+                                            ':projectId',
+                                            project._id
+                                          )
+                                        )
+                                      }
+                                      style={{
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        border: '2px solid transparent',
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.borderColor = '#0d6efd')
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.borderColor = 'transparent')
+                                      }
+                                    >
+                                      <div className="card-body">
+                                        <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
+                                          <div className="flex-shrink-0 me-2">
                                             <ImageWithBasePath
-                                              className="avatar avatar-xs rounded-circle me-1"
-                                              src="assets/img/profiles/avatar-01.jpg"
+                                              src="assets/img/social/project-01.svg"
                                               alt="Img"
                                             />
-                                            Leona
-                                          </h6>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="bg-light p-2">
-                                      <div className="row align-items-center">
-                                        <div className="col-6">
-                                          <span className="fw-medium d-flex align-items-center">
-                                            <i className="ti ti-clock text-primary me-2" />
-                                            Total 565 Hrs
-                                          </span>
-                                        </div>
-                                        <div className="col-6">
+                                          </div>
                                           <div>
-                                            <div className="d-flex align-items-center justify-content-between mb-1">
-                                              <small className="text-dark">
-                                                495 Hrs
-                                              </small>
-                                              <small className="text-dark">
-                                                70 Hrs
-                                              </small>
-                                            </div>
-                                            <div className="progress  progress-xs">
-                                              <div
-                                                className="progress-bar bg-warning"
-                                                role="progressbar"
-                                                style={{ width: "75%" }}
-                                              />
-                                              <div
-                                                className="progress-bar bg-success"
-                                                role="progressbar"
-                                                style={{ width: "25%" }}
-                                              />
+                                            <h6 className="mb-1">{project.name}</h6>
+                                            <div className="d-flex align-items-center">
+                                              <span
+                                                className={`badge badge-${
+                                                  project.status === 'Active'
+                                                    ? 'success'
+                                                    : project.status === 'Completed'
+                                                      ? 'info'
+                                                      : project.status === 'On Hold'
+                                                        ? 'warning'
+                                                        : 'danger'
+                                                }`}
+                                              >
+                                                {project.status}
+                                              </span>
+                                              <span className="mx-2">
+                                                <i className="ti ti-point-filled text-primary" />
+                                              </span>
+                                              <span
+                                                className={`badge badge-${
+                                                  project.priority === 'High'
+                                                    ? 'danger'
+                                                    : project.priority === 'Medium'
+                                                      ? 'warning'
+                                                      : 'info'
+                                                }`}
+                                              >
+                                                {project.priority}
+                                              </span>
                                             </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="col-xxl-6 col-lg-12 col-md-6">
-                                <div className="card">
-                                  <div className="card-body">
-                                    <div className="d-flex align-items-center pb-3 mb-3 border-bottom">
-                                      <Link
-                                        to={all_routes.project}
-                                        className="flex-shrink-0 me-2"
-                                      >
-                                        <ImageWithBasePath
-                                          src="assets/img/social/project-02.svg"
-                                          alt="Img"
-                                        />
-                                      </Link>
-                                      <div>
-                                        <h6 className="mb-1">
-                                          <Link to={all_routes.project}>
-                                            Video Calling App
-                                          </Link>
-                                        </h6>
-                                        <div className="d-flex align-items-center">
-                                          <span>22 tasks</span>
-                                          <span className="mx-1">
-                                            <i className="ti ti-point-filled text-primary" />
-                                          </span>
-                                          <span>15 Completed</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="row">
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Deadline
-                                          </span>
-                                          <p className="text-dark">
-                                            16 Jan 2025
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Value
-                                          </span>
-                                          <p className="text-dark">$279987</p>
-                                        </div>
-                                      </div>
-                                      <div className="col-sm-4">
-                                        <div className="mb-3">
-                                          <span className="mb-1 d-block">
-                                            Project Lead
-                                          </span>
-                                          <h6 className="fw-normal d-flex align-items-center">
-                                            <ImageWithBasePath
-                                              className="avatar avatar-xs rounded-circle me-1"
-                                              src="assets/img/profiles/avatar-02.jpg"
-                                              alt="Img"
-                                            />
-                                            Mathis
-                                          </h6>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="bg-light p-2">
-                                      <div className="row align-items-center">
-                                        <div className="col-6">
-                                          <span className="fw-medium d-flex align-items-center">
-                                            <i className="ti ti-clock text-primary me-2" />
-                                            Total 700 Hrs
-                                          </span>
-                                        </div>
-                                        <div className="col-6">
-                                          <div>
-                                            <div className="d-flex align-items-center justify-content-between mb-1">
-                                              <small className="text-dark">
-                                                605 Hrs
-                                              </small>
-                                              <small className="text-dark">
-                                                95 Hrs
-                                              </small>
+                                        <div className="row">
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Deadline</span>
+                                              <p className="text-dark">
+                                                {project.dueDate
+                                                  ? new Date(project.dueDate).toLocaleDateString(
+                                                      'en-US',
+                                                      {
+                                                        day: 'numeric',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                      }
+                                                    )
+                                                  : 'Not set'}
+                                              </p>
                                             </div>
-                                            <div className="progress  progress-xs">
-                                              <div
-                                                className="progress-bar bg-warning"
-                                                role="progressbar"
-                                                style={{ width: "75%" }}
-                                              />
-                                              <div
-                                                className="progress-bar bg-success"
-                                                role="progressbar"
-                                                style={{ width: "25%" }}
-                                              />
+                                          </div>
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Budget</span>
+                                              <p className="text-dark">
+                                                {project.projectValue || project.budget
+                                                  ? `$${(project.projectValue || project.budget)?.toLocaleString()}`
+                                                  : 'Not set'}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="col-sm-4">
+                                            <div className="mb-3">
+                                              <span className="mb-1 d-block">Progress</span>
+                                              <div className="d-flex align-items-center">
+                                                <div
+                                                  className="progress flex-fill me-2"
+                                                  style={{ height: '6px' }}
+                                                >
+                                                  <div
+                                                    className="progress-bar bg-success"
+                                                    role="progressbar"
+                                                    style={{ width: `${project.progress}%` }}
+                                                  />
+                                                </div>
+                                                <span className="text-dark">
+                                                  {project.progress}%
+                                                </span>
+                                              </div>
                                             </div>
                                           </div>
                                         </div>
+                                        {project.description && (
+                                          <div className="mb-2">
+                                            <span className="mb-1 d-block text-muted">
+                                              Description
+                                            </span>
+                                            <p
+                                              className="text-dark mb-0"
+                                              style={{
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                              }}
+                                            >
+                                              {project.description}
+                                            </p>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
-                                </div>
+                                ))}
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2570,6 +2363,7 @@ const ClientDetails = () => {
                     className="tab-pane"
                     id="bottom-justified-tab3"
                     role="tabpanel"
+                    style={{ display: 'none' }}
                   >
                     <div className="accordion accordions-items-seperate">
                       <div className="accordion-item">
@@ -2597,18 +2391,13 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 d-flex align-items-center rating-select">
                                         <i className="ti ti-star-filled filled" />
                                       </span>
                                       <div className="strike-info">
-                                        <h4 className="fs-14">
-                                          Patient appointment booking
-                                        </h4>
+                                        <h4 className="fs-14">Patient appointment booking</h4>
                                       </div>
                                     </div>
                                   </div>
@@ -2699,18 +2488,14 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 rating-select d-flex align-items-center">
                                         <i className="ti ti-star" />
                                       </span>
                                       <div className="strike-info">
                                         <h4 className="fs-14">
-                                          Appointment booking with payment
-                                          gateway
+                                          Appointment booking with payment gateway
                                         </h4>
                                       </div>
                                     </div>
@@ -2802,10 +2587,7 @@ const ClientDetails = () => {
                                   <div className="col-md-7">
                                     <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
                                       <div className="form-check form-check-md me-2">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
+                                        <input className="form-check-input" type="checkbox" />
                                       </div>
                                       <span className="me-2 rating-select d-flex align-items-center">
                                         <i className="ti ti-star" />
@@ -2914,9 +2696,7 @@ const ClientDetails = () => {
                                         <i className="ti ti-star" />
                                       </span>
                                       <div className="strike-info">
-                                        <h4 className="fs-14">
-                                          Private chat module
-                                        </h4>
+                                        <h4 className="fs-14">Private chat module</h4>
                                       </div>
                                     </div>
                                   </div>
@@ -3012,6 +2792,7 @@ const ClientDetails = () => {
                     className="tab-pane"
                     id="bottom-justified-tab4"
                     role="tabpanel"
+                    style={{ display: 'none' }}
                   >
                     <div className="accordion accordions-items-seperate">
                       <div className="accordion-item">
@@ -3059,13 +2840,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Phase 2 Completion
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Phase 2 Completion</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-123{" "}
-                                          </Link>{" "}
+                                            #INV-123{' '}
+                                          </Link>{' '}
                                           11 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -3083,16 +2862,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -3107,13 +2880,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Advance for Project
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Advance for Project</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-124{" "}
-                                          </Link>{" "}
+                                            #INV-124{' '}
+                                          </Link>{' '}
                                           14 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -3131,16 +2902,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Hold
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -3160,8 +2925,8 @@ const ClientDetails = () => {
                                         </h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-125{" "}
-                                          </Link>{" "}
+                                            #INV-125{' '}
+                                          </Link>{' '}
                                           15 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -3179,16 +2944,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -3203,13 +2962,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Added New Functionality
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Added New Functionality</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-126{" "}
-                                          </Link>{" "}
+                                            #INV-126{' '}
+                                          </Link>{' '}
                                           16 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -3227,16 +2984,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         Paid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -3251,13 +3002,11 @@ const ClientDetails = () => {
                                         <i className="ti ti-file-invoice text-dark fs-24" />
                                       </span>
                                       <div>
-                                        <h6 className="fw-medium mb-1">
-                                          Phase 1 Completion
-                                        </h6>
+                                        <h6 className="fw-medium mb-1">Phase 1 Completion</h6>
                                         <p>
                                           <Link to="#" className="text-info">
-                                            #INV-127{" "}
-                                          </Link>{" "}
+                                            #INV-127{' '}
+                                          </Link>{' '}
                                           17 Sep 2025, 05:35 pm
                                         </p>
                                       </div>
@@ -3275,16 +3024,10 @@ const ClientDetails = () => {
                                         <i className="ti ti-point-filled me-1" />
                                         unpaid
                                       </span>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm"
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm">
                                         <i className="ti ti-edit" />
                                       </Link>
-                                      <Link
-                                        to="#"
-                                        className="btn btn-icon btn-sm "
-                                      >
+                                      <Link to="#" className="btn btn-icon btn-sm ">
                                         <i className="ti ti-trash" />
                                       </Link>
                                     </div>
@@ -3306,6 +3049,7 @@ const ClientDetails = () => {
                     className="tab-pane"
                     id="bottom-justified-tab5"
                     role="tabpanel"
+                    style={{ display: 'none' }}
                   >
                     <div className="accordion accordions-items-seperate">
                       <div className="accordion-item">
@@ -3349,9 +3093,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        15 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">15 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -3363,19 +3105,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -3388,11 +3124,9 @@ const ClientDetails = () => {
                                       Changes &amp; design
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -3402,9 +3136,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        16 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">16 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -3416,19 +3148,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -3441,11 +3167,9 @@ const ClientDetails = () => {
                                       Phase 1 Completion
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -3455,9 +3179,7 @@ const ClientDetails = () => {
                                 <div className="card flex-fill">
                                   <div className="card-body">
                                     <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
-                                        17 May 2025
-                                      </h6>
+                                      <h6 className="text-gray-5 fw-medium">17 May 2025</h6>
                                       <div className="dropdown">
                                         <Link
                                           to="to"
@@ -3469,19 +3191,13 @@ const ClientDetails = () => {
                                         </Link>
                                         <ul className="dropdown-menu dropdown-menu-end p-3">
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-edit me-2" />
                                               Edit
                                             </Link>
                                           </li>
                                           <li>
-                                            <Link
-                                              to="to"
-                                              className="dropdown-item rounded-1"
-                                            >
+                                            <Link to="to" className="dropdown-item rounded-1">
                                               <i className="ti ti-trash me-1" />
                                               Delete
                                             </Link>
@@ -3494,11 +3210,9 @@ const ClientDetails = () => {
                                       Phase 2 Completion
                                     </h6>
                                     <p className="text-truncate line-clamb-3">
-                                      An office management app project
-                                      streamlines administrative tasks by
-                                      integrating tools for scheduling,
-                                      communication, and task management,
-                                      enhancing overall productivity and
+                                      An office management app project streamlines administrative
+                                      tasks by integrating tools for scheduling, communication, and
+                                      task management, enhancing overall productivity and
                                       efficiency.
                                     </p>
                                   </div>
@@ -3506,10 +3220,7 @@ const ClientDetails = () => {
                               </div>
                               <div className="col-md-12">
                                 <div className="text-center">
-                                  <Link
-                                    to="#"
-                                    className="btn btn-primary btn-sm"
-                                  >
+                                  <Link to="#" className="btn btn-primary btn-sm">
                                     Load More
                                   </Link>
                                 </div>
@@ -3524,6 +3235,7 @@ const ClientDetails = () => {
                     className="tab-pane"
                     id="bottom-justified-tab6"
                     role="tabpanel"
+                    style={{ display: 'none' }}
                   >
                     <div className="accordion accordions-items-seperate">
                       <div className="accordion-item">
@@ -3562,42 +3274,27 @@ const ClientDetails = () => {
                                     </Link>
                                     <ul className="dropdown-menu dropdown-menu-end p-3">
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Docs
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Pdf
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Image
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Folder
                                         </Link>
                                       </li>
                                       <li>
-                                        <Link
-                                          to="to"
-                                          className="dropdown-item rounded-1"
-                                        >
+                                        <Link to="to" className="dropdown-item rounded-1">
                                           Xml
                                         </Link>
                                       </li>
@@ -3660,9 +3357,7 @@ const ClientDetails = () => {
                                     <td>7.6 MB</td>
                                     <td>Doc</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Mar 15, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Mar 15, 2025</p>
                                       <span>05:00:14 PM</span>
                                     </td>
                                     <td>
@@ -3708,19 +3403,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -3761,9 +3450,7 @@ const ClientDetails = () => {
                                     <td>7.4 MB</td>
                                     <td>PDF</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Jan 8, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Jan 8, 2025</p>
                                       <span>08:20:13 PM</span>
                                     </td>
                                     <td>
@@ -3802,19 +3489,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -3855,9 +3536,7 @@ const ClientDetails = () => {
                                     <td>6.1 MB</td>
                                     <td>Image</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Aug 6, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Aug 6, 2025</p>
                                       <span>04:10:12 PM</span>
                                     </td>
                                     <td>
@@ -3916,19 +3595,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -3969,9 +3642,7 @@ const ClientDetails = () => {
                                     <td>5.2 MB</td>
                                     <td>Folder</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Jan 6, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Jan 6, 2025</p>
                                       <span>03:40:14 PM</span>
                                     </td>
                                     <td>
@@ -4017,19 +3688,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -4070,9 +3735,7 @@ const ClientDetails = () => {
                                     <td>8 MB</td>
                                     <td>Xml</td>
                                     <td>
-                                      <p className="text-title mb-0">
-                                        Oct 12, 2025
-                                      </p>
+                                      <p className="text-title mb-0">Oct 12, 2025</p>
                                       <span>05:00:14 PM</span>
                                     </td>
                                     <td>
@@ -4125,19 +3788,13 @@ const ClientDetails = () => {
                                           </Link>
                                           <ul className="dropdown-menu dropdown-menu-right p-3">
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-trash me-2" />
                                                 Permanent Delete
                                               </Link>
                                             </li>
                                             <li>
-                                              <Link
-                                                className="dropdown-item rounded-1"
-                                                to="#"
-                                              >
+                                              <Link className="dropdown-item rounded-1" to="#">
                                                 <i className="ti ti-edit-circle me-2" />
                                                 Restore File
                                               </Link>
@@ -4156,7 +3813,7 @@ const ClientDetails = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-end mb-4">
+                <div className="text-end mb-4" style={{ display: 'none' }}>
                   <div className="dropdown">
                     <Link
                       to="to"
@@ -4167,70 +3824,46 @@ const ClientDetails = () => {
                     </Link>
                     <ul className="dropdown-menu dropdown-menu-end bg-gray-900 dropdown-menu-md dropdown-menu-dark p-3">
                       <li>
-                        <Link
-                          to="to"
-                          className="dropdown-item rounded-1 d-flex align-items-center"
-                        >
+                        <Link to="to" className="dropdown-item rounded-1 d-flex align-items-center">
                           <span className="avatar avatar-md bg-gray-800 flex-shrink-0 me-2">
                             <i className="ti ti-basket-code" />
                           </span>
                           <div>
-                            <h6 className="fw-medium text-white mb-1">
-                              Add a Task
-                            </h6>
-                            <p className="text-white">
-                              Create a new Priority tasks{" "}
-                            </p>
+                            <h6 className="fw-medium text-white mb-1">Add a Task</h6>
+                            <p className="text-white">Create a new Priority tasks </p>
                           </div>
                         </Link>
                       </li>
                       <li>
-                        <Link
-                          to="to"
-                          className="dropdown-item rounded-1 d-flex align-items-center"
-                        >
+                        <Link to="to" className="dropdown-item rounded-1 d-flex align-items-center">
                           <span className="avatar avatar-md bg-gray-800 flex-shrink-0 me-2">
                             <i className="ti ti-file-invoice" />
                           </span>
                           <div>
-                            <h6 className="fw-medium text-white mb-1">
-                              Add Invoice
-                            </h6>
+                            <h6 className="fw-medium text-white mb-1">Add Invoice</h6>
                             <p className="text-white">Create a new Billing</p>
                           </div>
                         </Link>
                       </li>
                       <li>
-                        <Link
-                          to="to"
-                          className="dropdown-item rounded-1 d-flex align-items-center"
-                        >
+                        <Link to="to" className="dropdown-item rounded-1 d-flex align-items-center">
                           <span className="avatar avatar-md bg-gray-800 flex-shrink-0 me-2">
                             <i className="ti ti-file-description" />
                           </span>
                           <div>
                             <h6 className="fw-medium text-white mb-1">Notes</h6>
-                            <p className="text-white">
-                              Create new note for you &amp; team
-                            </p>
+                            <p className="text-white">Create new note for you &amp; team</p>
                           </div>
                         </Link>
                       </li>
                       <li>
-                        <Link
-                          to="to"
-                          className="dropdown-item rounded-1 d-flex align-items-center"
-                        >
+                        <Link to="to" className="dropdown-item rounded-1 d-flex align-items-center">
                           <span className="avatar avatar-md bg-gray-800 flex-shrink-0 me-2">
                             <i className="ti ti-folder-open" />
                           </span>
                           <div>
-                            <h6 className="fw-medium text-white mb-1">
-                              Add Files
-                            </h6>
-                            <p className="text-white">
-                              Upload New files for this Client
-                            </p>
+                            <h6 className="fw-medium text-white mb-1">Add Files</h6>
+                            <p className="text-white">Upload New files for this Client</p>
                           </div>
                         </Link>
                       </li>
@@ -4244,943 +3877,6 @@ const ClientDetails = () => {
         <Footer />
       </div>
       {/* /Page Wrapper */}
-      {/* Edit Client */}
-      <div className="modal fade" id="edit_client">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Edit Client</h4>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <form>
-              <div className="contact-grids-tab">
-                <ul className="nav nav-underline" id="myTab2" role="tablist">
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link active"
-                      id="info-tab2"
-                      data-bs-toggle="tab"
-                      data-bs-target="#basic-info2"
-                      type="button"
-                      role="tab"
-                      aria-selected="true"
-                    >
-                      Basic Information
-                    </button>
-                  </li>
-                  <li className="nav-item" role="presentation">
-                    <button
-                      className="nav-link"
-                      id="address-tab2"
-                      data-bs-toggle="tab"
-                      data-bs-target="#address2"
-                      type="button"
-                      role="tab"
-                      aria-selected="false"
-                    >
-                      Permissions
-                    </button>
-                  </li>
-                </ul>
-              </div>
-              <div className="tab-content" id="myTabContent2">
-                <div
-                  className="tab-pane fade show active"
-                  id="basic-info2"
-                  role="tabpanel"
-                  aria-labelledby="info-tab2"
-                  tabIndex={0}
-                >
-                  <div className="modal-body pb-0 ">
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                          <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                            <i className="ti ti-photo" />
-                          </div>
-                          <div className="profile-upload">
-                            <div className="mb-2">
-                              <h6 className="mb-1">Upload Profile Image</h6>
-                              <p className="fs-12">
-                                Image should be below 4 mb
-                              </p>
-                            </div>
-                            <div className="profile-uploader d-flex align-items-center">
-                              <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                Upload
-                                <input
-                                  type="file"
-                                  className="form-control image-sign"
-                                  multiple
-                                />
-                              </div>
-                              <Link to="to" className="btn btn-light btn-sm">
-                                Cancel
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">
-                            First Name <span className="text-danger"> *</span>
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            defaultValue="Michael"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Last Name</label>
-                          <input
-                            type="email"
-                            className="form-control"
-                            defaultValue="Walker"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">
-                            Username <span className="text-danger"> *</span>
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            defaultValue="Michael Walker"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">
-                            Email<span className="text-danger"> *</span>
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            defaultValue="michael@example.com"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3 ">
-                          <label className="form-label">
-                            Password <span className="text-danger"> *</span>
-                          </label>
-                          <div className="pass-group">
-                            <input
-                              type={
-                                passwordVisibility.password
-                                  ? "text"
-                                  : "password"
-                              }
-                              className="pass-input form-control"
-                            />
-                            <span
-                              className={`ti toggle-passwords ${
-                                passwordVisibility.password
-                                  ? "ti-eye"
-                                  : "ti-eye-off"
-                              }`}
-                              onClick={() =>
-                                togglePasswordVisibility("password")
-                              }
-                            ></span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3 ">
-                          <label className="form-label">
-                            Confirm Password{" "}
-                            <span className="text-danger"> *</span>
-                          </label>
-                          <div className="pass-group">
-                            <input
-                              type={
-                                passwordVisibility.confirmPassword
-                                  ? "text"
-                                  : "password"
-                              }
-                              className="pass-input form-control"
-                            />
-                            <span
-                              className={`ti toggle-passwords ${
-                                passwordVisibility.confirmPassword
-                                  ? "ti-eye"
-                                  : "ti-eye-off"
-                              }`}
-                              onClick={() =>
-                                togglePasswordVisibility("confirmPassword")
-                              }
-                            ></span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">
-                            Phone Number <span className="text-danger"> *</span>
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            defaultValue="(163) 2459 315"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Company</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            defaultValue="BrightWave Innovations"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      type="button"
-                      className="btn btn-outline-light border me-2"
-                      data-bs-dismiss="modal"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      data-bs-dismiss="modal"
-                      className="btn btn-primary"
-                    >
-                      Save{" "}
-                    </button>
-                  </div>
-                </div>
-                <div
-                  className="tab-pane fade"
-                  id="address2"
-                  role="tabpanel"
-                  aria-labelledby="address-tab2"
-                  tabIndex={0}
-                >
-                  <div className="modal-body pb-0 ">
-                    <div className="card bg-light-500 shadow-none">
-                      <div className="card-body d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-                        <h6>Enable Options</h6>
-                        <div className="d-flex align-items-center justify-content-end">
-                          <div className="form-check form-check-md form-switch me-2">
-                            <label className="form-check-label mt-0">
-                              <input
-                                className="form-check-input me-2"
-                                type="checkbox"
-                                role="switch"
-                              />
-                              Enable all Module
-                            </label>
-                          </div>
-                          <div className="form-check form-check-md d-flex align-items-center">
-                            <label className="form-check-label mt-0">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                defaultChecked
-                              />
-                              Select All
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="table-responsive permission-table border rounded">
-                      <table className="table">
-                        <tbody>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                    defaultChecked
-                                  />
-                                  Holidays
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    defaultChecked
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    defaultChecked
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                    defaultChecked
-                                  />
-                                  Leaves
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Clients
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Projects
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    defaultChecked
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Tasks
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    defaultChecked
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Chats
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    defaultChecked
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Assets
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>
-                              <div className="form-check form-check-md form-switch me-2">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input me-2"
-                                    type="checkbox"
-                                    role="switch"
-                                  />
-                                  Timing Sheets
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Read
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Write
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Create
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Delete
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Import
-                                </label>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="form-check form-check-md d-flex align-items-center">
-                                <label className="form-check-label mt-0">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                  />
-                                  Export
-                                </label>
-                              </div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      type="button"
-                      className="btn btn-outline-light border me-2"
-                      data-bs-dismiss="modal"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      data-bs-dismiss="modal"
-                      className="btn btn-primary"
-                    >
-                      Save{" "}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
       {/* /Edit Client */}
       {/* Edit Todo */}
       <div className="modal fade" id="edit_todo">
@@ -5213,11 +3909,7 @@ const ClientDetails = () => {
                   <div className="col-6">
                     <div className="mb-3">
                       <label className="form-label">Tag</label>
-                      <CommonSelect
-                        className="select"
-                        options={tags}
-                        defaultValue={tags[1]}
-                      />
+                      <CommonSelect className="select" options={tags} defaultValue={tags[1]} />
                     </div>
                   </div>
                   <div className="col-6">
@@ -5259,18 +3951,10 @@ const ClientDetails = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-light me-2"
-                  data-bs-dismiss="modal"
-                >
+                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  data-bs-dimiss="modal"
-                  className="btn btn-primary"
-                >
+                <button type="button" data-bs-dimiss="modal" className="btn btn-primary">
                   Submit
                 </button>
               </div>
@@ -5284,9 +3968,7 @@ const ClientDetails = () => {
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header bg-dark">
-              <h4 className="modal-title text-white">
-                Respond to any pending messages
-              </h4>
+              <h4 className="modal-title text-white">Respond to any pending messages</h4>
               <span className="badge badge-danger d-inline-flex align-items-center">
                 <i className="ti ti-square me-1" />
                 Urgent
@@ -5336,13 +4018,11 @@ const ClientDetails = () => {
               <div className="mb-3">
                 <h5 className="mb-2">Description</h5>
                 <p>
-                  Hiking is a long, vigorous walk, usually on trails or
-                  footpaths in the countryside. Walking for pleasure developed
-                  in Europe during the eighteenth century. Religious pilgrimages
-                  have existed much longer but they involve walking long
-                  distances for a spiritual purpose associated with specific
-                  religions and also we achieve inner peace while we hike at a
-                  local park.
+                  Hiking is a long, vigorous walk, usually on trails or footpaths in the
+                  countryside. Walking for pleasure developed in Europe during the eighteenth
+                  century. Religious pilgrimages have existed much longer but they involve walking
+                  long distances for a spiritual purpose associated with specific religions and also
+                  we achieve inner peace while we hike at a local park.
                 </p>
               </div>
               <div className="mb-3">
@@ -5411,11 +4091,7 @@ const ClientDetails = () => {
                   <label className="form-label">
                     Note <span className="text-danger"> *</span>
                   </label>
-                  <textarea
-                    className="form-control"
-                    rows={4}
-                    defaultValue={""}
-                  />
+                  <textarea className="form-control" rows={4} defaultValue={''} />
                 </div>
                 <div className="mb-3">
                   <label className="form-label">
@@ -5425,9 +4101,7 @@ const ClientDetails = () => {
                     <span className="avatar avatar-lg avatar-rounded bg-primary-transparent mb-2">
                       <i className="ti ti-folder-open fs-24" />
                     </span>
-                    <p className="fs-14 text-center mb-2">
-                      Drag and drop your files
-                    </p>
+                    <p className="fs-14 text-center mb-2">Drag and drop your files</p>
                     <div className="file-upload position-relative btn btn-sm btn-primary px-3 mb-2">
                       <i className="ti ti-upload me-1" />
                       Upload
@@ -5444,7 +4118,7 @@ const ClientDetails = () => {
                       <div
                         className="progress-bar bg-success"
                         role="progressbar"
-                        style={{ width: "45%" }}
+                        style={{ width: '45%' }}
                         aria-valuenow={25}
                         aria-valuemin={0}
                         aria-valuemax={100}
@@ -5465,17 +4139,10 @@ const ClientDetails = () => {
               </div>
               <div className="modal-footer">
                 <div className="d-flex align-items-center justify-content-end m-0">
-                  <button
-                    type="button"
-                    className="btn btn-outline-light border me-2"
-                  >
+                  <button type="button" className="btn btn-outline-light border me-2">
                     Cancel
                   </button>
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    data-bs-dimiss="modal"
-                  >
+                  <button className="btn btn-primary" type="button" data-bs-dimiss="modal">
                     Save
                   </button>
                 </div>

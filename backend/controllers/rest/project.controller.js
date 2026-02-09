@@ -55,11 +55,11 @@ export const getProjects = asyncHandler(async (req, res) => {
   };
 
   // Debug logging - lightweight
-  console.log('[getProjects] Using database:', user.companyId || 'default');
-  console.log('[getProjects] User object:', JSON.stringify(user, null, 2));
-  console.log('[getProjects] User role:', user.role);
-  console.log('[getProjects] User employeeId:', user.employeeId);
-  console.log('[getProjects] Initial filter:', JSON.stringify(filter));
+  // console.log('[getProjects] Using database:', user.companyId || 'default');
+  // console.log('[getProjects] User object:', JSON.stringify(user, null, 2));
+  // console.log('[getProjects] User role:', user.role);
+  // console.log('[getProjects] User employeeId:', user.employeeId);
+  // console.log('[getProjects] Initial filter:', JSON.stringify(filter));
 
   // For employee role, filter projects where they are assigned as team member, leader, or manager
   if (user.role === 'employee') {
@@ -532,16 +532,16 @@ export const deleteProject = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid project ID format');
   }
 
-  // Build filter - superadmins can access any project
-  const filter = {
+  // Build filter - Match the same logic as getProjects
+  let filter = {
     _id: id,
-    isDeleted: false,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
   // Only filter by companyId for non-superadmin users (case-insensitive)
-  if (user.role?.toLowerCase() !== 'superadmin') {
-    filter.companyId = user.companyId;
-  }
+  // if (user.role?.toLowerCase() !== 'superadmin') {
+  //   filter.companyId = user.companyId;
+  // }
 
   // Get tenant-specific model
   const ProjectModel = getProjectModel(user.companyId);

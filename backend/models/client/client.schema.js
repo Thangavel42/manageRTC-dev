@@ -76,6 +76,62 @@ const clientSchema = new mongoose.Schema(
       default: 'Active',
     },
 
+    // Social media links
+    socialLinks: {
+      instagram: {
+        type: String,
+        trim: true,
+        default: '',
+        validate: {
+          validator: function (v) {
+            if (!v || v === '') return true; // Allow empty string
+            // Check if URL contains instagram.com or instagr.am
+            return /instagram\.com|instagr\.am/i.test(v);
+          },
+          message: 'Instagram URL must contain "instagram.com"',
+        },
+      },
+      facebook: {
+        type: String,
+        trim: true,
+        default: '',
+        validate: {
+          validator: function (v) {
+            if (!v || v === '') return true; // Allow empty string
+            // Check if URL contains facebook.com or fb.com or fb.me
+            return /facebook\.com|fb\.com|fb\.me/i.test(v);
+          },
+          message: 'Facebook URL must contain "facebook.com"',
+        },
+      },
+      linkedin: {
+        type: String,
+        trim: true,
+        default: '',
+        validate: {
+          validator: function (v) {
+            if (!v || v === '') return true; // Allow empty string
+            // Check if URL contains linkedin.com
+            return /linkedin\.com/i.test(v);
+          },
+          message: 'LinkedIn URL must contain "linkedin.com"',
+        },
+      },
+      whatsapp: {
+        type: String,
+        trim: true,
+        default: '',
+        validate: {
+          validator: function (v) {
+            if (!v || v === '') return true; // Allow empty string
+            // Check if it's a WhatsApp URL (wa.me, api.whatsapp.com, whatsapp.com) or just a phone number
+            return /wa\.me|whatsapp\.com|^\+?\d{10,15}$/i.test(v);
+          },
+          message: 'WhatsApp must be a valid phone number or WhatsApp URL',
+        },
+      },
+    },
+
     // Projects count (for tracking)
     projects: {
       type: Number,

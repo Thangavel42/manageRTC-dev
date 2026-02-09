@@ -112,8 +112,13 @@ const createApiClient = (): AxiosInstance => {
 
         console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
           params: config.params || '',
-          hasToken: !!token
+          hasToken: !!token,
+          data: config.data,
         });
+        // Log full request body for PUT/POST
+        if ((config.method === 'put' || config.method === 'post') && config.data) {
+          console.log(`[API] Full Request Body:`, JSON.stringify(config.data, null, 2));
+        }
       } catch (error) {
         console.error('[API] Failed to get auth token:', error);
       }

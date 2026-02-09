@@ -211,6 +211,13 @@ export const useClientsREST = () => {
   const updateClient = useCallback(
     async (clientId: string, updateData: Partial<Client>): Promise<boolean> => {
       try {
+        console.log('[useClientsREST] updateClient - clientId:', clientId);
+        console.log(
+          '[useClientsREST] updateClient - updateData:',
+          JSON.stringify(updateData, null, 2)
+        );
+        console.log('[useClientsREST] updateClient - socialLinks:', updateData.socialLinks);
+
         const response: ApiResponse<Client> = await put(`/clients/${clientId}`, updateData);
 
         if (response.success && response.data) {

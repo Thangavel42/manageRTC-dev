@@ -12,6 +12,7 @@ import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { Task, useTasksREST } from '../../../hooks/useTasksREST';
 import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
+import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import {
   del as apiDel,
   get as apiGet,
@@ -23,6 +24,9 @@ import { all_routes } from '../../router/all_routes';
 const ProjectDetails = () => {
   const { projectId } = useParams();
   const { user: clerkUser } = useUser();
+
+  // Initialize user profile hook
+  const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
 
   // Log user metadata for verification
   useEffect(() => {
@@ -54,6 +58,7 @@ const ProjectDetails = () => {
     updateTask: updateTaskAPI,
     deleteTask: deleteTaskAPI,
     getTasksByProject: getTasksByProjectAPI,
+    getEmployeeProjectTasks: getEmployeeProjectTasksAPI,
   } = useTasksREST();
 
   const { getProjectById: getProjectByIdAPI, updateProject: updateProjectAPI } = useProjectsREST();
@@ -91,6 +96,7 @@ const ProjectDetails = () => {
   const [editNoteFieldErrors, setEditNoteFieldErrors] = useState<Record<string, string>>({});
   const [deletingNote, setDeletingNote] = useState<any>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
+  const [confirmNoteTitle, setConfirmNoteTitle] = useState('');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
@@ -114,6 +120,7 @@ const ProjectDetails = () => {
   const [editTaskFieldErrors, setEditTaskFieldErrors] = useState<Record<string, string>>({});
   const [deletingTask, setDeletingTask] = useState<any>(null);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [confirmTaskTitle, setConfirmTaskTitle] = useState('');
   const [viewingTask, setViewingTask] = useState<any>(null);
   const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
   const [isSavingProject, setIsSavingProject] = useState(false);
@@ -214,13 +221,25 @@ const ProjectDetails = () => {
     console.log('[ProjectDetails] loadProjectTasks called with projectId:', project?._id);
     if (!project?._id) return;
     try {
-      await getTasksByProjectAPI(project._id);
+      // If employee role, use dedicated employee project tasks API
+      if (isEmployee && profile && '_id' in profile && profile._id) {
+        console.log('[ProjectDetails] Loading tasks for employee from dedicated API:', {
+          _id: profile._id,
+          employeeId: profile.employeeId,
+          name: `${profile.firstName} ${profile.lastName}`,
+          projectId: project._id,
+        });
+        await getEmployeeProjectTasksAPI(project._id);
+      } else {
+        // Admin/HR: load all project tasks
+        await getTasksByProjectAPI(project._id);
+      }
       // Tasks will be available via tasksFromHook, sync via useEffect
     } catch (error) {
       console.error('[ProjectDetails] Error loading tasks:', error);
       message.error('Failed to load tasks');
     }
-  }, [project?._id, getTasksByProjectAPI]);
+  }, [project?._id, getTasksByProjectAPI, getEmployeeProjectTasksAPI, isEmployee, profile]);
 
   // Sync tasks from hook to local state
   useEffect(() => {
@@ -1160,6 +1179,7 @@ const ProjectDetails = () => {
 
       if (response.success) {
         setDeletingNote(null);
+        setConfirmNoteTitle('');
         loadProjectNotes();
         closeModalById('delete_note_modal');
       } else {
@@ -1337,6 +1357,7 @@ const ProjectDetails = () => {
       if (success) {
         console.log('[ProjectDetails] Task deleted successfully');
         setDeletingTask(null);
+        setConfirmTaskTitle('');
         loadProjectTasks();
         closeModalById('delete_modal');
       } else {
@@ -1800,18 +1821,20 @@ const ProjectDetails = () => {
                 </Link>
               </h6>
               <div className="d-flex">
-                <div className="text-end">
-                  <Link
-                    to="#"
-                    className="btn btn-primary"
-                    data-bs-toggle="modal"
-                    data-inert={true}
-                    data-bs-target="#edit_project"
-                  >
-                    <i className="ti ti-edit me-1" />
-                    Edit Project
-                  </Link>
-                </div>
+                {!isEmployee && (
+                  <div className="text-end">
+                    <Link
+                      to="#"
+                      className="btn btn-primary"
+                      data-bs-toggle="modal"
+                      data-inert={true}
+                      data-bs-target="#edit_project"
+                    >
+                      <i className="ti ti-edit me-1" />
+                      Edit Project
+                    </Link>
+                  </div>
+                )}
                 <div className="head-icons ms-2 text-end">
                   <CollapseHeader />
                 </div>
@@ -2032,18 +2055,20 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No team members assigned</p>
                         )}
-                        <div>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center fs-12"
-                            data-bs-toggle="modal"
-                            data-bs-target="#add_team_members_modal"
-                            onClick={resetTeamMembersModal}
-                          >
-                            <i className="ti ti-circle-plus me-1" />
-                            Add New
-                          </Link>
-                        </div>
+                        {!isEmployee && (
+                          <div>
+                            <Link
+                              to="#"
+                              className="d-flex align-items-center fs-12"
+                              data-bs-toggle="modal"
+                              data-bs-target="#add_team_members_modal"
+                              onClick={resetTeamMembersModal}
+                            >
+                              <i className="ti ti-circle-plus me-1" />
+                              Add New
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-sm-3">
@@ -2081,18 +2106,20 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No team lead assigned</p>
                         )}
-                        <div>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center fs-12"
-                            data-bs-toggle="modal"
-                            data-bs-target="#add_team_leads_modal"
-                            onClick={resetTeamLeadsModal}
-                          >
-                            <i className="ti ti-circle-plus me-1" />
-                            Add New
-                          </Link>
-                        </div>
+                        {!isEmployee && (
+                          <div>
+                            <Link
+                              to="#"
+                              className="d-flex align-items-center fs-12"
+                              data-bs-toggle="modal"
+                              data-bs-target="#add_team_leads_modal"
+                              onClick={resetTeamLeadsModal}
+                            >
+                              <i className="ti ti-circle-plus me-1" />
+                              Add New
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-sm-3">
@@ -2130,18 +2157,20 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No project manager assigned</p>
                         )}
-                        <div>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center fs-12"
-                            data-bs-toggle="modal"
-                            data-bs-target="#add_project_managers_modal"
-                            onClick={resetProjectManagersModal}
-                          >
-                            <i className="ti ti-circle-plus me-1" />
-                            Add New
-                          </Link>
-                        </div>
+                        {!isEmployee && (
+                          <div>
+                            <Link
+                              to="#"
+                              className="d-flex align-items-center fs-12"
+                              data-bs-toggle="modal"
+                              data-bs-target="#add_project_managers_modal"
+                              onClick={resetProjectManagersModal}
+                            >
+                              <i className="ti ti-circle-plus me-1" />
+                              Add New
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-sm-3">
@@ -2272,27 +2301,88 @@ const ProjectDetails = () => {
                                         </span>
                                         <div className="d-flex align-items-center">
                                           <div className="avatar-list-stacked avatar-group-sm">
-                                            {/* <span className="avatar avatar-rounded">
-                                              <ImageWithBasePath
-                                                className="border border-white"
-                                                src="assets/img/profiles/avatar-13.jpg"
-                                                alt="img"
-                                              />
-                                            </span>
-                                            <span className="avatar avatar-rounded">
-                                              <ImageWithBasePath
-                                                className="border border-white"
-                                                src="assets/img/profiles/avatar-14.jpg"
-                                                alt="img"
-                                              />
-                                            </span>
-                                            <span className="avatar avatar-rounded">
-                                              <ImageWithBasePath
-                                                className="border border-white"
-                                                src="assets/img/profiles/avatar-15.jpg"
-                                                alt="img"
-                                              />
-                                            </span> */}
+                                            {task.assignee && task.assignee.length > 0 ? (
+                                              task.assignee
+                                                .slice(0, 3)
+                                                .map((assignee: any, idx: number) => {
+                                                  // Handle both populated objects and ID strings
+                                                  let member = null;
+
+                                                  if (
+                                                    typeof assignee === 'object' &&
+                                                    assignee !== null
+                                                  ) {
+                                                    member = assignee;
+                                                  } else {
+                                                    const assigneeId = assignee.toString();
+                                                    const allMembers = [
+                                                      ...(project?.teamMembers || []),
+                                                      ...(project?.teamLeader || []),
+                                                    ];
+                                                    member = allMembers.find(
+                                                      (m: any) =>
+                                                        m._id?.toString() === assigneeId ||
+                                                        m.employeeId === assigneeId
+                                                    );
+                                                  }
+
+                                                  return member ? (
+                                                    <span
+                                                      key={idx}
+                                                      className="avatar avatar-sm avatar-rounded"
+                                                      title={`${member.firstName} ${member.lastName}${member.employeeId ? ` (${member.employeeId})` : ''}`}
+                                                    >
+                                                      {member.profileImage ? (
+                                                        <ImageWithBasePath
+                                                          className="border border-white"
+                                                          src={member.profileImage}
+                                                          alt={`${member.firstName} ${member.lastName}`}
+                                                        />
+                                                      ) : (
+                                                        <span
+                                                          className="avatar-title bg-purple border border-white fs-10"
+                                                          style={{
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            borderRadius: '50%',
+                                                          }}
+                                                        >
+                                                          {(
+                                                            member.firstName?.charAt(0) ||
+                                                            member.lastName?.charAt(0) ||
+                                                            '?'
+                                                          ).toUpperCase()}
+                                                        </span>
+                                                      )}
+                                                    </span>
+                                                  ) : null;
+                                                })
+                                            ) : (
+                                              <span className="text-muted small">No assignees</span>
+                                            )}
+                                            {task.assignee && task.assignee.length > 3 && (
+                                              <span
+                                                className="avatar avatar-sm avatar-rounded"
+                                                title={`+${task.assignee.length - 3} more assignees`}
+                                              >
+                                                <span
+                                                  className="avatar-title bg-primary fs-10"
+                                                  style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '50%',
+                                                  }}
+                                                >
+                                                  +{task.assignee.length - 3}
+                                                </span>
+                                              </span>
+                                            )}
                                           </div>
                                           <div className="dropdown ms-2">
                                             <Link
@@ -2303,38 +2393,42 @@ const ProjectDetails = () => {
                                               <i className="ti ti-dots-vertical" />
                                             </Link>
                                             <ul className="dropdown-menu dropdown-menu-end p-2">
-                                              <li>
-                                                <Link
-                                                  to="#"
-                                                  className="dropdown-item rounded-1"
-                                                  data-bs-toggle="modal"
-                                                  data-inert={true}
-                                                  data-bs-target="#edit_task"
-                                                  onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleOpenEditTask(task);
-                                                  }}
-                                                >
-                                                  <i className="ti ti-edit me-2" />
-                                                  Edit
-                                                </Link>
-                                              </li>
-                                              <li>
-                                                <Link
-                                                  to="#"
-                                                  className="dropdown-item rounded-1"
-                                                  data-bs-toggle="modal"
-                                                  data-inert={true}
-                                                  data-bs-target="#delete_modal"
-                                                  onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleOpenDeleteTask(task);
-                                                  }}
-                                                >
-                                                  <i className="ti ti-trash me-2" />
-                                                  Delete
-                                                </Link>
-                                              </li>
+                                              {!isEmployee && (
+                                                <li>
+                                                  <Link
+                                                    to="#"
+                                                    className="dropdown-item rounded-1"
+                                                    data-bs-toggle="modal"
+                                                    data-inert={true}
+                                                    data-bs-target="#edit_task"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      handleOpenEditTask(task);
+                                                    }}
+                                                  >
+                                                    <i className="ti ti-edit me-2" />
+                                                    Edit
+                                                  </Link>
+                                                </li>
+                                              )}
+                                              {!isEmployee && (
+                                                <li>
+                                                  <Link
+                                                    to="#"
+                                                    className="dropdown-item rounded-1"
+                                                    data-bs-toggle="modal"
+                                                    data-inert={true}
+                                                    data-bs-target="#delete_modal"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      handleOpenDeleteTask(task);
+                                                    }}
+                                                  >
+                                                    <i className="ti ti-trash me-2" />
+                                                    Delete
+                                                  </Link>
+                                                </li>
+                                              )}
                                               <li>
                                                 <Link
                                                   to="#"
@@ -2361,85 +2455,105 @@ const ProjectDetails = () => {
                               </>
                             ))
                           )}
-                          <button
-                            className="btn bg-primary-transparent border-dashed border-primary w-100 text-start"
-                            data-bs-toggle="modal"
-                            data-inert={true}
-                            data-bs-target="#add_task"
-                          >
-                            <i className="ti ti-plus me-2" />
-                            New task
-                          </button>
+                          {!isEmployee && (
+                            <button
+                              className="btn bg-primary-transparent border-dashed border-primary w-100 text-start"
+                              data-bs-toggle="modal"
+                              data-inert={true}
+                              data-bs-target="#add_task"
+                            >
+                              <i className="ti ti-plus me-2" />
+                              New task
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="row">
-                    <div className="col-xl-6 d-flex">
-                      <div className="accordion-item flex-fill">
-                        <div className="accordion-header" id="headingFive">
-                          <div className="accordion-button">
-                            <div className="d-flex align-items-center flex-fill">
-                              <h5>Notes</h5>
-                              <div className=" ms-auto d-flex align-items-center">
-                                <Link
-                                  to="#"
-                                  className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#add_note_modal"
-                                >
-                                  <i className="ti ti-square-rounded-plus-filled me-1" />
-                                  Add New
-                                </Link>
-                                <Link
-                                  to="#"
-                                  className="d-flex align-items-center collapsed collapse-arrow"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target="#primaryBorderFive"
-                                  aria-expanded="false"
-                                  aria-controls="primaryBorderFive"
-                                >
-                                  <i className="ti ti-chevron-down fs-18" />
-                                </Link>
-                              </div>
-                            </div>
-                          </div>
+                  <div className="accordion-item">
+                    <div className="accordion-header" id="headingFive">
+                      <div className="accordion-button">
+                        <h5>Notes</h5>
+                        <div className=" ms-auto d-flex align-items-center">
+                          <Link
+                            to="#"
+                            className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
+                            data-bs-toggle="modal"
+                            data-bs-target="#add_note_modal"
+                          >
+                            <i className="ti ti-square-rounded-plus-filled me-1" />
+                            Add New
+                          </Link>
+                          <Link
+                            to="#"
+                            className="d-flex align-items-center collapsed collapse-arrow"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#primaryBorderFive"
+                            aria-expanded="false"
+                            aria-controls="primaryBorderFive"
+                          >
+                            <i className="ti ti-chevron-down fs-18" />
+                          </Link>
                         </div>
-                        <div
-                          id="primaryBorderFive"
-                          className="accordion-collapse collapse show border-top"
-                          aria-labelledby="headingFive"
-                          style={{ maxHeight: '60vh', overflowY: 'auto' }}
-                        >
-                          <div className="accordion-body">
-                            {notes.length === 0 ? (
-                              <div className="text-center py-4">
-                                <i className="ti ti-note-off fs-1 text-muted mb-3"></i>
-                                <h6 className="text-muted">No notes found</h6>
-                                <p className="text-muted small">
-                                  Notes for this project will appear here
-                                </p>
-                              </div>
-                            ) : (
-                              notes.map((note) => (
-                                <div key={note._id} className="card">
-                                  <div className="card-body">
-                                    <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 className="text-gray-5 fw-medium">
+                      </div>
+                    </div>
+                    <div
+                      id="primaryBorderFive"
+                      className="accordion-collapse collapse show border-top"
+                      aria-labelledby="headingFive"
+                      data-bs-parent="#accordionExample"
+                    >
+                      <div
+                        className="accordion-body"
+                        style={{ minHeight: '210px', overflow: 'visible' }}
+                      >
+                        <div className="list-group list-group-flush">
+                          {notes.length === 0 ? (
+                            <div className="text-center py-4">
+                              <i className="ti ti-note-off fs-1 text-muted mb-3"></i>
+                              <h6 className="text-muted">No notes found</h6>
+                              <p className="text-muted small">
+                                Notes for this project will appear here
+                              </p>
+                            </div>
+                          ) : (
+                            notes.slice(0, 5).map((note) => (
+                              <div
+                                key={note._id}
+                                className="list-group-item border bg-white rounded mb-3 p-3 shadow-sm"
+                              >
+                                <div className="row align-items-center row-gap-3">
+                                  <div className="col-md-8">
+                                    <div className="d-flex align-items-start">
+                                      <span className="me-2">
+                                        <i className="ti ti-note text-primary" />
+                                      </span>
+                                      <div className="flex-fill">
+                                        <h6 className="d-flex align-items-center mb-1">
+                                          {note.title}
+                                        </h6>
+                                        <p className="text-muted small mb-0 text-truncate">
+                                          {note.content}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-4">
+                                    <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-2">
+                                      <span className="text-muted small me-3">
                                         {note.createdAt
                                           ? new Date(note.createdAt).toLocaleDateString()
                                           : 'N/A'}
-                                      </h6>
+                                      </span>
                                       <div className="dropdown">
                                         <Link
                                           to="#"
                                           className="d-inline-flex align-items-center"
                                           data-bs-toggle="dropdown"
-                                          aria-expanded="false"
                                         >
                                           <i className="ti ti-dots-vertical" />
                                         </Link>
-                                        <ul className="dropdown-menu dropdown-menu-end p-3">
+                                        <ul className="dropdown-menu dropdown-menu-end p-2">
                                           <li>
                                             <Link
                                               to="#"
@@ -2462,63 +2576,50 @@ const ProjectDetails = () => {
                                                 handleOpenDeleteNote(note);
                                               }}
                                             >
-                                              <i className="ti ti-trash me-1" />
+                                              <i className="ti ti-trash me-2" />
                                               Delete
                                             </Link>
                                           </li>
                                         </ul>
                                       </div>
                                     </div>
-                                    <h6 className="d-flex align-items-center mb-2">
-                                      <i className="ti ti-point-filled text-primary me-1" />
-                                      {note.title}
-                                    </h6>
-                                    <p className="text-truncate line-clamb-3">{note.content}</p>
                                   </div>
                                 </div>
-                              ))
-                            )}
-                          </div>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div className="col-xl-6 d-flex">
-                      <div className="accordion-item flex-fill">
-                        <div className="accordion-header" id="headingSix">
-                          <div className="accordion-button">
-                            <div className="d-flex align-items-center flex-fill">
-                              <h5>Activity</h5>
-                              {/* <div className=" ms-auto d-flex align-items-center">
-                                <Link
-                                  to="#"
-                                  className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
-                                >
-                                  <i className="ti ti-square-rounded-plus-filled me-1" />
-                                  Add New
-                                </Link>
-                                <Link
-                                  to="#"
-                                  className="d-flex align-items-center collapsed collapse-arrow"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target="#primaryBorderSix"
-                                  aria-expanded="false"
-                                  aria-controls="primaryBorderSix"
-                                >
-                                  <i className="ti ti-chevron-down fs-18" />
-                                </Link>
-                              </div> */}
-                            </div>
-                          </div>
+                  </div>
+                  <div className="accordion-item">
+                    <div className="accordion-header" id="headingSix">
+                      <div className="accordion-button">
+                        <h5>Activity</h5>
+                        <div className=" ms-auto">
+                          <Link
+                            to="#"
+                            className="d-flex align-items-center collapsed collapse-arrow"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#primaryBorderSix"
+                            aria-expanded="false"
+                            aria-controls="primaryBorderSix"
+                          >
+                            <i className="ti ti-chevron-down fs-18" />
+                          </Link>
                         </div>
-                        <div
-                          id="primaryBorderSix"
-                          className="accordion-collapse collapse show border-top"
-                          aria-labelledby="headingSix"
-                        >
-                          <div className="accordion-body">
-                            <div className="notice-widget">
-                              <div className="d-flex align-items-center justify-content-between mb-4"></div>
-                            </div>
+                      </div>
+                    </div>
+                    <div
+                      id="primaryBorderSix"
+                      className="accordion-collapse collapse show border-top"
+                      aria-labelledby="headingSix"
+                      data-bs-parent="#accordionExample"
+                    >
+                      <div className="accordion-body">
+                        <div className="notice-widget">
+                          <div className="d-flex align-items-center justify-content-between mb-4">
+                            <p className="text-muted mb-0">Project activity will appear here</p>
                           </div>
                         </div>
                       </div>
@@ -3083,41 +3184,85 @@ const ProjectDetails = () => {
       {/* /Edit Note */}
       {/* Delete Note Modal */}
       <div className="modal fade" id="delete_note_modal">
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
           <div className="modal-content">
-            <div className="modal-body text-center">
-              <span className="avatar avatar-xl bg-transparent-danger text-danger mb-3">
-                <i className="ti ti-trash-x fs-36" />
-              </span>
-              <h4 className="mb-1">Confirm Delete</h4>
-              <p className="mb-3">
+            <div className="modal-body">
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Note</h5>
                 {deletingNote && (
                   <>
-                    Are you sure you want to delete the note <strong>"{deletingNote.title}"</strong>
-                    ?
-                    <br />
-                    This action cannot be undone.
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-1">{deletingNote.title}</h6>
+                      <p className="mb-0 text-muted small">
+                        {deletingNote.content && deletingNote.content.length > 50
+                          ? deletingNote.content.substring(0, 50) + '...'
+                          : deletingNote.content}
+                      </p>
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. This note will be removed.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{deletingNote.title}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmNoteTitle &&
+                          confirmNoteTitle.trim().toLowerCase() !==
+                            deletingNote.title.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmNoteTitle.trim().toLowerCase() ===
+                          deletingNote.title.trim().toLowerCase()
+                            ? 'is-valid'
+                            : ''
+                        }`}
+                        placeholder={`Type "${deletingNote.title}" to confirm`}
+                        value={confirmNoteTitle}
+                        onChange={(e) => setConfirmNoteTitle(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmNoteTitle &&
+                        confirmNoteTitle.trim().toLowerCase() !==
+                          deletingNote.title.trim().toLowerCase() && (
+                          <div className="invalid-feedback">Title does not match</div>
+                        )}
+                    </div>
                   </>
                 )}
-              </p>
-              <div className="d-flex justify-content-center">
-                <button
-                  type="button"
-                  className="btn btn-light me-3"
-                  data-bs-dismiss="modal"
-                  disabled={isDeletingNote}
-                  onClick={() => setDeletingNote(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteNote}
-                  className="btn btn-danger"
-                  disabled={isDeletingNote}
-                >
-                  {isDeletingNote ? 'Deleting...' : 'Yes, Delete'}
-                </button>
+                <div className="d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    disabled={isDeletingNote}
+                    onClick={() => {
+                      setDeletingNote(null);
+                      setConfirmNoteTitle('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteNote}
+                    className="btn btn-danger"
+                    disabled={
+                      isDeletingNote ||
+                      !deletingNote ||
+                      confirmNoteTitle.trim().toLowerCase() !==
+                        deletingNote.title.trim().toLowerCase()
+                    }
+                  >
+                    {isDeletingNote ? 'Deleting...' : 'Delete Note'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3797,41 +3942,88 @@ const ProjectDetails = () => {
       {/* /Edit task */}
       {/* Delete Task Modal */}
       <div className="modal fade" id="delete_modal">
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
           <div className="modal-content">
-            <div className="modal-body text-center">
-              <span className="avatar avatar-xl bg-transparent-danger text-danger mb-3">
-                <i className="ti ti-trash-x fs-36" />
-              </span>
-              <h4 className="mb-1">Confirm Delete</h4>
-              <p className="mb-3">
+            <div className="modal-body">
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Task</h5>
                 {deletingTask && (
                   <>
-                    Are you sure you want to delete the task <strong>"{deletingTask.title}"</strong>
-                    ?
-                    <br />
-                    This action cannot be undone.
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-1">{deletingTask.title}</h6>
+                      <p className="mb-1 text-muted">
+                        Status: <span className="badge badge-soft-info">{deletingTask.status}</span>
+                      </p>
+                      <p className="mb-0 text-muted">
+                        Priority:{' '}
+                        <span className="badge badge-soft-warning">{deletingTask.priority}</span>
+                      </p>
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. All data associated with this task will be
+                        removed.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{deletingTask.title}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmTaskTitle &&
+                          confirmTaskTitle.trim().toLowerCase() !==
+                            deletingTask.title.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmTaskTitle.trim().toLowerCase() ===
+                          deletingTask.title.trim().toLowerCase()
+                            ? 'is-valid'
+                            : ''
+                        }`}
+                        placeholder={`Type "${deletingTask.title}" to confirm`}
+                        value={confirmTaskTitle}
+                        onChange={(e) => setConfirmTaskTitle(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmTaskTitle &&
+                        confirmTaskTitle.trim().toLowerCase() !==
+                          deletingTask.title.trim().toLowerCase() && (
+                          <div className="invalid-feedback">Title does not match</div>
+                        )}
+                    </div>
                   </>
                 )}
-              </p>
-              <div className="d-flex justify-content-center">
-                <button
-                  type="button"
-                  className="btn btn-light me-3"
-                  data-bs-dismiss="modal"
-                  disabled={isDeletingTask}
-                  onClick={() => setDeletingTask(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteTask}
-                  className="btn btn-danger"
-                  disabled={isDeletingTask}
-                >
-                  {isDeletingTask ? 'Deleting...' : 'Yes, Delete'}
-                </button>
+                <div className="d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    disabled={isDeletingTask}
+                    onClick={() => {
+                      setDeletingTask(null);
+                      setConfirmTaskTitle('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteTask}
+                    className="btn btn-danger"
+                    disabled={
+                      isDeletingTask ||
+                      !deletingTask ||
+                      confirmTaskTitle.trim().toLowerCase() !==
+                        deletingTask.title.trim().toLowerCase()
+                    }
+                  >
+                    {isDeletingTask ? 'Deleting...' : 'Delete Task'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3958,26 +4150,88 @@ const ProjectDetails = () => {
                 <div className="mb-3">
                   <h5 className="mb-2">Assignees</h5>
                   <div className="d-flex flex-column gap-2">
-                    {viewingTask.assignee.map((assigneeId: string, index: number) => {
-                      const member = project?.teamMembers?.find(
-                        (m: any) => m._id?.toString() === assigneeId.toString()
-                      );
+                    {viewingTask.assignee.map((assignee: any, index: number) => {
+                      // Handle both populated objects and ID strings
+                      let member = null;
+
+                      if (typeof assignee === 'object' && assignee !== null) {
+                        // Assignee is already a populated object
+                        member = assignee;
+                      } else {
+                        // Assignee is an ID string, search in team members and leaders
+                        const assigneeId = assignee.toString();
+                        const allMembers = [
+                          ...(project?.teamMembers || []),
+                          ...(project?.teamLeader || []),
+                        ];
+                        member = allMembers.find(
+                          (m: any) =>
+                            m._id?.toString() === assigneeId || m.employeeId === assigneeId
+                        );
+                      }
+
                       return member ? (
                         <div key={index} className="d-flex align-items-center bg-light p-2 rounded">
-                          <span className="avatar avatar-sm avatar-rounded me-2">
-                            <ImageWithBasePath
-                              src={`assets/img/users/user-${42 + index}.jpg`}
-                              alt="img"
-                            />
+                          <span
+                            className="avatar avatar-sm avatar-rounded me-2"
+                            title={`${member.firstName} ${member.lastName}${member.employeeId ? ` (${member.employeeId})` : ''}`}
+                          >
+                            {member.profileImage ? (
+                              <ImageWithBasePath src={member.profileImage} alt="img" />
+                            ) : (
+                              <span
+                                className="avatar-title bg-purple"
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '50%',
+                                }}
+                              >
+                                {(
+                                  member.firstName?.charAt(0) ||
+                                  member.lastName?.charAt(0) ||
+                                  '?'
+                                ).toUpperCase()}
+                              </span>
+                            )}
                           </span>
                           <div>
                             <h6 className="mb-0">
-                              {member.firstName} {member.lastName}
+                              {member.firstName || 'Unknown'} {member.lastName || ''}
                             </h6>
-                            <small className="text-muted">{member.employeeId}</small>
+                            {member.employeeId && (
+                              <small className="text-muted">{member.employeeId}</small>
+                            )}
                           </div>
                         </div>
-                      ) : null;
+                      ) : (
+                        <div key={index} className="d-flex align-items-center bg-light p-2 rounded">
+                          <span className="avatar avatar-sm avatar-rounded me-2">
+                            <span
+                              className="avatar-title bg-secondary"
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '50%',
+                              }}
+                            >
+                              ?
+                            </span>
+                          </span>
+                          <div>
+                            <h6 className="mb-0">Unknown Employee</h6>
+                            <small className="text-muted">
+                              ID: {typeof assignee === 'string' ? assignee : assignee?._id}
+                            </small>
+                          </div>
+                        </div>
+                      );
                     })}
                   </div>
                 </div>

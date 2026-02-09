@@ -11,6 +11,7 @@ import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { Task, useTasksREST } from '../../../hooks/useTasksREST';
 import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
+import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import { useSocket } from '../../../SocketContext';
 import { all_routes } from '../../router/all_routes';
 
@@ -18,6 +19,7 @@ const TaskDetails = () => {
   const { taskId } = useParams();
   const socket = useSocket() as any; // Keep for real-time updates from backend broadcasts
   const { getTaskById: getTaskByIdAPI, updateTask: updateTaskAPI } = useTasksREST();
+  const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
   const { getProjectById: getProjectByIdAPI } = useProjectsREST();
   const { statuses: statusesFromHook, fetchTaskStatuses: fetchTaskStatusesAPI } =
     useTaskStatusREST();
@@ -549,18 +551,20 @@ const TaskDetails = () => {
                 </Link>
               </h6>
               <div className="d-flex">
-                <div className="text-end">
-                  <Link
-                    to="#"
-                    className="btn btn-primary"
-                    data-bs-toggle="modal"
-                    data-bs-target="#edit_task"
-                    onClick={handleOpenEditTaskModal}
-                  >
-                    <i className="ti ti-edit me-1" />
-                    Edit Task
-                  </Link>
-                </div>
+                {!isEmployee && (
+                  <div className="text-end">
+                    <Link
+                      to="#"
+                      className="btn btn-primary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#edit_task"
+                      onClick={handleOpenEditTaskModal}
+                    >
+                      <i className="ti ti-edit me-1" />
+                      Edit Task
+                    </Link>
+                  </div>
+                )}
                 <div className="head-icons ms-2 text-end">
                   <CollapseHeader />
                 </div>
@@ -669,17 +673,19 @@ const TaskDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No assignee assigned</p>
                         )}
-                        <div>
-                          <Link
-                            to="#"
-                            className="d-flex align-items-center fs-12"
-                            data-bs-toggle="modal"
-                            data-bs-target="#add_assignee_modal"
-                          >
-                            <i className="ti ti-circle-plus me-1" />
-                            Add New
-                          </Link>
-                        </div>
+                        {!isEmployee && (
+                          <div>
+                            <Link
+                              to="#"
+                              className="d-flex align-items-center fs-12"
+                              data-bs-toggle="modal"
+                              data-bs-target="#add_assignee_modal"
+                            >
+                              <i className="ti ti-circle-plus me-1" />
+                              Add New
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-sm-3">
@@ -786,13 +792,6 @@ const TaskDetails = () => {
                         <div className="d-flex align-items-center flex-fill">
                           <h5>Activity</h5>
                           <div className="d-flex align-items-center ms-auto">
-                            <Link
-                              to="#"
-                              className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
-                            >
-                              <i className="ti ti-square-rounded-plus-filled me-1" />
-                              Add New
-                            </Link>
                             <Link
                               to="#"
                               className="d-flex align-items-center collapse-arrow"

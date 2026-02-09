@@ -13,6 +13,7 @@ import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { useTasksREST } from '../../../hooks/useTasksREST';
 import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
 import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
+import { get } from '../../../services/api';
 import { all_routes } from '../../router/all_routes';
 
 const Task = () => {
@@ -30,6 +31,8 @@ const Task = () => {
     updateTask,
     deleteTask,
     getTasksByProject,
+    getEmployeeProjectTasks,
+    getMyTasks,
   } = useTasksREST();
   const {
     projects,
@@ -42,6 +45,7 @@ const Task = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [allEmployeeTasks, setAllEmployeeTasks] = useState<any[]>([]); // Store all employee tasks for count calculations
   const [filters, setFilters] = useState({
     priority: 'all',
     status: 'all',
@@ -81,12 +85,19 @@ const Task = () => {
   const [savingEditTask, setSavingEditTask] = useState(false);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
+  const [confirmTaskName, setConfirmTaskName] = useState('');
 
   // Pagination state
   const [projectPage, setProjectPage] = useState(1);
   const [taskPage, setTaskPage] = useState(1);
   const projectsPerPage = 5;
   const tasksPerPage = 10;
+
+  // Computed value for task name match validation
+  const taskToDelete = tasks.find((t) => t._id === deleteTaskId);
+  const taskNameMatches = taskToDelete
+    ? confirmTaskName.trim().toLowerCase() === taskToDelete.title.trim().toLowerCase()
+    : false;
 
   // Derived counts: total and completed tasks per project (from project data or tasks)
   const projectTaskCounts = React.useMemo(() => {
@@ -105,6 +116,28 @@ const Task = () => {
     return counts;
   }, [projects]);
 
+  // Employee task counts: total and completed tasks assigned to the employee
+  const employeeTaskCounts = React.useMemo(() => {
+    if (!isEmployee || !profile || !('_id' in profile) || !profile._id) {
+      return { total: 0, completed: 0, inProgress: 0, pending: 0 };
+    }
+
+    const employeeId = profile._id;
+    const employeeTasks = tasks.filter(
+      (task: any) =>
+        task.assignee && Array.isArray(task.assignee) && task.assignee.includes(employeeId)
+    );
+
+    const total = employeeTasks.length;
+    const completed = employeeTasks.filter((task: any) => task.status === 'Completed').length;
+    const inProgress = employeeTasks.filter((task: any) => task.status === 'Inprogress').length;
+    const pending = employeeTasks.filter(
+      (task: any) => task.status === 'Pending' || task.status === 'To do'
+    ).length;
+
+    return { total, completed, inProgress, pending };
+  }, [tasks, isEmployee, profile]);
+
   const getProjectCounts = React.useCallback(
     (projectId: string) => {
       const total = projectTaskCounts[projectId]?.total || 0;
@@ -113,6 +146,50 @@ const Task = () => {
       return { total, completed, percent };
     },
     [projectTaskCounts]
+  );
+
+  // Get employee task counts for a specific project
+  const getEmployeeProjectTaskCounts = React.useCallback(
+    (projectId: string) => {
+      if (!isEmployee || !profile || !('_id' in profile) || !profile._id) {
+        return { total: 0, completed: 0, percent: 0 };
+      }
+
+      const employeeId = profile._id;
+      // Use allEmployeeTasks instead of tasks for accurate counts across all projects
+      const projectTasks = allEmployeeTasks.filter((task: any) => {
+        // Handle both ObjectId and string comparison
+        const taskProjectId = task.projectId?._id || task.projectId;
+        const matchesProject =
+          taskProjectId === projectId || String(taskProjectId) === String(projectId);
+
+        // Check if employee is in assignee array
+        const isAssigned =
+          task.assignee &&
+          Array.isArray(task.assignee) &&
+          task.assignee.some((a: any) => {
+            const assigneeId = typeof a === 'object' ? a._id : a;
+            return String(assigneeId) === String(employeeId);
+          });
+
+        return matchesProject && isAssigned;
+      });
+
+      const total = projectTasks.length;
+      const completed = projectTasks.filter((task: any) => task.status === 'Completed').length;
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      if (total > 0) {
+        console.log(`[Task] Employee task counts for project ${projectId}:`, {
+          total,
+          completed,
+          percent,
+        });
+      }
+
+      return { total, completed, percent };
+    },
+    [allEmployeeTasks, isEmployee, profile]
   );
 
   // Projects are already filtered by backend for employees
@@ -233,14 +310,21 @@ const Task = () => {
     }
 
     setError(null);
-    // Only send project filter to backend, priority and status filters are applied client-side
-    const restFilters: any = {};
-    if (filters.project && filters.project !== 'all') {
-      restFilters.project = filters.project;
-    }
 
-    fetchTasks(restFilters);
-  }, [filters.project, fetchTasks]);
+    // If employee role, use dedicated employee project tasks API
+    if (isEmployee && profile && '_id' in profile && profile._id) {
+      console.log('[Task] Loading tasks for employee from dedicated API:', {
+        _id: profile._id,
+        employeeId: profile.employeeId,
+        name: `${profile.firstName} ${profile.lastName}`,
+        projectId: filters.project,
+      });
+      getEmployeeProjectTasks(filters.project);
+    } else {
+      // Admin/HR: load all project tasks
+      getTasksByProject(filters.project);
+    }
+  }, [filters.project, getTasksByProject, getEmployeeProjectTasks, isEmployee, profile]);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -274,6 +358,25 @@ const Task = () => {
       console.error('[Task] Failed to load task statuses:', err);
     }
   }, [fetchTaskStatuses]);
+
+  const loadAllEmployeeTasks = useCallback(async () => {
+    if (!isEmployee || !profile || !('_id' in profile)) {
+      return;
+    }
+
+    try {
+      console.log('[Task] Loading all employee tasks for count calculations');
+
+      const response = await get('/tasks/my');
+
+      if (response.success && response.data) {
+        console.log('[Task] Loaded', response.data.length, 'employee tasks for count calculations');
+        setAllEmployeeTasks(response.data);
+      }
+    } catch (err) {
+      console.error('[Task] Failed to load employee tasks:', err);
+    }
+  }, [isEmployee, profile]);
 
   const validateField = useCallback(
     (field: string, value: any): string => {
@@ -449,24 +552,19 @@ const Task = () => {
     setSortBy(sort);
   }, []);
 
-  const handleProjectTasksClick = useCallback(
-    (projectId) => {
-      if (!projectId) return;
+  const handleProjectTasksClick = useCallback((projectId) => {
+    if (!projectId) return;
 
-      // Update filters to reflect selected project
-      setFilters((prev) => ({
-        ...prev,
-        project: projectId,
-      }));
+    // Update filters to reflect selected project
+    setFilters((prev) => ({
+      ...prev,
+      project: projectId,
+    }));
 
-      // Fetch tasks for the selected project
-      getTasksByProject(projectId);
-
-      // Reset to first page when changing project
-      setTaskPage(1);
-    },
-    [getTasksByProject]
-  );
+    // Note: loadTasks will be called automatically by useEffect when filters.project changes
+    // Reset to first page when changing project
+    setTaskPage(1);
+  }, []);
 
   const resetAddForm = useCallback(() => {
     // Use first status from loaded statuses or default to 'To do'
@@ -522,13 +620,16 @@ const Task = () => {
         // Reload tasks and projects to refresh all counts and lists
         loadTasks();
         loadProjects();
+        if (isEmployee) {
+          loadAllEmployeeTasks();
+        }
         return;
       }
 
       setFormError(errorMsg || 'Failed to create task');
       if (errorMsg) message.error(errorMsg);
     },
-    [closeAddModal, loadTasks, loadProjects, resetAddForm]
+    [closeAddModal, loadTasks, loadProjects, resetAddForm, isEmployee, loadAllEmployeeTasks]
   );
 
   const closeEditModal = useCallback(() => {
@@ -564,13 +665,16 @@ const Task = () => {
         setEditFormError(null);
         loadTasks();
         loadProjects();
+        if (isEmployee) {
+          loadAllEmployeeTasks();
+        }
         return;
       }
 
       setEditFormError(errorMsg || 'Failed to update task');
       if (errorMsg) message.error(errorMsg);
     },
-    [closeEditModal, loadTasks, loadProjects]
+    [closeEditModal, loadTasks, loadProjects, isEmployee, loadAllEmployeeTasks]
   );
 
   const handleDeleteTask = useCallback(async () => {
@@ -582,13 +686,34 @@ const Task = () => {
     setDeletingTask(true);
     const success = await deleteTask(deleteTaskId);
     if (success) {
-      message.success('Task deleted successfully');
-      setDeleteTaskId(null);
+      // Close the modal
+      const modalElement = document.getElementById('delete_modal');
+      if (modalElement) {
+        const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modalElement);
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+        }
+      }
+
+      // Reset state after a short delay to allow modal to close
+      setTimeout(() => {
+        setDeleteTaskId(null);
+        setConfirmTaskName('');
+      }, 300);
+
       loadTasks();
       loadProjects();
+      if (isEmployee) {
+        loadAllEmployeeTasks();
+      }
     }
     setDeletingTask(false);
-  }, [deleteTaskId, deleteTask, loadTasks, loadProjects]);
+  }, [deleteTaskId, deleteTask, loadTasks, loadProjects, isEmployee, loadAllEmployeeTasks]);
+
+  const handleCancelDelete = useCallback(() => {
+    setConfirmTaskName('');
+    setDeleteTaskId(null);
+  }, []);
 
   const handleSaveEditTask = useCallback(async () => {
     if (!editTaskId) {
@@ -627,10 +752,23 @@ const Task = () => {
       setEditFormError(null);
       loadTasks();
       loadProjects();
+      if (isEmployee) {
+        loadAllEmployeeTasks();
+      }
     } else {
       setSavingEditTask(false);
     }
-  }, [editForm, editTaskId, validateEditForm, updateTask, closeEditModal, loadTasks, loadProjects]);
+  }, [
+    editForm,
+    editTaskId,
+    validateEditForm,
+    updateTask,
+    closeEditModal,
+    loadTasks,
+    loadProjects,
+    isEmployee,
+    loadAllEmployeeTasks,
+  ]);
 
   const handleAddTaskSubmit = useCallback(async () => {
     if (!validateForm()) {
@@ -666,6 +804,9 @@ const Task = () => {
       // Reload tasks and projects to refresh all counts and lists
       loadTasks();
       loadProjects();
+      if (isEmployee) {
+        loadAllEmployeeTasks();
+      }
     } else {
       setCreatingTask(false);
     }
@@ -678,6 +819,8 @@ const Task = () => {
     resetAddForm,
     loadTasks,
     loadProjects,
+    isEmployee,
+    loadAllEmployeeTasks,
   ]);
 
   const getEmployeeById = useCallback(
@@ -699,7 +842,28 @@ const Task = () => {
   useEffect(() => {
     loadProjects();
     loadTaskStatuses();
-  }, [loadProjects, loadTaskStatuses]);
+    // Load all employee tasks for count calculations (only for employees)
+    if (isEmployee) {
+      loadAllEmployeeTasks();
+    }
+  }, [loadProjects, loadTaskStatuses, loadAllEmployeeTasks, isEmployee]);
+
+  // Debug: Log when allEmployeeTasks changes
+  useEffect(() => {
+    if (isEmployee && allEmployeeTasks.length > 0) {
+      console.log('[Task] allEmployeeTasks state updated:', {
+        count: allEmployeeTasks.length,
+        tasksByProject: allEmployeeTasks.reduce(
+          (acc, task) => {
+            const projectId = task.projectId?._id || task.projectId;
+            acc[projectId] = (acc[projectId] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
+      });
+    }
+  }, [allEmployeeTasks, isEmployee]);
 
   // Console log employee _id from profile
   useEffect(() => {
@@ -795,17 +959,19 @@ const Task = () => {
               </nav>
             </div>
             <div className="my-xl-auto right-content d-flex">
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-bs-target="#add_task"
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Task
-                </Link>
-              </div>
+              {!isEmployee && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    data-bs-toggle="modal"
+                    data-bs-target="#add_task"
+                    className="btn btn-primary d-flex align-items-center"
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Task
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2 mb-0">
                 <CollapseHeader />
               </div>
@@ -987,6 +1153,36 @@ const Task = () => {
                               </div>
                             </div>
                           </div>
+                          {/* Employee Task Count - Only visible for employee role */}
+                          {isEmployee && getEmployeeProjectTaskCounts(project._id).total > 0 && (
+                            <div className="row align-items-center mt-2 pt-2 border-top">
+                              <div className="col-6">
+                                <span className="fw-medium d-flex align-items-center">
+                                  <i className="ti ti-user-check text-success me-2" />
+                                  {getEmployeeProjectTaskCounts(project._id).completed} /{' '}
+                                  {getEmployeeProjectTaskCounts(project._id).total} My Tasks
+                                </span>
+                              </div>
+                              <div className="col-6">
+                                <div>
+                                  <div className="d-flex align-items-center justify-content-between mb-1">
+                                    <small className="text-success">
+                                      {getEmployeeProjectTaskCounts(project._id).percent}% Completed
+                                    </small>
+                                  </div>
+                                  <div className="progress progress-xs">
+                                    <div
+                                      className="progress-bar bg-success"
+                                      role="progressbar"
+                                      style={{
+                                        width: `${getEmployeeProjectTaskCounts(project._id).percent}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1327,26 +1523,104 @@ const Task = () => {
                             </span>
                             <div className="d-flex align-items-center">
                               <div className="avatar-list-stacked avatar-group-sm">
-                                {task.assignee &&
-                                  Array.isArray(task.assignee) &&
-                                  task.assignee.slice(0, 3).map((assignee: any, idx: number) => {
-                                    const assigneeId =
-                                      typeof assignee === 'string'
-                                        ? assignee
-                                        : assignee?._id || assignee?.id;
-                                    return (
-                                      <span
-                                        key={assigneeId || idx}
-                                        className="avatar avatar-rounded"
-                                      >
-                                        <ImageWithBasePath
-                                          className="border border-white"
-                                          src={`assets/img/profiles/avatar-${(idx % 10) + 1}.jpg`}
-                                          alt="img"
-                                        />
-                                      </span>
+                                {task.assignee && task.assignee.length > 0 ? (
+                                  (() => {
+                                    // Find the project for this task
+                                    const taskProjectId =
+                                      typeof task.projectId === 'object'
+                                        ? task.projectId._id
+                                        : task.projectId;
+                                    const taskProject = projects.find(
+                                      (p) => p._id === taskProjectId
                                     );
-                                  })}
+
+                                    // Get all team members from the project
+                                    const allMembers = taskProject
+                                      ? [
+                                          ...(taskProject.teamMembers || []),
+                                          ...(taskProject.teamLeader || []),
+                                        ]
+                                      : [];
+
+                                    return (
+                                      <>
+                                        {task.assignee
+                                          .slice(0, 3)
+                                          .map((assignee: any, idx: number) => {
+                                            // Handle both populated objects and ID strings
+                                            let member = null;
+
+                                            if (typeof assignee === 'object' && assignee !== null) {
+                                              member = assignee;
+                                            } else {
+                                              const assigneeId = assignee.toString();
+                                              member = allMembers.find(
+                                                (m: any) =>
+                                                  m._id?.toString() === assigneeId ||
+                                                  m.employeeId === assigneeId
+                                              );
+                                            }
+
+                                            return member ? (
+                                              <span
+                                                key={idx}
+                                                className="avatar avatar-sm avatar-rounded"
+                                                title={`${member.firstName} ${member.lastName}${member.employeeId ? ` (${member.employeeId})` : ''}`}
+                                              >
+                                                {member.profileImage ? (
+                                                  <ImageWithBasePath
+                                                    className="border border-white"
+                                                    src={member.profileImage}
+                                                    alt={`${member.firstName} ${member.lastName}`}
+                                                  />
+                                                ) : (
+                                                  <span
+                                                    className="avatar-title bg-purple border border-white fs-10"
+                                                    style={{
+                                                      width: '100%',
+                                                      height: '100%',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center',
+                                                      borderRadius: '50%',
+                                                    }}
+                                                  >
+                                                    {(
+                                                      member.firstName?.charAt(0) ||
+                                                      member.lastName?.charAt(0) ||
+                                                      '?'
+                                                    ).toUpperCase()}
+                                                  </span>
+                                                )}
+                                              </span>
+                                            ) : null;
+                                          })}
+                                        {task.assignee.length > 3 && (
+                                          <span
+                                            className="avatar avatar-sm avatar-rounded"
+                                            title={`+${task.assignee.length - 3} more assignees`}
+                                          >
+                                            <span
+                                              className="avatar-title bg-primary fs-10"
+                                              style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderRadius: '50%',
+                                              }}
+                                            >
+                                              +{task.assignee.length - 3}
+                                            </span>
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="text-muted small">No assignees</span>
+                                )}
                               </div>
                               <div className="dropdown ms-2">
                                 <Link
@@ -1366,53 +1640,57 @@ const Task = () => {
                                       View
                                     </Link>
                                   </li>
-                                  <li>
-                                    <Link
-                                      to="#"
-                                      className="dropdown-item rounded-1"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#edit_task"
-                                      onClick={async () => {
-                                        setEditTaskId(task._id);
-                                        setEditForm({
-                                          title: task.title || '',
-                                          projectId: task.projectId || '',
-                                          assignees: task.assignee || [],
-                                          dueDate: task.dueDate ? dayjs(task.dueDate) : null,
-                                          status: task.status || 'To do',
-                                          priority: task.priority || 'Medium',
-                                          description: task.description || '',
-                                          tags: task.tags || [],
-                                        });
-                                        setEditFieldErrors({});
-                                        setEditFormError(null);
-                                        // Load team members for the project
-                                        if (task.projectId) {
-                                          setLoadingTeamMembers(true);
-                                          const teamMembers = await getProjectTeamMembers(
-                                            task.projectId
-                                          );
-                                          setProjectTeamMembers(teamMembers);
-                                          setLoadingTeamMembers(false);
-                                        }
-                                      }}
-                                    >
-                                      <i className="ti ti-edit me-2" />
-                                      Edit
-                                    </Link>
-                                  </li>
-                                  <li>
-                                    <Link
-                                      to="#"
-                                      className="dropdown-item rounded-1"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#delete_modal"
-                                      onClick={() => setDeleteTaskId(task._id)}
-                                    >
-                                      <i className="ti ti-trash me-2" />
-                                      Delete
-                                    </Link>
-                                  </li>
+                                  {!isEmployee && (
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#edit_task"
+                                        onClick={async () => {
+                                          setEditTaskId(task._id);
+                                          setEditForm({
+                                            title: task.title || '',
+                                            projectId: task.projectId || '',
+                                            assignees: task.assignee || [],
+                                            dueDate: task.dueDate ? dayjs(task.dueDate) : null,
+                                            status: task.status || 'To do',
+                                            priority: task.priority || 'Medium',
+                                            description: task.description || '',
+                                            tags: task.tags || [],
+                                          });
+                                          setEditFieldErrors({});
+                                          setEditFormError(null);
+                                          // Load team members for the project
+                                          if (task.projectId) {
+                                            setLoadingTeamMembers(true);
+                                            const teamMembers = await getProjectTeamMembers(
+                                              task.projectId
+                                            );
+                                            setProjectTeamMembers(teamMembers);
+                                            setLoadingTeamMembers(false);
+                                          }
+                                        }}
+                                      >
+                                        <i className="ti ti-edit me-2" />
+                                        Edit
+                                      </Link>
+                                    </li>
+                                  )}
+                                  {!isEmployee && (
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#delete_modal"
+                                        onClick={() => setDeleteTaskId(task._id)}
+                                      >
+                                        <i className="ti ti-trash me-2" />
+                                        Delete
+                                      </Link>
+                                    </li>
+                                  )}
                                 </ul>
                               </div>
                             </div>
@@ -1892,43 +2170,70 @@ const Task = () => {
       {/* /Edit Task */}
       {/* Delete Task Modal */}
       <div className="modal fade" id="delete_modal">
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
           <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Delete Task</h4>
-              <button
-                type="button"
-                className="btn-close"
-                data-bs-dismiss="modal"
-                disabled={deletingTask}
-              />
-            </div>
             <div className="modal-body">
-              <p>Are you sure you want to delete this task?</p>
-              {deleteTaskId && tasks.find((t) => t._id === deleteTaskId) && (
-                <p className="text-muted">
-                  Task: <strong>{tasks.find((t) => t._id === deleteTaskId)?.title}</strong>
-                </p>
-              )}
-              <p className="text-danger small">This action cannot be undone.</p>
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                data-bs-dismiss="modal"
-                disabled={deletingTask}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={handleDeleteTask}
-                disabled={deletingTask}
-              >
-                {deletingTask ? 'Deleting...' : 'Delete Task'}
-              </button>
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Task</h5>
+                {taskToDelete && (
+                  <>
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-1">{taskToDelete.title}</h6>
+                      <p className="mb-1 text-muted">
+                        Status: <span className="badge badge-soft-info">{taskToDelete.status}</span>
+                      </p>
+                      <p className="mb-0 text-muted">
+                        Priority:{' '}
+                        <span className="badge badge-soft-warning">{taskToDelete.priority}</span>
+                      </p>
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. All data associated with this task will be
+                        removed.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{taskToDelete.title}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmTaskName && !taskNameMatches ? 'is-invalid' : ''
+                        } ${taskNameMatches ? 'is-valid' : ''}`}
+                        placeholder={`Type "${taskToDelete.title}" to confirm`}
+                        value={confirmTaskName}
+                        onChange={(e) => setConfirmTaskName(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmTaskName && !taskNameMatches && (
+                        <div className="invalid-feedback">Name does not match</div>
+                      )}
+                    </div>
+                  </>
+                )}
+                <div className="d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    onClick={handleCancelDelete}
+                    disabled={deletingTask}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={handleDeleteTask}
+                    disabled={deletingTask || !taskNameMatches}
+                  >
+                    {deletingTask ? 'Deleting...' : 'Delete Task'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

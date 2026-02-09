@@ -13,6 +13,12 @@ interface ClientFormData {
   logo: string;
   status: 'Active' | 'Inactive';
   contractValue: number;
+  socialLinks: {
+    instagram: string;
+    facebook: string;
+    linkedin: string;
+    whatsapp: string;
+  };
 }
 
 interface ClientFormErrors {
@@ -25,6 +31,10 @@ interface ClientFormErrors {
   status?: string;
   contractValue?: string;
   projects?: string;
+  instagram?: string;
+  facebook?: string;
+  linkedin?: string;
+  whatsapp?: string;
 }
 
 const AddClient = () => {
@@ -38,6 +48,12 @@ const AddClient = () => {
     logo: '',
     status: 'Active',
     contractValue: 0,
+    socialLinks: {
+      instagram: '',
+      facebook: '',
+      linkedin: '',
+      whatsapp: '',
+    },
   });
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -177,6 +193,22 @@ const AddClient = () => {
       case 'status':
         if (!['Active', 'Inactive'].includes(v)) return 'Status must be Active or Inactive';
         return undefined;
+      case 'instagram':
+        if (v && v !== '' && !/instagram\.com|instagr\.am/i.test(v))
+          return 'Instagram URL must contain "instagram.com"';
+        return undefined;
+      case 'facebook':
+        if (v && v !== '' && !/facebook\.com|fb\.com|fb\.me/i.test(v))
+          return 'Facebook URL must contain "facebook.com"';
+        return undefined;
+      case 'linkedin':
+        if (v && v !== '' && !/linkedin\.com/i.test(v))
+          return 'LinkedIn URL must contain "linkedin.com"';
+        return undefined;
+      case 'whatsapp':
+        if (v && v !== '' && !/wa\.me|whatsapp\.com|^\+?[\d\s\-()]{10,20}$/i.test(v))
+          return 'WhatsApp must be a valid phone number or WhatsApp URL';
+        return undefined;
       default:
         return undefined;
     }
@@ -189,6 +221,21 @@ const AddClient = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: name === 'contractValue' ? Number(value) || 0 : value,
+    }));
+  };
+
+  // Handle social media input changes
+  const handleSocialLinkChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    platform: keyof ClientFormData['socialLinks']
+  ) => {
+    const { value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      socialLinks: {
+        ...prev.socialLinks,
+        [platform]: value,
+      },
     }));
   };
 
@@ -257,6 +304,12 @@ const AddClient = () => {
         logo: formData.logo,
         status: formData.status,
         contractValue: formData.contractValue,
+        socialLinks: {
+          instagram: formData.socialLinks.instagram?.trim() || '',
+          facebook: formData.socialLinks.facebook?.trim() || '',
+          linkedin: formData.socialLinks.linkedin?.trim() || '',
+          whatsapp: formData.socialLinks.whatsapp?.trim() || '',
+        },
       };
 
       // Console log the API request
@@ -279,6 +332,12 @@ const AddClient = () => {
           logo: '',
           status: 'Active',
           contractValue: 0,
+          socialLinks: {
+            instagram: '',
+            facebook: '',
+            linkedin: '',
+            whatsapp: '',
+          },
         });
         setFieldErrors({});
         setLogo(null);
@@ -360,6 +419,12 @@ const AddClient = () => {
       logo: '',
       status: 'Active',
       contractValue: 0,
+      socialLinks: {
+        instagram: '',
+        facebook: '',
+        linkedin: '',
+        whatsapp: '',
+      },
     });
     setFieldErrors({});
     setLogo(null);
@@ -616,6 +681,92 @@ const AddClient = () => {
                             <div className="invalid-feedback d-block">
                               {fieldErrors.contractValue}
                             </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Social Media Links Section */}
+                      <div className="col-md-12">
+                        <div className="border-top my-3 pt-3">
+                          <h6 className="mb-3">Social Media Links (Optional)</h6>
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            <i className="ti ti-brand-instagram me-1"></i>
+                            Instagram
+                          </label>
+                          <input
+                            type="text"
+                            className={`form-control ${fieldErrors.instagram ? 'is-invalid' : ''}`}
+                            value={formData.socialLinks.instagram}
+                            onChange={(e) => handleSocialLinkChange(e, 'instagram')}
+                            onFocus={() => clearFieldError('instagram')}
+                            onBlur={(e) => handleFieldBlur('instagram', e.target.value)}
+                            placeholder="https://instagram.com/yourcompany"
+                          />
+                          {fieldErrors.instagram && (
+                            <div className="invalid-feedback d-block">{fieldErrors.instagram}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            <i className="ti ti-brand-facebook me-1"></i>
+                            Facebook
+                          </label>
+                          <input
+                            type="text"
+                            className={`form-control ${fieldErrors.facebook ? 'is-invalid' : ''}`}
+                            value={formData.socialLinks.facebook}
+                            onChange={(e) => handleSocialLinkChange(e, 'facebook')}
+                            onFocus={() => clearFieldError('facebook')}
+                            onBlur={(e) => handleFieldBlur('facebook', e.target.value)}
+                            placeholder="https://facebook.com/yourcompany"
+                          />
+                          {fieldErrors.facebook && (
+                            <div className="invalid-feedback d-block">{fieldErrors.facebook}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            <i className="ti ti-brand-linkedin me-1"></i>
+                            LinkedIn
+                          </label>
+                          <input
+                            type="text"
+                            className={`form-control ${fieldErrors.linkedin ? 'is-invalid' : ''}`}
+                            value={formData.socialLinks.linkedin}
+                            onChange={(e) => handleSocialLinkChange(e, 'linkedin')}
+                            onFocus={() => clearFieldError('linkedin')}
+                            onBlur={(e) => handleFieldBlur('linkedin', e.target.value)}
+                            placeholder="https://linkedin.com/company/yourcompany"
+                          />
+                          {fieldErrors.linkedin && (
+                            <div className="invalid-feedback d-block">{fieldErrors.linkedin}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            <i className="ti ti-brand-whatsapp me-1"></i>
+                            WhatsApp
+                          </label>
+                          <input
+                            type="text"
+                            className={`form-control ${fieldErrors.whatsapp ? 'is-invalid' : ''}`}
+                            value={formData.socialLinks.whatsapp}
+                            onChange={(e) => handleSocialLinkChange(e, 'whatsapp')}
+                            onFocus={() => clearFieldError('whatsapp')}
+                            onBlur={(e) => handleFieldBlur('whatsapp', e.target.value)}
+                            placeholder="+1234567890 or https://wa.me/1234567890"
+                          />
+                          {fieldErrors.whatsapp && (
+                            <div className="invalid-feedback d-block">{fieldErrors.whatsapp}</div>
                           )}
                         </div>
                       </div>

@@ -94,6 +94,7 @@ const ProjectGrid = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+  const [confirmProjectName, setConfirmProjectName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [currentStep, setCurrentStep] = useState(1);
@@ -924,59 +925,44 @@ const ProjectGrid = () => {
       title: 'Team',
       dataIndex: 'teamMembers',
       render: (text: any, record: any) => (
-        <div className="avatar-list-stacked avatar-group-sm">
-          {record.teamMembers && record.teamMembers.length > 0 ? (
-            <>
-              {record.teamMembers.slice(0, 3).map((member: string, index: number) => (
-                <span key={index} className="avatar avatar-rounded bg-primary text-white">
-                  <span className="fs-12 fw-medium">
-                    {member && typeof member === 'string' && member.length > 0
-                      ? member.charAt(0).toUpperCase()
-                      : '?'}
-                  </span>
-                </span>
-              ))}
-              {record.teamMembers.length > 3 && (
-                <span className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium">
-                  +{record.teamMembers.length - 3}
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="avatar avatar-rounded bg-secondary text-white">
-              <span className="fs-12 fw-medium">?</span>
-            </span>
-          )}
-        </div>
+        <span className="badge bg-pink-transparent">
+          {(record.teamMembers?.length || 0) +
+            (record.teamLeader?.length || 0) +
+            (record.projectManager?.length || 0)}
+        </span>
       ),
     },
-    {
-      title: '',
-      dataIndex: 'actions',
-      render: (text: any, record: any) => (
-        <div className="action-icon d-inline-flex">
-          <Link
-            to="#"
-            className="me-2"
-            onClick={(e) => {
-              e.preventDefault();
-              handleEdit(record);
-            }}
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            onClick={(e) => {
-              e.preventDefault();
-              handleDelete(record);
-            }}
-          >
-            <i className="ti ti-trash" />
-          </Link>
-        </div>
-      ),
-    },
+    ...(!isEmployee
+      ? [
+          {
+            title: '',
+            dataIndex: 'actions',
+            render: (text: any, record: any) => (
+              <div className="action-icon d-inline-flex">
+                <Link
+                  to="#"
+                  className="me-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleEdit(record);
+                  }}
+                >
+                  <i className="ti ti-edit" />
+                </Link>
+                <Link
+                  to="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleDelete(record);
+                  }}
+                >
+                  <i className="ti ti-trash" />
+                </Link>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   if (loading) {
@@ -1058,45 +1044,49 @@ const ProjectGrid = () => {
                   </button>
                 </div>
               </div>
-              <div className="me-2 mb-2">
-                <div className="dropdown">
-                  <button
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    <i className="ti ti-file-export me-1" />
-                    Export
-                  </button>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </button>
-                    </li>
-                    <li>
-                      <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel
-                      </button>
-                    </li>
-                  </ul>
+              {!isEmployee && (
+                <div className="me-2 mb-2">
+                  <div className="dropdown">
+                    <button
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      <i className="ti ti-file-export me-1" />
+                      Export
+                    </button>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
+                          <i className="ti ti-file-type-pdf me-1" />
+                          Export as PDF
+                        </button>
+                      </li>
+                      <li>
+                        <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
+                          <i className="ti ti-file-type-xls me-1" />
+                          Export as Excel
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
-              </div>
-              <div className="me-2 mb-2">
-                <button
-                  onClick={() => {
-                    setFormData(initialFormData);
-                    setFormError(null);
-                    loadModalData();
-                    setShowAddModal(true);
-                  }}
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Project
-                </button>
-              </div>
+              )}
+              {!isEmployee && (
+                <div className="me-2 mb-2">
+                  <button
+                    onClick={() => {
+                      setFormData(initialFormData);
+                      setFormError(null);
+                      loadModalData();
+                      setShowAddModal(true);
+                    }}
+                    className="btn btn-primary d-flex align-items-center"
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Project
+                  </button>
+                </div>
+              )}
               <div className="ms-2 head-icons">
                 <CollapseHeader />
               </div>
@@ -1444,35 +1434,37 @@ const ProjectGrid = () => {
                             </span>
                             <span className={getStatusColor(project.status)}>{project.status}</span>
                           </div>
-                          <div className="dropdown">
-                            <button
-                              className="btn btn-icon btn-sm"
-                              data-bs-toggle="dropdown"
-                              aria-expanded="false"
-                            >
-                              <i className="ti ti-dots-vertical" />
-                            </button>
-                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                              <li>
-                                <button
-                                  className="dropdown-item rounded-1"
-                                  onClick={() => handleEdit(project)}
-                                >
-                                  <i className="ti ti-edit me-2" />
-                                  Edit
-                                </button>
-                              </li>
-                              <li>
-                                <button
-                                  className="dropdown-item rounded-1 text-danger"
-                                  onClick={() => handleDelete(project)}
-                                >
-                                  <i className="ti ti-trash me-1" />
-                                  Delete
-                                </button>
-                              </li>
-                            </ul>
-                          </div>
+                          {!isEmployee && (
+                            <div className="dropdown">
+                              <button
+                                className="btn btn-icon btn-sm"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                              >
+                                <i className="ti ti-dots-vertical" />
+                              </button>
+                              <ul className="dropdown-menu dropdown-menu-end p-3">
+                                <li>
+                                  <button
+                                    className="dropdown-item rounded-1"
+                                    onClick={() => handleEdit(project)}
+                                  >
+                                    <i className="ti ti-edit me-2" />
+                                    Edit
+                                  </button>
+                                </li>
+                                <li>
+                                  <button
+                                    className="dropdown-item rounded-1 text-danger"
+                                    onClick={() => handleDelete(project)}
+                                  >
+                                    <i className="ti ti-trash me-1" />
+                                    Delete
+                                  </button>
+                                </li>
+                              </ul>
+                            </div>
+                          )}
                         </div>
                         <div className="mb-3 pb-3 border-bottom">
                           <p className="text-truncate line-clamp-3 mb-0">
@@ -1510,31 +1502,11 @@ const ProjectGrid = () => {
                               <span className="text-dark">{project.progress}%</span>
                             </p>
                           </div>
-                          <div className="avatar-list-stacked avatar-group-sm">
-                            {project.teamMembers && project.teamMembers.length > 0 ? (
-                              project.teamMembers.slice(0, 3).map((member, index) => (
-                                <span
-                                  key={index}
-                                  className="avatar avatar-rounded bg-primary text-white"
-                                >
-                                  <span className="fs-12 fw-medium">
-                                    {member && typeof member === 'string' && member.length > 0
-                                      ? member.charAt(0).toUpperCase()
-                                      : '?'}
-                                  </span>
-                                </span>
-                              ))
-                            ) : (
-                              <span className="avatar avatar-rounded bg-secondary text-white">
-                                <span className="fs-12 fw-medium">?</span>
-                              </span>
-                            )}
-                            {project.teamMembers && project.teamMembers.length > 3 && (
-                              <span className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium">
-                                +{project.teamMembers.length - 3}
-                              </span>
-                            )}
-                          </div>
+                          <span className="badge bg-pink-transparent">
+                            {(project.teamMembers?.length || 0) +
+                              (project.teamLeader?.length || 0) +
+                              (project.projectManager?.length || 0)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -2646,21 +2618,63 @@ const ProjectGrid = () => {
             <div className="modal-content">
               <div className="modal-body">
                 <div className="text-center p-3">
-                  <span className="avatar avatar-lg avatar-rounded bg-danger-transparent mb-3">
-                    <i className="ti ti-trash text-danger fs-24" />
+                  <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                    <i className="ti ti-trash fs-24" />
                   </span>
                   <h5 className="mb-2">Delete Project</h5>
-                  <p className="mb-3">
-                    Are you sure you want to delete <strong>{deletingProject.name}</strong>? This
-                    action cannot be undone.
-                  </p>
+                  <div className="bg-light p-3 rounded mb-3">
+                    <h6 className="mb-1">{deletingProject.name}</h6>
+                    <p className="mb-1 text-muted">
+                      Client: <strong>{deletingProject.client || 'N/A'}</strong>
+                    </p>
+                    <p className="mb-0 text-muted">
+                      Status:{' '}
+                      <span className={getStatusColor(deletingProject.status)}>
+                        {deletingProject.status}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="text-start mb-3">
+                    <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                      This action is permanent. All data associated with this project will be
+                      removed.
+                    </p>
+                    <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                      Type <strong>{deletingProject.name}</strong> to confirm deletion:
+                    </label>
+                    <input
+                      type="text"
+                      className={`form-control form-control-sm ${
+                        confirmProjectName &&
+                        confirmProjectName.trim().toLowerCase() !==
+                          deletingProject.name.trim().toLowerCase()
+                          ? 'is-invalid'
+                          : ''
+                      } ${
+                        confirmProjectName.trim().toLowerCase() ===
+                        deletingProject.name.trim().toLowerCase()
+                          ? 'is-valid'
+                          : ''
+                      }`}
+                      placeholder={`Type \"${deletingProject.name}\" to confirm`}
+                      value={confirmProjectName}
+                      onChange={(e) => setConfirmProjectName(e.target.value)}
+                      autoComplete="off"
+                    />
+                    {confirmProjectName &&
+                      confirmProjectName.trim().toLowerCase() !==
+                        deletingProject.name.trim().toLowerCase() && (
+                        <div className="invalid-feedback">Name does not match</div>
+                      )}
+                  </div>
                   <div className="d-flex justify-content-center gap-2">
                     <button
                       type="button"
-                      className="btn btn-outline-light border"
+                      className="btn btn-light"
                       onClick={() => {
                         setShowDeleteModal(false);
                         setDeletingProject(null);
+                        setConfirmProjectName('');
                       }}
                     >
                       Cancel
@@ -2669,13 +2683,27 @@ const ProjectGrid = () => {
                       className="btn btn-danger"
                       onClick={async () => {
                         if (deletingProject) {
-                          await handleDeleteProject(deletingProject._id);
-                          setDeletingProject(null);
-                          setShowDeleteModal(false);
+                          const success = await deleteProject(deletingProject._id);
+                          if (success) {
+                            // Close the modal
+                            setTimeout(() => {
+                              setDeletingProject(null);
+                              setShowDeleteModal(false);
+                              setConfirmProjectName('');
+                            }, 300);
+
+                            // Reload projects list
+                            loadProjects(filters);
+                          }
                         }
                       }}
+                      disabled={
+                        !deletingProject ||
+                        confirmProjectName.trim().toLowerCase() !==
+                          deletingProject.name.trim().toLowerCase()
+                      }
                     >
-                      Delete
+                      Delete Project
                     </button>
                   </div>
                 </div>

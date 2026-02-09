@@ -8,6 +8,8 @@ import {
   createTask,
   createTaskStatus,
   deleteTask,
+  deleteTaskStatusBoard,
+  getEmployeeProjectTasks,
   getMyTasks,
   getTaskById,
   getTasks,
@@ -44,8 +46,19 @@ router.put(
   updateTaskStatusBoard
 );
 
+// Delete task status board (Admin only) - Soft delete
+router.delete(
+  '/statuses/:id',
+  authenticate,
+  requireRole('admin', 'superadmin'),
+  deleteTaskStatusBoard
+);
+
 // Get current user's tasks
 router.get('/my', authenticate, getMyTasks);
+
+// Get current user's tasks for a specific project
+router.get('/my/project/:projectId', authenticate, getEmployeeProjectTasks);
 
 // Get tasks by project
 router.get('/project/:projectId', authenticate, getTasksByProject);

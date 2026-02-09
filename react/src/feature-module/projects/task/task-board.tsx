@@ -23,6 +23,7 @@ const TaskBoard = () => {
     loading: tasksLoading,
     createTask: createTaskAPI,
     updateTask: updateTaskAPI,
+    deleteTask: deleteTaskAPI,
     updateStatus: updateTaskStatusAPI,
     getTasksByProject: fetchTasksByProject,
   } = useTasksREST();
@@ -83,6 +84,16 @@ const TaskBoard = () => {
     taskTitle: string;
     progress?: number;
   } | null>(null);
+  const [deletingBoard, setDeletingBoard] = useState<any>(null);
+  const [isDeletingBoard, setIsDeletingBoard] = useState(false);
+  const [confirmBoardName, setConfirmBoardName] = useState('');
+  const [deletingTask, setDeletingTask] = useState<any>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [confirmTaskName, setConfirmTaskName] = useState('');
+  const [showDeleteError, setShowDeleteError] = useState(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
+  const [deleteErrorBoardName, setDeleteErrorBoardName] = useState('');
+  const [deleteErrorTaskCount, setDeleteErrorTaskCount] = useState(0);
 
   // Add Task Modal States
   const [taskTitle, setTaskTitle] = useState('');
@@ -482,6 +493,139 @@ const TaskBoard = () => {
       }
     }
   }, []);
+
+  const handleOpenDeleteBoard = useCallback(
+    (board: any) => {
+      console.log('[TaskBoard] Attempting to delete board:', {
+        board,
+        boardKey: board.key,
+        boardName: board.name,
+        totalTasks: tasks.length,
+      });
+
+      // Check if there are any tasks with this board's status
+      const boardStatusKey = normalizeKey(board.key || board.name);
+      console.log('[TaskBoard] Normalized board status key:', boardStatusKey);
+
+      const tasksInBoard = tasks.filter((task) => {
+        const taskStatus = normalizeKey(task.status);
+        const matches = taskStatus === boardStatusKey;
+        if (matches) {
+          console.log('[TaskBoard] Found task in board:', {
+            taskTitle: task.title,
+            taskStatus: task.status,
+            normalizedTaskStatus: taskStatus,
+            boardStatusKey,
+          });
+        }
+        return matches;
+      });
+
+      console.log('[TaskBoard] Tasks in board:', tasksInBoard.length);
+
+      if (tasksInBoard.length > 0) {
+        console.log('[TaskBoard] Showing error modal...');
+        // Show error modal instead of toast
+        setDeleteErrorBoardName(board.name);
+        setDeleteErrorTaskCount(tasksInBoard.length);
+        setDeleteErrorMessage(
+          `Cannot delete this board. There ${tasksInBoard.length === 1 ? 'is' : 'are'} ${tasksInBoard.length} task${tasksInBoard.length === 1 ? '' : 's'} currently in this status. Please move ${tasksInBoard.length === 1 ? 'it' : 'them'} to another status before deleting.`
+        );
+        setShowDeleteError(true);
+        return;
+      }
+
+      // No tasks in this board, set state and open modal programmatically
+      setDeletingBoard(board);
+      setConfirmBoardName('');
+
+      // Open modal programmatically after state update
+      setTimeout(() => {
+        const modalElement = document.getElementById('delete_board_modal');
+        if (modalElement && (window as any).bootstrap) {
+          const modal = new (window as any).bootstrap.Modal(modalElement);
+          modal.show();
+        }
+      }, 0);
+    },
+    [tasks, normalizeKey]
+  );
+
+  const handleDeleteBoard = useCallback(async () => {
+    if (!deletingBoard?._id) return;
+
+    setIsDeletingBoard(true);
+    console.log('[TaskBoard] Deleting board:', deletingBoard._id);
+
+    try {
+      // Use proper API service with authentication
+      const { del } = await import('../../../services/api');
+      const response = await del(`/tasks/statuses/${deletingBoard._id}`);
+
+      if (response.success) {
+        toast.success('Board deleted successfully');
+        setDeletingBoard(null);
+        setConfirmBoardName('');
+        await loadTaskStatuses();
+        closeModalById('delete_board_modal');
+      } else {
+        console.error('[TaskBoard] Failed to delete board:', response.error?.message);
+        toast.error(response.error?.message || 'Failed to delete board');
+      }
+    } catch (error: any) {
+      console.error('[TaskBoard] Error deleting board:', error);
+      const errorMessage =
+        error.response?.data?.error?.message ||
+        error.message ||
+        'An error occurred while deleting the board';
+      toast.error(errorMessage);
+    } finally {
+      setIsDeletingBoard(false);
+    }
+  }, [deletingBoard, loadTaskStatuses, closeModalById]);
+
+  const handleOpenDeleteTask = useCallback((task: any) => {
+    setDeletingTask(task);
+    setConfirmTaskName('');
+
+    // Open modal programmatically after state update
+    setTimeout(() => {
+      const modalElement = document.getElementById('delete_task_modal');
+      if (modalElement && (window as any).bootstrap) {
+        const modal = new (window as any).bootstrap.Modal(modalElement);
+        modal.show();
+      }
+    }, 0);
+  }, []);
+
+  const handleDeleteTask = useCallback(async () => {
+    if (!deletingTask?._id) return;
+
+    setIsDeletingTask(true);
+    console.log('[TaskBoard] Deleting task:', deletingTask._id);
+
+    try {
+      const success = await deleteTaskAPI(deletingTask._id);
+      if (success) {
+        console.log('[TaskBoard] Task deleted successfully');
+        setDeletingTask(null);
+        setConfirmTaskName('');
+        // Reload tasks to reflect the change
+        if (selectedProject !== 'Select') {
+          loadprojecttasks(selectedProject);
+        }
+        closeModalById('delete_task_modal');
+      } else {
+        console.error('[TaskBoard] Failed to delete task');
+        toast.error('Failed to delete task');
+      }
+    } catch (error) {
+      console.error('[TaskBoard] Error deleting task:', error);
+      toast.error('An error occurred while deleting the task');
+    } finally {
+      setIsDeletingTask(false);
+    }
+  }, [deletingTask, deleteTaskAPI, selectedProject, loadprojecttasks, closeModalById]);
 
   // Add Task Functions
   const clearTaskFieldError = (fieldName: string) => {
@@ -1024,55 +1168,59 @@ const TaskBoard = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="dropdown me-2">
-                <button
-                  className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                  onClick={() => console.log('Export clicked')}
+              {!isEmployee && (
+                <div className="dropdown me-2">
+                  <button
+                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                    type="button"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    onClick={() => console.log('Export clicked')}
+                  >
+                    <i className="ti ti-file-export me-2" /> Export
+                  </button>
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                    <li>
+                      <a
+                        href="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          console.log('Export as PDF clicked');
+                        }}
+                      >
+                        <i className="ti ti-file-type-pdf me-1" />
+                        Export as PDF
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          console.log('Export as Excel clicked');
+                        }}
+                      >
+                        <i className="ti ti-file-type-xls me-1" />
+                        Export as Excel{' '}
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              )}
+              {!isEmployee && (
+                <Link
+                  to="#"
+                  className="btn btn-primary d-inline-flex align-items-center"
+                  data-bs-toggle="modal"
+                  data-inert={true}
+                  data-bs-target="#add_board"
                 >
-                  <i className="ti ti-file-export me-2" /> Export
-                </button>
-                <ul className="dropdown-menu dropdown-menu-end p-3">
-                  <li>
-                    <a
-                      href="#"
-                      className="dropdown-item rounded-1"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log('Export as PDF clicked');
-                      }}
-                    >
-                      <i className="ti ti-file-type-pdf me-1" />
-                      Export as PDF
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="#"
-                      className="dropdown-item rounded-1"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log('Export as Excel clicked');
-                      }}
-                    >
-                      <i className="ti ti-file-type-xls me-1" />
-                      Export as Excel{' '}
-                    </a>
-                  </li>
-                </ul>
-              </div>
-              <Link
-                to="#"
-                className="btn btn-primary d-inline-flex align-items-center"
-                data-bs-toggle="modal"
-                data-inert={true}
-                data-bs-target="#add_board"
-              >
-                <i className="ti ti-circle-plus me-1" />
-                Add Board
-              </Link>
+                  <i className="ti ti-circle-plus me-1" />
+                  Add Board
+                </Link>
+              )}
               <div className="head-icons ms-2 mb-0">
                 <CollapseHeader />
               </div>
@@ -1359,42 +1507,45 @@ const TaskBoard = () => {
                                   <h5 className="me-2">{status.name}</h5>
                                   <span className="badge bg-light rounded-pill">{count}</span>
                                 </div>
-                                <div className="dropdown">
-                                  <Link
-                                    to="#"
-                                    className="d-inline-flex align-items-center"
-                                    data-bs-toggle="dropdown"
-                                  >
-                                    <i className="ti ti-dots-vertical" />
-                                  </Link>
-                                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                                    <li>
-                                      <Link
-                                        to="#"
-                                        className="dropdown-item rounded-1"
-                                        data-bs-toggle="modal"
-                                        data-inert={true}
-                                        data-bs-target="#edit_board"
-                                        onClick={() => handleEditBoardClick(status)}
-                                      >
-                                        <i className="ti ti-edit me-2" />
-                                        Edit
-                                      </Link>
-                                    </li>
-                                    <li>
-                                      <Link
-                                        to="#"
-                                        className="dropdown-item rounded-1"
-                                        data-bs-toggle="modal"
-                                        data-inert={true}
-                                        data-bs-target="#delete_modal"
-                                      >
-                                        <i className="ti ti-trash me-2" />
-                                        Delete
-                                      </Link>
-                                    </li>
-                                  </ul>
-                                </div>
+                                {!isEmployee && (
+                                  <div className="dropdown">
+                                    <Link
+                                      to="#"
+                                      className="d-inline-flex align-items-center"
+                                      data-bs-toggle="dropdown"
+                                    >
+                                      <i className="ti ti-dots-vertical" />
+                                    </Link>
+                                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                                      <li>
+                                        <Link
+                                          to="#"
+                                          className="dropdown-item rounded-1"
+                                          data-bs-toggle="modal"
+                                          data-inert={true}
+                                          data-bs-target="#edit_board"
+                                          onClick={() => handleEditBoardClick(status)}
+                                        >
+                                          <i className="ti ti-edit me-2" />
+                                          Edit
+                                        </Link>
+                                      </li>
+                                      <li>
+                                        <Link
+                                          to="#"
+                                          className="dropdown-item rounded-1"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            handleOpenDeleteBoard(status);
+                                          }}
+                                        >
+                                          <i className="ti ti-trash me-2" />
+                                          Delete
+                                        </Link>
+                                      </li>
+                                    </ul>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div
@@ -1425,42 +1576,45 @@ const TaskBoard = () => {
                                               {(t as any).priority || 'Medium'}
                                             </span>
                                           </div>
-                                          <div className="dropdown">
-                                            <Link
-                                              to="#"
-                                              className="d-inline-flex align-items-center"
-                                              data-bs-toggle="dropdown"
-                                            >
-                                              <i className="ti ti-dots-vertical" />
-                                            </Link>
-                                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                                              <li>
-                                                <Link
-                                                  to="#"
-                                                  className="dropdown-item rounded-1"
-                                                  data-bs-toggle="modal"
-                                                  data-inert={true}
-                                                  data-bs-target="#edit_task"
-                                                  onClick={() => handleOpenEditTask(t)}
-                                                >
-                                                  <i className="ti ti-edit me-2" />
-                                                  Edit
-                                                </Link>
-                                              </li>
-                                              <li>
-                                                <Link
-                                                  to="#"
-                                                  className="dropdown-item rounded-1"
-                                                  data-bs-toggle="modal"
-                                                  data-inert={true}
-                                                  data-bs-target="#delete_modal"
-                                                >
-                                                  <i className="ti ti-trash me-2" />
-                                                  Delete
-                                                </Link>
-                                              </li>
-                                            </ul>
-                                          </div>
+                                          {!isEmployee && (
+                                            <div className="dropdown">
+                                              <Link
+                                                to="#"
+                                                className="d-inline-flex align-items-center"
+                                                data-bs-toggle="dropdown"
+                                              >
+                                                <i className="ti ti-dots-vertical" />
+                                              </Link>
+                                              <ul className="dropdown-menu dropdown-menu-end p-3">
+                                                <li>
+                                                  <Link
+                                                    to="#"
+                                                    className="dropdown-item rounded-1"
+                                                    data-bs-toggle="modal"
+                                                    data-inert={true}
+                                                    data-bs-target="#edit_task"
+                                                    onClick={() => handleOpenEditTask(t)}
+                                                  >
+                                                    <i className="ti ti-edit me-2" />
+                                                    Edit
+                                                  </Link>
+                                                </li>
+                                                <li>
+                                                  <Link
+                                                    to="#"
+                                                    className="dropdown-item rounded-1"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      handleOpenDeleteTask(t);
+                                                    }}
+                                                  >
+                                                    <i className="ti ti-trash me-2" />
+                                                    Delete
+                                                  </Link>
+                                                </li>
+                                              </ul>
+                                            </div>
+                                          )}
                                         </div>
                                         <div className="mb-2">
                                           <h6 className="d-flex align-items-center">
@@ -2349,6 +2503,231 @@ const TaskBoard = () => {
         </div>
       )}
       {/* /Status Change Confirmation Modal */}
+
+      {/* Delete Board Modal */}
+      <div className="modal fade" id="delete_board_modal">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
+          <div className="modal-content">
+            <div className="modal-body">
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Board</h5>
+                <p className="mb-3">
+                  Are you sure you want to delete this board? This action cannot be undone.
+                </p>
+                {deletingBoard && (
+                  <>
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-0">{deletingBoard.name}</h6>
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. All data associated with this board will be
+                        removed.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{deletingBoard.name}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmBoardName &&
+                          confirmBoardName.trim().toLowerCase() !==
+                            deletingBoard.name.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmBoardName.trim().toLowerCase() ===
+                          deletingBoard.name.trim().toLowerCase()
+                            ? 'is-valid'
+                            : ''
+                        }`}
+                        placeholder={`Type "${deletingBoard.name}" to confirm`}
+                        value={confirmBoardName}
+                        onChange={(e) => setConfirmBoardName(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmBoardName &&
+                        confirmBoardName.trim().toLowerCase() !==
+                          deletingBoard.name.trim().toLowerCase() && (
+                          <div className="invalid-feedback">Name does not match</div>
+                        )}
+                    </div>
+                  </>
+                )}
+                <div className="d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    disabled={isDeletingBoard}
+                    onClick={() => {
+                      setDeletingBoard(null);
+                      setConfirmBoardName('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteBoard}
+                    className="btn btn-danger"
+                    disabled={
+                      isDeletingBoard ||
+                      !deletingBoard ||
+                      confirmBoardName.trim().toLowerCase() !==
+                        deletingBoard.name.trim().toLowerCase()
+                    }
+                  >
+                    {isDeletingBoard ? 'Deleting...' : 'Delete Board'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Delete Board Modal */}
+
+      {/* Delete Task Modal */}
+      <div className="modal fade" id="delete_task_modal">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
+          <div className="modal-content">
+            <div className="modal-body">
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Task</h5>
+                <p className="mb-3">
+                  Are you sure you want to delete this task? This action cannot be undone.
+                </p>
+                {deletingTask && (
+                  <>
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-0">{deletingTask.title}</h6>
+                      {deletingTask.description && (
+                        <p className="mb-0 text-muted" style={{ fontSize: '13px' }}>
+                          {deletingTask.description.length > 50
+                            ? deletingTask.description.substring(0, 50) + '...'
+                            : deletingTask.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. All data associated with this task will be
+                        removed.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{deletingTask.title}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmTaskName &&
+                          confirmTaskName.trim().toLowerCase() !==
+                            deletingTask.title.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmTaskName.trim().toLowerCase() ===
+                          deletingTask.title.trim().toLowerCase()
+                            ? 'is-valid'
+                            : ''
+                        }`}
+                        placeholder={`Type "${deletingTask.title}" to confirm`}
+                        value={confirmTaskName}
+                        onChange={(e) => setConfirmTaskName(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmTaskName &&
+                        confirmTaskName.trim().toLowerCase() !==
+                          deletingTask.title.trim().toLowerCase() && (
+                          <div className="invalid-feedback">Name does not match</div>
+                        )}
+                    </div>
+                  </>
+                )}
+                <div className="d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    disabled={isDeletingTask}
+                    onClick={() => {
+                      setDeletingTask(null);
+                      setConfirmTaskName('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteTask}
+                    className="btn btn-danger"
+                    disabled={
+                      isDeletingTask ||
+                      !deletingTask ||
+                      confirmTaskName.trim().toLowerCase() !==
+                        deletingTask.title.trim().toLowerCase()
+                    }
+                  >
+                    {isDeletingTask ? 'Deleting...' : 'Delete Task'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Delete Task Modal */}
+
+      {/* Delete Error Modal */}
+      {showDeleteError && (
+        <div
+          className="modal fade show"
+          style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowDeleteError(false)}
+        >
+          <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-body">
+                <div className="text-center p-3">
+                  <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                    <i className="ti ti-alert-circle fs-24" />
+                  </span>
+                  <h5 className="mb-2">Cannot Delete Board</h5>
+                  <div className="bg-light p-3 rounded mb-3">
+                    <h6 className="mb-0">{deleteErrorBoardName}</h6>
+                  </div>
+                  <div className="alert alert-danger text-start mb-3" role="alert">
+                    <p className="mb-0">{deleteErrorMessage}</p>
+                  </div>
+                  <div className="text-muted mb-3" style={{ fontSize: '13px' }}>
+                    <strong>{deleteErrorTaskCount}</strong> task
+                    {deleteErrorTaskCount === 1 ? '' : 's'}{' '}
+                    {deleteErrorTaskCount === 1 ? 'is' : 'are'} currently using this status. Please
+                    reassign {deleteErrorTaskCount === 1 ? 'it' : 'them'} before deleting the board.
+                  </div>
+                  <div className="d-flex gap-2 justify-content-center">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setShowDeleteError(false)}
+                    >
+                      OK, Got It
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* /Delete Error Modal */}
     </>
   );
 };

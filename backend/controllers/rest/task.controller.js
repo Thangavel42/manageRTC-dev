@@ -411,6 +411,74 @@ export const getTasksByProject = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get employee's tasks for a specific project
+ * @route   GET /api/tasks/my/project/:projectId
+ * @access  Private (Employee, HR, Admin, Superadmin)
+ */
+export const getEmployeeProjectTasks = asyncHandler(async (req, res) => {
+  const { projectId } = req.params;
+  const { status } = req.query;
+  const user = extractUser(req);
+
+  console.log(
+    '[getEmployeeProjectTasks] ProjectId:',
+    projectId,
+    'User:',
+    user.userId,
+    'CompanyId:',
+    user.companyId
+  );
+
+  // Get tenant-specific models
+  const TaskModel = getTaskModel(user.companyId);
+  const EmployeeModel = getEmployeeModel(user.companyId);
+
+  // Find the Employee record for this user
+  const employee = await EmployeeModel.findOne({ clerkUserId: user.userId });
+
+  if (!employee) {
+    console.log('[getEmployeeProjectTasks] No employee found for user:', user.userId);
+    return sendSuccess(res, [], 'No tasks found');
+  }
+
+  console.log('[getEmployeeProjectTasks] Found employee:', {
+    _id: employee._id,
+    employeeId: employee.employeeId,
+    name: `${employee.firstName} ${employee.lastName}`,
+  });
+
+  // Validate ObjectId
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw buildValidationError('projectId', 'Invalid project ID format');
+  }
+
+  // Convert projectId to ObjectId for querying
+  const projectObjectId = new mongoose.Types.ObjectId(projectId);
+
+  // Build filter - tasks where user is assigned AND project matches
+  let filter = {
+    projectId: projectObjectId,
+    assignee: employee._id,
+    $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+  };
+
+  if (status) {
+    filter.status = status;
+  }
+
+  console.log('[getEmployeeProjectTasks] Filter:', JSON.stringify(filter));
+
+  const tasks = await TaskModel.find(filter)
+    .populate('projectId', 'name projectId status progress')
+    .populate('assignee', 'firstName lastName fullName employeeId')
+    .sort({ createdAt: -1 });
+
+  console.log('[getEmployeeProjectTasks] Found', tasks.length, 'tasks for employee');
+
+  return sendSuccess(res, tasks, 'Employee project tasks retrieved successfully');
+});
+
+/**
  * @desc    Update task status
  * @route   PATCH /api/tasks/:id/status
  * @access  Private (Admin, HR, Superadmin, Project Managers, Assignees)
@@ -541,9 +609,10 @@ export const getTaskStatuses = asyncHandler(async (req, res) => {
   // Get tenant-specific TaskStatus model
   const TaskStatusModel = getTaskStatusModel(user.companyId);
 
-  const statuses = await TaskStatusModel.find().sort({ order: 1 }).lean();
+  // Only fetch active task statuses (exclude soft-deleted ones)
+  const statuses = await TaskStatusModel.find({ active: true }).sort({ order: 1 }).lean();
 
-  console.log('[getTaskStatuses] Found', statuses.length, 'task statuses');
+  console.log('[getTaskStatuses] Found', statuses.length, 'active task statuses');
 
   // If no statuses found, provide debug info
   if (statuses.length === 0) {
@@ -631,6 +700,31 @@ export const updateTaskStatusBoard = asyncHandler(async (req, res) => {
   return sendSuccess(res, status, 'Task status updated successfully');
 });
 
+/**
+ * @desc    Delete task status board (soft delete)
+ * @route   DELETE /api/tasks/statuses/:id
+ * @access  Private (Admin, Superadmin)
+ */
+export const deleteTaskStatusBoard = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const { id } = req.params;
+
+  // Get tenant-specific TaskStatus model
+  const TaskStatusModel = getTaskStatusModel(user.companyId);
+
+  const status = await TaskStatusModel.findById(id);
+
+  if (!status) {
+    throw buildNotFoundError('Task status not found');
+  }
+
+  // Soft delete - set active to false
+  status.active = false;
+  await status.save();
+
+  return sendSuccess(res, { id: status._id }, 'Task status deleted successfully');
+});
+
 export default {
   getTasks,
   getTaskById,
@@ -639,9 +733,11 @@ export default {
   deleteTask,
   getMyTasks,
   getTasksByProject,
+  getEmployeeProjectTasks,
   updateTaskStatus,
   getTaskStats,
   getTaskStatuses,
   createTaskStatus,
   updateTaskStatusBoard,
+  deleteTaskStatusBoard,
 };

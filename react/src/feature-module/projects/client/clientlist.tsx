@@ -31,7 +31,6 @@ const ClientList = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [viewingClient, setViewingClient] = useState<Client | null>(null);
 
   // View state - 'list' or 'grid'
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -66,7 +65,6 @@ const ClientList = () => {
 
   // Apply filters whenever clients or filter states change (Activity-style filtering)
   useEffect(() => {
-
     if (!clients || clients.length === 0) {
       setFilteredClients([]);
       return;
@@ -168,11 +166,6 @@ const ClientList = () => {
     window.dispatchEvent(new CustomEvent('delete-client', { detail: { client } }));
   };
 
-  // Handle view client details
-  const handleViewClient = (client: Client) => {
-    setViewingClient(client);
-  };
-
   // Handle edit client
   const handleEditClient = (client: any) => {
     setSelectedClient(client);
@@ -194,15 +187,7 @@ const ClientList = () => {
       title: 'Client ID',
       dataIndex: '_id',
       render: (text: string, record: any) => (
-        <Link
-          to="#"
-          data-bs-toggle="modal"
-          data-bs-target="#view_client"
-          onClick={(e) => {
-            e.preventDefault();
-            handleViewClient(record);
-          }}
-        >
+        <Link to={`/clients-details/${record._id}`}>
           {record.clientId ? record.clientId.toUpperCase() : record._id.slice(-8).toUpperCase()}
         </Link>
       ),
@@ -214,14 +199,8 @@ const ClientList = () => {
       render: (text: string, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <Link
-            to="#"
+            to={`/clients-details/${record._id}`}
             className="avatar avatar-md border avatar-rounded"
-            data-bs-toggle="modal"
-            data-bs-target="#view_client"
-            onClick={(e) => {
-              e.preventDefault();
-              handleViewClient(record);
-            }}
           >
             <ImageWithBasePath
               src={record.logo || `assets/img/users/user-01.jpg`}
@@ -232,17 +211,7 @@ const ClientList = () => {
           </Link>
           <div className="ms-2">
             <h6 className="fw-medium">
-              <Link
-                to="#"
-                data-bs-toggle="modal"
-                data-bs-target="#view_client"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleViewClient(record);
-                }}
-              >
-                {record.name}
-              </Link>
+              <Link to={`/clients-details/${record._id}`}>{record.name}</Link>
             </h6>
             <span className="fs-12 fw-normal">{record.company}</span>
           </div>
@@ -835,14 +804,8 @@ const ClientList = () => {
                                   </div>
                                   <div>
                                     <Link
-                                      to="#"
+                                      to={`/clients-details/${client._id}`}
                                       className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#view_client"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        handleViewClient(client);
-                                      }}
                                     >
                                       <ImageWithBasePath
                                         src={client.logo || 'assets/img/users/user-39.jpg'}
@@ -899,17 +862,7 @@ const ClientList = () => {
                                 </div>
                                 <div className="text-center mb-3">
                                   <h6 className="mb-1">
-                                    <Link
-                                      to="#"
-                                      data-bs-toggle="modal"
-                                      data-bs-target="#view_client"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        handleViewClient(client);
-                                      }}
-                                    >
-                                      {client.name}
-                                    </Link>
+                                    <Link to={`/clients-details/${client._id}`}>{client.name}</Link>
                                   </h6>
                                   <span
                                     className={`badge fs-10 fw-medium ${
