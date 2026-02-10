@@ -3,9 +3,9 @@
  * Replaces Socket.IO-based promotion operations with REST API calls
  */
 
-import { useState, useCallback, useEffect } from 'react';
 import { message } from 'antd';
-import { get, post, put, del, buildParams, ApiResponse, getAuthToken } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, post, put } from '../services/api';
 
 export interface Promotion {
   _id: string;
@@ -27,7 +27,7 @@ export interface Promotion {
     salary?: number;
   };
   promotionDate: string;
-  promotionType?: 'promotion' | 'demotion' | 'transfer';
+  promotionType?: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
   reason?: string;
   status: 'pending' | 'approved' | 'applied' | 'cancelled' | 'rejected';
   isDue?: boolean;
@@ -86,7 +86,7 @@ export interface CreatePromotionRequest {
     designationId: string;
   };
   promotionDate: string;
-  promotionType?: 'promotion' | 'demotion' | 'transfer';
+  promotionType?: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
   reason?: string;
   notes?: string;
 }

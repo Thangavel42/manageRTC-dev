@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Socket } from "socket.io-client";
-import { useSocket } from "../../SocketContext";
 import { all_routes } from "../router/all_routes";
 import CommonSelect from "../../core/common/commonSelect";
 import Table from "../../core/common/dataTable/index";
@@ -10,6 +8,8 @@ import PredefinedDateRanges from "../../core/common/datePicker";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
 
+// API Base URL
+const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 interface User {
   _id: string;
@@ -34,12 +34,12 @@ type FormData = {
 
 const Users = () => {
   // --- STATE MANAGEMENT ---
-  const socket = useSocket() as Socket | null;
   const [data, setData] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [filters, setFilters] = useState({
     dateRange: null,
@@ -69,9 +69,11 @@ const Users = () => {
     { value: "Employee", label: "Employee" },
     { value: "Client", label: "Client" },
   ];
+
   const handleFilterChange = (filterName: string, value: any) => {
     setFilters((prevFilters) => ({ ...prevFilters, [filterName]: value }));
   };
+
   // --- HANDLER FUNCTIONS ---
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -80,14 +82,46 @@ const Users = () => {
     setFormData((prevState) => ({ ...prevState, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
       alert("Passwords do not match!");
       return;
     }
-    if (socket) {
-      socket.emit("admin/users/create", formData);
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        await fetchUsers();
+        // Reset form
+        setFormData({
+          firstName: "",
+          lastName: "",
+          username: "",
+          email: "",
+          password: "",
+          confirmPassword: "",
+          phone: "",
+          role: "Employee",
+        });
+        // Close modal using Bootstrap modal API
+        const modalElement = document.querySelector('#add_users .btn-close') as HTMLElement;
+        if (modalElement) modalElement.click();
+      } else {
+        alert(result.error || 'Failed to create user');
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      alert('Failed to create user');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -102,13 +136,33 @@ const Users = () => {
     setEditingUser(user);
   };
 
-  const handleUpdateSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (socket && editingUser) {
-      socket.emit("admin/users/update", {
-        userId: editingUser._id,
-        updatedData: formData,
+    if (!editingUser) return;
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users/${editingUser._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
       });
+
+      const result = await response.json();
+      if (result.success) {
+        await fetchUsers();
+        setEditingUser(null);
+        // Close modal using Bootstrap modal API
+        const modalElement = document.querySelector('#edit_user .btn-close') as HTMLElement;
+        if (modalElement) modalElement.click();
+      } else {
+        alert(result.error || 'Failed to update user');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -116,58 +170,62 @@ const Users = () => {
     setUserToDelete(userId);
   };
 
-  const confirmDelete = () => {
-    if (socket && userToDelete) {
-      socket.emit("admin/users/delete", { userId: userToDelete });
-      setUserToDelete(null);
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users/${userToDelete}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        await fetchUsers();
+        setUserToDelete(null);
+        // Close modal using Bootstrap modal API
+        const modalElement = document.querySelector('#delete-modal .btn-danger') as HTMLElement;
+        if (modalElement) modalElement.click();
+      } else {
+        alert(result.error || 'Failed to delete user');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Failed to delete user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // --- FETCH USERS ---
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (filters.role !== 'All') queryParams.append('role', filters.role);
+      if (filters.status !== 'All') queryParams.append('status', filters.status);
+      if (filters.sortBy !== 'recent') queryParams.append('sortBy', filters.sortBy);
+
+      const response = await fetch(`${API_BASE}/api/admin/users?${queryParams.toString()}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setData(result.data);
+      } else {
+        setError(result.error || 'Failed to fetch users');
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setError('Failed to fetch users');
+    } finally {
+      setLoading(false);
     }
   };
 
   // --- EFFECTS ---
   useEffect(() => {
-    if (socket) {
-      setLoading(true);
-      socket.emit("admin/users/get", filters);
-    }
-  }, [filters, socket]);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.emit("admin/users/get");
-    setLoading(true);
-
-    const handleGetResponse = (response: {
-      done: boolean;
-      data: User[];
-      error?: string;
-    }) => {
-      if (response.done) {
-        setData(response.data);
-      } else {
-        setError(response.error || "Failed to fetch users.");
-      }
-      setLoading(false);
-    };
-
-    const handleListUpdate = (response: {
-      done: boolean;
-      data: User[];
-      error?: string;
-    }) => {
-      if (response.done) {
-        setData(response.data);
-      }
-    };
-
-    socket.on("admin/users/get-response", handleGetResponse);
-    socket.on("admin/users/list-update", handleListUpdate);
-
-    return () => {
-      socket.off("admin/users/get-response", handleGetResponse);
-      socket.off("admin/users/list-update", handleListUpdate);
-    };
-  }, [socket]);
+    fetchUsers();
+  }, [filters]);
 
   useEffect(() => {
     if (editingUser) {
@@ -231,7 +289,7 @@ const Users = () => {
       sorter: (a: User, b: User) => a.role.localeCompare(b.role),
     },
     {
-      title: "Status",
+      title: "Actions",
       render: (_: any, record: User) => (
         <div className="action-icon d-inline-flex align-items-center">
           <button
@@ -628,8 +686,6 @@ const Users = () => {
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Role</label>
-                      {/* Note: This assumes your CommonSelect component takes 'value' and 'onChange' props that work with a standard event.
-                        If it requires a special handler, you may need to adjust the handleChange function. */}
                       <CommonSelect
                         className="select"
                         options={roleChoose}
@@ -654,121 +710,23 @@ const Users = () => {
                       />
                     </div>
                   </div>
-                  <div className="col-md-12">
-                    <div className="card">
-                      <div className="card-body p-0">
-                        <div className="table-responsive">
-                          <table className="table">
-                            <thead className="thead-light">
-                              <tr>
-                                <th>Module Permissions</th>
-                                <th>Read</th>
-                                <th>Write</th>
-                                <th>Create</th>
-                                <th>Delete</th>
-                                <th>Import</th>
-                                <th>Export</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Employee
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Holidays
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Leaves
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Events
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-white border me-2"
+                  className="btn btn-light border me-2"
                   data-bs-dismiss="modal"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  data-bs-dismiss="modal"
                   className="btn btn-primary"
+                  disabled={submitting}
                 >
-                  Add User
+                  {submitting ? 'Creating...' : 'Add User'}
                 </button>
               </div>
             </form>
@@ -803,6 +761,7 @@ const Users = () => {
                         name="firstName"
                         value={formData.firstName}
                         onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
@@ -815,6 +774,7 @@ const Users = () => {
                         name="lastName"
                         value={formData.lastName}
                         onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
@@ -827,6 +787,7 @@ const Users = () => {
                         name="username"
                         value={formData.username}
                         onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
@@ -839,6 +800,7 @@ const Users = () => {
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
+                        required
                       />
                     </div>
                   </div>
@@ -881,6 +843,7 @@ const Users = () => {
                           name="confirmPassword"
                           value={formData.confirmPassword}
                           onChange={handleChange}
+                          placeholder="Leave blank to keep unchanged"
                         />
                         <span
                           className={`ti toggle-passwords ${
@@ -915,115 +878,11 @@ const Users = () => {
                         name="role"
                         value={formData.role}
                         onChange={handleChange}
+                        required
                       >
                         <option value="Employee">Employee</option>
                         <option value="Client">Client</option>
                       </select>
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="card">
-                      <div className="card-body p-0">
-                        <div className="table-responsive">
-                          <table className="table">
-                            <thead className="thead-light">
-                              <tr>
-                                <th>Module Permissions</th>
-                                <th>Read</th>
-                                <th>Write</th>
-                                <th>Create</th>
-                                <th>Delete</th>
-                                <th>Import</th>
-                                <th>Export</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Employee
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                          defaultChecked={
-                                            index === 0 || index === 2
-                                          }
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Holidays
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                          defaultChecked={index < 3}
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Leaves
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                          defaultChecked
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                              <tr>
-                                <td>
-                                  <h6 className="fs-14 fw-normal text-gray-9">
-                                    Events
-                                  </h6>
-                                </td>
-                                {Array(6)
-                                  .fill(null)
-                                  .map((_, index) => (
-                                    <td key={index}>
-                                      <div className="form-check form-check-md">
-                                        <input
-                                          className="form-check-input"
-                                          type="checkbox"
-                                          defaultChecked
-                                        />
-                                      </div>
-                                    </td>
-                                  ))}
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1031,17 +890,18 @@ const Users = () => {
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-white border me-2"
+                  className="btn btn-light border me-2"
                   data-bs-dismiss="modal"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  data-bs-dismiss="modal"
                   className="btn btn-primary"
+                  disabled={submitting}
                 >
-                  Update User
+                  {submitting ? 'Saving...' : 'Update User'}
                 </button>
               </div>
             </form>
@@ -1073,15 +933,16 @@ const Users = () => {
                     type="button"
                     className="btn btn-light me-3"
                     data-bs-dismiss="modal"
+                    disabled={submitting}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     className="btn btn-danger"
-                    data-bs-dismiss="modal"
+                    disabled={submitting}
                   >
-                    Yes, Delete
+                    {submitting ? 'Deleting...' : 'Yes, Delete'}
                   </button>
                 </div>
               </div>

@@ -1,21 +1,20 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { DeleteOutlined } from "@ant-design/icons";
+import { DatePicker, Input, Modal, Select } from "antd";
+import dayjs from "dayjs";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
+import { Socket } from "socket.io-client";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from '../../core/common/commonSelect';
 import Table from "../../core/common/dataTable/index";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import CommonSelect from '../../core/common/commonSelect';
 import { useSocket } from "../../SocketContext";
-import { Socket } from "socket.io-client";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Modal, Select, Input } from "antd";
-import dayjs from "dayjs";
-import { DatePicker } from "antd";
-import { format, parse } from "date-fns";
+import { all_routes } from "../router/all_routes";
 
 type TrainingRow = {
   trainingType: string;
   trainer: string;
+  trainerProfileImage?: string;
   employee: string [];
   startDate: string;
   endDate: string;
@@ -52,11 +51,11 @@ type Stats = {
   totalTrainingList: string;
 };
 
-type EmpLite = { 
-  employeeId: string; 
-  firstName: string; 
-  lastName: string; 
-  trainer?: string 
+type EmpLite = {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  trainer?: string
 };
 
 const TrainingList = () => {
@@ -76,7 +75,7 @@ const TrainingList = () => {
     const [empPopupTrainer, setEmpPopupTrainer] = useState<string>("");
     const [empPopupList, setEmpPopupList] = useState<EmpLite[]>([]);
     const [empPopupQuery, setEmpPopupQuery] = useState("");
-    
+
     const [editForm, setEditForm] = useState({
       trainingType: "",
       trainer: "",
@@ -378,7 +377,7 @@ const TrainingList = () => {
       }
 
       console.log("📤 Submitting training data:", addForm);
-      
+
       const startIso = toIsoFromDDMMYYYY(addForm.startDate);
       const endIso = toIsoFromDDMMYYYY(addForm.endDate);
 
@@ -434,7 +433,7 @@ const TrainingList = () => {
 
       const startfmt = fmtYMD(editForm.startDate);
       const endfmt = fmtYMD(editForm.endDate);
-    
+
       const timeDurationfmt= startfmt+" - "+endfmt;
 
       const payload = {
@@ -472,7 +471,7 @@ const TrainingList = () => {
     }, [socket, fetchList, fetchTypeList, fetchTrainersList, fetchEmployeeList, fetchStats, filterType, customRange]);
 
     type Option = { value: string; label: string };
-     
+
     const handleFilterChange = (opt: Option | null) => {
       const value = opt?.value ?? "alltime";
       setFilterType(value);
@@ -566,7 +565,7 @@ const TrainingList = () => {
         <div className="d-flex align-items-center file-name-icon">
           <Link to="#" className="avatar avatar-md border avatar-rounded">
             <ImageWithBasePath
-              src={"assets/img/favicon.png"}
+              src={record.trainerProfileImage || "assets/img/profiles/avatar-14.jpg"}
               className="img-fluid"
               alt="img"
             />
@@ -793,15 +792,17 @@ const TrainingList = () => {
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © SmartHR.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="#" className="text-primary">
-              Dreams
-            </Link>
-          </p>
-        </div>
+        {/* Footer */}
+                <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
+                  <p className="mb-0">2026 © amasQIS.ai</p>
+                  <p>
+                    Designed &amp; Developed By{" "}
+                    <Link to="amasqis.ai" className="text-primary">
+                      amasQIS.ai
+                    </Link>
+                  </p>
+                </div>
+                {/* /Footer */}
       </div>
       {/* /Page Wrapper */}
       {/* Add Training */}
@@ -830,7 +831,7 @@ const TrainingList = () => {
                             </label>
                             <CommonSelect
                               className="select"
-                              defaultValue={toOption(addForm.trainingType)} 
+                              defaultValue={toOption(addForm.trainingType)}
                               onChange={(opt: OptionTypes | null) =>setAddForm({ ...addForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") })}
                               options={trainingTypeOptions}
                             />
@@ -843,7 +844,7 @@ const TrainingList = () => {
                             </label>
                             <CommonSelect
                               className="select"
-                              defaultValue={toOptionTrainer(addForm.trainer)} 
+                              defaultValue={toOptionTrainer(addForm.trainer)}
                               onChange={(opt: OptionTrainer | null) =>setAddForm({ ...addForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") })}
                               options={trainingTrainerOptions}
                             />
@@ -860,12 +861,12 @@ const TrainingList = () => {
                               style={{width:'100%'}}
                               showSearch
                               optionFilterProp="label"
-                              listHeight={256}        
+                              listHeight={256}
                               defaultValue={addForm.employee} // string[]
                               options={trainingEmployeeOptions} // OptionEmployee[]
                               onChange={(vals: string[]) => setAddForm({ ...addForm, employee: vals })}
                               getPopupContainer={getModalContainerEmp}  // render dropdown inside modal
-                              dropdownStyle={{ zIndex: 2000 }} 
+                              dropdownStyle={{ zIndex: 2000 }}
                               placeholder="Select employees"
                             />
                           </div>
@@ -999,7 +1000,7 @@ const TrainingList = () => {
                             </label>
                             <CommonSelect
                               className="select"
-                              defaultValue={toOption(editForm.trainingType)} 
+                              defaultValue={toOption(editForm.trainingType)}
                               onChange={(opt: OptionTypes | null) =>setEditForm({ ...editForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") })}
                               options={trainingTypeOptions}
                             />
@@ -1010,7 +1011,7 @@ const TrainingList = () => {
                             <label className="form-label">Trainer</label>
                             <CommonSelect
                               className="select"
-                              defaultValue={toOptionTrainer(editForm.trainer)} 
+                              defaultValue={toOptionTrainer(editForm.trainer)}
                               onChange={(opt: OptionTrainer | null) =>setEditForm({ ...editForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") })}
                               options={trainingTrainerOptions}
                             />
@@ -1032,7 +1033,7 @@ const TrainingList = () => {
                                 setEditForm({ ...editForm, employee: vals })   // keep only ids in state
                               }
                               getPopupContainer={getModalContainer}  // render dropdown inside modal
-                              dropdownStyle={{ zIndex: 2000 }} 
+                              dropdownStyle={{ zIndex: 2000 }}
                               placeholder="Select employees"
                             />
                           </div>
@@ -1047,7 +1048,7 @@ const TrainingList = () => {
                               onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })}
                             />
                           </div>
-                        </div>            
+                        </div>
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
@@ -1061,7 +1062,7 @@ const TrainingList = () => {
                                   type: "mask",
                                 }}
                                 getPopupContainer={getModalContainer}
-                                placeholder="DD-MM-YYYY" 
+                                placeholder="DD-MM-YYYY"
                                 defaultValue={editForm.startDate ? dayjs(editForm.startDate, "DD-MM-YYYY") : null}
                                 onChange={(_, dateString) => setEditForm({ ...editForm, startDate: dateString as string })}
                               />
@@ -1084,7 +1085,7 @@ const TrainingList = () => {
                                   type: "mask",
                                 }}
                                 getPopupContainer={getModalContainer}
-                                placeholder="DD-MM-YYYY" 
+                                placeholder="DD-MM-YYYY"
                                 defaultValue={editForm.endDate ? dayjs(editForm.endDate, "DD-MM-YYYY") : null}
                                 onChange={(_, dateString) => setEditForm({ ...editForm, endDate: dateString as string })}
                               />
@@ -1145,7 +1146,7 @@ const TrainingList = () => {
             </div>
           </div>
         </div>
-        {/* /Edit Training */}     
+        {/* /Edit Training */}
         <Modal
           open={empPopupOpen}
           onCancel={() => setEmpPopupOpen(false)}

@@ -1,14 +1,14 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Modal } from "antd";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
+import { Socket } from "socket.io-client";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from '../../core/common/commonSelect';
 import Table from "../../core/common/dataTable/index";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import CommonSelect from '../../core/common/commonSelect';
 import { useSocket } from "../../SocketContext";
-import { Socket } from "socket.io-client";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Modal } from "antd";
+import { all_routes } from "../router/all_routes";
 
 type TrainersRow = {
   trainer: string;
@@ -17,6 +17,9 @@ type TrainersRow = {
   desc: string;
   status: string;
   trainerId: string;
+  trainerType?: string;
+  employeeId?: string;
+  profileImage?: string;
 };
 
 type Stats = {
@@ -28,10 +31,9 @@ type Employee = {
   employeeId: string;
   firstName: string;
   lastName: string;
-  contact?: {
-    email?: string;
-    phone?: string;
-  };
+  email?: string;
+  phone?: string;
+  profileImage?: string;
 };
 
 const Trainers = () => {
@@ -46,7 +48,8 @@ const Trainers = () => {
     const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-    
+    const [trainerType, setTrainerType] = useState<"Internal" | "External">("Internal");
+
     const [editForm, setEditForm] = useState({
       trainer: "",
       phone: "",
@@ -54,6 +57,8 @@ const Trainers = () => {
       desc: "",
       status: "Active",
       trainerId: "",
+      trainerType: "Internal" as "Internal" | "External",
+      employeeId: "",
     });
 
     const openEditModal = (row: any) => {
@@ -64,6 +69,8 @@ const Trainers = () => {
         desc: row.desc || "",
         status: row.status || "Active",
         trainerId: row.trainerId,
+        trainerType: row.trainerType || "External",
+        employeeId: row.employeeId || "",
       });
     };
 
@@ -78,6 +85,8 @@ const Trainers = () => {
       email: "",
       desc: "",
       status: "Active",
+      trainerType: "Internal" as "Internal" | "External",
+      employeeId: "",
     });
 
     const confirmDelete = (onConfirm: () => void) => {
@@ -206,15 +215,30 @@ const Trainers = () => {
       [socket]
     );
 
+    const handleTrainerTypeChange = (opt: { value: string; label: string } | null) => {
+      const type = opt?.value as "Internal" | "External" || "Internal";
+      setTrainerType(type);
+      setAddForm({
+        trainer: "",
+        phone: "",
+        email: "",
+        desc: "",
+        status: "Active",
+        trainerType: type,
+        employeeId: "",
+      });
+      setSelectedEmployee(null);
+    };
+
     const handleEmployeeSelect = (opt: { value: string; label: string } | null) => {
       if (!opt) {
         setSelectedEmployee(null);
         setAddForm({
+          ...addForm,
           trainer: "",
           phone: "",
           email: "",
-          desc: "",
-          status: "Active",
+          employeeId: "",
         });
         return;
       }
@@ -222,11 +246,13 @@ const Trainers = () => {
       const employee = employees.find(emp => emp._id === opt.value);
       if (employee) {
         setSelectedEmployee(employee);
+        console.log("📋 Selected employee:", employee);
         setAddForm({
           ...addForm,
           trainer: `${employee.firstName} ${employee.lastName}`,
-          phone: employee.contact?.phone || "",
-          email: employee.contact?.email || "",
+          phone: employee.phone || "",
+          email: employee.email || "",
+          employeeId: employee._id,
         });
       }
     };
@@ -234,61 +260,129 @@ const Trainers = () => {
     const handleAddSave = () => {
         if (!socket) return;
 
-        // basic validation
-        if (!addForm.trainer || !addForm.phone || !addForm.email || !addForm.desc || !addForm.status) {
-          // toast.warn("Please fill required fields");
-          return;
-      }
-        
+        // Validation based on trainer type
+        if (addForm.trainerType === "Internal") {
+          // For internal trainers, only need employeeId, desc, and status
+          if (!addForm.employeeId || !addForm.desc || !addForm.status) {
+            alert("Please select an employee and fill all required fields");
+            return;
+          }
+        } else {
+          // For external trainers, need all fields
+          if (!addForm.trainer || !addForm.phone || !addForm.email || !addForm.desc || !addForm.status) {
+            alert("Please fill all required fields");
+            return;
+          }
 
-      const payload = {
-        trainer: addForm.trainer,
-        phone: addForm.phone,
-        email: addForm.email,
+          // Validate email format
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(addForm.email)) {
+            alert("Please enter a valid email address");
+            return;
+          }
+
+          // Validate phone number (only +, (, ), space, and numbers)
+          const phoneRegex = /^[+()\s\d]+$/;
+          if (!phoneRegex.test(addForm.phone)) {
+            alert("Phone number can only contain +, (, ), space, and numbers");
+            return;
+          }
+        }
+
+      const payload: any = {
         desc: addForm.desc,
         status: addForm.status as "Active" | "Inactive",
+        trainerType: addForm.trainerType,
       };
 
+      // For internal trainers, only send employeeId
+      if (addForm.trainerType === "Internal") {
+        payload.employeeId = addForm.employeeId;
+      } else {
+        // For external trainers, send full details
+        payload.trainer = addForm.trainer;
+        payload.phone = addForm.phone;
+        payload.email = addForm.email;
+      }
+
+      console.log("📤 Adding trainer:", payload);
       socket.emit("hr/trainers/add-trainers", payload);
-      // modal has data-bs-dismiss; optional: reset form
+
+      // Reset form
       setAddForm({
         trainer: "",
         desc: "",
         status: "Active",
         phone: "",
         email: "",
+        trainerType: "Internal",
+        employeeId: "",
       });
       setSelectedEmployee(null);
+      setTrainerType("Internal");
     };
 
     const handleEditSave = () => {
         if (!socket) return;
 
-      // basic validation
-        if (!editForm.trainer || !editForm.phone || !editForm.email || !editForm.desc || !editForm.status || !editForm.trainerId) {
-        // toast.warn("Please fill required fields");
+      // Validation based on trainer type
+      if (editForm.trainerType === "Internal") {
+        // For internal trainers, only need employeeId, desc, and status
+        if (!editForm.employeeId || !editForm.desc || !editForm.status || !editForm.trainerId) {
+          alert("Please fill all required fields");
           return;
+        }
+      } else {
+        // For external trainers, need all fields
+        if (!editForm.trainer || !editForm.phone || !editForm.email || !editForm.desc || !editForm.status || !editForm.trainerId) {
+          alert("Please fill all required fields");
+          return;
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(editForm.email)) {
+          alert("Please enter a valid email address");
+          return;
+        }
+
+        // Validate phone number (only +, (, ), space, and numbers)
+        const phoneRegex = /^[+()\s\d]+$/;
+        if (!phoneRegex.test(editForm.phone)) {
+          alert("Phone number can only contain +, (, ), space, and numbers");
+          return;
+        }
       }
 
-      const payload = {
-        trainer: editForm.trainer,
-        status: editForm.status as "Active" | "Inactive",
+      const payload: any = {
         desc: editForm.desc,
-        phone: editForm.phone,
-        email: editForm.email,
+        status: editForm.status as "Active" | "Inactive",
         trainerId: editForm.trainerId,
-        };
+        trainerType: editForm.trainerType,
+      };
 
+      // For internal trainers, only include employeeId
+      if (editForm.trainerType === "Internal") {
+        payload.employeeId = editForm.employeeId;
+      } else {
+        // For external trainers, include full details
+        payload.trainer = editForm.trainer;
+        payload.phone = editForm.phone;
+        payload.email = editForm.email;
+      }
+
+      console.log("📤 Updating trainer:", payload);
       socket.emit("hr/trainers/update-trainers", payload);
-      // modal has data-bs-dismiss; optional: reset form
+
+      // Reset form
       setEditForm({
         trainer: "",
         phone: "",
         email: "",
         desc: "",
-        status: "Active", 
+        status: "Active",
         trainerId:"",
-      });
+        trainerType: "Internal",        employeeId: "",      });
     };
 
     const fetchStats = useCallback(() => {
@@ -303,7 +397,7 @@ const Trainers = () => {
     }, [socket, fetchList, fetchStats, filterType, customRange]);
 
     type Option = { value: string; label: string };
-     
+
     const handleFilterChange = (opt: Option | null) => {
       const value = opt?.value ?? "alltime";
       setFilterType(value);
@@ -340,7 +434,11 @@ const Trainers = () => {
           render: (text: string, record: any) => (
             <div className="d-flex align-items-center file-name-icon">
                 <Link to="#" className="avatar avatar-md border avatar-rounded">
-                    <ImageWithBasePath src={"assets/img/favicon.png"} className="img-fluid" alt="img"/>
+                    <ImageWithBasePath
+                      src={record.profileImage || "assets/img/profiles/avatar-14.jpg"}
+                      className="img-fluid"
+                      alt="img"
+                    />
                 </Link>
                 <div className="ms-2">
                     <h6 className="fw-medium">
@@ -365,6 +463,27 @@ const Trainers = () => {
             title: "Description",
             dataIndex: "desc",
             sorter: (a: TrainersRow, b: TrainersRow) => a.desc.localeCompare(b.desc),
+        },
+        {
+            title: "Type",
+            dataIndex: "trainerType",
+            render: (text: string) => {
+              const type = text || "External";
+              const isInternal = type === "Internal";
+              const cls = `badge ${isInternal ? "badge-info" : "badge-warning"} d-inline-flex align-items-center badge-xs`;
+              return (
+                <span className={cls}>
+                  <i className={`ti ${isInternal ? "ti-users" : "ti-user"} me-1`} />
+                  {type}
+                </span>
+              );
+            },
+            filters: [
+              { text: "Internal", value: "Internal" },
+              { text: "External", value: "External" },
+            ],
+            onFilter: (val: any, rec: any) => (rec.trainerType || "External") === val,
+            sorter: (a: TrainersRow, b: TrainersRow) => (a.trainerType || "External").localeCompare(b.trainerType || "External"),
         },
         {
             title: "Status",
@@ -477,7 +596,7 @@ const Trainers = () => {
                           ]}
                           defaultValue={filterType}
                           onChange={handleFilterChange}
-                        />                    
+                        />
                   </Link>
                 </div>
               </div>
@@ -488,15 +607,17 @@ const Trainers = () => {
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © SmartHR.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="#" className="text-primary">
-              Dreams
-            </Link>
-          </p>
-        </div>
+       {/* Footer */}
+               <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
+                 <p className="mb-0">2026 © amasQIS.ai</p>
+                 <p>
+                   Designed &amp; Developed By{" "}
+                   <Link to="amasqis.ai" className="text-primary">
+                     amasQIS.ai
+                   </Link>
+                 </p>
+               </div>
+               {/* /Footer */}
       </div>
       {/* /Page Wrapper */}
       {/* Add Trainer */}
@@ -520,60 +641,98 @@ const Trainers = () => {
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Select Employee <span className="text-danger">*</span>
+                          Trainer Type <span className="text-danger">*</span>
                         </label>
                         <CommonSelect
                           className="select"
-                          options={employees.map(emp => ({
-                            value: emp._id,
-                            label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
-                          }))}
-                          value={selectedEmployee ? {
-                            value: selectedEmployee._id,
-                            label: `${selectedEmployee.employeeId} - ${selectedEmployee.firstName} ${selectedEmployee.lastName}`
-                          } : null}
-                          onChange={handleEmployeeSelect}
+                          options={[
+                            { value: "Internal", label: "Internal (Employee)" },
+                            { value: "External", label: "External" }
+                          ]}
+                          value={{ value: trainerType, label: trainerType === "Internal" ? "Internal (Employee)" : "External" }}
+                          onChange={handleTrainerTypeChange}
                         />
                       </div>
                     </div>
+
+                    {trainerType === "Internal" ? (
+                      <>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Select Employee <span className="text-danger">*</span>
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              options={employees.map(emp => ({
+                                value: emp._id,
+                                label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
+                              }))}
+                              value={selectedEmployee ? {
+                                value: selectedEmployee._id,
+                                label: `${selectedEmployee.employeeId} - ${selectedEmployee.firstName} ${selectedEmployee.lastName}`
+                              } : null}
+                              onChange={handleEmployeeSelect}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Trainer Name <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Enter trainer name"
+                              value={addForm.trainer}
+                              onChange={(e) => setAddForm({ ...addForm, trainer: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Phone <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Enter phone number"
+                              value={addForm.phone}
+                              onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Email <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="email"
+                              className="form-control"
+                              placeholder="Enter email address"
+                              value={addForm.email}
+                              onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Phone <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={addForm.phone}
-                          readOnly
-                          disabled
-                          style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Email <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={addForm.email}
-                          readOnly
-                          disabled
-                          style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Description
+                          Description <span className="text-danger">*</span>
                         </label>
                         <textarea
                           className="form-control"
-                          rows={1} value={addForm.desc} onChange ={(e) => setAddForm({ ...addForm, desc: e.target.value})}
+                          rows={3}
+                          value={addForm.desc}
+                          onChange={(e) => setAddForm({ ...addForm, desc: e.target.value})}
                         />
                       </div>
                     </div>
@@ -635,44 +794,89 @@ const Trainers = () => {
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Name&nbsp;
+                          Trainer Type <span className="text-danger">*</span>
+                        </label>
+                        <CommonSelect
+                          className="select"
+                          options={[
+                            { value: "Internal", label: "Internal (Employee)" },
+                            { value: "External", label: "External" }
+                          ]}
+                          value={{
+                            value: editForm.trainerType,
+                            label: editForm.trainerType === "Internal" ? "Internal (Employee)" : "External"
+                          }}
+                          onChange={(opt: { value: string } | null) =>
+                            setEditForm({ ...editForm, trainerType: (opt?.value as "Internal" | "External") || "External" })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Trainer Name <span className="text-danger">*</span>
                         </label>
                         <input
                           type="text"
                           className="form-control"
                           value={editForm.trainer}
                           onChange={(e) => setEditForm({ ...editForm, trainer: e.target.value })}
+                          readOnly={editForm.trainerType === "Internal"}
+                          disabled={editForm.trainerType === "Internal"}
+                          style={editForm.trainerType === "Internal" ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
                         />
+                        {editForm.trainerType === "Internal" && (
+                          <small className="text-muted">Name is fetched from employee record</small>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Phone</label>
-                        <textarea
+                        <label className="form-label">
+                          Phone <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="text"
                           className="form-control"
-                          rows={1}
                           value={editForm.phone}
                           onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          readOnly={editForm.trainerType === "Internal"}
+                          disabled={editForm.trainerType === "Internal"}
+                          style={editForm.trainerType === "Internal" ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
                         />
+                        {editForm.trainerType === "Internal" && (
+                          <small className="text-muted">Phone is fetched from employee record</small>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Email</label>
-                        <textarea
+                        <label className="form-label">
+                          Email <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="email"
                           className="form-control"
-                          rows={1}
                           value={editForm.email}
                           onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          readOnly={editForm.trainerType === "Internal"}
+                          disabled={editForm.trainerType === "Internal"}
+                          style={editForm.trainerType === "Internal" ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
                         />
+                        {editForm.trainerType === "Internal" && (
+                          <small className="text-muted">Email is fetched from employee record</small>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Description</label>
+                        <label className="form-label">
+                          Description <span className="text-danger">*</span>
+                        </label>
                         <textarea
                           className="form-control"
-                          rows={1}
+                          rows={3}
                           value={editForm.desc}
                           onChange={(e) => setEditForm({ ...editForm, desc: e.target.value })}
                         />
