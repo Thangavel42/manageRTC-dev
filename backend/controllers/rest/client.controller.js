@@ -24,8 +24,18 @@ import {
   sendCreated,
   sendSuccess
 } from '../../utils/apiResponse.js';
-import { devError, devLog } from '../../utils/logger.js';
 import { getTenantModel } from '../../utils/mongooseMultiTenant.js';
+import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+
+/**
+ * Helper function to get tenant-specific Client model
+ */
+const getClientModel = (companyId) => {
+  if (!companyId) {
+    return Client;
+  }
+  return getTenantModel(companyId, 'Client', Client.schema);
+};
 
 /**
  * Helper function to check if user has required role
@@ -46,16 +56,6 @@ const sendForbidden = (res, message = 'You do not have permission to access this
     success: false,
     error: { message }
   });
-};
-
-/**
- * Helper function to get tenant-specific Client model
- */
-const getClientModel = (companyId) => {
-  if (!companyId) {
-    return Client;
-  }
-  return getTenantModel(companyId, 'Client', Client.schema);
 };
 
 /**
@@ -220,6 +220,12 @@ export const updateClient = asyncHandler(async (req, res) => {
   if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
     return sendForbidden(res, 'You do not have permission to update clients');
   }
+
+  // Debug logging
+  console.log('=== UPDATE CLIENT DEBUG ===');
+  console.log('Received req.body:', JSON.stringify(req.body, null, 2));
+  console.log('socialLinks in req.body:', req.body.socialLinks);
+  console.log('==========================');
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {

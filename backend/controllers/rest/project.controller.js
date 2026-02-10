@@ -55,7 +55,7 @@ export const getProjects = asyncHandler(async (req, res) => {
     $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
-  // Debug logging - lightweight
+  // Debug logging
   devLog('[getProjects] Using database:', user.companyId || 'default');
   devLog('[getProjects] User object:', JSON.stringify(user, null, 2));
   devLog('[getProjects] User role:', user.role);

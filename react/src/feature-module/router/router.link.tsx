@@ -120,9 +120,9 @@ import PayslipReport from '../administration/reports/payslipreport';
 import ProjectReport from '../administration/reports/projectreport';
 import TaskReport from '../administration/reports/taskreport';
 import UserReports from '../administration/reports/userreports';
-import PermissionPage from '../administration/user-management/permissionpage';
-import RolesPermission from '../administration/user-management/rolePermission';
-import Users from '../administration/user-management/users';
+import PermissionPage from '../super-admin/permissionpage';
+import RolesPermission from '../super-admin/rolePermission';
+import Users from '../super-admin/users';
 import IncomingCall from '../application/call/incomingcall';
 import OutgoingCalls from '../application/call/outgingcalls';
 import Videocallss from '../application/call/videocalls';
@@ -1397,7 +1397,7 @@ export const publicRoutes = [
   {
     path: routes.permissionpage,
     element: <PermissionPage />,
-    roles: ['public'],
+    roles: ['superadmin'],
   },
   {
     path: routes.expensesreport,
@@ -1515,17 +1515,17 @@ export const publicRoutes = [
   {
     path: routes.users,
     element: <Users />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.rolePermission,
     element: <RolesPermission />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.permissionpage,
     element: <Permission />,
-    roles: ['admin', 'superadmin'],
+    roles: ['superadmin'],
   },
   {
     path: routes.invoiceDetails,
@@ -1759,7 +1759,7 @@ export const publicRoutes = [
   },
   {
     path: routes.employeeGrid,
-    element: <EmployeesGrid />,
+    element: <EmployeeList />,
     route: Route,
     roles: ['admin', 'hr', 'superadmin'],
   },
