@@ -271,8 +271,8 @@ import Permission from '../userManagement/permission';
 import RolesPermissions from '../userManagement/rolesPermissions';
 
 import Invoices from '../finance-accounts/sales/invoices';
-import AttendanceEmployee from '../hrm/attendance/attendance_employee';
 import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
+import AttendanceEmployee from '../hrm/attendance/attendance_employee';
 import BatchesList from '../hrm/attendance/batchesList';
 import LeaveAdmin from '../hrm/attendance/leaves/leaveAdmin';
 import LeaveEmployee from '../hrm/attendance/leaves/leaveEmployee';

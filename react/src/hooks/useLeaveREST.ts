@@ -5,10 +5,11 @@
  * Real-time updates via Socket.IO event listeners
  */
 
-import { useState, useCallback, useEffect } from 'react';
 import { message } from 'antd';
-import { get, post, put, del, buildParams, ApiResponse } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, post, put } from '../services/api';
 import { useSocket } from '../SocketContext';
+import { useAuth } from './useAuth';
 
 // Leave Types matching backend schema
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'on-hold';
@@ -321,7 +322,6 @@ export const useLeaveREST = () => {
       const response: ApiResponse<Leave> = await post(`/leaves/${leaveId}/approve`, { comments });
 
       if (response.success && response.data) {
-        message.success('Leave approved successfully!');
         setLeaves(prev =>
           prev.map(leave => leave._id === leaveId ? { ...leave, ...transformLeaveData(response.data!) } : leave)
         );
@@ -353,7 +353,6 @@ export const useLeaveREST = () => {
       const response: ApiResponse<Leave> = await post(`/leaves/${leaveId}/reject`, { reason });
 
       if (response.success && response.data) {
-        message.warning('Leave rejected');
         setLeaves(prev =>
           prev.map(leave => leave._id === leaveId ? { ...leave, ...transformLeaveData(response.data!) } : leave)
         );
@@ -480,6 +479,7 @@ export const useLeaveREST = () => {
 
   // Socket.IO event listeners for real-time updates
   const socket = useSocket();
+  const { userId } = useAuth();
 
   useEffect(() => {
     if (!socket) return;
@@ -491,10 +491,16 @@ export const useLeaveREST = () => {
      */
     const handleLeaveCreated = (data: any) => {
       console.log('[useLeaveREST] Leave created via broadcast:', data);
-      // Add new leave to the list
-      setLeaves(prev => [...prev, transformLeaveData(data)]);
-      // Show notification
-      message.info(`New leave request: ${data.employeeName || 'Employee'} - ${leaveTypeDisplayMap[data.leaveType] || data.leaveType}`);
+      const leave = transformLeaveData(data);
+      // Add new leave if it is not already in the list (prevents duplicates for the creator)
+      setLeaves(prev => {
+        const exists = prev.some(item => item._id === leave._id || item.leaveId === leave.leaveId);
+        return exists ? prev : [...prev, leave];
+      });
+      // Skip toast for the creator to avoid double notifications (API success + socket broadcast)
+      if (data.createdBy !== userId) {
+        message.info(`New leave request: ${data.employeeName || 'Employee'} - ${leaveTypeDisplayMap[data.leaveType] || data.leaveType}`);
+      }
     };
 
     /**
@@ -607,7 +613,7 @@ export const useLeaveREST = () => {
       socket.off('leave:your_leave_approved', handleYourLeaveApproved);
       socket.off('leave:your_leave_rejected', handleYourLeaveRejected);
     };
-  }, [socket]);
+  }, [socket, userId]);
 
   return {
     leaves,

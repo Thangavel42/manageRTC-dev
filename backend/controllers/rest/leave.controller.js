@@ -7,23 +7,21 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-    asyncHandler,
-    buildConflictError,
-    buildNotFoundError,
-    buildValidationError,
-    buildForbiddenError
+  asyncHandler,
+  buildConflictError, buildForbiddenError, buildNotFoundError,
+  buildValidationError,
+  ConflictError
 } from '../../middleware/errorHandler.js';
 import {
-    buildPagination,
-    extractUser,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
-import { broadcastLeaveEvents, getSocketIO, broadcastToCompany } from '../../utils/socketBroadcaster.js';
 import { generateId } from '../../utils/idGenerator.js';
+import logger, { logLeaveEvent } from '../../utils/logger.js';
+import { broadcastLeaveEvents, broadcastToCompany, getSocketIO } from '../../utils/socketBroadcaster.js';
 import { withTransactionRetry } from '../../utils/transactionHelper.js';
-import logger from '../../utils/logger.js';
-import { logLeaveEvent } from '../../utils/logger.js';
 
 /**
  * Helper: Check for overlapping leave requests
@@ -59,6 +57,13 @@ async function checkOverlap(collections, employeeId, startDate, endDate, exclude
 
   const overlapping = await collections.leaves.find(filter).toArray();
   return overlapping;
+}
+
+function buildLeaveIdFilter(id) {
+  if (ObjectId.isValid(id)) {
+    return { $or: [{ _id: new ObjectId(id) }, { leaveId: id }] };
+  }
+  return { leaveId: id };
 }
 
 /**
@@ -175,9 +180,45 @@ export const getLeaves = asyncHandler(async (req, res) => {
     .limit(limitNum)
     .toArray();
 
+  const employeeIds = Array.from(
+    new Set(leaves.map(leave => leave.employeeId).filter(Boolean))
+  );
+  let employeesById = new Map();
+  if (employeeIds.length > 0) {
+    const employees = await collections.employees.find({
+      $or: [
+        { employeeId: { $in: employeeIds } },
+        { clerkUserId: { $in: employeeIds } }
+      ],
+      isDeleted: { $ne: true }
+    }).toArray();
+
+    employeesById = new Map(
+      employees.flatMap(emp => {
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        const designation = emp.designation || emp.jobTitle || emp.designationName || '';
+        const record = { fullName, designation };
+        const entries = [];
+        if (emp.employeeId) entries.push([emp.employeeId, record]);
+        if (emp.clerkUserId) entries.push([emp.clerkUserId, record]);
+        return entries;
+      })
+    );
+  }
+
+  const leavesWithEmployees = leaves.map(leave => {
+    const employee = employeesById.get(leave.employeeId);
+    const employeeName = employee?.fullName || leave.employeeName || (leave.employeeId ? `User ${leave.employeeId}` : 'Unknown');
+    return {
+      ...leave,
+      employeeName,
+      employeeDesignation: employee?.designation || leave.employeeDesignation || ''
+    };
+  });
+
   const pagination = buildPagination(pageNum, limitNum, total);
 
-  return sendSuccess(res, leaves, 'Leave requests retrieved successfully', 200, pagination);
+  return sendSuccess(res, leavesWithEmployees, 'Leave requests retrieved successfully', 200, pagination);
 });
 
 /**
@@ -220,16 +261,22 @@ export const createLeave = asyncHandler(async (req, res) => {
   const leaveData = req.body;
 
   logger.info('[Leave Controller] createLeave', { companyId: user.companyId });
-        logLeaveEvent('create', result.data, user);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
-  // Get Employee record from Clerk user ID
-  const employee = await getEmployeeByClerkId(collections, user.userId);
+  // Resolve employee for this leave (admin can create for another employee)
+  const employeeLookupId = leaveData.employeeId || user.userId;
+  const employee = await collections.employees.findOne({
+    $or: [
+      { employeeId: employeeLookupId },
+      { clerkUserId: employeeLookupId }
+    ],
+    isDeleted: { $ne: true }
+  });
 
   if (!employee) {
-    throw buildNotFoundError('Employee', user.userId);
+    throw buildNotFoundError('Employee', employeeLookupId);
   }
 
   // Validate dates
@@ -240,16 +287,18 @@ export const createLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('endDate', 'End date must be after start date');
   }
 
-  // Check for overlapping leaves
-  const overlappingLeaves = await checkOverlap(
-    collections,
-    employee.employeeId,
-    leaveData.startDate,
-    leaveData.endDate
-  );
+  const shouldEnforceOverlap = user.role?.toLowerCase() === 'employee';
+  if (shouldEnforceOverlap) {
+    const overlappingLeaves = await checkOverlap(
+      collections,
+      employee.employeeId,
+      leaveData.startDate,
+      leaveData.endDate
+    );
 
-  if (overlappingLeaves && overlappingLeaves.length > 0) {
-    throw buildConflictError('You have overlapping leave requests for the same period');
+    if (overlappingLeaves && overlappingLeaves.length > 0) {
+      throw new ConflictError('You have overlapping leave requests for the same period');
+    }
   }
 
   // Get current leave balance
@@ -289,6 +338,10 @@ export const createLeave = asyncHandler(async (req, res) => {
 
   // Get created leave
   const leave = await collections.leaves.findOne({ _id: result.insertedId });
+
+  if (leave) {
+    logLeaveEvent('create', leave, user);
+  }
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -336,17 +389,20 @@ export const updateLeave = asyncHandler(async (req, res) => {
   if (updateData.startDate || updateData.endDate) {
     const newStartDate = updateData.startDate || leave.startDate;
     const newEndDate = updateData.endDate || leave.endDate;
+    const shouldEnforceOverlap = user.role?.toLowerCase() === 'employee';
 
-    const overlappingLeaves = await checkOverlap(
-      collections,
-      leave.employeeId,
-      newStartDate,
-      newEndDate,
-      id
-    );
+    if (shouldEnforceOverlap) {
+      const overlappingLeaves = await checkOverlap(
+        collections,
+        leave.employeeId,
+        newStartDate,
+        newEndDate,
+        id
+      );
 
-    if (overlappingLeaves && overlappingLeaves.length > 0) {
-      throw buildConflictError('Overlapping leave requests exist for the new dates');
+      if (overlappingLeaves && overlappingLeaves.length > 0) {
+        throw new ConflictError('Overlapping leave requests exist for the new dates');
+      }
     }
   }
 
@@ -549,18 +605,17 @@ export const approveLeave = asyncHandler(async (req, res) => {
   const { comments } = req.body;
   const user = extractUser(req);
 
-  if (!ObjectId.isValid(id)) {
-    throw buildValidationError('id', 'Invalid leave ID format');
+  if (!id) {
+    throw buildValidationError('id', 'Leave ID is required');
   }
 
   logger.info('[Leave Controller] approveLeave', { id, companyId: user.companyId });
-        logLeaveEvent('approve', result.leave, user);
 
   // Use transaction for atomic leave approval and balance update
   const result = await withTransactionRetry(user.companyId, async (collections, session) => {
     // Find leave within transaction
     const leave = await collections.leaves.findOne(
-      { _id: new ObjectId(id), isDeleted: { $ne: true } },
+      { ...buildLeaveIdFilter(id), isDeleted: { $ne: true } },
       { session }
     );
 
@@ -584,7 +639,7 @@ export const approveLeave = asyncHandler(async (req, res) => {
 
     // Update leave status within transaction
     await collections.leaves.updateOne(
-      { _id: new ObjectId(id) },
+      { _id: leave._id },
       { $set: updateObj },
       { session }
     );
@@ -618,7 +673,7 @@ export const approveLeave = asyncHandler(async (req, res) => {
 
     // Get updated leave
     const updatedLeave = await collections.leaves.findOne(
-      { _id: new ObjectId(id) },
+      { _id: leave._id },
       { session }
     );
 
@@ -635,6 +690,10 @@ export const approveLeave = asyncHandler(async (req, res) => {
     if (result.employeeLeaveBalances) {
       broadcastLeaveEvents.balanceUpdated(io, user.companyId, result.employee._id, result.employeeLeaveBalances);
     }
+  }
+
+  if (result?.leave) {
+    logLeaveEvent('approve', result.leave, user);
   }
 
   return sendSuccess(res, result.leave, 'Leave request approved successfully');
@@ -654,18 +713,17 @@ export const rejectLeave = asyncHandler(async (req, res) => {
     throw buildValidationError('reason', 'Rejection reason is required');
   }
 
-  if (!ObjectId.isValid(id)) {
-    throw buildValidationError('id', 'Invalid leave ID format');
+  if (!id) {
+    throw buildValidationError('id', 'Leave ID is required');
   }
 
   logger.info('[Leave Controller] rejectLeave', { id, companyId: user.companyId });
-        logLeaveEvent('reject', updatedLeave, user);
 
   // Use transaction for consistent leave rejection
   const updatedLeave = await withTransactionRetry(user.companyId, async (collections, session) => {
     // Find leave within transaction
     const leave = await collections.leaves.findOne(
-      { _id: new ObjectId(id), isDeleted: { $ne: true } },
+      { ...buildLeaveIdFilter(id), isDeleted: { $ne: true } },
       { session }
     );
 
@@ -689,14 +747,14 @@ export const rejectLeave = asyncHandler(async (req, res) => {
 
     // Update leave status within transaction
     await collections.leaves.updateOne(
-      { _id: new ObjectId(id) },
+      { _id: leave._id },
       { $set: updateObj },
       { session }
     );
 
     // Get updated leave
     return await collections.leaves.findOne(
-      { _id: new ObjectId(id) },
+      { _id: leave._id },
       { session }
     );
   });
@@ -705,6 +763,10 @@ export const rejectLeave = asyncHandler(async (req, res) => {
   const io = getSocketIO(req);
   if (io) {
     broadcastLeaveEvents.rejected(io, user.companyId, updatedLeave, user.userId, reason);
+  }
+
+  if (updatedLeave) {
+    logLeaveEvent('reject', updatedLeave, user);
   }
 
   return sendSuccess(res, updatedLeave, 'Leave request rejected successfully');

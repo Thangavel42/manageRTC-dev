@@ -14,7 +14,7 @@ import {
   asyncHandler,
   buildConflictError,
   buildNotFoundError,
-  buildValidationError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
 import Client from '../../models/client/client.schema.js';
 import {
@@ -22,7 +22,7 @@ import {
   extractUser,
   filterAndPaginate,
   sendCreated,
-  sendSuccess,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import { getTenantModel } from '../../utils/mongooseMultiTenant.js';
 import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';

@@ -5,7 +5,6 @@
  */
 
 import { client } from '../config/db.js';
-import { getTenantCollections } from '../config/db.js';
 
 /**
  * Execute operations within a MongoDB transaction
@@ -20,9 +19,8 @@ export const withTransaction = async (companyId, operations) => {
   try {
     session.startTransaction();
 
-    // Get database name from companyId
-    const dbName = `manageRTC_${companyId}`;
-    const db = client.db(dbName);
+    // Use companyId as tenant database name (align with getTenantCollections)
+    const db = client.db(companyId);
 
     // Create collections object with session support
     const collections = {
