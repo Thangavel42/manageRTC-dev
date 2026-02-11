@@ -326,7 +326,7 @@ const Modules = () => {
 
   // Handle delete module
   const handleDeleteModule = async (moduleId: string) => {
-    if (!confirm('Are you sure you want to delete this module? This will also remove all associated pages.')) return;
+    if (!window.confirm('Are you sure you want to delete this module? This will also remove all associated pages.')) return;
     try {
       setSaving(true);
       const response = await fetch(`${API_BASE}/api/rbac/modules/${moduleId}`, {
