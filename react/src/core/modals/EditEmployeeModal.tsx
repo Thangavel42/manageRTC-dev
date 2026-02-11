@@ -170,14 +170,14 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   const { designations, fetchDesignations } = useDesignationsREST();
   const { batches, fetchBatches } = useBatchesREST();
   const { shifts: allShifts } = useShiftsREST();
-  const { updateEmployee, updatePermissions, checkLifecycleStatus, fetchEmployees, employees } = useEmployeesREST();
+  const { updateEmployee, updatePermissions, checkLifecycleStatus, fetchActiveEmployeesList, employees } = useEmployeesREST();
 
   // Initialize departments, batches, and employees on mount
   useEffect(() => {
     fetchDepartments();
     fetchBatches();
-    fetchEmployees();
-  }, [fetchDepartments, fetchBatches, fetchEmployees]);
+    fetchActiveEmployeesList();
+  }, [fetchDepartments, fetchBatches, fetchActiveEmployeesList]);
 
   // Sync departments from REST hook
   useEffect(() => {
@@ -203,19 +203,28 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     }
   }, [designations]);
 
-  // Sync managers from employees (filter for Manager role)
+  const getEmployeeOptionLabel = (emp: any) => {
+    const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.fullName || 'Unknown';
+    const id = emp.employeeId ? ` (${emp.employeeId})` : '';
+    const departmentLabel = emp.department
+      ? emp.department
+      : department.find((dep) => dep.value === emp.departmentId)?.label;
+    const departmentText = departmentLabel ? ` - ${departmentLabel}` : '';
+    return `${name}${id}${departmentText}`;
+  };
+
+  // Sync managers from employees (all active employees)
   useEffect(() => {
     if (employees && employees.length > 0) {
-      // Filter employees with role 'Manager' (case-insensitive)
       const managersList = employees
-        .filter((emp: any) => emp.account?.role?.toLowerCase() === 'manager')
+        .filter((emp: any) => (emp.status || '').toLowerCase() === 'active')
         .map((emp: any) => ({
           value: emp._id,
-          label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`,
+          label: getEmployeeOptionLabel(emp),
         }));
       setManagers([{ value: '', label: 'Select Reporting Manager' }, ...managersList]);
     }
-  }, [employees]);
+  }, [employees, department]);
 
   // Sync shift assignments
   useEffect(() => {

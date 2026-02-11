@@ -4,17 +4,16 @@
  */
 
 import express from 'express';
+import { uploadEmployeeImage } from '../../config/multer.config.js';
 import {
     bulkUploadEmployees,
     checkDuplicates,
     checkLifecycleStatus,
     createEmployee,
     deleteEmployee,
-    deleteEmployeeProfileImage,
-    getEmployeeById,
+    deleteEmployeeProfileImage, getActiveEmployeesList, getEmployeeById,
     getEmployeeReportees,
-    getEmployees,
-    getEmployeeStatsByDepartment,
+    getEmployees, getEmployeeStatsByDepartment,
     getMyProfile,
     reassignAndDeleteEmployee,
     searchEmployees,
@@ -35,7 +34,6 @@ import {
     validateBody,
     validateQuery
 } from '../../middleware/validate.js';
-import { uploadEmployeeImage } from '../../config/multer.config.js';
 
 const router = express.Router();
 
@@ -77,9 +75,23 @@ router.get(
   '/',
   authenticate,
   requireCompany,
-  requireRole('admin', 'hr', 'superadmin'),
+  (req, res, next) => {
+    const roleFilter = (req.query?.role || '').toString().toLowerCase();
+    if (roleFilter === 'manager') {
+      return next();
+    }
+    return requireRole('admin', 'hr', 'superadmin')(req, res, next);
+  },
   validateQuery(employeeSchemas.list),
   getEmployees
+);
+
+// List all active employees for dropdowns (no role restriction)
+router.get(
+  '/active-list',
+  authenticate,
+  requireCompany,
+  getActiveEmployeesList
 );
 
 // Check for duplicate email/phone before creating employee

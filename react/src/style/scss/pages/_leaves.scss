@@ -53,6 +53,21 @@
     background-repeat: no-repeat;
     background-size: contain;
 }
+
+.badge.leave-status-warning {
+    background-color: #fed24e !important;
+    color: #fff !important;
+}
+
+.badge.leave-status-success {
+    background-color: #03c95a !important;
+    color: #fff !important;
+}
+
+.badge.leave-status-danger {
+    background-color: #f8220a !important;
+    color: #fff !important;
+}
 .card-body {
     .edit-leave-details{
         display: none;

@@ -106,6 +106,38 @@ const leaveSchema = new mongoose.Schema({
     index: true
   },
 
+  // Employee-facing status
+  employeeStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+
+  // Reporting manager status
+  managerStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+
+  // HR notification status (view-only)
+  hrStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+
+  // Final status derived from manager action
+  finalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+
   // Approval details
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -199,6 +231,12 @@ const leaveSchema = new mongoose.Schema({
   reportingManager: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Employee'
+  },
+
+  // Reporting manager (employeeId for REST workflow)
+  reportingManagerId: {
+    type: String,
+    index: true
   },
 
   // Additional approvers (multi-level approval)

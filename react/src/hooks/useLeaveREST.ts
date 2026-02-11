@@ -7,7 +7,7 @@
 
 import { message } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
-import { ApiResponse, buildParams, del, get, post, put } from '../services/api';
+import { ApiResponse, buildParams, del, get, patch, post, put } from '../services/api';
 import { useSocket } from '../SocketContext';
 import { useAuth } from './useAuth';
 
@@ -29,6 +29,10 @@ export interface Leave {
   reason: string;
   detailedReason?: string;
   status: LeaveStatus;
+  employeeStatus?: LeaveStatus;
+  managerStatus?: LeaveStatus;
+  hrStatus?: LeaveStatus;
+  finalStatus?: LeaveStatus;
   reportingManagerId?: string;
   reportingManagerName?: string;
   approvedBy?: string;
@@ -73,9 +77,9 @@ export interface LeaveStats {
 
 // Status display mapping for UI
 export const statusDisplayMap: Record<LeaveStatus, { label: string; color: string; badgeClass: string }> = {
-  pending: { label: 'Pending', color: 'warning', badgeClass: 'bg-transparent-warning' },
-  approved: { label: 'Approved', color: 'success', badgeClass: 'bg-transparent-success' },
-  rejected: { label: 'Rejected', color: 'danger', badgeClass: 'bg-transparent-danger' },
+  pending: { label: 'Pending', color: 'warning', badgeClass: 'leave-status-warning' },
+  approved: { label: 'Approved', color: 'success', badgeClass: 'leave-status-success' },
+  rejected: { label: 'Rejected', color: 'danger', badgeClass: 'leave-status-danger' },
   cancelled: { label: 'Cancelled', color: 'default', badgeClass: 'bg-transparent-secondary' },
   'on-hold': { label: 'On Hold', color: 'info', badgeClass: 'bg-transparent-info' },
 };
@@ -110,10 +114,17 @@ export const leaveTypeToBackendMap: Record<string, LeaveType> = {
  * Transform backend leave data to frontend format
  */
 const transformLeaveData = (backendLeave: any): Leave => {
+  const finalStatus = backendLeave.finalStatus || backendLeave.status || 'pending';
+  const managerStatus = backendLeave.managerStatus ||
+    (backendLeave.status === 'approved' || backendLeave.status === 'rejected' ? backendLeave.status : 'pending');
   return {
     ...backendLeave,
     leaveType: backendLeave.leaveType || 'casual',
-    status: backendLeave.status || 'pending',
+    status: finalStatus,
+    finalStatus,
+    managerStatus,
+    employeeStatus: backendLeave.employeeStatus || 'pending',
+    hrStatus: backendLeave.hrStatus || 'pending',
   };
 };
 
@@ -361,6 +372,41 @@ export const useLeaveREST = () => {
       throw new Error(response.error?.message || 'Failed to reject leave');
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to reject leave';
+      setError(errorMessage);
+      message.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Manager approve/reject action
+   */
+  const managerActionLeave = useCallback(async (leaveId: string, action: 'approved' | 'rejected', reason?: string, comments?: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (action === 'rejected' && (!reason || !reason.trim())) {
+        message.error('Rejection reason is required');
+        return false;
+      }
+
+      const response: ApiResponse<Leave> = await patch(`/leaves/${leaveId}/manager-action`, {
+        action,
+        reason,
+        comments,
+      });
+
+      if (response.success && response.data) {
+        setLeaves(prev =>
+          prev.map(leave => leave._id === leaveId ? { ...leave, ...transformLeaveData(response.data!) } : leave)
+        );
+        return true;
+      }
+      throw new Error(response.error?.message || 'Failed to update manager action');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update manager action';
       setError(errorMessage);
       message.error(errorMessage);
       return false;
@@ -627,6 +673,7 @@ export const useLeaveREST = () => {
     updateLeave,
     approveLeave,
     rejectLeave,
+    managerActionLeave,
     cancelLeave,
     deleteLeave,
     getLeaveBalance,
