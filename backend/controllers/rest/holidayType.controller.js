@@ -4,20 +4,13 @@
  */
 
 import mongoose from 'mongoose';
-import HolidayType from '../../models/holidayType/holidayType.schema.js';
+import { getTenantCollections } from '../../config/db.js';
 import {
-  buildNotFoundError,
-  buildConflictError,
-  buildValidationError,
-  asyncHandler
+    asyncHandler, buildConflictError, buildNotFoundError, buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-  sendSuccess,
-  sendCreated,
-  filterAndPaginate,
-  extractUser
+    extractUser, sendCreated, sendSuccess
 } from '../../utils/apiResponse.js';
-import { getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * @desc    Get all holiday types
@@ -28,18 +21,18 @@ export const getHolidayTypes = asyncHandler(async (req, res) => {
   const { active } = req.query;
   const user = extractUser(req);
 
-  // Build filter
-  let filter = {
-    companyId: user.companyId,
-    isDeleted: false
-  };
+  // Read from tenant DB to stay consistent with HR service insertions
+  const collections = getTenantCollections(user.companyId);
 
-  // Apply active filter
+  const filter = { isDeleted: { $ne: true } };
   if (active !== undefined) {
     filter.isActive = active === 'true';
   }
 
-  const holidayTypes = await HolidayType.find(filter).sort({ displayOrder: 1, name: 1 });
+  const holidayTypes = await collections.holidayTypes
+    .find(filter)
+    .sort({ createdAt: 1, name: 1 })
+    .toArray();
 
   return sendSuccess(res, holidayTypes, 'Holiday types retrieved successfully');
 });
@@ -58,10 +51,11 @@ export const getHolidayTypeById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid holiday type ID format');
   }
 
-  const holidayType = await HolidayType.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
+  const collections = getTenantCollections(user.companyId);
+
+  const holidayType = await collections.holidayTypes.findOne({
+    _id: new mongoose.Types.ObjectId(id),
+    isDeleted: { $ne: true }
   });
 
   if (!holidayType) {
@@ -85,25 +79,36 @@ export const createHolidayType = asyncHandler(async (req, res) => {
     throw buildValidationError('fields', 'Name and code are required');
   }
 
-  // Check if code already exists
-  const existingByCode = await HolidayType.findOne({
-    companyId: user.companyId,
-    code: holidayTypeData.code.toUpperCase(),
-    isDeleted: false
+  // Use tenant collection for consistency with HR service
+  const collections = getTenantCollections(user.companyId);
+
+  const code = holidayTypeData.code.toUpperCase();
+
+  const existingByCode = await collections.holidayTypes.findOne({
+    code,
+    isDeleted: { $ne: true }
   });
 
   if (existingByCode) {
     throw buildConflictError('Holiday type with this code already exists');
   }
 
-  // Prepare holiday type data
-  holidayTypeData.companyId = user.companyId;
-  holidayTypeData.code = holidayTypeData.code.toUpperCase();
-  holidayTypeData.createdBy = user.userId;
+  const holidayTypeDoc = {
+    name: holidayTypeData.name,
+    code,
+    isActive: holidayTypeData.isActive !== false,
+    description: holidayTypeData.description || '',
+    companyId: user.companyId,
+    createdBy: user.userId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    isDeleted: false,
+  };
 
-  const holidayType = await HolidayType.create(holidayTypeData);
+  const result = await collections.holidayTypes.insertOne(holidayTypeDoc);
+  const created = { _id: result.insertedId, ...holidayTypeDoc };
 
-  return sendCreated(res, holidayType, 'Holiday type created successfully');
+  return sendCreated(res, created, 'Holiday type created successfully');
 });
 
 /**
@@ -116,31 +121,39 @@ export const updateHolidayType = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const updateData = req.body;
 
-  // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid holiday type ID format');
   }
 
-  const holidayType = await HolidayType.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
+  const collections = getTenantCollections(user.companyId);
+
+  const holidayType = await collections.holidayTypes.findOne({
+    _id: new mongoose.Types.ObjectId(id),
+    isDeleted: { $ne: true }
   });
 
   if (!holidayType) {
     throw buildNotFoundError('Holiday Type', id);
   }
 
-  // Update code to uppercase if provided
-  if (updateData.code) {
-    updateData.code = updateData.code.toUpperCase();
+  const updateDoc = {
+    ...updateData,
+    updatedBy: user.userId,
+    updatedAt: new Date()
+  };
+
+  if (updateDoc.code) {
+    updateDoc.code = updateDoc.code.toUpperCase();
   }
 
-  Object.assign(holidayType, updateData);
-  holidayType.updatedBy = user.userId;
-  await holidayType.save();
+  await collections.holidayTypes.updateOne(
+    { _id: new mongoose.Types.ObjectId(id) },
+    { $set: updateDoc }
+  );
 
-  return sendSuccess(res, holidayType, 'Holiday type updated successfully');
+  const updated = await collections.holidayTypes.findOne({ _id: new mongoose.Types.ObjectId(id) });
+
+  return sendSuccess(res, updated, 'Holiday type updated successfully');
 });
 
 /**
@@ -152,26 +165,31 @@ export const deleteHolidayType = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid holiday type ID format');
   }
 
-  const holidayType = await HolidayType.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
+  const collections = getTenantCollections(user.companyId);
+
+  const holidayType = await collections.holidayTypes.findOne({
+    _id: new mongoose.Types.ObjectId(id),
+    isDeleted: { $ne: true }
   });
 
   if (!holidayType) {
     throw buildNotFoundError('Holiday Type', id);
   }
 
-  // Soft delete
-  holidayType.isDeleted = true;
-  holidayType.deletedAt = new Date();
-  holidayType.deletedBy = user.userId;
-  await holidayType.save();
+  await collections.holidayTypes.updateOne(
+    { _id: new mongoose.Types.ObjectId(id) },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: user.userId
+      }
+    }
+  );
 
   return sendSuccess(res, {
     _id: holidayType._id,
@@ -186,10 +204,43 @@ export const deleteHolidayType = asyncHandler(async (req, res) => {
  */
 export const initializeDefaults = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+  const collections = getTenantCollections(user.companyId);
 
-  const holidayTypes = await HolidayType.initializeDefaults(user.companyId, user.userId);
+  // Check if types already exist in tenant DB
+  const existingCount = await collections.holidayTypes.countDocuments({ isDeleted: { $ne: true } });
+  if (existingCount > 0) {
+    return sendSuccess(res, [], `Holiday types already exist for this company (${existingCount} types found)`);
+  }
 
-  return sendSuccess(res, holidayTypes, 'Default holiday types initialized successfully');
+  const defaultTypes = [
+    'Public (National) Holidays',
+    'State / Regional Holidays',
+    'Local Holidays',
+    'Religious Holidays',
+    'Government Holidays',
+    'Company / Organization Holidays',
+    'Special / Emergency Holidays',
+    'Others'
+  ];
+
+  const now = new Date();
+  const defaultDocs = defaultTypes.map(name => ({
+    name,
+    isActive: true,
+    isDeleted: false,
+    createdBy: user.userId || 'system',
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  await collections.holidayTypes.insertMany(defaultDocs, { ordered: false });
+
+  const inserted = await collections.holidayTypes
+    .find({})
+    .sort({ createdAt: 1, name: 1 })
+    .toArray();
+
+  return sendSuccess(res, inserted, 'Default holiday types initialized successfully');
 });
 
 export default {

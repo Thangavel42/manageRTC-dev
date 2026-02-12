@@ -6,7 +6,7 @@ import CommonSelect from "../../../../core/common/commonSelect";
 import Table from "../../../../core/common/dataTable/index";
 import PredefinedDateRanges from "../../../../core/common/datePicker";
 import Footer from "../../../../core/common/footer";
-import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
+import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
 import { leaveTypeDisplayMap, statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveType } from "../../../../hooks/useLeaveREST";
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
 import { all_routes } from "../../../router/all_routes";
@@ -80,6 +80,7 @@ const LeaveEmployee = () => {
   // API hook for employee's leaves
   const { leaves, loading, fetchMyLeaves, cancelLeave, getLeaveBalance, createLeave, updateLeave } = useLeaveREST();
   const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
+  const { employees: reportingManagers, fetchActiveEmployeesList: fetchReportingManagers } = useEmployeesREST();
 
   // Local state for balance
   const [balances, setBalances] = useState<Record<string, { total: number; used: number; balance: number }>>({
@@ -97,6 +98,7 @@ const LeaveEmployee = () => {
     session: '',
     reason: '',
     noOfDays: 0,
+    reportingManagerId: '',
   });
 
   // Form state for Edit Leave modal
@@ -110,6 +112,8 @@ const LeaveEmployee = () => {
     noOfDays: number;
   } | null>(null);
 
+  const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
+
   // Fetch employee leaves on mount
   useEffect(() => {
     fetchMyLeaves();
@@ -120,6 +124,10 @@ const LeaveEmployee = () => {
   useEffect(() => {
     fetchActiveLeaveTypes();
   }, [fetchActiveLeaveTypes]);
+
+  useEffect(() => {
+    fetchReportingManagers();
+  }, [fetchReportingManagers]);
 
   useEffect(() => {
     if (!addFormData.leaveType && addFormData.session) {
@@ -169,8 +177,9 @@ const LeaveEmployee = () => {
     From: formatDate(leave.startDate),
     To: formatDate(leave.endDate),
     NoOfDays: `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
-    Status: leave.status,
-    ApprovedBy: leave.approvedByName || "Pending",
+    ReportingManager: leave.reportingManagerName || "-",
+    ManagerStatus: leave.managerStatus || 'pending',
+    Status: leave.finalStatus || leave.status,
     Roll: "Employee", // Should come from employee data
     Image: "user-32.jpg", // Default image
     rawLeave: leave,
@@ -198,6 +207,10 @@ const LeaveEmployee = () => {
       message.error('Please select a leave type');
       return;
     }
+    if (!addFormData.reportingManagerId) {
+      message.error('Reporting Manager is required');
+      return;
+    }
     if (!addFormData.startDate) {
       message.error('Please select a start date');
       return;
@@ -220,6 +233,10 @@ const LeaveEmployee = () => {
       startDate: addFormData.startDate.format('YYYY-MM-DD'),
       endDate: addFormData.endDate.format('YYYY-MM-DD'),
       reason: addFormData.reason,
+      reportingManagerId: addFormData.reportingManagerId,
+      employeeStatus: 'pending',
+      managerStatus: 'pending',
+      hrStatus: 'pending',
     });
 
     if (success) {
@@ -231,6 +248,7 @@ const LeaveEmployee = () => {
         session: '',
         reason: '',
         noOfDays: 0,
+        reportingManagerId: '',
       });
       // Close modal using Bootstrap API
       const modalEl = document.getElementById('add_leaves');
@@ -310,31 +328,14 @@ const LeaveEmployee = () => {
       sorter: (a: any, b: any) => a.LeaveType.length - b.LeaveType.length,
     },
     {
+      title: "Reporting Manager",
+      dataIndex: "ReportingManager",
+      sorter: (a: any, b: any) => a.ReportingManager.localeCompare(b.ReportingManager),
+    },
+    {
       title: "From",
       dataIndex: "From",
       sorter: (a: any, b: any) => a.From.length - b.From.length,
-    },
-    {
-      title: "Approved By",
-      dataIndex: "ApprovedBy",
-      render: (text: String, record: any) => (
-        <div className="d-flex align-items-center file-name-icon">
-          <Link to="#" className="avatar avatar-md border avatar-rounded">
-            <ImageWithBasePath
-              src={`assets/img/users/${record.Image}`}
-              className="img-fluid"
-              alt="img"
-            />
-          </Link>
-          <div className="ms-2">
-            <h6 className="fw-medium">
-              <Link to="#">{record.ApprovedBy}</Link>
-            </h6>
-            <span className="fs-12 fw-normal ">{record.Roll}</span>
-          </div>
-        </div>
-      ),
-      sorter: (a: any, b: any) => a.ApprovedBy.length - b.ApprovedBy.length,
     },
     {
       title: "To",
@@ -345,6 +346,12 @@ const LeaveEmployee = () => {
       title: "No of Days",
       dataIndex: "NoOfDays",
       sorter: (a: any, b: any) => a.NoOfDays.length - b.NoOfDays.length,
+    },
+    {
+      title: "Manager Status",
+      dataIndex: "ManagerStatus",
+      render: (status: LeaveStatus) => <StatusBadge status={status} />,
+      sorter: (a: any, b: any) => a.ManagerStatus.localeCompare(b.ManagerStatus),
     },
     {
       title: "Status",
@@ -374,18 +381,10 @@ const LeaveEmployee = () => {
             className="me-2"
             data-bs-toggle="modal"
             data-inert={true}
-            data-bs-target="#edit_leaves"
-            onClick={() => handleEditClick(record.rawLeave)}
+            data-bs-target="#leave_details"
+            onClick={() => setSelectedLeave(record.rawLeave)}
           >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
-          >
-            <i className="ti ti-trash" />
+            <i className="ti ti-eye" />
           </Link>
         </div>
       ),
@@ -421,6 +420,19 @@ const LeaveEmployee = () => {
       : fallbackOptions;
     return [{ value: "", label: "Select Leave Type" }, ...apiOptions];
   }, [activeOptions]);
+
+  const reportingManagerOptions = useMemo(() => {
+    const options = reportingManagers.map(manager => {
+      const name = `${manager.firstName || ''} ${manager.lastName || ''}`.trim() || manager.fullName || 'Unknown';
+      const id = manager.employeeId ? ` (${manager.employeeId})` : '';
+      const department = manager.department ? ` - ${manager.department}` : manager.departmentId ? ` - ${manager.departmentId}` : '';
+      return {
+        value: manager.employeeId,
+        label: `${name}${id}${department}`
+      };
+    });
+    return [{ value: "", label: "Select Reporting Manager" }, ...options];
+  }, [reportingManagers]);
 
   // Filter handlers
   const handleStatusFilter = (status: LeaveStatus) => {
@@ -798,6 +810,7 @@ const LeaveEmployee = () => {
                   session: '',
                   reason: '',
                   noOfDays: 0,
+                  reportingManagerId: '',
                 })}
               >
                 <i className="ti ti-x" />
@@ -814,6 +827,17 @@ const LeaveEmployee = () => {
                         options={leaveTypeOptions}
                         value={addFormData.leaveType}
                         onChange={(option: any) => setAddFormData({ ...addFormData, leaveType: option?.value || '' })}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Reporting Manager</label>
+                      <CommonSelect
+                        className="select"
+                        options={reportingManagerOptions}
+                        value={addFormData.reportingManagerId}
+                        onChange={(option: any) => setAddFormData({ ...addFormData, reportingManagerId: option?.value || '' })}
                       />
                     </div>
                   </div>
@@ -929,6 +953,7 @@ const LeaveEmployee = () => {
                     session: '',
                     reason: '',
                     noOfDays: 0,
+                    reportingManagerId: '',
                   })}
                 >
                   Cancel
@@ -1147,6 +1172,84 @@ const LeaveEmployee = () => {
         </div>
       </div>
       {/* /Edit Leaves */}
+      {/* Leave Details Modal */}
+      <div className="modal fade" id="leave_details" tabIndex={-1}>
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Leave Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={() => setSelectedLeave(null)}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="row">
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">Leave Type</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? (leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType) : "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">Status</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? (statusDisplayMap[selectedLeave.finalStatus || selectedLeave.status]?.label || selectedLeave.finalStatus || selectedLeave.status) : "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">From</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? formatDate(selectedLeave.startDate) : "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">To</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? formatDate(selectedLeave.endDate) : "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">No. of Days</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? `${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}` : "-"}
+                  </div>
+                </div>
+                <div className="col-md-12 mb-3">
+                  <label className="form-label">Reason</label>
+                  <div className="fw-medium">{selectedLeave?.reason || "-"}</div>
+                </div>
+                <div className="col-md-12">
+                  <div className="leave-info-card">
+                    <h4>Reporting Manager</h4>
+                    <p><strong>Name:</strong> {selectedLeave?.reportingManagerName || '-'}</p>
+                    <p>
+                      <strong>Status:</strong>{' '}
+                      <StatusBadge status={selectedLeave?.managerStatus || 'pending'} />
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light"
+                data-bs-dismiss="modal"
+                onClick={() => setSelectedLeave(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Leave Details Modal */}
     </>
   );
 };

@@ -93,6 +93,11 @@ const useSidebarData = () => {
                   base: 'packages',
                   base2: 'packages-grid',
                 },
+                {
+                  label: "Modules",
+                  link: routes.superAdminModules,
+                  base: "modules",
+                },
                 // {
                 //   label: "Purchase Transaction",
                 //   link: routes.superAdminPurchaseTransaction,
@@ -4441,6 +4446,12 @@ const useSidebarData = () => {
                 },
                 {
                   label: 'Domain',
+                  label: "Modules",
+                  link: routes.superAdminModules,
+                  base: "modules",
+                },
+                {
+                  label: "Domain",
                   link: routes.superAdminDomain,
                   base: 'domain',
                 },

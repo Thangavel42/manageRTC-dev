@@ -1,17 +1,14 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Modal } from "antd";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
+import { Socket } from "socket.io-client";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
+import CommonSelect from '../../core/common/commonSelect';
 import Table from "../../core/common/dataTable/index";
 import TrainingTypeModal from "../../core/modals/trainingTypeModal";
-import ImageWithBasePath from '../../core/common/imageWithBasePath';
-import CommonSelect from '../../core/common/commonSelect';
-import Footer from "../../core/common/footer";
 import { useSocket } from "../../SocketContext";
-import { Socket } from "socket.io-client";
-import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Modal } from "antd";
-import { log } from "console";
+import { all_routes } from "../router/all_routes";
 
 type TrainingTypesRow = {
   trainingType: string;
@@ -180,7 +177,7 @@ const TrainingType = () => {
   );
 
   const handleAddSave = () => {
-    console.log("Adding training type:", addForm); // Debug log 
+    console.log("Adding training type:", addForm); // Debug log
     // return;
     if (!socket) return;
     // basic validation
@@ -225,7 +222,7 @@ const TrainingType = () => {
     setEditForm({
       trainingType: "",
       desc: "",
-      status: "Active", 
+      status: "Active",
       typeId:"",
     });
     };
@@ -399,7 +396,7 @@ const TrainingType = () => {
                           ]}
                           defaultValue={filterType}
                           onChange={handleFilterChange}
-                        />                    
+                        />
                   </Link>
                 </div>
               </div>
@@ -410,15 +407,17 @@ const TrainingType = () => {
           </div>
           {/* /Performance Indicator list */}
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between border-top bg-white p-3">
-          <p className="mb-0">2014 - 2025 © SmartHR.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="#" className="text-primary">
-              Dreams
-            </Link>
-          </p>
-        </div>
+        {/* Footer */}
+                <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
+                  <p className="mb-0">2026 © amasQIS.ai</p>
+                  <p>
+                    Designed &amp; Developed By{" "}
+                    <Link to="amasqis.ai" className="text-primary">
+                      amasQIS.ai
+                    </Link>
+                  </p>
+                </div>
+                {/* /Footer */}
       </div>
       {/* /Page Wrapper */}
 

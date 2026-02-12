@@ -7,16 +7,16 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildConflictError, buildForbiddenError, buildNotFoundError,
-  buildValidationError,
-  ConflictError
+    asyncHandler,
+    buildConflictError, buildForbiddenError, buildNotFoundError,
+    buildValidationError,
+    ConflictError
 } from '../../middleware/errorHandler.js';
 import {
-  buildPagination,
-  extractUser,
-  sendCreated,
-  sendSuccess
+    buildPagination,
+    extractUser,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import { generateId } from '../../utils/idGenerator.js';
 import logger, { logLeaveEvent } from '../../utils/logger.js';
@@ -64,6 +64,21 @@ function buildLeaveIdFilter(id) {
     return { $or: [{ _id: new ObjectId(id) }, { leaveId: id }] };
   }
   return { leaveId: id };
+}
+
+function normalizeLeaveStatuses(leave) {
+  const finalStatus = leave.finalStatus || leave.status || 'pending';
+  const managerStatus = leave.managerStatus ||
+    (leave.status === 'approved' || leave.status === 'rejected' ? leave.status : 'pending');
+
+  return {
+    ...leave,
+    status: finalStatus,
+    finalStatus,
+    managerStatus,
+    employeeStatus: leave.employeeStatus || 'pending',
+    hrStatus: leave.hrStatus || 'pending'
+  };
 }
 
 /**
@@ -206,13 +221,40 @@ export const getLeaves = asyncHandler(async (req, res) => {
     );
   }
 
+  const managerIds = Array.from(
+    new Set(leaves.map(leave => leave.reportingManagerId).filter(Boolean))
+  );
+  let managersById = new Map();
+  if (managerIds.length > 0) {
+    const managers = await collections.employees.find({
+      $or: [
+        { employeeId: { $in: managerIds } },
+        { clerkUserId: { $in: managerIds } }
+      ],
+      isDeleted: { $ne: true }
+    }).toArray();
+
+    managersById = new Map(
+      managers.flatMap(emp => {
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        const entries = [];
+        if (emp.employeeId) entries.push([emp.employeeId, { fullName }]);
+        if (emp.clerkUserId) entries.push([emp.clerkUserId, { fullName }]);
+        return entries;
+      })
+    );
+  }
+
   const leavesWithEmployees = leaves.map(leave => {
     const employee = employeesById.get(leave.employeeId);
+    const manager = managersById.get(leave.reportingManagerId);
     const employeeName = employee?.fullName || leave.employeeName || (leave.employeeId ? `User ${leave.employeeId}` : 'Unknown');
+    const reportingManagerName = manager?.fullName || leave.reportingManagerName || '-';
     return {
-      ...leave,
+      ...normalizeLeaveStatuses(leave),
       employeeName,
-      employeeDesignation: employee?.designation || leave.employeeDesignation || ''
+      employeeDesignation: employee?.designation || leave.employeeDesignation || '',
+      reportingManagerName
     };
   });
 
@@ -248,6 +290,11 @@ export const getLeaveById = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Leave request', id);
   }
 
+  const userRole = user.role?.toLowerCase();
+  if (userRole === 'employee') {
+    throw buildForbiddenError('Employees cannot edit leave requests after submission');
+  }
+
   return sendSuccess(res, leave);
 });
 
@@ -277,6 +324,40 @@ export const createLeave = asyncHandler(async (req, res) => {
 
   if (!employee) {
     throw buildNotFoundError('Employee', employeeLookupId);
+  }
+
+  // Resolve reporting manager (employeeId)
+  let reportingManagerId = leaveData.reportingManagerId || null;
+
+  if (!reportingManagerId && employee.reportingTo && ObjectId.isValid(employee.reportingTo)) {
+    const manager = await collections.employees.findOne({
+      _id: new ObjectId(employee.reportingTo),
+      isDeleted: { $ne: true }
+    });
+    reportingManagerId = manager?.employeeId || null;
+  }
+
+  if (reportingManagerId) {
+    const managerExists = await collections.employees.findOne({
+      $or: [
+        { employeeId: reportingManagerId },
+        { clerkUserId: reportingManagerId }
+      ],
+      isDeleted: { $ne: true }
+    });
+
+    if (!managerExists) {
+      throw buildValidationError('reportingManagerId', 'Reporting manager not found');
+    }
+  }
+
+  const userRole = user.role?.toLowerCase();
+  if (userRole === 'employee' && !reportingManagerId) {
+    throw buildValidationError('reportingManagerId', 'Reporting manager is required');
+  }
+
+  if (reportingManagerId && reportingManagerId === employee.employeeId) {
+    throw buildValidationError('reportingManagerId', 'Reporting manager cannot be the employee');
   }
 
   // Validate dates
@@ -320,8 +401,12 @@ export const createLeave = asyncHandler(async (req, res) => {
     reason: leaveData.reason || '',
     detailedReason: leaveData.detailedReason || '',
     status: 'pending',
+    employeeStatus: 'pending',
+    managerStatus: 'pending',
+    hrStatus: 'pending',
+    finalStatus: 'pending',
     balanceAtRequest: currentBalance.balance,
-    reportingManagerId: employee.reportingTo || null,
+    reportingManagerId,
     handoverToId: leaveData.handoverTo || null,
     attachments: leaveData.attachments || [],
     createdBy: user.userId,
@@ -546,9 +631,41 @@ export const getMyLeaves = asyncHandler(async (req, res) => {
     .limit(limitNum)
     .toArray();
 
+  const managerIds = Array.from(
+    new Set(leaves.map(leave => leave.reportingManagerId).filter(Boolean))
+  );
+  let managersById = new Map();
+  if (managerIds.length > 0) {
+    const managers = await collections.employees.find({
+      $or: [
+        { employeeId: { $in: managerIds } },
+        { clerkUserId: { $in: managerIds } }
+      ],
+      isDeleted: { $ne: true }
+    }).toArray();
+
+    managersById = new Map(
+      managers.flatMap(emp => {
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        const entries = [];
+        if (emp.employeeId) entries.push([emp.employeeId, { fullName }]);
+        if (emp.clerkUserId) entries.push([emp.clerkUserId, { fullName }]);
+        return entries;
+      })
+    );
+  }
+
+  const leavesWithManagers = leaves.map(leave => {
+    const manager = managersById.get(leave.reportingManagerId);
+    return {
+      ...normalizeLeaveStatuses(leave),
+      reportingManagerName: manager?.fullName || leave.reportingManagerName || '-'
+    };
+  });
+
   const pagination = buildPagination(pageNum, limitNum, total);
 
-  return sendSuccess(res, leaves, 'My leave requests retrieved successfully', 200, pagination);
+  return sendSuccess(res, leavesWithManagers, 'My leave requests retrieved successfully', 200, pagination);
 });
 
 /**
@@ -604,6 +721,11 @@ export const approveLeave = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { comments } = req.body;
   const user = extractUser(req);
+  const userRole = user.role?.toLowerCase();
+
+  if (userRole === 'hr') {
+    throw buildForbiddenError('HR cannot approve leave requests');
+  }
 
   if (!id) {
     throw buildValidationError('id', 'Leave ID is required');
@@ -623,6 +745,23 @@ export const approveLeave = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Leave request', id);
     }
 
+    const currentEmployee = await getEmployeeByClerkId(collections, user.userId);
+    if (!currentEmployee) {
+      throw buildForbiddenError('Not authorized to approve this leave request');
+    }
+
+    if (!leave.reportingManagerId) {
+      throw buildForbiddenError('No reporting manager assigned for this leave request');
+    }
+
+    if (leave.reportingManagerId !== currentEmployee.employeeId) {
+      throw buildForbiddenError('Only the selected reporting manager can approve this leave request');
+    }
+
+    if (leave.employeeId === currentEmployee.employeeId) {
+      throw buildForbiddenError('Employees cannot approve their own leave requests');
+    }
+
     // Check if leave can be approved
     if (leave.status !== 'pending') {
       throw buildConflictError('Can only approve pending leave requests');
@@ -631,6 +770,8 @@ export const approveLeave = asyncHandler(async (req, res) => {
     // Prepare update object
     const updateObj = {
       status: 'approved',
+      managerStatus: 'approved',
+      finalStatus: 'approved',
       approvedBy: user.userId,
       approvedAt: new Date(),
       approvalComments: comments || '',
@@ -708,6 +849,11 @@ export const rejectLeave = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const user = extractUser(req);
+  const userRole = user.role?.toLowerCase();
+
+  if (userRole === 'hr') {
+    throw buildForbiddenError('HR cannot reject leave requests');
+  }
 
   if (!reason || !reason.trim()) {
     throw buildValidationError('reason', 'Rejection reason is required');
@@ -731,6 +877,23 @@ export const rejectLeave = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Leave request', id);
     }
 
+    const currentEmployee = await getEmployeeByClerkId(collections, user.userId);
+    if (!currentEmployee) {
+      throw buildForbiddenError('Not authorized to reject this leave request');
+    }
+
+    if (!leave.reportingManagerId) {
+      throw buildForbiddenError('No reporting manager assigned for this leave request');
+    }
+
+    if (leave.reportingManagerId !== currentEmployee.employeeId) {
+      throw buildForbiddenError('Only the selected reporting manager can reject this leave request');
+    }
+
+    if (leave.employeeId === currentEmployee.employeeId) {
+      throw buildForbiddenError('Employees cannot reject their own leave requests');
+    }
+
     // Check if leave can be rejected
     if (leave.status !== 'pending') {
       throw buildConflictError('Can only reject pending leave requests');
@@ -739,6 +902,8 @@ export const rejectLeave = asyncHandler(async (req, res) => {
     // Prepare update object
     const updateObj = {
       status: 'rejected',
+      managerStatus: 'rejected',
+      finalStatus: 'rejected',
       rejectedBy: user.userId,
       rejectedAt: new Date(),
       rejectionReason: reason,
@@ -770,6 +935,147 @@ export const rejectLeave = asyncHandler(async (req, res) => {
   }
 
   return sendSuccess(res, updatedLeave, 'Leave request rejected successfully');
+});
+
+/**
+ * @desc    Manager approval/rejection action
+ * @route   PATCH /api/leaves/:id/manager-action
+ * @access  Private (Manager, Admin, Superadmin)
+ */
+export const managerActionLeave = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { action, reason, comments } = req.body || {};
+  const user = extractUser(req);
+  const userRole = user.role?.toLowerCase();
+
+  if (!id) {
+    throw buildValidationError('id', 'Leave ID is required');
+  }
+
+  const normalizedAction = (action || '').toString().toLowerCase();
+  if (!['approved', 'rejected'].includes(normalizedAction)) {
+    throw buildValidationError('action', 'Action must be approved or rejected');
+  }
+
+  if (normalizedAction === 'rejected' && (!reason || !reason.trim())) {
+    throw buildValidationError('reason', 'Rejection reason is required');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const currentEmployee = await getEmployeeByClerkId(collections, user.userId);
+
+  if (!currentEmployee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isManager = userRole === 'manager';
+
+  const result = await withTransactionRetry(user.companyId, async (tenantCollections, session) => {
+    const leave = await tenantCollections.leaves.findOne(
+      { ...buildLeaveIdFilter(id), isDeleted: { $ne: true } },
+      { session }
+    );
+
+    if (!leave) {
+      throw buildNotFoundError('Leave request', id);
+    }
+
+    if (leave.managerStatus && leave.managerStatus !== 'pending') {
+      throw buildConflictError('Manager action already taken for this leave');
+    }
+
+    if (!isAdmin) {
+      if (!isManager) {
+        throw buildForbiddenError('Not authorized to approve or reject this leave request');
+      }
+
+      if (leave.reportingManagerId && leave.reportingManagerId !== currentEmployee.employeeId) {
+        throw buildForbiddenError('Only the reporting manager can approve or reject this leave request');
+      }
+
+      if (leave.employeeId === currentEmployee.employeeId) {
+        throw buildForbiddenError('Employees cannot approve their own leave requests');
+      }
+    }
+
+    const updateObj = {
+      status: normalizedAction,
+      managerStatus: normalizedAction,
+      finalStatus: normalizedAction,
+      updatedAt: new Date()
+    };
+
+    if (normalizedAction === 'approved') {
+      updateObj.approvedBy = user.userId;
+      updateObj.approvedAt = new Date();
+      updateObj.approvalComments = comments || '';
+    } else {
+      updateObj.rejectedBy = user.userId;
+      updateObj.rejectedAt = new Date();
+      updateObj.rejectionReason = reason;
+    }
+
+    await tenantCollections.leaves.updateOne(
+      { _id: leave._id },
+      { $set: updateObj },
+      { session }
+    );
+
+    let updatedLeaveBalances = null;
+    let employee = null;
+
+    if (normalizedAction === 'approved') {
+      employee = await tenantCollections.employees.findOne(
+        { employeeId: leave.employeeId },
+        { session }
+      );
+
+      if (employee && employee.leaveBalances) {
+        const balanceIndex = employee.leaveBalances.findIndex(
+          b => b.type === leave.leaveType
+        );
+
+        if (balanceIndex !== -1) {
+          updatedLeaveBalances = employee.leaveBalances.map(b => ({ ...b }));
+          updatedLeaveBalances[balanceIndex].used += leave.duration;
+          updatedLeaveBalances[balanceIndex].balance -= leave.duration;
+
+          await tenantCollections.employees.updateOne(
+            { employeeId: leave.employeeId },
+            { $set: { leaveBalances: updatedLeaveBalances } },
+            { session }
+          );
+        }
+      }
+    }
+
+    const updatedLeave = await tenantCollections.leaves.findOne(
+      { _id: leave._id },
+      { session }
+    );
+
+    return { leave: updatedLeave, employee, employeeLeaveBalances: updatedLeaveBalances };
+  });
+
+  const io = getSocketIO(req);
+  if (io) {
+    if (normalizedAction === 'approved') {
+      broadcastLeaveEvents.approved(io, user.companyId, result.leave, user.userId);
+    } else {
+      broadcastLeaveEvents.rejected(io, user.companyId, result.leave, user.userId, reason);
+    }
+
+    if (result.employeeLeaveBalances) {
+      broadcastLeaveEvents.balanceUpdated(io, user.companyId, result.employee._id, result.employeeLeaveBalances);
+    }
+  }
+
+  if (result?.leave) {
+    logLeaveEvent(normalizedAction, result.leave, user);
+  }
+
+  return sendSuccess(res, result.leave, `Leave request ${normalizedAction} successfully`);
 });
 
 /**
@@ -1238,6 +1544,7 @@ export default {
   getLeavesByStatus,
   approveLeave,
   rejectLeave,
+  managerActionLeave,
   cancelLeave,
   getLeaveBalance,
   getTeamLeaves,

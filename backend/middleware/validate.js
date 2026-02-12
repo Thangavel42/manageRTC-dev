@@ -274,7 +274,7 @@ export const employeeSchemas = {
     reportingTo: commonSchemas.objectId.optional(),
     employmentType: Joi.string().valid('Full-time', 'Part-time', 'Contract', 'Intern').optional(),
     status: Joi.string()
-      .valid('Active', 'Probation', 'Resigned', 'Terminated', 'On Leave')
+      .valid('Active', 'Inactive', 'On Notice', 'Probation', 'Resigned', 'Terminated', 'On Leave')
       .optional(),
     salary: Joi.object({
       basic: Joi.number().min(0).optional(),
@@ -295,7 +295,7 @@ export const employeeSchemas = {
       gender: Joi.string().optional(),
       birthday: commonSchemas.ddmmyyyy.optional().allow('', null),
       maritalStatus: Joi.string().optional(),
-      religion: Joi.string().optional(),
+      religion: Joi.string().allow('').optional(),
       employmentOfSpouse: Joi.boolean().optional(),
       noOfChildren: Joi.number().min(0).optional(),
       passport: Joi.object({
@@ -312,6 +312,50 @@ export const employeeSchemas = {
         country: Joi.string().optional(),
       }).optional(),
     }).optional(),
+    // Bank information
+    bank: Joi.object({
+      accountHolderName: Joi.string().allow('').optional(),
+      accountNumber: Joi.string().allow('').optional(),
+      bankName: Joi.string().allow('').optional(),
+      branch: Joi.string().allow('').optional(),
+      ifscCode: Joi.string().allow('').optional(),
+    }).optional(),
+    // Emergency contacts
+    emergencyContacts: Joi.array().items(
+      Joi.object({
+        name: Joi.string().allow('').optional(),
+        relationship: Joi.string().allow('').optional(),
+        phone: Joi.array().items(Joi.string().allow('')).optional(),
+      }).unknown(true)
+    ).optional(),
+    // Family information
+    family: Joi.array().items(
+      Joi.object({
+        Name: Joi.string().allow('').optional(),
+        relationship: Joi.string().allow('').optional(),
+        phone: Joi.string().allow('').optional(),
+      }).unknown(true)
+    ).optional(),
+    // Education information
+    education: Joi.array().items(
+      Joi.object({
+        degree: Joi.string().allow('').optional(),
+        institution: Joi.string().allow('').optional(),
+        startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+        endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+        grade: Joi.string().allow('').optional(),
+      }).unknown(true)
+    ).optional(),
+    // Experience information
+    experience: Joi.array().items(
+      Joi.object({
+        previousCompany: Joi.string().allow('').optional(),
+        designation: Joi.string().allow('').optional(),
+        startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+        endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+        currentlyWorking: Joi.boolean().optional(),
+      }).unknown(true)
+    ).optional(),
     // Account information
     account: Joi.object({
       role: Joi.string().allow('').optional(),
@@ -358,6 +402,9 @@ export const employeeSchemas = {
     designation: commonSchemas.objectId.optional(),
     status: Joi.string()
       .valid('Active', 'Probation', 'Resigned', 'Terminated', 'On Leave')
+      .optional(),
+    role: Joi.string()
+      .valid('employee', 'manager', 'hr', 'admin', 'superadmin')
       .optional(),
     sortBy: Joi.string()
       .valid('firstName', 'lastName', 'email', 'employeeCode', 'joiningDate', 'createdAt')

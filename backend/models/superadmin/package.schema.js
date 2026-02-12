@@ -13,7 +13,11 @@ const planSchema = new mongoose.Schema({
   maxCustomers: { type: Number, required: true },
   product: { type: Number, required: true },
   supplier: { type: Number, required: true },
-  planModules: { type: [String], required: true },
+  planModules: [{
+    moduleId: { type: String },
+    moduleName: { type: String },
+    moduleDisplayName: { type: String }
+  }],
   accessTrial: { type: Boolean, required: true },
   trialDays: { type: Number, required: true },
   isRecommended: { type: Boolean, required: true },

@@ -1,6 +1,5 @@
-import { getTenantCollections, getsuperadminCollections } from "../../config/db.js";
-import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
+import { getTenantCollections } from "../../config/db.js";
 
 const toYMDStr = (input) => {
   const d = new Date(input);
@@ -115,10 +114,24 @@ const getTrainingList = async (companyId, {type,startDate,endDate}={}) => {
       { $match: dateFilter },
       { $sort: { startDate: -1, _id: -1 } },
       {
+        $lookup: {
+          from: "trainers",
+          localField: "trainer",
+          foreignField: "trainer",
+          as: "trainerData"
+        }
+      },
+      {
+        $addFields: {
+          trainerInfo: { $arrayElemAt: ["$trainerData", 0] },
+        }
+      },
+      {
         $project: {
           _id: 0,
           trainingType: 1,
           trainer: 1,
+          trainerProfileImage: "$trainerInfo.profileImage",
           employee: 1,
           startDate: 1,
           endDate: 1,
@@ -275,12 +288,7 @@ const deleteTrainingList = async (companyId, trainingIds) => {
 };
 
 export {
-  getTrainingListStats,
-  getTrainingList,
-  getEmployeeDetails,
-  getSpecificTrainingList,
-  addTrainingList,
-  updateTrainingList,
-  deleteTrainingList,
+    addTrainingList, deleteTrainingList, getEmployeeDetails,
+    getSpecificTrainingList, getTrainingList, getTrainingListStats, updateTrainingList
 };
 

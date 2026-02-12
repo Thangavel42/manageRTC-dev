@@ -7,19 +7,19 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  buildNotFoundError,
-  buildConflictError,
-  buildValidationError,
-  asyncHandler
+    asyncHandler,
+    buildConflictError,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-  sendSuccess,
-  sendCreated,
-  buildPagination,
-  extractUser
+    buildPagination,
+    extractUser,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
-import { broadcastPromotionEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 import logger from '../../utils/logger.js';
+import { broadcastPromotionEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * @desc    Get all promotions
@@ -142,8 +142,9 @@ export const createPromotion = asyncHandler(async (req, res) => {
   }
 
   // Check for overlapping pending promotions
+  // Use employee's _id for consistency in promotions collection
   const existingPromotion = await collections.promotions.findOne({
-    employeeId: promotionData.employeeId,
+    employeeId: employee._id.toString(),
     status: 'pending',
     isDeleted: { $ne: true }
   });
@@ -153,21 +154,38 @@ export const createPromotion = asyncHandler(async (req, res) => {
   }
 
   // Get current employee data to store current position
-  const employee = await collections.employees.findOne({
-    employeeId: promotionData.employeeId
-  });
+  // Check if employeeId is ObjectId format or string employeeId
+  let employee;
+  if (ObjectId.isValid(promotionData.employeeId)) {
+    // Query by _id if it's an ObjectId
+    employee = await collections.employees.findOne({
+      _id: new ObjectId(promotionData.employeeId),
+      isDeleted: { $ne: true }
+    });
+  } else {
+    // Query by employeeId string field
+    employee = await collections.employees.findOne({
+      employeeId: promotionData.employeeId,
+      isDeleted: { $ne: true }
+    });
+  }
 
   if (!employee) {
     throw buildNotFoundError('Employee', promotionData.employeeId);
   }
 
   // Prepare promotion data with current position
+  // Store employee _id as string for consistency
   const promotionToInsert = {
     ...promotionData,
+    employeeId: employee._id.toString(),
+    employeeName: `${employee.firstName} ${employee.lastName}`,
     companyId: user.companyId,
     promotionFrom: {
       departmentId: employee.departmentId,
-      designationId: employee.designationId
+      designationId: employee.designationId,
+      department: employee.department?.department || employee.department || '',
+      designation: employee.designation?.designation || employee.designation || ''
     },
     salaryChange: promotionData.salaryChange || null,
     status: 'pending',
@@ -206,7 +224,7 @@ export const createPromotion = asyncHandler(async (req, res) => {
     }
 
     await collections.employees.updateOne(
-      { employeeId: promotionData.employeeId },
+      { _id: employee._id },
       { $set: updateData }
     );
 
@@ -227,7 +245,7 @@ export const createPromotion = asyncHandler(async (req, res) => {
     // Broadcast promotion applied event
     if (io) {
       const updatedEmployee = await collections.employees.findOne({
-        employeeId: promotionData.employeeId
+        _id: employee._id
       });
       broadcastPromotionEvents.applied(io, user.companyId, promotion, updatedEmployee);
     }
@@ -395,9 +413,19 @@ export const applyPromotion = asyncHandler(async (req, res) => {
   }
 
   // Get employee before update
-  const employee = await collections.employees.findOne({
-    employeeId: promotion.employeeId
-  });
+  // promotion.employeeId is stored as _id string, so query by _id
+  let employee;
+  if (ObjectId.isValid(promotion.employeeId)) {
+    employee = await collections.employees.findOne({
+      _id: new ObjectId(promotion.employeeId),
+      isDeleted: { $ne: true }
+    });
+  } else {
+    employee = await collections.employees.findOne({
+      employeeId: promotion.employeeId,
+      isDeleted: { $ne: true }
+    });
+  }
 
   if (!employee) {
     throw buildNotFoundError('Employee', promotion.employeeId);
@@ -417,7 +445,7 @@ export const applyPromotion = asyncHandler(async (req, res) => {
 
   // Apply promotion - update employee record
   await collections.employees.updateOne(
-    { employeeId: promotion.employeeId },
+    { _id: employee._id },
     { $set: updateData }
   );
 

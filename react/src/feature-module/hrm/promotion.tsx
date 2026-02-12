@@ -114,7 +114,10 @@ const Promotion = () => {
   } = usePromotionsREST();
 
   // REST API Hook for Employees (for fetching employees by department)
-  const { fetchEmployees: fetchEmployeesByDept } = useEmployeesREST();
+  const {
+    fetchEmployees: fetchEmployeesByDept,
+    employees: hookEmployees
+  } = useEmployeesREST();
 
   // State management (keeping local state for UI-specific needs)
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -335,6 +338,25 @@ const Promotion = () => {
     };
   }, [socket, cleanupModals, fetchPromotions, fetchDepartments, fetchDesignations, fetchStats]);
 
+  // Sync hook employees to local state
+  useEffect(() => {
+    if (hookEmployees && hookEmployees.length > 0) {
+      console.log("[Promotion] Syncing hook employees to local state:", hookEmployees.length);
+      const transformedEmployees = hookEmployees.map(emp => ({
+        id: emp._id || (emp as any).id,
+        name: `${emp.firstName} ${emp.lastName}`,
+        email: emp.email,
+        image: emp.profileImage || emp.avatarUrl || '',
+        department: (emp.department as any)?.department || emp.department || '',
+        departmentId: emp.departmentId || '',
+        designation: (emp.designation as any)?.designation || emp.jobTitle || '',
+        designationId: emp.designationId || '',
+        employeeId: emp.employeeId || '',
+      }));
+      setEmployees(transformedEmployees as any);
+    }
+  }, [hookEmployees]);
+
   // Sync REST API data to local state
   useEffect(() => {
     const transformedPromotions = (apiPromotions || []).map(promo => ({
@@ -474,9 +496,9 @@ const Promotion = () => {
     console.log("[Promotion] Fetching employees for department via REST API:", departmentId, "type:", typeof departmentId);
     try {
       // Use the employees REST hook to fetch employees by department
-      await fetchEmployeesByDept({ departmentId });
-      // Note: The employees state will be updated by the socket listener for real-time updates
-      // or we can use the returned data from the hook directly if needed
+      // Note: Backend expects 'department' as query param name, not 'departmentId'
+      await fetchEmployeesByDept({ department: departmentId });
+      // The employees state will be synced via the useEffect hook
     } catch (error) {
       console.error("[Promotion] Error fetching employees by department:", error);
       setEmployees([]);
@@ -665,6 +687,14 @@ const Promotion = () => {
     if (!newPromotion.promotionDate) {
       errors.promotionDate = "Please select a promotion date";
       isValid = false;
+    } else {
+      // Validate promotion date is not in the past
+      const selectedDate = dayjs(newPromotion.promotionDate).startOf('day');
+      const today = dayjs().startOf('day');
+      if (selectedDate.isBefore(today)) {
+        errors.promotionDate = "Promotion date cannot be in the past";
+        isValid = false;
+      }
     }
 
     setAddErrors(errors);
@@ -700,6 +730,14 @@ const Promotion = () => {
     if (!editForm.promotionDate) {
       errors.promotionDate = "Please select a promotion date";
       isValid = false;
+    } else {
+      // Validate promotion date is not in the past
+      const selectedDate = dayjs(editForm.promotionDate).startOf('day');
+      const today = dayjs().startOf('day');
+      if (selectedDate.isBefore(today)) {
+        errors.promotionDate = "Promotion date cannot be in the past";
+        isValid = false;
+      }
     }
 
     setEditErrors(errors);
@@ -743,8 +781,8 @@ const Promotion = () => {
         departmentId: newPromotion.targetDepartmentId,
         designationId: newPromotion.designationToId
       },
-      promotionDate: newPromotion.promotionDate ? dayjs(newPromotion.promotionDate).format('YYYY-MM-DD') : undefined,
-      promotionType: (newPromotion.promotionType || 'promotion') as 'promotion' | 'demotion' | 'transfer',
+      promotionDate: newPromotion.promotionDate ? dayjs(newPromotion.promotionDate).toISOString() : undefined,
+      promotionType: (newPromotion.promotionType || 'Regular') as 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other',
     };
 
     console.log("[Promotion] Adding promotion via REST API:", promotionData);
@@ -860,13 +898,20 @@ const Promotion = () => {
     }
 
     // Prepare data for REST API - map to the expected format
-    const updateData = {
+    const updateData: Partial<{
+      promotionTo: {
+        departmentId: string;
+        designationId: string;
+      };
+      promotionDate: string;
+      promotionType: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
+    }> = {
       promotionTo: {
         departmentId: editForm.departmentId,
         designationId: editForm.designationToId
       },
-      promotionDate: editForm.promotionDate ? dayjs(editForm.promotionDate).format('YYYY-MM-DD') : undefined,
-      promotionType: editForm.promotionType as 'promotion' | 'demotion' | 'transfer',
+      promotionDate: editForm.promotionDate ? dayjs(editForm.promotionDate).toISOString() : undefined,
+      promotionType: (editForm.promotionType || 'Regular') as 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other',
     };
 
     console.log("[Promotion] Updating promotion via REST API:", { promotionId: editingPromotion._id, update: updateData });
@@ -1466,6 +1511,10 @@ const Promotion = () => {
                             onChange={handleAddPromotionDateChange}
                             getPopupContainer={getModalContainer}
                             placeholder="DD-MM-YYYY"
+                            disabledDate={(current) => {
+                              // Disable all dates before today
+                              return current && current < dayjs().startOf('day');
+                            }}
                           />
                           <span className="input-icon-addon">
                             <i className="ti ti-calendar text-gray-7" />
@@ -1622,6 +1671,10 @@ const Promotion = () => {
                                 }}
                                 getPopupContainer={getModalContainer}
                                 placeholder="DD-MM-YYYY"
+                                disabledDate={(current) => {
+                                  // Disable all dates before today
+                                  return current && current < dayjs().startOf('day');
+                                }}
                               />
                               <span className="input-icon-addon">
                                 <i className="ti ti-calendar text-gray-7" />

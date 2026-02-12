@@ -5,10 +5,10 @@
  */
 
 import { message } from 'antd';
+import axios from 'axios';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiResponse, buildParams, del, get, getAuthToken, post, put } from '../services/api';
 import { useSocket } from '../SocketContext';
-import axios from 'axios';
 
 // Permission Module Types
 export type PermissionModule =
@@ -150,6 +150,7 @@ export interface EmployeeFilters {
   status?: string;
   designation?: string;
   search?: string;
+  role?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   startDate?: string;
@@ -388,6 +389,35 @@ export const useEmployeesREST = () => {
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch employees';
+      setError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Fetch active employee list for dropdowns (no role restriction)
+   * REST API: GET /api/employees/active-list
+   */
+  const fetchActiveEmployeesList = useCallback(async (params: { search?: string } = {}) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = buildParams(params);
+      const response: ApiResponse<Employee[]> = await get('/employees/active-list', { params: queryParams });
+
+      if (response.success && response.data) {
+        const normalizedEmployees = response.data.map((emp: Employee) => ({
+          ...emp,
+          status: normalizeStatus(emp.status)
+        }));
+        setEmployees(normalizedEmployees);
+      } else {
+        throw new Error(response.error?.message || 'Failed to fetch active employees');
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch active employees';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -1137,6 +1167,7 @@ export const useEmployeesREST = () => {
     loading,
     error,
     fetchEmployees,
+    fetchActiveEmployeesList,
     fetchEmployeesWithStats,
     fetchStats,
     getEmployeeById,

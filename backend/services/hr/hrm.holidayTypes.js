@@ -154,7 +154,7 @@ export const updateHolidayType = async (companyId, hrId, payload) => {
     const collections = getTenantCollections(companyId);
 
     const typeId = payload.typeId || payload._id;
-    
+
     if (!typeId) {
       return { done: false, message: "Holiday type ID not found" };
     }
@@ -336,6 +336,10 @@ export const initializeDefaultHolidayTypes = async (companyId, hrId) => {
       });
 
       logger.info('[initializeDefaultHolidayTypes] Inserted defaults', { companyId, count: Object.keys(result.insertedIds).length });
+
+      // Invalidate cache so subsequent fetch returns the new defaults
+      cacheManager.invalidateCompanyCache(companyId, 'holidayTypes');
+      logger.info('[initializeDefaultHolidayTypes] Cache invalidated after defaults', { companyId });
 
       return {
         done: true,

@@ -62,6 +62,12 @@ import userProfileRoutes from './routes/api/user-profile.js';
 import healthRoutes from './routes/health.js';
 import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
+// RBAC Routes
+import rbacRolesRoutes from "./routes/api/rbac/roles.js";
+import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
+import rbacModulesRoutes from "./routes/api/rbac/modules.js";
+import adminUsersRoutes from "./routes/api/admin.users.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -215,6 +221,12 @@ const initializeServer = async () => {
     app.use('/api/overtime', overtimeRoutes);
     app.use('/api/schedule', scheduleRoutes);
     app.use('/api/sync-role', syncRoleRoutes);
+
+    // RBAC Routes
+    app.use("/api/rbac/roles", rbacRolesRoutes);
+    app.use("/api/rbac/permissions", rbacPermissionsRoutes);
+    app.use("/api/rbac/modules", rbacModulesRoutes);
+    app.use("/api/admin/users", adminUsersRoutes);
 
     // Clerk Webhooks
     app.use('/api/webhooks', clerkWebhookRoutes);

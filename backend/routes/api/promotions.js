@@ -4,15 +4,18 @@
  */
 
 import express from 'express';
-import { authenticate, requireRole } from '../../middleware/auth.js';
-import { validate, validateBody, validateQuery } from '../../middleware/validate.js';
-import { promotionSchemas } from '../../middleware/validate.js';
 import promotionController from '../../controllers/rest/promotion.controller.js';
+import { attachRequestId, authenticate, requireCompany, requireRole } from '../../middleware/auth.js';
+import { promotionSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// Apply request ID middleware to all routes
+router.use(attachRequestId);
+
+// All routes require authentication and company association
 router.use(authenticate);
+router.use(requireCompany);
 
 /**
  * @route   GET /api/promotions

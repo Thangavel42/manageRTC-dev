@@ -22,6 +22,12 @@ dayjs.extend(customParseFormat);
 const DATE_FORMAT = "DD-MM-YYYY";
 const DATE_FORMAT_REGEX = /^\d{2}-\d{2}-\d{4}$/;
 
+// Generate an uppercase, underscore-safe code from a holiday type name
+const buildHolidayTypeCode = (name: string) => {
+  const base = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return base || `TYPE_${Date.now()}`;
+};
+
 const parseDisplayDate = (value?: string | null) => {
   if (!value) return null;
   const strict = dayjs(value, DATE_FORMAT, true);
@@ -1118,7 +1124,7 @@ const Holidays = () => {
                   </button>
                 </div>
 
-                <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                <div>
                   {holidayEntries.map((entry, index) => (
                     <div
                       key={entry.id}

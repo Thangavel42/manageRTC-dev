@@ -169,6 +169,81 @@ const Packages = () => {
   const [resetKey, setResetKey] = useState(0);
   const [imageupload, setimageupload] = useState(false);
 
+  // State for modules from API
+  const [availableModules, setAvailableModules] = useState([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
+
+  // API Base URL
+  const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+
+  // Fetch modules from API
+  const fetchModules = async () => {
+    try {
+      setModulesLoading(true);
+      const response = await fetch(`${API_BASE}/api/rbac/modules`);
+      const data = await response.json();
+      if (data.success) {
+        // Only include specific modules: HRM, Projects, CRM
+        const allowedModules = ['hrm', 'projects', 'crm'];
+
+        // Transform modules into options
+        const moduleOptions = data.data
+          .filter(mod => mod.isActive && allowedModules.includes(mod.name))
+          .map(mod => ({
+            _id: mod._id,
+            value: mod._id,
+            label: mod.name === 'projects' ? 'Project Management' : mod.displayName,
+            name: mod.name,
+            icon: mod.icon,
+            color: mod.color,
+            route: mod.route,
+          }));
+
+        // Add "ALL" option at the beginning
+        const allModules = [
+          {
+            _id: 'all',
+            value: 'all',
+            label: 'ALL',
+            name: 'all',
+            icon: 'ti ti-checkbox',
+            color: '#6c757d',
+            route: '/all'
+          },
+          ...moduleOptions
+        ];
+
+        setAvailableModules(allModules);
+      }
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+      toast.error('Failed to load modules');
+    } finally {
+      setModulesLoading(false);
+    }
+  };
+
+  // Fetch modules on component mount
+  useEffect(() => {
+    fetchModules();
+  }, []);
+
+  // Handle add module
+  const handleAddModule = (module) => {
+    setFormData(prevState => ({
+      ...prevState,
+      planModules: [...prevState.planModules, module]
+    }));
+  };
+
+  // Handle remove module
+  const handleRemoveModule = (moduleValue) => {
+    setFormData(prevState => ({
+      ...prevState,
+      planModules: prevState.planModules.filter(m => m.value !== moduleValue)
+    }));
+  };
+
   const planName = [
     { value: "Advanced", label: "Advanced" },
     { value: "Basic", label: "Basic" },
@@ -203,17 +278,6 @@ const Packages = () => {
     setFormData((prevState) => ({
       ...prevState,
       [name]: selectedOption.value,
-    }));
-  };
-
-  const handlePlanModulesChange = (e) => {
-    const { name, checked } = e.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      planModules: {
-        ...prevState.planModules,
-        [name]: checked,
-      },
     }));
   };
 
@@ -294,17 +358,19 @@ const Packages = () => {
 
     setIsLoading(true); // Enable loading state
 
-    // Filter planModules to include only true values
-    const filteredPlanModules = Object.keys(formData.planModules).filter(
-      (key) => formData.planModules[key]
-    ); // Keep only keys with true values
+    // Convert planModules array to array of module IDs and names
+    const planModulesData = formData.planModules.map(mod => ({
+      moduleId: mod.value,
+      moduleName: mod.name,
+      moduleDisplayName: mod.label,
+    }));
 
-    console.log(filteredPlanModules); // Array of keys where value is true
+    console.log(planModulesData); // Array of module objects
 
     // Prepare the data to be submitted
     const formDataWithLogo = {
       ...formData,
-      planModules: filteredPlanModules, // Replace planModules with the filtered object
+      planModules: planModulesData, // Send array of module objects
       logo: logo, // Add the base64 image to the form data
     };
 
@@ -353,17 +419,19 @@ const Packages = () => {
 
     setIsLoading(true); // Enable loading state
 
-    // Filter planModules to include only true values
-    const filteredPlanModules = Object.keys(formData.planModules).filter(
-      (key) => formData.planModules[key]
-    ); // Keep only keys with true values
+    // Convert planModules array to array of module IDs and names
+    const planModulesData = formData.planModules.map(mod => ({
+      moduleId: mod.value,
+      moduleName: mod.name,
+      moduleDisplayName: mod.label,
+    }));
 
-    console.log(filteredPlanModules); // Array of keys where value is true
+    console.log(planModulesData); // Array of module objects
 
     // Prepare the data to be submitted
     const formDataWithLogo = {
       ...formData,
-      planModules: filteredPlanModules, // Replace planModules with the filtered object
+      planModules: planModulesData, // Send array of module objects
       logo: logo, // Add the base64 image to the form data
     };
 
@@ -385,24 +453,7 @@ const Packages = () => {
       price: "",
       product: 0,
       supplier: 0,
-      planModules: {
-        employees: false,
-        invoices: false,
-        reports: false,
-        contacts: false,
-        clients: false,
-        estimates: false,
-        goals: false,
-        deals: false,
-        projects: false,
-        payments: false,
-        assets: false,
-        leads: false,
-        tickets: false,
-        taxes: false,
-        activities: false,
-        pipelines: false,
-      },
+      planModules: [], // Empty array for multi-select
       accessTrial: false,
       trialDays: 0,
       isRecommended: false,
@@ -411,8 +462,6 @@ const Packages = () => {
     });
     RemoveLogo();
     setResetKey((prevKey) => prevKey + 1);
-    const selectAllButton = document.getElementById("select-all-btn");
-    selectAllButton.checked = false;
   };
 
   useEffect(() => {
@@ -479,26 +528,34 @@ const Packages = () => {
 
       const handleeditplan = (response) => {
         if (response.done) {
+          // Convert planModules array from backend to react-select format
+          const planModulesOptions = (response.data.planModules || []).map(module => {
+            // Handle both old string format and new object format
+            if (typeof module === 'string') {
+              // Old format - try to find the module in availableModules
+              const foundModule = availableModules.find(m => m.value === module || m.name === module);
+              return foundModule || {
+                value: module,
+                label: module,
+                name: module,
+              };
+            } else if (typeof module === 'object' && module.moduleId) {
+              // New format - module object with moduleId, moduleName, moduleDisplayName
+              const foundModule = availableModules.find(m => m.value === module.moduleId);
+              return foundModule || {
+                value: module.moduleId,
+                label: module.moduleDisplayName || module.moduleName,
+                name: module.moduleName,
+                icon: module.icon,
+                color: module.color,
+              };
+            }
+            return null;
+          }).filter(Boolean); // Remove any null entries
+
           setFormData({
             ...response.data,
-            planModules: {
-              employees: response.data.planModules.includes("employees"),
-              invoices: response.data.planModules.includes("invoices"),
-              reports: response.data.planModules.includes("reports"),
-              contacts: response.data.planModules.includes("contacts"),
-              clients: response.data.planModules.includes("clients"),
-              estimates: response.data.planModules.includes("estimates"),
-              goals: response.data.planModules.includes("goals"),
-              deals: response.data.planModules.includes("deals"),
-              projects: response.data.planModules.includes("projects"),
-              payments: response.data.planModules.includes("payments"),
-              assets: response.data.planModules.includes("assets"),
-              leads: response.data.planModules.includes("leads"),
-              tickets: response.data.planModules.includes("tickets"),
-              taxes: response.data.planModules.includes("taxes"),
-              activities: response.data.planModules.includes("activities"),
-              pipelines: response.data.planModules.includes("pipelines"),
-            },
+            planModules: planModulesOptions,
           });
           setLogo(response.data.logo);
           console.log("Edit plans ----->", response.data);
@@ -564,24 +621,7 @@ const Packages = () => {
     price: "",
     product: 0,
     supplier: 0,
-    planModules: {
-      employees: false,
-      invoices: false,
-      reports: false,
-      contacts: false,
-      clients: false,
-      estimates: false,
-      goals: false,
-      deals: false,
-      projects: false,
-      payments: false,
-      assets: false,
-      leads: false,
-      tickets: false,
-      taxes: false,
-      activities: false,
-      pipelines: false,
-    },
+    planModules: [], // Array of module objects {value, label, name}
     accessTrial: false,
     trialDays: 0,
     isRecommended: false,
@@ -1278,285 +1318,90 @@ const Packages = () => {
                       </div>
                     </div>
                     <div className="col-lg-12">
-                      <div className="d-flex align-items-center justify-content-between mb-3">
-                        <h6>Plan Modules</h6>
-                        <div className="form-check d-flex align-items-center">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="selectAll"
-                              id="select-all-btn"
-                              onChange={(e) => {
-                                const isChecked = e.target.checked;
-                                setFormData((prevState) => ({
-                                  ...prevState,
-                                  planModules: {
-                                    employees: isChecked,
-                                    invoices: isChecked,
-                                    reports: isChecked,
-                                    contacts: isChecked,
-                                    clients: isChecked,
-                                    estimates: isChecked,
-                                    goals: isChecked,
-                                    deals: isChecked,
-                                    projects: isChecked,
-                                    payments: isChecked,
-                                    assets: isChecked,
-                                    leads: isChecked,
-                                    tickets: isChecked,
-                                    taxes: isChecked,
-                                    activities: isChecked,
-                                    pipelines: isChecked,
-                                  },
-                                }));
-                              }}
-                            />
-                            Select All
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="employees"
-                              checked={formData.planModules.employees}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Employees
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="invoices"
-                              checked={formData.planModules.invoices}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Invoices
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="reports"
-                              checked={formData.planModules.reports}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Reports
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="contacts"
-                              checked={formData.planModules.contacts}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Contacts
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="clients"
-                              checked={formData.planModules.clients}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Clients
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="estimates"
-                              checked={formData.planModules.estimates}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Estimates
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="goals"
-                              checked={formData.planModules.goals}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Goals
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="deals"
-                              checked={formData.planModules.deals}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Deals
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="projects"
-                              checked={formData.planModules.projects}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Projects
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="payments"
-                              checked={formData.planModules.payments}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Payments
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="assets"
-                              checked={formData.planModules.assets}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Assets
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="leads"
-                              checked={formData.planModules.leads}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Leads
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="tickets"
-                              checked={formData.planModules.tickets}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Tickets
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="taxes"
-                              checked={formData.planModules.taxes}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Taxes
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="activities"
-                              checked={formData.planModules.activities}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Activities
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-lg-3 col-sm-6">
-                        <div className="form-check d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 text-dark fw-medium">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              name="pipelines"
-                              checked={formData.planModules.pipelines}
-                              onChange={handlePlanModulesChange}
-                            />
-                            Pipelines
-                          </label>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="d-flex align-items-center mb-3">
-                          <label className="form-check-label mt-0 me-2 text-dark fw-medium">
-                            Access Trial
-                          </label>
-                          <div className="form-check form-switch me-2">
-                            <input
-                              className="form-check-input me-2"
-                              type="checkbox"
-                              role="switch"
-                              name="accessTrial"
-                              checked={formData.accessTrial}
-                              onChange={handleInputChange}
-                            />
-                          </div>
+                      <div className="mb-3">
+                        <label className="form-label">Plan Modules</label>
+                        {modulesLoading ? (
+                          <div className="text-muted">Loading modules...</div>
+                        ) : (
+                          <div className="card">
+                            <div className="card-body p-0">
+                              <div className="table-responsive">
+                                <table className="table table-bordered mb-0">
+                                  <thead className="table-light">
+                                    <tr>
+                                      <th style={{ width: '50px' }} className="text-center">Select</th>
+                                      <th>Module Name</th>
+                                      <th>Route</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {availableModules.map(module => {
+                                      const isSelected = formData.planModules.some(m => m.value === module.value);
+                                      return (
+                                        <tr key={module.value}>
+                                          <td className="text-center">
+                                            <div className="form-check form-check-md d-flex justify-content-center">
+                                              <input
+                                                                className="form-check-input"
+                                                                type="checkbox"
+                                                                checked={isSelected}
+                                                                onChange={() => {
+                                                                  if (isSelected) {
+                                                                    handleRemoveModule(module.value);
+                                                                  } else {
+                                                                    handleAddModule(module);
+                                                                  }
+                                                                }}
+                                                              />
+                                                            </div>
+                                                          </td>
+                                                          <td>
+                                                            <div className="d-flex align-items-center">
+                                                              <div
+                                                                className="rounded d-flex align-items-center justify-content-center me-2"
+                                                                style={{
+                                                                  width: '36px',
+                                                                  height: '36px',
+                                                                  backgroundColor: module.color + '20',
+                                                                  color: module.color
+                                                                }}
+                                                              >
+                                                                <i className={module.icon}></i>
+                                                              </div>
+                                                              <div>
+                                                                <div className="fw-medium">{module.label}</div>
+                                                                <small className="text-muted">{module.name}</small>
+                                                              </div>
+                                                            </div>
+                                                          </td>
+                                                          <td>
+                                                            <code>{module.route}</code>
+                                                          </td>
+                                                        </tr>
+                                                      );
+                                                    })}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                    <div className="col-md-6">
+                      <div className="d-flex align-items-center mb-3">
+                        <label className="form-check-label mt-0 me-2 text-dark fw-medium">
+                          Access Trial
+                        </label>
+                        <div className="form-check form-switch me-2">
+                          <input
+                            className="form-check-input me-2"
+                            type="checkbox"
+                            role="switch"
+                            name="accessTrial"
+                            checked={formData.accessTrial}
+                            onChange={handleInputChange}
+                          />
                         </div>
                       </div>
                     </div>
@@ -2011,285 +1856,90 @@ const Packages = () => {
                         </div>
                       </div>
                       <div className="col-lg-12">
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <h6>Plan Modules</h6>
-                          <div className="form-check d-flex align-items-center">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="selectAll"
-                                id="select-all-btn"
-                                onChange={(e) => {
-                                  const isChecked = e.target.checked;
-                                  setFormData((prevState) => ({
-                                    ...prevState,
-                                    planModules: {
-                                      employees: isChecked,
-                                      invoices: isChecked,
-                                      reports: isChecked,
-                                      contacts: isChecked,
-                                      clients: isChecked,
-                                      estimates: isChecked,
-                                      goals: isChecked,
-                                      deals: isChecked,
-                                      projects: isChecked,
-                                      payments: isChecked,
-                                      assets: isChecked,
-                                      leads: isChecked,
-                                      tickets: isChecked,
-                                      taxes: isChecked,
-                                      activities: isChecked,
-                                      pipelines: isChecked,
-                                    },
-                                  }));
-                                }}
-                              />
-                              Select All
-                            </label>
-                          </div>
+                        <div className="mb-3">
+                          <label className="form-label">Plan Modules</label>
+                          {modulesLoading ? (
+                            <div className="text-muted">Loading modules...</div>
+                          ) : (
+                            <div className="card">
+                              <div className="card-body p-0">
+                                <div className="table-responsive">
+                                  <table className="table table-bordered mb-0">
+                                    <thead className="table-light">
+                                      <tr>
+                                        <th style={{ width: '50px' }} className="text-center">Select</th>
+                                        <th>Module Name</th>
+                                        <th>Route</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {availableModules.map(module => {
+                                        const isSelected = formData.planModules.some(m => m.value === module.value);
+                                        return (
+                                          <tr key={module.value}>
+                                            <td className="text-center">
+                                              <div className="form-check form-check-md d-flex justify-content-center">
+                                                <input
+                                                  className="form-check-input"
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                    if (isSelected) {
+                                                      handleRemoveModule(module.value);
+                                                    } else {
+                                                      handleAddModule(module);
+                                                    }
+                                                  }}
+                                                />
+                                              </div>
+                                            </td>
+                                            <td>
+                                              <div className="d-flex align-items-center">
+                                                <div
+                                                  className="rounded d-flex align-items-center justify-content-center me-2"
+                                                  style={{
+                                                    width: '36px',
+                                                    height: '36px',
+                                                    backgroundColor: module.color + '20',
+                                                    color: module.color
+                                                  }}
+                                                >
+                                                  <i className={module.icon}></i>
+                                                </div>
+                                                <div>
+                                                  <div className="fw-medium">{module.label}</div>
+                                                  <small className="text-muted">{module.name}</small>
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td>
+                                              <code>{module.route}</code>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="row">
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="employees"
-                                checked={formData.planModules.employees}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Employees
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="invoices"
-                                checked={formData.planModules.invoices}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Invoices
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="reports"
-                                checked={formData.planModules.reports}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Reports
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="contacts"
-                                checked={formData.planModules.contacts}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Contacts
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="clients"
-                                checked={formData.planModules.clients}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Clients
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="estimates"
-                                checked={formData.planModules.estimates}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Estimates
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="goals"
-                                checked={formData.planModules.goals}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Goals
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="deals"
-                                checked={formData.planModules.deals}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Deals
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="projects"
-                                checked={formData.planModules.projects}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Projects
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="payments"
-                                checked={formData.planModules.payments}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Payments
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="assets"
-                                checked={formData.planModules.assets}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Assets
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="leads"
-                                checked={formData.planModules.leads}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Leads
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="tickets"
-                                checked={formData.planModules.tickets}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Tickets
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="taxes"
-                                checked={formData.planModules.taxes}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Taxes
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="activities"
-                                checked={formData.planModules.activities}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Activities
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-lg-3 col-sm-6">
-                          <div className="form-check d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 text-dark fw-medium">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                name="pipelines"
-                                checked={formData.planModules.pipelines}
-                                onChange={handlePlanModulesChange}
-                              />
-                              Pipelines
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="d-flex align-items-center mb-3">
-                            <label className="form-check-label mt-0 me-2 text-dark fw-medium">
-                              Access Trial
-                            </label>
-                            <div className="form-check form-switch me-2">
-                              <input
-                                className="form-check-input me-2"
-                                type="checkbox"
-                                role="switch"
-                                name="accessTrial"
-                                checked={formData.accessTrial}
-                                onChange={handleInputChange}
-                              />
-                            </div>
+                      <div className="col-md-6">
+                        <div className="d-flex align-items-center mb-3">
+                          <label className="form-check-label mt-0 me-2 text-dark fw-medium">
+                            Access Trial
+                          </label>
+                          <div className="form-check form-switch me-2">
+                            <input
+                              className="form-check-input me-2"
+                              type="checkbox"
+                              role="switch"
+                              name="accessTrial"
+                              checked={formData.accessTrial}
+                              onChange={handleInputChange}
+                            />
                           </div>
                         </div>
                       </div>
@@ -2393,6 +2043,7 @@ const Packages = () => {
           </div>
         </div>
         {/* /Edit Plan */}
+
         <ToastContainer />
       </SkeletonTheme>
     </>

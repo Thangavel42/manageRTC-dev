@@ -1,12 +1,12 @@
-import { getTenantCollections } from "../../config/db.js";
 import {
-  subDays,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
+    endOfMonth,
+    endOfWeek,
+    startOfMonth,
+    startOfWeek,
+    subDays,
 } from "date-fns";
 import { ObjectId } from "mongodb";
+import { getTenantCollections } from "../../config/db.js";
 
 // Helper function to get date filter based on filter type
 const getDateFilter = (filter) => {
@@ -2098,6 +2098,52 @@ export const deleteUser = async (companyId, userId) => {
   }
 
   return { done: true, message: "User deleted successfully." };
+};
+
+/**
+ * Gets a user by ID from either employees or clients collection
+ */
+export const getUserById = async (companyId, userId) => {
+  const { employees, clients } = getTenantCollections(companyId);
+
+  // 1. Try to find in employees collection
+  const employee = await employees.findOne({ _id: new ObjectId(userId) });
+
+  if (employee) {
+    return {
+      done: true,
+      data: {
+        _id: employee._id,
+        name: `${employee.firstName || ""} ${employee.lastName || ""}`.trim(),
+        image_url: employee.avatar || "default_avatar.png",
+        email: employee.email,
+        created_date: employee.createdAt,
+        role: "Employee",
+        status: employee.status || "Active",
+      },
+    };
+  }
+
+  // 2. If not found in employees, try clients collection
+  const client = await clients.findOne({ _id: new ObjectId(userId) });
+
+  if (client) {
+    return {
+      done: true,
+      data: {
+        _id: client._id,
+        name: client.name,
+        image_url: client.logo || "default_avatar.png",
+        email: client.email,
+        created_date: client.createdAt,
+        role: "Client",
+        status: client.status || "Active",
+      },
+    };
+  }
+
+  // 3. User not found in either collection
+  return { done: false, error: "User not found" };
 };
 
 // Add todo

@@ -1,6 +1,5 @@
-import { getTenantCollections } from "../../config/db.js";
-import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
+import { getTenantCollections } from "../../config/db.js";
 
 const toYMDStr = (input) => {
   const d = new Date(input);
@@ -80,15 +79,55 @@ const getTrainers = async (companyId, {type,startDate,endDate}={}) => {
       Object.keys(dateFilter).length ? { $match: dateFilter } : { $match: {} },
       { $sort: { created_at: -1, _id: -1 } },
       {
+        $lookup: {
+          from: "employees",
+          localField: "employeeId",
+          foreignField: "_id",
+          as: "employeeData"
+        }
+      },
+      {
+        $addFields: {
+          employeeInfo: { $arrayElemAt: ["$employeeData", 0] },
+        }
+      },
+      {
         $project: {
           _id: 0,
-          trainer: 1,
-          phone: 1,
-          email: 1,
+          trainer: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: { $concat: ["$employeeInfo.firstName", " ", "$employeeInfo.lastName"] },
+              else: "$trainer"
+            }
+          },
+          phone: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.phone",
+              else: "$phone"
+            }
+          },
+          email: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.email",
+              else: "$email"
+            }
+          },
+          profileImage: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.profileImage",
+              else: "$profileImage"
+            }
+          },
           desc: 1,
           status: 1,
           created_at: 1,
-          trainerId:1,
+          trainerId: 1,
+          trainerType: 1,
+          employeeId: { $toString: "$employeeId" },
         },
       },
     ];
@@ -113,22 +152,66 @@ const getSpecificTrainers = async (companyId, trainerId) => {
   try {
     if (!companyId) throw new Error("Company ID is required");
     const collection = getTenantCollections(companyId);
-    const record = await collection.trainers.findOne(
-      { trainerId: trainerId },
+
+    const pipeline = [
+      { $match: { trainerId: trainerId } },
       {
-        projection: {
+        $lookup: {
+          from: "employees",
+          localField: "employeeId",
+          foreignField: "_id",
+          as: "employeeData"
+        }
+      },
+      {
+        $addFields: {
+          employeeInfo: { $arrayElemAt: ["$employeeData", 0] },
+        }
+      },
+      {
+        $project: {
           _id: 0,
-          trainer: 1,
-          phone: 1,
-          email: 1,
+          trainer: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: { $concat: ["$employeeInfo.firstName", " ", "$employeeInfo.lastName"] },
+              else: "$trainer"
+            }
+          },
+          phone: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.phone",
+              else: "$phone"
+            }
+          },
+          email: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.email",
+              else: "$email"
+            }
+          },
+          profileImage: {
+            $cond: {
+              if: { $eq: ["$trainerType", "Internal"] },
+              then: "$employeeInfo.profileImage",
+              else: "$profileImage"
+            }
+          },
           desc: 1,
           status: 1,
           trainerId: 1,
+          trainerType: 1,
+          employeeId: { $toString: "$employeeId" },
         },
-      }
-    );
-    if (!record) throw new Error("trainers record not found");
-    return { done: true, message: "success", data: record };
+      },
+    ];
+
+    const results = await collection.trainers.aggregate(pipeline).toArray();
+    if (!results || results.length === 0) throw new Error("trainers record not found");
+
+    return { done: true, message: "success", data: results[0] };
   } catch (error) {
     console.error("Error fetching trainers record:", error);
     return { done: false, message: error.message, data: [] };
@@ -140,25 +223,32 @@ const addTrainers = async (companyId, form) => {
   try {
     if (!companyId) throw new Error("Company ID is required");
     const collection = getTenantCollections(companyId);
-    // basic validation
-    const required = ["trainer", "phone", "email", "desc", "status"];
-    for (const k of required) {
-      if (!form[k]) throw new Error(`Missing field: ${k}`);
-    }
-
 
     const newType = {
-      trainer: form.trainer,
-      phone: form.phone,
-      email: form.email,
       desc: form.desc,
       status: form.status,
+      trainerType: form.trainerType || "External",
       trainerId: new ObjectId().toHexString(),
       created_by: form.created_by || null,
       created_at: new Date(),
     };
 
-    console.log(newType);
+    // For Internal trainers, only store employeeId as ObjectId
+    if (form.trainerType === "Internal") {
+      if (!form.employeeId) throw new Error("Missing employeeId for internal trainer");
+      newType.employeeId = new ObjectId(form.employeeId);
+    } else {
+      // For External trainers, store full details
+      const required = ["trainer", "phone", "email"];
+      for (const k of required) {
+        if (!form[k]) throw new Error(`Missing field: ${k}`);
+      }
+      newType.trainer = form.trainer;
+      newType.phone = form.phone;
+      newType.email = form.email;
+    }
+
+    console.log("📥 Adding trainer:", newType);
 
     await collection.trainers.insertOne(newType);
     return { done: true, message: "Trainers added successfully" };
@@ -170,7 +260,7 @@ const addTrainers = async (companyId, form) => {
 
 // 5. Update a Trainers
 const updateTrainers = async (companyId, form) => {
-    console.log(form);
+    console.log("📝 Updating trainer:", form);
   try {
     if (!companyId) throw new Error("Company ID is required");
     const collection = getTenantCollections(companyId);
@@ -180,16 +270,32 @@ const updateTrainers = async (companyId, form) => {
     if (!existing) throw new Error("Trainers not found");
 
     const updateData = {
-      trainer: form.trainer ?? existing.trainer,
-      phone: form.phone ?? existing.phone,
-      email: form.email ?? existing.email,
       desc: form.desc ?? existing.desc,
       status: form.status ?? existing.status,
+      trainerType: form.trainerType ?? existing.trainerType ?? "External",
       // keep identifiers and created metadata
       trainerId: existing.trainerId,
       created_by: existing.created_by,
       created_at: existing.created_at,
     };
+
+    // Handle Internal vs External trainer updates
+    if (form.trainerType === "Internal" || (existing.trainerType === "Internal" && !form.trainerType)) {
+      // For internal trainers, only store/update employeeId as ObjectId
+      const empId = form.employeeId ?? existing.employeeId;
+      updateData.employeeId = empId instanceof ObjectId ? empId : new ObjectId(empId);
+      // Remove stored trainer details as they come from employee
+      updateData.trainer = null;
+      updateData.phone = null;
+      updateData.email = null;
+    } else {
+      // For external trainers, store full details
+      updateData.trainer = form.trainer ?? existing.trainer;
+      updateData.phone = form.phone ?? existing.phone;
+      updateData.email = form.email ?? existing.email;
+      // Remove employeeId if changing from internal to external
+      updateData.employeeId = null;
+    }
 
     const result = await collection.trainers.updateOne(
       { trainerId: form.trainerId },
@@ -226,11 +332,6 @@ const deleteTrainers = async (companyId, trainerIds) => {
 };
 
 export {
-  getTrainersStats,
-  getTrainers,
-  getSpecificTrainers,
-  addTrainers,
-  updateTrainers,
-  deleteTrainers,
+    addTrainers, deleteTrainers, getSpecificTrainers, getTrainers, getTrainersStats, updateTrainers
 };
 
