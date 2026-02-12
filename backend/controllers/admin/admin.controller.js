@@ -1,25 +1,22 @@
-import * as adminService from "../../services/admin/admin.services.js";
-import { ObjectId } from "mongodb";
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+import { ObjectId } from 'mongodb';
+import * as adminService from '../../services/admin/admin.services.js';
+import { devError, devLog, devWarn } from '../../utils/logger.js';
 
 const adminController = (socket, io) => {
   // Check if we're in development mode
   const isDevelopment =
-    process.env.NODE_ENV === "development" ||
-    process.env.NODE_ENV !== "production";
+    process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
 
   const validateCompanyAccess = (socket) => {
     if (!socket.companyId) {
-      throw new Error("Company ID not found in user metadata");
+      throw new Error('Company ID not found in user metadata');
     }
 
     // SECURITY: Validate companyId format (should be alphanumeric, reasonable length)
     const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!companyIdRegex.test(socket.companyId)) {
-      devError(
-        `Invalid company ID format: ${socket.companyId} for user ${socket.user.sub}`
-      );
-      throw new Error("Invalid company ID format");
+      devError(`Invalid company ID format: ${socket.companyId} for user ${socket.user.sub}`);
+      throw new Error('Invalid company ID format');
     }
 
     // SECURITY: Check if user actually belongs to this company
@@ -27,7 +24,7 @@ const adminController = (socket, io) => {
       devError(
         `Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
       );
-      throw new Error("Unauthorized: Company ID mismatch");
+      throw new Error('Unauthorized: Company ID mismatch');
     }
 
     return socket.companyId;
@@ -43,10 +40,10 @@ const adminController = (socket, io) => {
 
       if (!socket.checkRateLimit()) {
         devWarn(`Rate limit exceeded for user ${socket.user.sub}`);
-        const eventName = args[0] || "unknown";
+        const eventName = args[0] || 'unknown';
         socket.emit(`${eventName}-response`, {
           done: false,
-          error: "Rate limit exceeded. Please try again later.",
+          error: 'Rate limit exceeded. Please try again later.',
         });
         return;
       }
@@ -55,13 +52,13 @@ const adminController = (socket, io) => {
   };
 
   // Get dashboard statistics
-  socket.on("admin/dashboard/get-stats", async () => {
+  socket.on('admin/dashboard/get-stats', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getDashboardStats(companyId);
-      socket.emit("admin/dashboard/get-stats-response", result);
+      socket.emit('admin/dashboard/get-stats-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-stats-response", {
+      socket.emit('admin/dashboard/get-stats-response', {
         done: false,
         error: error.message,
       });
@@ -69,45 +66,31 @@ const adminController = (socket, io) => {
   });
 
   // Get employees by department
-  socket.on(
-    "admin/dashboard/get-employees-by-department",
-    async (data = {}) => {
-      try {
-        const companyId = validateCompanyAccess(socket);
-        const filter = data?.filter || "all";
-        const year = data?.year || new Date().getFullYear();
-        const result = await adminService.getEmployeesByDepartment(
-          companyId,
-          filter,
-          year
-        );
-        socket.emit(
-          "admin/dashboard/get-employees-by-department-response",
-          result
-        );
-      } catch (error) {
-        socket.emit("admin/dashboard/get-employees-by-department-response", {
-          done: false,
-          error: error.message,
-        });
-      }
-    }
-  );
-
-  // Get employee status distribution
-  socket.on("admin/dashboard/get-employee-status", async (data) => {
+  socket.on('admin/dashboard/get-employees-by-department', async (data = {}) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
-      const result = await adminService.getEmployeeStatus(
-        companyId,
-        filter,
-        year
-      );
-      socket.emit("admin/dashboard/get-employee-status-response", result);
+      const result = await adminService.getEmployeesByDepartment(companyId, filter, year);
+      socket.emit('admin/dashboard/get-employees-by-department-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-employee-status-response", {
+      socket.emit('admin/dashboard/get-employees-by-department-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get employee status distribution
+  socket.on('admin/dashboard/get-employee-status', async (data) => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const filter = data?.filter || 'all';
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getEmployeeStatus(companyId, filter, year);
+      socket.emit('admin/dashboard/get-employee-status-response', result);
+    } catch (error) {
+      socket.emit('admin/dashboard/get-employee-status-response', {
         done: false,
         error: error.message,
       });
@@ -115,19 +98,15 @@ const adminController = (socket, io) => {
   });
 
   // Get attendance overview
-  socket.on("admin/dashboard/get-attendance-overview", async (data) => {
+  socket.on('admin/dashboard/get-attendance-overview', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
-      const result = await adminService.getAttendanceOverview(
-        companyId,
-        filter,
-        year
-      );
-      socket.emit("admin/dashboard/get-attendance-overview-response", result);
+      const result = await adminService.getAttendanceOverview(companyId, filter, year);
+      socket.emit('admin/dashboard/get-attendance-overview-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-attendance-overview-response", {
+      socket.emit('admin/dashboard/get-attendance-overview-response', {
         done: false,
         error: error.message,
       });
@@ -135,21 +114,16 @@ const adminController = (socket, io) => {
   });
 
   // Get clock in/out data
-  socket.on("admin/dashboard/get-clock-inout-data", async (data) => {
+  socket.on('admin/dashboard/get-clock-inout-data', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
       const department = data?.department || null;
-      const result = await adminService.getClockInOutData(
-        companyId,
-        filter,
-        year,
-        department
-      );
-      socket.emit("admin/dashboard/get-clock-inout-data-response", result);
+      const result = await adminService.getClockInOutData(companyId, filter, year, department);
+      socket.emit('admin/dashboard/get-clock-inout-data-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-clock-inout-data-response", {
+      socket.emit('admin/dashboard/get-clock-inout-data-response', {
         done: false,
         error: error.message,
       });
@@ -157,21 +131,16 @@ const adminController = (socket, io) => {
   });
 
   // Get sales overview
-  socket.on("admin/dashboard/get-sales-overview", async (data) => {
+  socket.on('admin/dashboard/get-sales-overview', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
       const department = data?.department || null;
-      const result = await adminService.getSalesOverview(
-        companyId,
-        filter,
-        year,
-        department
-      );
-      socket.emit("admin/dashboard/get-sales-overview-response", result);
+      const result = await adminService.getSalesOverview(companyId, filter, year, department);
+      socket.emit('admin/dashboard/get-sales-overview-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-sales-overview-response", {
+      socket.emit('admin/dashboard/get-sales-overview-response', {
         done: false,
         error: error.message,
       });
@@ -179,21 +148,16 @@ const adminController = (socket, io) => {
   });
 
   // Get recent invoices
-  socket.on("admin/dashboard/get-recent-invoices", async (data) => {
+  socket.on('admin/dashboard/get-recent-invoices', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
-      const invoiceType = data?.invoiceType || "all";
-      const result = await adminService.getRecentInvoices(
-        companyId,
-        filter,
-        year,
-        invoiceType
-      );
-      socket.emit("admin/dashboard/get-recent-invoices-response", result);
+      const invoiceType = data?.invoiceType || 'all';
+      const result = await adminService.getRecentInvoices(companyId, filter, year, invoiceType);
+      socket.emit('admin/dashboard/get-recent-invoices-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-recent-invoices-response", {
+      socket.emit('admin/dashboard/get-recent-invoices-response', {
         done: false,
         error: error.message,
       });
@@ -201,13 +165,27 @@ const adminController = (socket, io) => {
   });
 
   // Get employees list
-  socket.on("admin/dashboard/get-employees-list", async () => {
+  socket.on('admin/dashboard/get-employees-list', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getEmployeesList(companyId);
-      socket.emit("admin/dashboard/get-employees-list-response", result);
+      socket.emit('admin/dashboard/get-employees-list-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-employees-list-response", {
+      socket.emit('admin/dashboard/get-employees-list-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get employees list for asset assignment and other admin features
+  socket.on('admin/employees/get-list', async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getEmployeesList(companyId);
+      socket.emit('admin/employees/get-list-response', result);
+    } catch (error) {
+      socket.emit('admin/employees/get-list-response', {
         done: false,
         error: error.message,
       });
@@ -215,13 +193,13 @@ const adminController = (socket, io) => {
   });
 
   // Get job applicants
-  socket.on("admin/dashboard/get-job-applicants", async () => {
+  socket.on('admin/dashboard/get-job-applicants', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getJobApplicants(companyId);
-      socket.emit("admin/dashboard/get-job-applicants-response", result);
+      socket.emit('admin/dashboard/get-job-applicants-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-job-applicants-response", {
+      socket.emit('admin/dashboard/get-job-applicants-response', {
         done: false,
         error: error.message,
       });
@@ -229,13 +207,13 @@ const adminController = (socket, io) => {
   });
 
   // Get recent activities
-  socket.on("admin/dashboard/get-recent-activities", async () => {
+  socket.on('admin/dashboard/get-recent-activities', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getRecentActivities(companyId);
-      socket.emit("admin/dashboard/get-recent-activities-response", result);
+      socket.emit('admin/dashboard/get-recent-activities-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-recent-activities-response", {
+      socket.emit('admin/dashboard/get-recent-activities-response', {
         done: false,
         error: error.message,
       });
@@ -243,13 +221,13 @@ const adminController = (socket, io) => {
   });
 
   // Get birthdays
-  socket.on("admin/dashboard/get-birthdays", async () => {
+  socket.on('admin/dashboard/get-birthdays', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getBirthdays(companyId);
-      socket.emit("admin/dashboard/get-birthdays-response", result);
+      socket.emit('admin/dashboard/get-birthdays-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-birthdays-response", {
+      socket.emit('admin/dashboard/get-birthdays-response', {
         done: false,
         error: error.message,
       });
@@ -257,18 +235,18 @@ const adminController = (socket, io) => {
   });
 
   // Get todos
-  socket.on("admin/dashboard/get-todos", async (data) => {
+  socket.on('admin/dashboard/get-todos', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
 
       const result = await adminService.getTodos(companyId, userId, filter);
 
-      socket.emit("admin/dashboard/get-todos-response", result);
+      socket.emit('admin/dashboard/get-todos-response', result);
     } catch (error) {
       devError(`[GET TODOS] Error:`, error);
-      socket.emit("admin/dashboard/get-todos-response", {
+      socket.emit('admin/dashboard/get-todos-response', {
         done: false,
         error: error.message,
       });
@@ -276,17 +254,17 @@ const adminController = (socket, io) => {
   });
 
   // Get todo statistics
-  socket.on("admin/dashboard/get-todo-statistics", async (data) => {
+  socket.on('admin/dashboard/get-todo-statistics', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
 
       const result = await adminService.getTodoStatistics(companyId, filter);
 
-      socket.emit("admin/dashboard/get-todo-statistics-response", result);
+      socket.emit('admin/dashboard/get-todo-statistics-response', result);
     } catch (error) {
       devError(`[GET TODO STATISTICS] Error:`, error);
-      socket.emit("admin/dashboard/get-todo-statistics-response", {
+      socket.emit('admin/dashboard/get-todo-statistics-response', {
         done: false,
         error: error.message,
       });
@@ -294,19 +272,15 @@ const adminController = (socket, io) => {
   });
 
   // Get projects data
-  socket.on("admin/dashboard/get-projects-data", async (data) => {
+  socket.on('admin/dashboard/get-projects-data', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
-      const result = await adminService.getProjectsData(
-        companyId,
-        filter,
-        year
-      );
-      socket.emit("admin/dashboard/get-projects-data-response", result);
+      const result = await adminService.getProjectsData(companyId, filter, year);
+      socket.emit('admin/dashboard/get-projects-data-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-projects-data-response", {
+      socket.emit('admin/dashboard/get-projects-data-response', {
         done: false,
         error: error.message,
       });
@@ -314,19 +288,15 @@ const adminController = (socket, io) => {
   });
 
   // Get task statistics
-  socket.on("admin/dashboard/get-task-statistics", async (data) => {
+  socket.on('admin/dashboard/get-task-statistics', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const filter = data?.filter || "all";
+      const filter = data?.filter || 'all';
       const year = data?.year || new Date().getFullYear();
-      const result = await adminService.getTaskStatistics(
-        companyId,
-        filter,
-        year
-      );
-      socket.emit("admin/dashboard/get-task-statistics-response", result);
+      const result = await adminService.getTaskStatistics(companyId, filter, year);
+      socket.emit('admin/dashboard/get-task-statistics-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-task-statistics-response", {
+      socket.emit('admin/dashboard/get-task-statistics-response', {
         done: false,
         error: error.message,
       });
@@ -334,27 +304,27 @@ const adminController = (socket, io) => {
   });
 
   // Get schedules
-  socket.on("admin/dashboard/get-schedules", async () => {
+  socket.on('admin/dashboard/get-schedules', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getSchedules(companyId);
-      socket.emit("admin/dashboard/get-schedules-response", result);
+      socket.emit('admin/dashboard/get-schedules-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-schedules-response", {
+      socket.emit('admin/dashboard/get-schedules-response', {
         done: false,
         error: error.message,
       });
     }
   });
   // Get all users (employees and clients combined)
-  socket.on("admin/users/get", async (filters) => {
+  socket.on('admin/users/get', async (filters) => {
     // Accept filters here
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getAllUsers(companyId, filters); // Pass filters to the service
-      socket.emit("admin/users/get-response", result);
+      socket.emit('admin/users/get-response', result);
     } catch (error) {
-      socket.emit("admin/users/get-response", {
+      socket.emit('admin/users/get-response', {
         done: false,
         error: error.message,
       });
@@ -362,25 +332,22 @@ const adminController = (socket, io) => {
   });
 
   // Create a new user
-  socket.on("admin/users/create", async (userData) => {
+  socket.on('admin/users/create', async (userData) => {
     try {
       // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.createUser(companyId, userData);
 
       // Respond directly to the sender for immediate feedback
-      socket.emit("admin/users/create-response", result);
+      socket.emit('admin/users/create-response', result);
 
       // If successful, fetch the updated list and broadcast it to all admins
       if (result.done) {
         const updatedUserList = await adminService.getAllUsers(companyId);
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/users/list-update",
-          updatedUserList
-        );
+        io.to(`admin_room_${companyId}`).emit('admin/users/list-update', updatedUserList);
       }
     } catch (error) {
-      socket.emit("admin/users/create-response", {
+      socket.emit('admin/users/create-response', {
         done: false,
         error: error.message,
       });
@@ -388,28 +355,21 @@ const adminController = (socket, io) => {
   });
 
   // Update an existing user
-  socket.on("admin/users/update", async (data) => {
+  socket.on('admin/users/update', async (data) => {
     try {
       const { userId, updatedData } = data;
       // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.updateUser(
-        companyId,
-        userId,
-        updatedData
-      );
+      const result = await adminService.updateUser(companyId, userId, updatedData);
 
-      socket.emit("admin/users/update-response", result);
+      socket.emit('admin/users/update-response', result);
 
       if (result.done) {
         const updatedUserList = await adminService.getAllUsers(companyId);
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/users/list-update",
-          updatedUserList
-        );
+        io.to(`admin_room_${companyId}`).emit('admin/users/list-update', updatedUserList);
       }
     } catch (error) {
-      socket.emit("admin/users/update-response", {
+      socket.emit('admin/users/update-response', {
         done: false,
         error: error.message,
       });
@@ -417,24 +377,21 @@ const adminController = (socket, io) => {
   });
 
   // Delete a user
-  socket.on("admin/users/delete", async (data) => {
+  socket.on('admin/users/delete', async (data) => {
     try {
       const { userId } = data;
       // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.deleteUser(companyId, userId);
 
-      socket.emit("admin/users/delete-response", result);
+      socket.emit('admin/users/delete-response', result);
 
       if (result.done) {
         const updatedUserList = await adminService.getAllUsers(companyId);
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/users/list-update",
-          updatedUserList
-        );
+        io.to(`admin_room_${companyId}`).emit('admin/users/list-update', updatedUserList);
       }
     } catch (error) {
-      socket.emit("admin/users/delete-response", {
+      socket.emit('admin/users/delete-response', {
         done: false,
         error: error.message,
       });
@@ -443,7 +400,7 @@ const adminController = (socket, io) => {
   // Get all dashboard data at once
   // FIXED: Added individual error handling for each service call to prevent timeout
   // when any single service fails. Returns partial data with error information.
-  socket.on("admin/dashboard/get-all-data", async (data = {}) => {
+  socket.on('admin/dashboard/get-all-data', async (data = {}) => {
     const startTime = Date.now();
     const companyId = validateCompanyAccess(socket);
     const userId = socket.user.sub;
@@ -470,19 +427,31 @@ const adminController = (socket, io) => {
       safeServiceCall('pendingItems', adminService.getPendingItems(companyId, userId, year)),
       safeServiceCall('employeeGrowth', adminService.getEmployeeGrowth(companyId, year)),
       safeServiceCall('stats', adminService.getDashboardStats(companyId, year)),
-      safeServiceCall('employeesByDepartment', adminService.getEmployeesByDepartment(companyId, "all", year)),
-      safeServiceCall('employeeStatus', adminService.getEmployeeStatus(companyId, "all", year)),
-      safeServiceCall('attendanceOverview', adminService.getAttendanceOverview(companyId, "all", year)),
-      safeServiceCall('clockInOutData', adminService.getClockInOutData(companyId, "all", year, null)),
-      safeServiceCall('salesOverview', adminService.getSalesOverview(companyId, "all", year, null)),
-      safeServiceCall('recentInvoices', adminService.getRecentInvoices(companyId, "all", year, "all")),
+      safeServiceCall(
+        'employeesByDepartment',
+        adminService.getEmployeesByDepartment(companyId, 'all', year)
+      ),
+      safeServiceCall('employeeStatus', adminService.getEmployeeStatus(companyId, 'all', year)),
+      safeServiceCall(
+        'attendanceOverview',
+        adminService.getAttendanceOverview(companyId, 'all', year)
+      ),
+      safeServiceCall(
+        'clockInOutData',
+        adminService.getClockInOutData(companyId, 'all', year, null)
+      ),
+      safeServiceCall('salesOverview', adminService.getSalesOverview(companyId, 'all', year, null)),
+      safeServiceCall(
+        'recentInvoices',
+        adminService.getRecentInvoices(companyId, 'all', year, 'all')
+      ),
       safeServiceCall('employeesList', adminService.getEmployeesList(companyId, year)),
       safeServiceCall('jobApplicants', adminService.getJobApplicants(companyId, year)),
       safeServiceCall('recentActivities', adminService.getRecentActivities(companyId, year)),
       safeServiceCall('birthdays', adminService.getBirthdays(companyId, year)),
-      safeServiceCall('todos', adminService.getTodos(companyId, userId, "all", year)),
-      safeServiceCall('projectsData', adminService.getProjectsData(companyId, "all", year)),
-      safeServiceCall('taskStatistics', adminService.getTaskStatistics(companyId, "all", year)),
+      safeServiceCall('todos', adminService.getTodos(companyId, userId, 'all', year)),
+      safeServiceCall('projectsData', adminService.getProjectsData(companyId, 'all', year)),
+      safeServiceCall('taskStatistics', adminService.getTaskStatistics(companyId, 'all', year)),
       safeServiceCall('schedules', adminService.getSchedules(companyId, year)),
     ]);
 
@@ -490,9 +459,12 @@ const adminController = (socket, io) => {
     devLog(`[ADMIN DASHBOARD] Total load time: ${totalTime}ms`);
 
     // Check which services failed
-    const failedServices = results.filter(r => !r.success);
+    const failedServices = results.filter((r) => !r.success);
     if (failedServices.length > 0) {
-      devWarn(`[ADMIN DASHBOARD] ${failedServices.length} services failed:`, failedServices.map(f => f.error));
+      devWarn(
+        `[ADMIN DASHBOARD] ${failedServices.length} services failed:`,
+        failedServices.map((f) => f.error)
+      );
     }
 
     // Build response with partial data even if some services failed
@@ -516,7 +488,7 @@ const adminController = (socket, io) => {
       schedules,
     ] = results;
 
-    socket.emit("admin/dashboard/get-all-data-response", {
+    socket.emit('admin/dashboard/get-all-data-response', {
       done: true,
       data: {
         pendingItems: pendingItems.data,
@@ -538,16 +510,16 @@ const adminController = (socket, io) => {
         schedules: schedules.data,
       },
       partialData: failedServices.length > 0,
-      failedServices: failedServices.length > 0 ? failedServices.map(f => f.error) : undefined,
+      failedServices: failedServices.length > 0 ? failedServices.map((f) => f.error) : undefined,
     });
   });
 
   // Add todo
   socket.on(
-    "admin/dashboard/add-todo",
+    'admin/dashboard/add-todo',
     withRateLimit(async (todoData) => {
       try {
-        devLog("Add todo request received:", {
+        devLog('Add todo request received:', {
           todoData,
           socketId: socket.id,
         });
@@ -555,75 +527,59 @@ const adminController = (socket, io) => {
         const userId = socket.user.sub;
 
         // SECURITY: Input validation
-        if (!todoData || typeof todoData !== "object") {
-          devError("Invalid todo data:", todoData);
-          throw new Error("Invalid todo data");
+        if (!todoData || typeof todoData !== 'object') {
+          devError('Invalid todo data:', todoData);
+          throw new Error('Invalid todo data');
         }
 
         // Validate required fields
-        if (!todoData.title || typeof todoData.title !== "string") {
-          throw new Error("Todo title is required and must be a string");
+        if (!todoData.title || typeof todoData.title !== 'string') {
+          throw new Error('Todo title is required and must be a string');
         }
 
         // Sanitize and validate input
         const sanitizedTodoData = {
           title: todoData.title.trim().substring(0, 200), // Limit title length
-          description: todoData.description
-            ? todoData.description.trim().substring(0, 1000)
-            : "",
-          tag: todoData.tag ? todoData.tag.trim().substring(0, 50) : "",
+          description: todoData.description ? todoData.description.trim().substring(0, 1000) : '',
+          tag: todoData.tag ? todoData.tag.trim().substring(0, 50) : '',
           priority: (() => {
             const priority = todoData.priority?.toLowerCase();
-            devLog("Priority validation:", {
+            devLog('Priority validation:', {
               original: todoData.priority,
               lowercase: priority,
             });
-            const isValid = ["low", "medium", "high"].includes(priority);
+            const isValid = ['low', 'medium', 'high'].includes(priority);
             const result = isValid
-              ? todoData.priority.charAt(0).toUpperCase() +
-                todoData.priority.slice(1).toLowerCase()
-              : "Medium";
-            devLog("Priority result:", result);
+              ? todoData.priority.charAt(0).toUpperCase() + todoData.priority.slice(1).toLowerCase()
+              : 'Medium';
+            devLog('Priority result:', result);
             return result;
           })(),
           dueDate:
             todoData.dueDate && !isNaN(new Date(todoData.dueDate))
               ? new Date(todoData.dueDate)
               : null,
-          assignedTo: todoData.assignedTo
-            ? todoData.assignedTo.trim().substring(0, 100)
-            : null,
+          assignedTo: todoData.assignedTo ? todoData.assignedTo.trim().substring(0, 100) : null,
         };
 
-        devLog("Calling adminService.addTodo with:", {
+        devLog('Calling adminService.addTodo with:', {
           companyId,
           userId,
           sanitizedTodoData,
         });
-        const result = await adminService.addTodo(
-          companyId,
-          userId,
-          sanitizedTodoData
-        );
-        devLog("Add todo service result:", result);
+        const result = await adminService.addTodo(companyId, userId, sanitizedTodoData);
+        devLog('Add todo service result:', result);
 
-        socket.emit("admin/dashboard/add-todo-response", result);
+        socket.emit('admin/dashboard/add-todo-response', result);
 
         // Broadcast updated todos to admin room (get all todos for real-time sync)
-        const updatedTodos = await adminService.getTodos(
-          companyId,
-          userId,
-          "all"
-        );
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/dashboard/get-todos-response",
-          updatedTodos
-        );
+        const updatedTodos = await adminService.getTodos(companyId, userId, 'all');
+        io.to(`admin_room_${companyId}`).emit('admin/dashboard/get-todos-response', updatedTodos);
       } catch (error) {
-        devError("Error adding todo:", error);
-        socket.emit("admin/dashboard/add-todo-response", {
+        devError('Error adding todo:', error);
+        socket.emit('admin/dashboard/add-todo-response', {
           done: false,
-          error: "Failed to add todo. Please try again.",
+          error: 'Failed to add todo. Please try again.',
         });
       }
     })
@@ -631,138 +587,110 @@ const adminController = (socket, io) => {
 
   // Update todo
   socket.on(
-    "admin/dashboard/update-todo",
+    'admin/dashboard/update-todo',
     withRateLimit(async (todoData) => {
       try {
         const companyId = validateCompanyAccess(socket);
         const userId = socket.user.sub;
 
         // SECURITY: Input validation
-        if (!todoData || !todoData.id || typeof todoData.id !== "string") {
-          throw new Error("Invalid todo ID");
+        if (!todoData || !todoData.id || typeof todoData.id !== 'string') {
+          throw new Error('Invalid todo ID');
         }
 
         // Validate ObjectId format
         if (!ObjectId.isValid(todoData.id)) {
-          throw new Error("Invalid todo ID format");
+          throw new Error('Invalid todo ID format');
         }
 
         // Sanitize update data
         const allowedFields = [
-          "title",
-          "description",
-          "completed",
-          "tag",
-          "priority",
-          "dueDate",
-          "assignedTo",
+          'title',
+          'description',
+          'completed',
+          'tag',
+          'priority',
+          'dueDate',
+          'assignedTo',
         ];
         const sanitizedUpdates = {};
 
         Object.keys(todoData).forEach((key) => {
           if (allowedFields.includes(key)) {
-            if (key === "title" && typeof todoData[key] === "string") {
+            if (key === 'title' && typeof todoData[key] === 'string') {
               sanitizedUpdates[key] = todoData[key].trim().substring(0, 200);
-            } else if (
-              key === "description" &&
-              typeof todoData[key] === "string"
-            ) {
+            } else if (key === 'description' && typeof todoData[key] === 'string') {
               sanitizedUpdates[key] = todoData[key].trim().substring(0, 1000);
-            } else if (
-              key === "completed" &&
-              typeof todoData[key] === "boolean"
-            ) {
+            } else if (key === 'completed' && typeof todoData[key] === 'boolean') {
               sanitizedUpdates[key] = todoData[key];
-            } else if (key === "tag" && typeof todoData[key] === "string") {
+            } else if (key === 'tag' && typeof todoData[key] === 'string') {
               sanitizedUpdates[key] = todoData[key].trim().substring(0, 50);
             } else if (
-              key === "priority" &&
-              ["low", "medium", "high"].includes(todoData[key]?.toLowerCase())
+              key === 'priority' &&
+              ['low', 'medium', 'high'].includes(todoData[key]?.toLowerCase())
             ) {
               sanitizedUpdates[key] =
-                todoData[key].charAt(0).toUpperCase() +
-                todoData[key].slice(1).toLowerCase();
-            } else if (key === "dueDate" && !isNaN(new Date(todoData[key]))) {
+                todoData[key].charAt(0).toUpperCase() + todoData[key].slice(1).toLowerCase();
+            } else if (key === 'dueDate' && !isNaN(new Date(todoData[key]))) {
               sanitizedUpdates[key] = new Date(todoData[key]);
-            } else if (
-              key === "assignedTo" &&
-              typeof todoData[key] === "string"
-            ) {
+            } else if (key === 'assignedTo' && typeof todoData[key] === 'string') {
               sanitizedUpdates[key] = todoData[key].trim().substring(0, 100);
             }
           }
         });
 
-        const result = await adminService.updateTodo(
-          companyId,
-          todoData.id,
-          sanitizedUpdates
-        );
+        const result = await adminService.updateTodo(companyId, todoData.id, sanitizedUpdates);
 
-        socket.emit("admin/dashboard/update-todo-response", result);
+        socket.emit('admin/dashboard/update-todo-response', result);
 
         // Broadcast updated todos to admin room (get all todos for real-time sync)
-        const updatedTodos = await adminService.getTodos(
-          companyId,
-          userId,
-          "all"
-        );
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/dashboard/get-todos-response",
-          updatedTodos
-        );
+        const updatedTodos = await adminService.getTodos(companyId, userId, 'all');
+        io.to(`admin_room_${companyId}`).emit('admin/dashboard/get-todos-response', updatedTodos);
       } catch (error) {
-        devError("Error updating todo:", error);
-        socket.emit("admin/dashboard/update-todo-response", {
+        devError('Error updating todo:', error);
+        socket.emit('admin/dashboard/update-todo-response', {
           done: false,
-          error: "Failed to update todo. Please try again.",
+          error: 'Failed to update todo. Please try again.',
         });
       }
     })
   );
 
   // Delete todo (soft delete)
-  socket.on("admin/dashboard/delete-todo", async (todoId) => {
+  socket.on('admin/dashboard/delete-todo', async (todoId) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
 
       // SECURITY: Input validation
-      if (!todoId || typeof todoId !== "string") {
-        throw new Error("Invalid todo ID");
+      if (!todoId || typeof todoId !== 'string') {
+        throw new Error('Invalid todo ID');
       }
 
       // Validate ObjectId format
       if (!ObjectId.isValid(todoId)) {
-        throw new Error("Invalid todo ID format");
+        throw new Error('Invalid todo ID format');
       }
 
       const result = await adminService.deleteTodo(companyId, todoId);
 
-      socket.emit("admin/dashboard/delete-todo-response", result);
+      socket.emit('admin/dashboard/delete-todo-response', result);
 
       // Broadcast updated todos to admin room (get all todos for real-time sync)
-      const updatedTodos = await adminService.getTodos(
-        companyId,
-        userId,
-        "all"
-      );
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/dashboard/get-todos-response",
-        updatedTodos
-      );
+      const updatedTodos = await adminService.getTodos(companyId, userId, 'all');
+      io.to(`admin_room_${companyId}`).emit('admin/dashboard/get-todos-response', updatedTodos);
     } catch (error) {
-      devError("Error deleting todo:", error);
-      socket.emit("admin/dashboard/delete-todo-response", {
+      devError('Error deleting todo:', error);
+      socket.emit('admin/dashboard/delete-todo-response', {
         done: false,
-        error: "Failed to delete todo. Please try again.",
+        error: 'Failed to delete todo. Please try again.',
       });
     }
   });
 
   // Delete todo permanently
   socket.on(
-    "admin/dashboard/delete-todo-permanently",
+    'admin/dashboard/delete-todo-permanently',
     withRateLimit(async (todoId) => {
       try {
         devLog(`[DELETE TODO] Attempting to delete todo: ${todoId}`);
@@ -771,55 +699,41 @@ const adminController = (socket, io) => {
         devLog(`[DELETE TODO] CompanyId: ${companyId}, UserId: ${userId}`);
 
         // SECURITY: Input validation
-        if (!todoId || typeof todoId !== "string") {
-          throw new Error("Invalid todo ID");
+        if (!todoId || typeof todoId !== 'string') {
+          throw new Error('Invalid todo ID');
         }
 
         // Validate ObjectId format
         if (!ObjectId.isValid(todoId)) {
-          throw new Error("Invalid todo ID format");
+          throw new Error('Invalid todo ID format');
         }
 
-        const result = await adminService.deleteTodoPermanently(
-          companyId,
-          todoId
-        );
+        const result = await adminService.deleteTodoPermanently(companyId, todoId);
 
-        socket.emit("admin/dashboard/delete-todo-permanently-response", result);
+        socket.emit('admin/dashboard/delete-todo-permanently-response', result);
 
         // Broadcast updated todos to admin room (get all todos for real-time sync)
-        const updatedTodos = await adminService.getTodos(
-          companyId,
-          userId,
-          "all"
-        );
-        devLog(
-          `[DELETE TODO] Broadcasting ${
-            updatedTodos.data?.length || 0
-          } todos to admin room`
-        );
-        io.to(`admin_room_${companyId}`).emit(
-          "admin/dashboard/get-todos-response",
-          updatedTodos
-        );
+        const updatedTodos = await adminService.getTodos(companyId, userId, 'all');
+        devLog(`[DELETE TODO] Broadcasting ${updatedTodos.data?.length || 0} todos to admin room`);
+        io.to(`admin_room_${companyId}`).emit('admin/dashboard/get-todos-response', updatedTodos);
       } catch (error) {
         devError(`[DELETE TODO] Error deleting todo:`, error);
-        socket.emit("admin/dashboard/delete-todo-permanently-response", {
+        socket.emit('admin/dashboard/delete-todo-permanently-response', {
           done: false,
-          error: "Failed to delete todo. Please try again.",
+          error: 'Failed to delete todo. Please try again.',
         });
       }
     })
   );
 
   // Get todo tags
-  socket.on("admin/dashboard/get-todo-tags", async () => {
+  socket.on('admin/dashboard/get-todo-tags', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getTodoTags(companyId);
-      socket.emit("admin/dashboard/get-todo-tags-response", result);
+      socket.emit('admin/dashboard/get-todo-tags-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-todo-tags-response", {
+      socket.emit('admin/dashboard/get-todo-tags-response', {
         done: false,
         error: error.message,
       });
@@ -827,13 +741,13 @@ const adminController = (socket, io) => {
   });
 
   // Get todo assignees
-  socket.on("admin/dashboard/get-todo-assignees", async () => {
+  socket.on('admin/dashboard/get-todo-assignees', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getTodoAssignees(companyId);
-      socket.emit("admin/dashboard/get-todo-assignees-response", result);
+      socket.emit('admin/dashboard/get-todo-assignees-response', result);
     } catch (error) {
-      socket.emit("admin/dashboard/get-todo-assignees-response", {
+      socket.emit('admin/dashboard/get-todo-assignees-response', {
         done: false,
         error: error.message,
       });
@@ -841,13 +755,13 @@ const adminController = (socket, io) => {
   });
 
   // Get project clients
-  socket.on("admin/project/get-clients", async () => {
+  socket.on('admin/project/get-clients', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getProjectClients(companyId);
-      socket.emit("admin/project/get-clients-response", result);
+      socket.emit('admin/project/get-clients-response', result);
     } catch (error) {
-      socket.emit("admin/project/get-clients-response", {
+      socket.emit('admin/project/get-clients-response', {
         done: false,
         error: error.message,
       });
@@ -855,13 +769,13 @@ const adminController = (socket, io) => {
   });
 
   // Get project employees
-  socket.on("admin/project/get-employees", async () => {
+  socket.on('admin/project/get-employees', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getProjectEmployees(companyId);
-      socket.emit("admin/project/get-employees-response", result);
+      socket.emit('admin/project/get-employees-response', result);
     } catch (error) {
-      socket.emit("admin/project/get-employees-response", {
+      socket.emit('admin/project/get-employees-response', {
         done: false,
         error: error.message,
       });
@@ -869,13 +783,13 @@ const adminController = (socket, io) => {
   });
 
   // Get project tags
-  socket.on("admin/project/get-tags", async () => {
+  socket.on('admin/project/get-tags', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getProjectTags(companyId);
-      socket.emit("admin/project/get-tags-response", result);
+      socket.emit('admin/project/get-tags-response', result);
     } catch (error) {
-      socket.emit("admin/project/get-tags-response", {
+      socket.emit('admin/project/get-tags-response', {
         done: false,
         error: error.message,
       });
@@ -883,12 +797,12 @@ const adminController = (socket, io) => {
   });
 
   // Get project priorities
-  socket.on("admin/project/get-priorities", async () => {
+  socket.on('admin/project/get-priorities', async () => {
     try {
       const result = await adminService.getProjectPriorities();
-      socket.emit("admin/project/get-priorities-response", result);
+      socket.emit('admin/project/get-priorities-response', result);
     } catch (error) {
-      socket.emit("admin/project/get-priorities-response", {
+      socket.emit('admin/project/get-priorities-response', {
         done: false,
         error: error.message,
       });
@@ -896,12 +810,12 @@ const adminController = (socket, io) => {
   });
 
   // Get project statuses
-  socket.on("admin/project/get-statuses", async () => {
+  socket.on('admin/project/get-statuses', async () => {
     try {
       const result = await adminService.getProjectStatuses();
-      socket.emit("admin/project/get-statuses-response", result);
+      socket.emit('admin/project/get-statuses-response', result);
     } catch (error) {
-      socket.emit("admin/project/get-statuses-response", {
+      socket.emit('admin/project/get-statuses-response', {
         done: false,
         error: error.message,
       });
@@ -909,13 +823,13 @@ const adminController = (socket, io) => {
   });
 
   // Generate next project ID
-  socket.on("admin/project/generate-id", async () => {
+  socket.on('admin/project/generate-id', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.generateNextProjectId(companyId);
-      socket.emit("admin/project/generate-id-response", result);
+      socket.emit('admin/project/generate-id-response', result);
     } catch (error) {
-      socket.emit("admin/project/generate-id-response", {
+      socket.emit('admin/project/generate-id-response', {
         done: false,
         error: error.message,
       });
@@ -923,24 +837,17 @@ const adminController = (socket, io) => {
   });
 
   // Add new project
-  socket.on("admin/project/add", async (projectData) => {
+  socket.on('admin/project/add', async (projectData) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
-      const result = await adminService.addProject(
-        companyId,
-        userId,
-        projectData
-      );
-      socket.emit("admin/project/add-response", result);
+      const result = await adminService.addProject(companyId, userId, projectData);
+      socket.emit('admin/project/add-response', result);
 
       // Broadcast to admin room to update project lists
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/project/project-added",
-        result
-      );
+      io.to(`admin_room_${companyId}`).emit('admin/project/project-added', result);
     } catch (error) {
-      socket.emit("admin/project/add-response", {
+      socket.emit('admin/project/add-response', {
         done: false,
         error: error.message,
       });
@@ -948,21 +855,20 @@ const adminController = (socket, io) => {
   });
 
   // Get project modal data (all data in one call)
-  socket.on("admin/project/get-modal-data", async () => {
+  socket.on('admin/project/get-modal-data', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
 
-      const [clients, employees, tags, priorities, statuses, projectId] =
-        await Promise.all([
-          adminService.getProjectClients(companyId),
-          adminService.getProjectEmployees(companyId),
-          adminService.getProjectTags(companyId),
-          adminService.getProjectPriorities(),
-          adminService.getProjectStatuses(),
-          adminService.generateNextProjectId(companyId),
-        ]);
+      const [clients, employees, tags, priorities, statuses, projectId] = await Promise.all([
+        adminService.getProjectClients(companyId),
+        adminService.getProjectEmployees(companyId),
+        adminService.getProjectTags(companyId),
+        adminService.getProjectPriorities(),
+        adminService.getProjectStatuses(),
+        adminService.generateNextProjectId(companyId),
+      ]);
 
-      socket.emit("admin/project/get-modal-data-response", {
+      socket.emit('admin/project/get-modal-data-response', {
         done: true,
         data: {
           clients: clients.data,
@@ -974,7 +880,7 @@ const adminController = (socket, io) => {
         },
       });
     } catch (error) {
-      socket.emit("admin/project/get-modal-data-response", {
+      socket.emit('admin/project/get-modal-data-response', {
         done: false,
         error: error.message,
       });
@@ -982,13 +888,13 @@ const adminController = (socket, io) => {
   });
 
   // Get leave request employees
-  socket.on("admin/leave/get-employees", async () => {
+  socket.on('admin/leave/get-employees', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getLeaveRequestEmployees(companyId);
-      socket.emit("admin/leave/get-employees-response", result);
+      socket.emit('admin/leave/get-employees-response', result);
     } catch (error) {
-      socket.emit("admin/leave/get-employees-response", {
+      socket.emit('admin/leave/get-employees-response', {
         done: false,
         error: error.message,
       });
@@ -996,13 +902,13 @@ const adminController = (socket, io) => {
   });
 
   // Get leave types
-  socket.on("admin/leave/get-types", async () => {
+  socket.on('admin/leave/get-types', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getLeaveTypes(companyId);
-      socket.emit("admin/leave/get-types-response", result);
+      socket.emit('admin/leave/get-types-response', result);
     } catch (error) {
-      socket.emit("admin/leave/get-types-response", {
+      socket.emit('admin/leave/get-types-response', {
         done: false,
         error: error.message,
       });
@@ -1010,17 +916,14 @@ const adminController = (socket, io) => {
   });
 
   // Get employee leave balance
-  socket.on("admin/leave/get-employee-balance", async (data) => {
+  socket.on('admin/leave/get-employee-balance', async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const { employeeId } = data;
-      const result = await adminService.getEmployeeLeaveBalance(
-        companyId,
-        employeeId
-      );
-      socket.emit("admin/leave/get-employee-balance-response", result);
+      const result = await adminService.getEmployeeLeaveBalance(companyId, employeeId);
+      socket.emit('admin/leave/get-employee-balance-response', result);
     } catch (error) {
-      socket.emit("admin/leave/get-employee-balance-response", {
+      socket.emit('admin/leave/get-employee-balance-response', {
         done: false,
         error: error.message,
       });
@@ -1028,31 +931,24 @@ const adminController = (socket, io) => {
   });
 
   // Create leave request
-  socket.on("admin/leave/create-request", async (leaveData) => {
+  socket.on('admin/leave/create-request', async (leaveData) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
-      const result = await adminService.createLeaveRequest(
-        companyId,
-        userId,
-        leaveData
-      );
-      socket.emit("admin/leave/create-request-response", result);
+      const result = await adminService.createLeaveRequest(companyId, userId, leaveData);
+      socket.emit('admin/leave/create-request-response', result);
 
       // Broadcast to admin room to update leave requests
-      io.to(`admin_room_${companyId}`).emit(
-        "admin/leave/request-created",
-        result
-      );
+      io.to(`admin_room_${companyId}`).emit('admin/leave/request-created', result);
     } catch (error) {
-      socket.emit("admin/leave/create-request-response", {
+      socket.emit('admin/leave/create-request-response', {
         done: false,
         error: error.message,
       });
     }
   });
 
-  socket.on("admin/invoices/create", async (payload, callback) => {
+  socket.on('admin/invoices/create', async (payload, callback) => {
     try {
       // 1. Create new invoice from payload
       const newInvoice = new Invoice({
@@ -1072,21 +968,21 @@ const adminController = (socket, io) => {
 
       // 3. Broadcast updated list to all admins
       const invoices = await Invoice.find({});
-      io.emit("admin/invoices/list-update", { done: true, data: invoices });
+      io.emit('admin/invoices/list-update', { done: true, data: invoices });
     } catch (err) {
-      devError("Error creating invoice:", err);
-      callback({ done: false, error: "Failed to create invoice" });
+      devError('Error creating invoice:', err);
+      callback({ done: false, error: 'Failed to create invoice' });
     }
   });
 
   // Get leave request modal data (all data in one call)
-  socket.on("admin/leave/get-modal-data", async () => {
+  socket.on('admin/leave/get-modal-data', async () => {
     try {
       const companyId = validateCompanyAccess(socket);
       const result = await adminService.getLeaveRequestModalData(companyId);
-      socket.emit("admin/leave/get-modal-data-response", result);
+      socket.emit('admin/leave/get-modal-data-response', result);
     } catch (error) {
-      socket.emit("admin/leave/get-modal-data-response", {
+      socket.emit('admin/leave/get-modal-data-response', {
         done: false,
         error: error.message,
       });

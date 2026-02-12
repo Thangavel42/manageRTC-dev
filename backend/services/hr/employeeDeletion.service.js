@@ -262,7 +262,7 @@ export const deleteEmployeeHard = async ({
         {
           $set: {
             assignedTo: null,
-            status: 'available',
+            status: 'inactive',
             assignedDate: null,
             assignmentType: null
           }

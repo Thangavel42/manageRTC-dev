@@ -108,6 +108,7 @@ import Budgets from '../accounting/budgets';
 import Categories from '../accounting/categories';
 import Assets from '../administration/asset';
 import AssetsCategory from '../administration/asset-category';
+import EmployeeAsset from '../administration/employee-asset';
 import Knowledgebase from '../administration/help-support/knowledgebase';
 import AttendanceReport from '../administration/reports/attendencereport';
 import DailyReport from '../administration/reports/dailyreport';
@@ -175,7 +176,6 @@ import Taxes from '../finance-accounts/sales/taxes';
 import Department from '../hrm/employees/deparment';
 import Designations from '../hrm/employees/designations';
 import EmployeeDetails from '../hrm/employees/employeedetails';
-import EmployeesGrid from '../hrm/employees/employeesGrid';
 import EmployeeList from '../hrm/employees/employeesList';
 import Policy from '../hrm/employees/policy';
 import Holidays from '../hrm/holidays';
@@ -255,6 +255,9 @@ import Preference from '../settings/websiteSettings/preferences';
 import Prefixes from '../settings/websiteSettings/prefixes';
 import Seosettings from '../settings/websiteSettings/seo-settings';
 import SuperAdminDashboard from '../super-admin/dashboard';
+import PermissionPage from '../super-admin/permissionpage';
+import RolesPermission from '../super-admin/rolePermission';
+import Users from '../super-admin/users';
 import TicketDetails from '../tickets/ticket-details';
 import Tickets from '../tickets/tickets';
 import TicketGrid from '../tickets/tickets-grid';
@@ -272,8 +275,8 @@ import Permission from '../userManagement/permission';
 import RolesPermissions from '../userManagement/rolesPermissions';
 
 import Invoices from '../finance-accounts/sales/invoices';
-import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import AttendanceEmployee from '../hrm/attendance/attendance_employee';
+import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import BatchesList from '../hrm/attendance/batchesList';
 import LeaveAdmin from '../hrm/attendance/leaves/leaveAdmin';
 import LeaveEmployee from '../hrm/attendance/leaves/leaveEmployee';
@@ -1502,6 +1505,11 @@ export const publicRoutes = [
     path: routes.assetCategories,
     element: <AssetsCategory />,
     roles: ['admin', 'superadmin'],
+  },
+  {
+    path: routes.employeeAsset,
+    element: <EmployeeAsset />,
+    roles: ['admin', 'hr', 'manager', 'employee', 'superadmin'],
   },
   {
     path: routes.knowledgebase,

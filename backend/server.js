@@ -27,38 +27,40 @@ import performanceIndicatorRoutes from './routes/performance/performanceIndicato
 import performanceReviewRoutes from './routes/performance/performanceReview.routes.js';
 
 // REST API Routes (Socket.IO to REST Migration)
-import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import activityRoutes from "./routes/api/activities.js";
-import adminDashboardRoutes from "./routes/api/admin-dashboard.js";
-import assetRoutes from "./routes/api/assets.js";
-import attendanceRoutes from "./routes/api/attendance.js";
-import clientRoutes from "./routes/api/clients.js";
-import departmentRoutes from "./routes/api/departments.js";
-import designationRoutes from "./routes/api/designations.js";
-import employeeRoutes from "./routes/api/employees.js";
-import holidayTypeRoutes from "./routes/api/holiday-types.js";
-import holidayRoutes from "./routes/api/holidays.js";
-import hrDashboardRoutes from "./routes/api/hr-dashboard.js";
-import leadRoutes from "./routes/api/leads.js";
-import leaveRoutes from "./routes/api/leave.js";
-import leaveTypeRoutes from "./routes/api/leaveTypes.js";
-import pipelineRoutes from "./routes/api/pipelines.js";
-import policyRoutes from "./routes/api/policies.js";
-import projectRoutes from "./routes/api/projects.js";
-import promotionRoutes from "./routes/api/promotions.js";
-import resignationRoutes from "./routes/api/resignations.js";
-import shiftRoutes from "./routes/api/shifts.js";
-import taskRoutes from "./routes/api/tasks.js";
-import terminationRoutes from "./routes/api/terminations.js";
-import trainingRoutes from "./routes/api/training.js";
-import timetrackingRoutes from "./routes/api/timetracking.js";
-import overtimeRoutes from "./routes/api/overtime.js";
-import userProfileRoutes from "./routes/api/user-profile.js";
-import clerkWebhookRoutes from "./routes/webhooks/clerk.routes.js";
-import scheduleRoutes from "./routes/api/schedule.js";
-import batchRoutes from "./routes/api/batches.js";
-import healthRoutes from "./routes/health.js";
-import syncRoleRoutes from "./routes/api/syncRole.routes.js";
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import activityRoutes from './routes/api/activities.js';
+import adminDashboardRoutes from './routes/api/admin-dashboard.js';
+import assetCategoryRoutes from './routes/api/asset-categories.js';
+import assetRoutes from './routes/api/assets.js';
+import assetUserRoutes from './routes/api/assetUsers.js';
+import attendanceRoutes from './routes/api/attendance.js';
+import batchRoutes from './routes/api/batches.js';
+import clientRoutes from './routes/api/clients.js';
+import departmentRoutes from './routes/api/departments.js';
+import designationRoutes from './routes/api/designations.js';
+import employeeRoutes from './routes/api/employees.js';
+import holidayTypeRoutes from './routes/api/holiday-types.js';
+import holidayRoutes from './routes/api/holidays.js';
+import hrDashboardRoutes from './routes/api/hr-dashboard.js';
+import leadRoutes from './routes/api/leads.js';
+import leaveRoutes from './routes/api/leave.js';
+import leaveTypeRoutes from './routes/api/leaveTypes.js';
+import overtimeRoutes from './routes/api/overtime.js';
+import pipelineRoutes from './routes/api/pipelines.js';
+import policyRoutes from './routes/api/policies.js';
+import projectRoutes from './routes/api/projects.js';
+import promotionRoutes from './routes/api/promotions.js';
+import resignationRoutes from './routes/api/resignations.js';
+import scheduleRoutes from './routes/api/schedule.js';
+import shiftRoutes from './routes/api/shifts.js';
+import syncRoleRoutes from './routes/api/syncRole.routes.js';
+import taskRoutes from './routes/api/tasks.js';
+import terminationRoutes from './routes/api/terminations.js';
+import timetrackingRoutes from './routes/api/timetracking.js';
+import trainingRoutes from './routes/api/training.js';
+import userProfileRoutes from './routes/api/user-profile.js';
+import healthRoutes from './routes/health.js';
+import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
 // RBAC Routes
 import rbacRolesRoutes from "./routes/api/rbac/roles.js";
@@ -113,24 +115,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/exports', express.static(path.join(__dirname, 'public', 'exports')));
 
 // Serve employee profile images with caching headers
-app.use('/uploads/employee-images', express.static(path.join(__dirname, 'public', 'uploads', 'employee-images'), {
-  setHeaders: (res, filepath) => {
-    // Set cache headers for images (1 day)
-    res.set('Cache-Control', 'public, max-age=86400, immutable');
-    res.set('X-Content-Type-Options', 'nosniff');
-  }
-}));
+app.use(
+  '/uploads/employee-images',
+  express.static(path.join(__dirname, 'public', 'uploads', 'employee-images'), {
+    setHeaders: (res, filepath) => {
+      // Set cache headers for images (1 day)
+      res.set('Cache-Control', 'public, max-age=86400, immutable');
+      res.set('X-Content-Type-Options', 'nosniff');
+    },
+  })
+);
 
 // Serve leave attachments with security headers
-app.use('/uploads/leave-attachments', express.static(path.join(__dirname, 'public', 'uploads', 'leave-attachments'), {
-  setHeaders: (res, filepath) => {
-    // No cache for attachments (security)
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    res.set('X-Content-Type-Options', 'nosniff');
-  }
-}));
+app.use(
+  '/uploads/leave-attachments',
+  express.static(path.join(__dirname, 'public', 'uploads', 'leave-attachments'), {
+    setHeaders: (res, filepath) => {
+      // No cache for attachments (security)
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('X-Content-Type-Options', 'nosniff');
+    },
+  })
+);
 
 // Serve static files from the temp directory
 app.use(
@@ -182,35 +190,37 @@ const initializeServer = async () => {
     app.use('/api/performance/reviews', performanceReviewRoutes);
 
     // REST API Routes (Socket.IO to REST Migration)
-    app.use("/api/employees", employeeRoutes);
-    app.use("/api/projects", projectRoutes);
-    app.use("/api/tasks", taskRoutes);
-    app.use("/api/leads", leadRoutes);
-    app.use("/api/clients", clientRoutes);
-    app.use("/api/attendance", attendanceRoutes);
-    app.use("/api/leaves", leaveRoutes);
-    app.use("/api/leave-types", leaveTypeRoutes);
-    app.use("/api/assets", assetRoutes);
-    app.use("/api/trainings", trainingRoutes);
-    app.use("/api/activities", activityRoutes);
-    app.use("/api/pipelines", pipelineRoutes);
-    app.use("/api/holiday-types", holidayTypeRoutes);
-    app.use("/api/promotions", promotionRoutes);
-    app.use("/api/departments", departmentRoutes);
-    app.use("/api/policies", policyRoutes);
-    app.use("/api/designations", designationRoutes);
-    app.use("/api/resignations", resignationRoutes);
-    app.use("/api/shifts", shiftRoutes);
-    app.use("/api/batches", batchRoutes);
-    app.use("/api/terminations", terminationRoutes);
-    app.use("/api/holidays", holidayRoutes);
-    app.use("/api/hr-dashboard", hrDashboardRoutes);
-    app.use("/api/admin-dashboard", adminDashboardRoutes);
-    app.use("/api/user-profile", userProfileRoutes);
-    app.use("/api/timetracking", timetrackingRoutes);
-    app.use("/api/overtime", overtimeRoutes);
-    app.use("/api/schedule", scheduleRoutes);
-    app.use("/api/sync-role", syncRoleRoutes);
+    app.use('/api/employees', employeeRoutes);
+    app.use('/api/projects', projectRoutes);
+    app.use('/api/tasks', taskRoutes);
+    app.use('/api/leads', leadRoutes);
+    app.use('/api/clients', clientRoutes);
+    app.use('/api/attendance', attendanceRoutes);
+    app.use('/api/leaves', leaveRoutes);
+    app.use('/api/leave-types', leaveTypeRoutes);
+    app.use('/api/assets', assetRoutes);
+    app.use('/api/asset-categories', assetCategoryRoutes);
+    app.use('/api/asset-users', assetUserRoutes);
+    app.use('/api/trainings', trainingRoutes);
+    app.use('/api/activities', activityRoutes);
+    app.use('/api/pipelines', pipelineRoutes);
+    app.use('/api/holiday-types', holidayTypeRoutes);
+    app.use('/api/promotions', promotionRoutes);
+    app.use('/api/departments', departmentRoutes);
+    app.use('/api/policies', policyRoutes);
+    app.use('/api/designations', designationRoutes);
+    app.use('/api/resignations', resignationRoutes);
+    app.use('/api/shifts', shiftRoutes);
+    app.use('/api/batches', batchRoutes);
+    app.use('/api/terminations', terminationRoutes);
+    app.use('/api/holidays', holidayRoutes);
+    app.use('/api/hr-dashboard', hrDashboardRoutes);
+    app.use('/api/admin-dashboard', adminDashboardRoutes);
+    app.use('/api/user-profile', userProfileRoutes);
+    app.use('/api/timetracking', timetrackingRoutes);
+    app.use('/api/overtime', overtimeRoutes);
+    app.use('/api/schedule', scheduleRoutes);
+    app.use('/api/sync-role', syncRoleRoutes);
 
     // RBAC Routes
     app.use("/api/rbac/roles", rbacRolesRoutes);
@@ -219,10 +229,10 @@ const initializeServer = async () => {
     app.use("/api/admin/users", adminUsersRoutes);
 
     // Clerk Webhooks
-    app.use("/api/webhooks", clerkWebhookRoutes);
+    app.use('/api/webhooks', clerkWebhookRoutes);
 
     // Health Check Routes
-    app.use("/health", healthRoutes);
+    app.use('/health', healthRoutes);
 
     // API Documentation (Swagger)
     app.use(

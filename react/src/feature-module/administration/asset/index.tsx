@@ -1,20 +1,26 @@
-import React, { useEffect, useState } from "react";
-import { Socket } from "socket.io-client";
-import { useSocket } from "../../../SocketContext";
-import CommonSelect from "../../../core/common/commonSelect";
-import { status } from "../../../core/common/selectoption/selectoption";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import { DatePicker } from "antd";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import Table from "../../../core/common/dataTable/index";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { Modal } from "bootstrap";
-import dayjs from "dayjs";
+import { DatePicker } from 'antd';
+import { Modal } from 'bootstrap';
+import dayjs from 'dayjs';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { Socket } from 'socket.io-client';
+import { useSocket } from '../../../SocketContext';
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import CommonSelect from '../../../core/common/commonSelect';
+import Table from '../../../core/common/dataTable/index';
+import PredefinedDateRanges from '../../../core/common/datePicker';
+import { status } from '../../../core/common/selectoption/selectoption';
+import { useAssetCategoriesREST } from '../../../hooks/useAssetCategoriesREST';
+import { useAssetsREST } from '../../../hooks/useAssetsREST';
+import { all_routes } from '../../router/all_routes';
 
 type Asset = {
   _id: string;
+  assetId?: string; // Generated unique asset ID (e.g., AST-2026-0001)
   assetName: string;
+  assetCategory?: string;
+  categoryId?: string;
   employeeId: string;
   employeeName: string;
   employeeAvatar?: string;
@@ -30,28 +36,36 @@ type Asset = {
   updatedAt?: string;
 };
 
-
-
 const Assets = () => {
   const socket = useSocket() as Socket | null;
-  const [newAsset, setNewAsset] = useState<Partial<Asset>>({});
-  const [selectedStatus, setSelectedStatus] = useState("All"); // Default to "All"
-  const [selectedSort, setSelectedSort] = useState("purchase_desc"); // Default sort
-
+  const { categories, fetchCategories } = useAssetCategoriesREST();
+  const {
+    assets: restAssets,
+    loading: restLoading,
+    fetchAssets: fetchAssetsREST,
+    createAsset,
+    updateAsset: updateAssetREST,
+    deleteAsset: deleteAssetREST,
+  } = useAssetsREST();
+  const [newAsset, setNewAsset] = useState<Partial<Asset>>({ status: 'active' });
+  const [selectedStatus, setSelectedStatus] = useState('All'); // Default to "All"
+  const [selectedSort, setSelectedSort] = useState('purchase_desc'); // Default sort
 
   const [data, setData] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-const [employees, setEmployees] = useState<
-  { _id: string; employeeId?: string; firstName: string; lastName: string; avatar?: string }[]
->([]);
+  const [employees, setEmployees] = useState<
+    { _id: string; employeeId?: string; firstName: string; lastName: string; avatar?: string }[]
+  >([]);
 
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
-  const [assetToDelete, setAssetToDelete] = useState<string | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
+  const [confirmAssetName, setConfirmAssetName] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const getModalContainer = () => {
-    const modalElement = document.getElementById("modal-datepicker");
+    const modalElement = document.getElementById('modal-datepicker');
     return modalElement ? modalElement : document.body;
   };
 
@@ -68,27 +82,44 @@ const [employees, setEmployees] = useState<
 
   const columns = [
     {
-      title: "Asset Name",
-      dataIndex: "assetName",
+      title: 'Asset ID',
+      dataIndex: 'assetId',
+      render: (text: string) => <span className="fw-medium text-primary">{text || '-'}</span>,
+      sorter: (a: any, b: any) => (a.assetId || '').localeCompare(b.assetId || ''),
+    },
+    {
+      title: 'Asset Name',
+      dataIndex: 'assetName',
       render: (text: string) => <h6 className="fs-14 fw-medium">{text}</h6>,
       sorter: (a: any, b: any) => a.assetName.length - b.assetName.length,
     },
     {
-      title: "Asset User",
-      dataIndex: "employeeName",
+      title: 'Category',
+      dataIndex: 'assetCategory',
+      render: (text: string) => <span className="badge badge-soft-info">{text || 'N/A'}</span>,
+      sorter: (a: any, b: any) => (a.assetCategory || '').localeCompare(b.assetCategory || ''),
+    },
+    {
+      title: 'Asset User',
+      dataIndex: 'employeeName',
       render: (text: string, record: any) => {
-        const employee = employees.find(emp => emp._id === record.employeeId);
-        const employeeDisplayId = employee?.employeeId || record.employeeId?.slice(-6) || "";
-        const avatarSrc = employee?.avatar || record.employeeAvatar || "assets/img/favicon.png";
-        
+        // Handle "Not Assigned" case
+        if (!text || text === 'Not Assigned' || !record.employeeId) {
+          return (
+            <div className="d-flex align-items-center">
+              <h6 className="fw-medium mb-0 text-muted">Not Assigned</h6>
+            </div>
+          );
+        }
+
+        const employee = employees.find((emp) => emp._id === record.employeeId);
+        const employeeDisplayId = employee?.employeeId || record.employeeId?.slice(-6) || '';
+        const avatarSrc = employee?.avatar || record.employeeAvatar || 'assets/img/favicon.png';
+
         return (
           <div className="d-flex align-items-center">
             <Link to="#" className="avatar avatar-md">
-              <img
-                src={avatarSrc}
-                className="img-fluid rounded-circle"
-                alt="img"
-              />
+              <img src={avatarSrc} className="img-fluid rounded-circle" alt="img" />
             </Link>
             <div className="ms-2">
               <h6 className="fw-medium mb-0">
@@ -102,49 +133,45 @@ const [employees, setEmployees] = useState<
       sorter: (a: any, b: any) => a.employeeName.length - b.employeeName.length,
     },
     {
-      title: "Purchase Date",
-      dataIndex: "purchaseDate",
-      render: (text: string) => text ? dayjs(text).format("DD-MM-YYYY") : "-",
-      sorter: (a: any, b: any) =>
-        (a.purchaseDate || "").length - (b.purchaseDate || "").length,
+      title: 'Purchase Date',
+      dataIndex: 'purchaseDate',
+      render: (text: string) => (text ? dayjs(text).format('DD-MM-YYYY') : '-'),
+      sorter: (a: any, b: any) => (a.purchaseDate || '').length - (b.purchaseDate || '').length,
     },
     {
-      title: "Warrenty",
-      dataIndex: "warrantyMonths",
-      sorter: (a: any, b: any) =>
-      (a.warrantyMonths || 0) - (b.warrantyMonths || 0),
-
+      title: 'Warrenty',
+      dataIndex: 'warrantyMonths',
+      sorter: (a: any, b: any) => (a.warrantyMonths || 0) - (b.warrantyMonths || 0),
     },
     {
-      title: "Warrenty End Date",
-      dataIndex: "warrantyEndDate",
-      render: (text: string) => text ? dayjs(text).format("DD-MM-YYYY") : "-",
+      title: 'Warrenty End Date',
+      dataIndex: 'warrantyEndDate',
+      render: (text: string) => (text ? dayjs(text).format('DD-MM-YYYY') : '-'),
       sorter: (a: any, b: any) =>
-      (a.warrantyEndDate || "").length - (b.warrantyEndDate || "").length,
-
+        (a.warrantyEndDate || '').length - (b.warrantyEndDate || '').length,
     },
     {
-      title: "Status",
-      dataIndex: "status",
+      title: 'Status',
+      dataIndex: 'status',
       render: (text: string) => (
-       <span
+        <span
           className={`badge d-inline-flex align-items-center badge-xs ${
-            text.toLowerCase() === "active"
-              ? "badge-success"
-              : text.toLowerCase() === "inactive"
-              ? "badge-danger"
-              : "badge-warning"
-          }`}>
+            text.toLowerCase() === 'active'
+              ? 'badge-success'
+              : text.toLowerCase() === 'inactive'
+                ? 'badge-danger'
+                : 'badge-warning'
+          }`}
+        >
           <i className="ti ti-point-filled me-1"></i>
           {text}
         </span>
-
       ),
       sorter: (a: any, b: any) => a.status.length - b.status.length,
     },
     {
-      title: "Actions",
-      dataIndex: "actions",
+      title: 'Actions',
+      dataIndex: 'actions',
       render: (_: any, record: Asset) => (
         <div className="action-icon d-inline-flex">
           <Link
@@ -156,7 +183,8 @@ const [employees, setEmployees] = useState<
               setEditingAsset(record);
               setEditForm({
                 ...record,
-                employeeId: record.employeeId?.trim() || "",
+                employeeId: record.employeeId?.trim() || '',
+                categoryId: record.categoryId || record.assetCategory || '',
               });
             }}
           >
@@ -167,7 +195,10 @@ const [employees, setEmployees] = useState<
             to="#"
             data-bs-toggle="modal"
             data-bs-target="#delete_modal"
-            onClick={() => setAssetToDelete(record._id)}
+            onClick={() => {
+              setAssetToDelete(record);
+              setConfirmAssetName('');
+            }}
           >
             <i className="ti ti-trash" />
           </Link>
@@ -177,278 +208,282 @@ const [employees, setEmployees] = useState<
   ];
 
   const SORT_MAPPING: Record<string, string> = {
-  recently_added: "createdAt_desc",
-  asc: "assetName_asc",
-  desc: "assetName_desc",
-  last_month: "purchaseDate_last_month",
-  last_7_days: "purchaseDate_last_7_days",
-};
-
-const fetchAssets = (statusFilter = selectedStatus, sortOption = selectedSort) => {
-  if (!socket) return;
-  setLoading(true);
-
-  socket.emit("admin/assets/get", {
-    page: 1,
-    pageSize: 10,
-    sortBy: SORT_MAPPING[sortOption] || "createdAt_desc",
-    filters: {
-      status: statusFilter !== "All" ? statusFilter : undefined,
-      search: "",
-      purchaseDate: { from: null, to: null },
-      assetUser: ""
-    }
-  });
-};
-
-
-useEffect(() => {
-  if (!socket) return;
-  fetchAssets();
-}, [socket]);
-
-
-useEffect(() => {
-  if (!socket) {
-    console.log("⚠️ Socket not available for employee list request");
-    return;
-  }
-
-  console.log("📤 Requesting employee list...");
-  socket.emit("admin/employees/get-list");
-  
-  const handler = (res: any) => {
-    console.log("📥 Employee list response:", res);
-    if (res.done) {
-      console.log("✅ Loaded employees:", res.data?.length || 0);
-      setEmployees(res.data || []);
-    } else {
-      console.error("❌ Failed to load employees:", res.error);
-      setEmployees([]);
-    }
+    recently_added: 'createdAt_desc',
+    asc: 'assetName_asc',
+    desc: 'assetName_desc',
+    last_month: 'purchaseDate_last_month',
+    last_7_days: 'purchaseDate_last_7_days',
   };
-  
-  socket.on("admin/employees/get-list-response", handler);
 
-  return () => {
-    socket.off("admin/employees/get-list-response", handler);
-  };
-}, [socket]);
+  const fetchAssets = async (statusFilter = selectedStatus, sortOption = selectedSort) => {
+    setLoading(true);
 
-
-useEffect(() => {
-  if (!socket) return;
-  // Normalize mapping so frontend always gets clean Asset[]
- const mapAssets = (assets: any[] = []): Asset[] =>
-  assets.map((asset) => {
-    const employee = employees.find(emp => emp._id === asset.employeeId);
-
-    return {
-      _id: asset._id || asset.id || "",
-      assetName: asset.assetName,
-      employeeId: asset.employeeId || "",  // ✅ always have a string fallback
-      employeeName: employee 
-        ? `${employee.firstName} ${employee.lastName}` 
-        : asset.employeeName || "",
-      employeeAvatar: asset.employeeAvatar || employee?.avatar || "",
-      purchaseDate: asset.purchaseDate,
-      warrantyMonths: asset.warrantyMonths,
-      warrantyEndDate: asset.warrantyEndDate,
-      serialNumber: asset.serialNumber,
-      purchaseFrom: asset.purchaseFrom,
-      manufacture: asset.manufacture,
-      model: asset.model,
-      status: asset.status,
-      createdAt: asset.createdAt,
-      updatedAt: asset.updatedAt,
+    const sortMap: Record<string, { sortBy: string; order: 'asc' | 'desc' }> = {
+      name_asc: { sortBy: 'name', order: 'asc' },
+      name_desc: { sortBy: 'name', order: 'desc' },
+      purchaseDate_asc: { sortBy: 'purchaseDate', order: 'asc' },
+      purchaseDate_desc: { sortBy: 'purchaseDate', order: 'desc' },
+      createdAt_asc: { sortBy: 'createdAt', order: 'asc' },
+      createdAt_desc: { sortBy: 'createdAt', order: 'desc' },
+      last_7_days: { sortBy: 'purchaseDate', order: 'desc' },
     };
-  });
 
+    const sortConfig = sortMap[sortOption] || { sortBy: 'createdAt', order: 'desc' as 'desc' };
 
+    console.log('🔄 Fetching assets with params:', {
+      page: 1,
+      pageSize: 100,
+      sortBy: sortConfig.sortBy,
+      order: sortConfig.order,
+      status: statusFilter !== 'All' ? statusFilter : undefined,
+    });
 
+    await fetchAssetsREST({
+      page: 1,
+      pageSize: 100,
+      sortBy: sortConfig.sortBy,
+      order: sortConfig.order,
+      status: statusFilter !== 'All' ? statusFilter : undefined,
+    });
 
-
-  // Handle initial GET
-  const handleGetResponse = (res: {
-    done: boolean;
-    data?: any[];
-    error?: string;
-  }) => {
-    if (res.done) {
-      setData(mapAssets(Array.isArray(res.data) ? res.data : []));
-      setError(null);
-    } else {
-      setError(res.error || "Failed to fetch assets.");
-    }
     setLoading(false);
   };
 
-  // Handle list update - backend sends same format as GET response
-  const handleListUpdate = (res: { done: boolean; data?: any[] }) => {
-    if (res.done && res.data) {
-      setData(mapAssets(Array.isArray(res.data) ? res.data : []));
-    }
-  };
-
-  socket.on("admin/assets/get-response", handleGetResponse);
-  socket.on("admin/assets/list-update", handleListUpdate);
-
-  return () => {
-    socket.off("admin/assets/get-response", handleGetResponse);
-    socket.off("admin/assets/list-update", handleListUpdate);
-  };
-}, [socket, employees]);
-
-
-  // ===== CRUD =====
-const handleAddAsset = (newAsset: Partial<Asset>) => {
-  if (!socket) return;
-  
-  // Validation
-  if (!newAsset.assetName?.trim()) {
-    alert("Please enter an asset name");
-    return;
-  }
-
-  if (!newAsset.employeeId) {
-    alert("Please select an employee");
-    return;
-  }
-
-  const selectedEmployee = employees.find(emp => emp._id === newAsset.employeeId);
-
-  if (!selectedEmployee) {
-    alert("Please select a valid employee");
-    return;
-  }
-
-  // Backend expects: { employeeId, asset: {...fields} }
-  socket.emit("admin/assets/create", {
-    employeeId: selectedEmployee._id,
-    asset: { 
-      assetName: newAsset.assetName,
-      serialNumber: newAsset.serialNumber,
-      purchaseFrom: newAsset.purchaseFrom,
-      manufacture: newAsset.manufacture,
-      model: newAsset.model,
-      purchaseDate: newAsset.purchaseDate,
-      warrantyMonths: newAsset.warrantyMonths,
-      status: newAsset.status?.toLowerCase() || "active",
-    },
-  });
-};
-
-
-useEffect(() => {
-  if (!socket) return;
-  
-  const handleCreateResponse = (res: any) => {
-    if (res.done) {
-      // Close modal
-      const modal = document.getElementById("add_assets");
-      if (modal) {
-        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
-        modalInstance.hide();
-      }
-      // Reset form
-      setNewAsset({});
-    } else {
-      alert(res.error || "Failed to create asset");
-    }
-  };
-
-  const handleUpdateResponse = (res: any) => {
-    if (res.done) {
-      // Close modal
-      const modal = document.getElementById("edit_assets");
-      if (modal) {
-        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
-        modalInstance.hide();
-      }
-      // Reset form
-      setEditingAsset(null);
-      setEditForm({});
-    } else {
-      alert(res.error || "Failed to update asset");
-    }
-  };
-
-  socket.on("admin/assets/create-response", handleCreateResponse);
-  socket.on("admin/assets/update-response", handleUpdateResponse);
-
-  return () => {
-    socket.off("admin/assets/create-response", handleCreateResponse);
-    socket.off("admin/assets/update-response", handleUpdateResponse);
-  };
-}, [socket]);
-
-
-
-const handleUpdateSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
-
-  if (!socket || !editForm._id) {
-    alert("No asset selected for update!");
-    return;
-  }
-
-  if (!editForm.assetName?.trim()) {
-    alert("Please enter an asset name");
-    return;
-  }
-
-  if (!editForm.employeeId || editForm.employeeId.trim() === "") {
-    alert("Please select an Asset User before saving!");
-    return;
-  }
-
-  socket.emit("admin/assets/update", {
-    assetId: editForm._id,
-    updateData: {
-      assetName: editForm.assetName,
-      serialNumber: editForm.serialNumber,
-      purchaseFrom: editForm.purchaseFrom,
-      manufacture: editForm.manufacture,
-      model: editForm.model,
-      purchaseDate: editForm.purchaseDate,
-      warrantyMonths: editForm.warrantyMonths,
-      status: editForm.status?.toLowerCase() || "active",
-      employeeId: editForm.employeeId, // Backend handles employee transfer
-    },
-  });
-};
-
-
-
-
-  const confirmDelete = () => {
-    if (!socket || !assetToDelete) return;
-    socket.emit("admin/assets/delete", { assetId: assetToDelete });
-    setAssetToDelete(null);
-    
-    // Close modal
-    const modal = document.getElementById("delete_modal");
-    if (modal) {
-      const modalInstance = Modal.getInstance(modal) || new Modal(modal);
-      modalInstance.hide();
-    }
-  };
-
-  // Handle delete response
   useEffect(() => {
-    if (!socket) return;
-    
-    const handleDeleteResponse = (res: any) => {
-      if (!res.done) {
-        alert(res.error || "Failed to delete asset");
+    fetchAssets();
+  }, []);
+
+  // Sync REST assets to local state
+  useEffect(() => {
+    console.log('📊 REST Assets updated:', restAssets?.length || 0, 'assets');
+    if (restAssets) {
+      // Map REST Asset format to component Asset format
+      const mappedAssets = restAssets.map(
+        (asset): Asset => ({
+          _id: asset._id,
+          assetId: asset.assetId, // Include generated asset ID
+          assetName: asset.name,
+          assetCategory: asset.categoryName || '',
+          categoryId: asset.category,
+          employeeId: '',
+          employeeName: 'Not Assigned',
+          employeeAvatar: undefined,
+          purchaseDate: asset.purchaseDate,
+          warrantyMonths: asset.warrantyMonths,
+          warrantyEndDate: asset.warranty?.expiryDate,
+          status: asset.status,
+          serialNumber: asset.serialNumber,
+          purchaseFrom: asset.vendor?.name,
+          manufacture: '',
+          model: asset.model,
+          createdAt: asset.createdAt || '',
+          updatedAt: asset.updatedAt,
+        })
+      );
+      console.log('✅ Mapped assets, setting data:', mappedAssets.length);
+      setData(mappedAssets);
+    }
+  }, [restAssets]);
+
+  // Fetch asset categories on mount
+  useEffect(() => {
+    fetchCategories({ page: 1, pageSize: 100, status: 'active' });
+  }, [fetchCategories]);
+
+  useEffect(() => {
+    if (!socket) {
+      console.log('⚠️ Socket not available for employee list request');
+      return;
+    }
+
+    console.log('📤 Requesting employee list...');
+    socket.emit('admin/employees/get-list');
+
+    const handler = (res: any) => {
+      console.log('📥 Employee list response:', res);
+      if (res.done) {
+        console.log('✅ Loaded employees:', res.data?.length || 0);
+        setEmployees(res.data || []);
+      } else {
+        console.error('❌ Failed to load employees:', res.error);
+        setEmployees([]);
       }
     };
 
-    socket.on("admin/assets/delete-response", handleDeleteResponse);
+    socket.on('admin/employees/get-list-response', handler);
+
     return () => {
-      socket.off("admin/assets/delete-response", handleDeleteResponse);
+      socket.off('admin/employees/get-list-response', handler);
     };
   }, [socket]);
+
+  // Validation function
+  const validateAssetField = useCallback((fieldName: string, value: any): string => {
+    switch (fieldName) {
+      case 'assetCategory':
+        if (!value || !value.trim()) return 'Asset category is required';
+        break;
+      case 'assetName':
+        if (!value || !value.trim()) return 'Asset name is required';
+        break;
+      case 'purchaseDate':
+        if (!value) return 'Purchase date is required';
+        break;
+      case 'purchaseFrom':
+        if (!value || !value.trim()) return 'Purchase from is required';
+        break;
+    }
+    return '';
+  }, []);
+
+  const clearFieldError = useCallback((fieldName: string) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  }, []);
+
+  // ===== CRUD =====
+  const handleAddAsset = async (newAsset: Partial<Asset>) => {
+    // Validation
+    const errors: Record<string, string> = {};
+
+    const categoryError = validateAssetField('assetCategory', newAsset.categoryId);
+    if (categoryError) errors.assetCategory = categoryError;
+
+    const nameError = validateAssetField('assetName', newAsset.assetName);
+    if (nameError) errors.assetName = nameError;
+
+    const dateError = validateAssetField('purchaseDate', newAsset.purchaseDate);
+    if (dateError) errors.purchaseDate = dateError;
+
+    const fromError = validateAssetField('purchaseFrom', newAsset.purchaseFrom);
+    if (fromError) errors.purchaseFrom = fromError;
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setFieldErrors({});
+
+    // Backend REST API expects: { name, category (as _id), purchaseDate, purchaseValue }
+    const success = await createAsset({
+      name: newAsset.assetName!,
+      category: newAsset.categoryId!, // Send category _id
+      serialNumber: newAsset.serialNumber || '',
+      model: newAsset.model || '',
+      vendor: {
+        name: newAsset.purchaseFrom || '',
+      },
+      purchaseDate: newAsset.purchaseDate!,
+      purchaseValue: 0, // Default value, can be made configurable
+      warrantyMonths: newAsset.warrantyMonths || 0,
+      status: newAsset.status?.toLowerCase() || 'active',
+    });
+
+    if (success) {
+      console.log('✅ Asset created successfully, reloading assets...');
+      // Close modal
+      const modal = document.getElementById('add_assets');
+      if (modal) {
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+        modalInstance.hide();
+      }
+      // Reset form
+      setNewAsset({ status: 'active' });
+      setFieldErrors({});
+      // Reload assets
+      await fetchAssets();
+      console.log('🔄 Assets reloaded');
+    } else {
+      console.error('❌ Asset creation failed');
+    }
+  };
+
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editForm._id) {
+      toast.error('No asset selected for update!');
+      return;
+    }
+
+    // Validation
+    const errors: Record<string, string> = {};
+
+    const categoryError = validateAssetField('assetCategory', editForm.categoryId);
+    if (categoryError) errors.assetCategory = categoryError;
+
+    const nameError = validateAssetField('assetName', editForm.assetName);
+    if (nameError) errors.assetName = nameError;
+
+    const dateError = validateAssetField('purchaseDate', editForm.purchaseDate);
+    if (dateError) errors.purchaseDate = dateError;
+
+    const fromError = validateAssetField('purchaseFrom', editForm.purchaseFrom);
+    if (fromError) errors.purchaseFrom = fromError;
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setFieldErrors({});
+
+    const success = await updateAssetREST(editForm._id, {
+      name: editForm.assetName!,
+      category: editForm.categoryId!,
+      serialNumber: editForm.serialNumber || '',
+      model: editForm.model || '',
+      vendor: {
+        name: editForm.purchaseFrom || '',
+      },
+      purchaseDate: editForm.purchaseDate!,
+      purchaseValue: 0,
+      warrantyMonths: editForm.warrantyMonths || 0,
+      status: editForm.status?.toLowerCase() || 'active',
+    });
+
+    if (success) {
+      // Close modal
+      const modal = document.getElementById('edit_assets');
+      if (modal) {
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+        modalInstance.hide();
+      }
+      // Reset form
+      setEditForm({});
+      setEditingAsset(null);
+      setFieldErrors({});
+      // Reload assets
+      fetchAssets();
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!assetToDelete) return;
+
+    const success = await deleteAssetREST(assetToDelete._id);
+
+    if (success) {
+      setAssetToDelete(null);
+      setConfirmAssetName('');
+
+      // Close modal
+      const modal = document.getElementById('delete_modal');
+      if (modal) {
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
+        modalInstance.hide();
+      }
+
+      // Reload assets
+      fetchAssets();
+    }
+  };
 
   return (
     <>
@@ -494,7 +529,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                     <li>
                       <Link to="#" className="dropdown-item rounded-1">
                         <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
+                        Export as Excel{' '}
                       </Link>
                     </li>
                   </ul>
@@ -540,7 +575,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                     Status
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
-                    {["All", "active", "inactive"].map((statusOption) => (
+                    {['All', 'active', 'inactive'].map((statusOption) => (
                       <li key={statusOption}>
                         <Link
                           to="#"
@@ -548,7 +583,6 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                           onClick={() => {
                             setSelectedStatus(statusOption);
                             fetchAssets(statusOption.toLowerCase(), selectedSort); // ✅ lowercase
-
                           }}
                         >
                           {statusOption}
@@ -556,7 +590,6 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                       </li>
                     ))}
                   </ul>
-
                 </div>
                 <div className="dropdown">
                   <Link
@@ -572,8 +605,8 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => {
-                          setSelectedSort("recently_added");
-                          fetchAssets(selectedStatus, "recently_added");
+                          setSelectedSort('recently_added');
+                          fetchAssets(selectedStatus, 'recently_added');
                         }}
                       >
                         Recently Added
@@ -584,8 +617,8 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => {
-                          setSelectedSort("asc");
-                          fetchAssets(selectedStatus, "asc");
+                          setSelectedSort('asc');
+                          fetchAssets(selectedStatus, 'asc');
                         }}
                       >
                         Asset Name (A → Z)
@@ -596,8 +629,8 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => {
-                          setSelectedSort("desc");
-                          fetchAssets(selectedStatus, "desc");
+                          setSelectedSort('desc');
+                          fetchAssets(selectedStatus, 'desc');
                         }}
                       >
                         Asset Name (Z → A)
@@ -608,8 +641,8 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => {
-                          setSelectedSort("last_month");
-                          fetchAssets(selectedStatus, "last_month");
+                          setSelectedSort('last_month');
+                          fetchAssets(selectedStatus, 'last_month');
                         }}
                       >
                         Purchased Last Month
@@ -620,16 +653,14 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         to="#"
                         className="dropdown-item rounded-1"
                         onClick={() => {
-                          setSelectedSort("last_7_days");
-                          fetchAssets(selectedStatus, "last_7_days");
+                          setSelectedSort('last_7_days');
+                          fetchAssets(selectedStatus, 'last_7_days');
                         }}
                       >
                         Purchased Last 7 Days
                       </Link>
                     </li>
                   </ul>
-
-
                 </div>
               </div>
             </div>
@@ -638,7 +669,6 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
             </div>
           </div>
         </div>
-        
       </div>
       {/* /Page Wrapper */}
       {/* Add Assets */}
@@ -652,80 +682,111 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
-                onClick={() => setNewAsset({})}
+                onClick={() => {
+                  setNewAsset({ status: 'active' });
+                  setFieldErrors({});
+                }}
               >
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleAddAsset(newAsset);
-              }}
-            >
-
+            <form>
               <div className="modal-body pb-0">
                 <div className="row">
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Asset Name <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={newAsset.assetName || ""}
-                        onChange={(e) => setNewAsset({ ...newAsset, assetName: e.target.value })}
-                        required
+                      <label className="form-label">
+                        Asset Category <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className={`select ${fieldErrors.assetCategory ? 'is-invalid' : ''}`}
+                        options={categories.map((cat) => ({ value: cat._id, label: cat.name }))}
+                        value={
+                          categories
+                            .map((cat) => ({ value: cat._id, label: cat.name }))
+                            .find((opt) => opt.value === newAsset.categoryId) || null
+                        }
+                        onChange={(opt) => {
+                          if (opt) {
+                            setNewAsset({ ...newAsset, categoryId: opt.value });
+                            clearFieldError('assetCategory');
+                          }
+                        }}
+                        isSearchable={true}
                       />
+                      {fieldErrors.assetCategory && (
+                        <div className="invalid-feedback d-block">{fieldErrors.assetCategory}</div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Purchased Date</label>
-                      <div className="input-icon-end position-relative">
+                      <label className="form-label">
+                        Asset Name <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control ${fieldErrors.assetName ? 'is-invalid' : ''}`}
+                        value={newAsset.assetName || ''}
+                        onChange={(e) => {
+                          setNewAsset({ ...newAsset, assetName: e.target.value });
+                          clearFieldError('assetName');
+                        }}
+                      />
+                      {fieldErrors.assetName && (
+                        <div className="invalid-feedback d-block">{fieldErrors.assetName}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Purchased Date <span className="text-danger">*</span>
+                      </label>
+                      <div
+                        className={`input-icon-end position-relative ${fieldErrors.purchaseDate ? 'border border-danger rounded' : ''}`}
+                      >
                         <DatePicker
                           className="form-control datetimepicker"
                           value={newAsset.purchaseDate ? dayjs(newAsset.purchaseDate) : null}
-                            onChange={(date) =>
+                          onChange={(date) => {
                             setNewAsset({
                               ...newAsset,
                               purchaseDate: date ? dayjs(date).toISOString() : undefined,
-                            })
-                          }
-
-
+                            });
+                            clearFieldError('purchaseDate');
+                          }}
                           format="DD-MM-YYYY"
                           getPopupContainer={getModalContainer}
                           placeholder="DD-MM-YYYY"
                         />
 
-
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-7" />
                         </span>
                       </div>
-                    </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="mb-3">
-                      <label className="form-label">Purchase From</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={newAsset.purchaseFrom || ""}
-                        onChange={(e) => setNewAsset({ ...newAsset, purchaseFrom: e.target.value })}
-                      />
-
+                      {fieldErrors.purchaseDate && (
+                        <div className="invalid-feedback d-block">{fieldErrors.purchaseDate}</div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Manufacture</label>
+                      <label className="form-label">
+                        Purchase From <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
-                        className="form-control"
-                        value={newAsset.manufacture || ""}
-                        onChange={(e) => setNewAsset({ ...newAsset, manufacture: e.target.value })}
+                        className={`form-control ${fieldErrors.purchaseFrom ? 'is-invalid' : ''}`}
+                        value={newAsset.purchaseFrom || ''}
+                        onChange={(e) => {
+                          setNewAsset({ ...newAsset, purchaseFrom: e.target.value });
+                          clearFieldError('purchaseFrom');
+                        }}
                       />
+                      {fieldErrors.purchaseFrom && (
+                        <div className="invalid-feedback d-block">{fieldErrors.purchaseFrom}</div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-6">
@@ -734,7 +795,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                       <input
                         type="text"
                         className="form-control"
-                        value={newAsset.serialNumber || ""}
+                        value={newAsset.serialNumber || ''}
                         onChange={(e) => setNewAsset({ ...newAsset, serialNumber: e.target.value })}
                       />
                     </div>
@@ -745,7 +806,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                       <input
                         type="text"
                         className="form-control"
-                        value={newAsset.model || ""}
+                        value={newAsset.model || ''}
                         onChange={(e) => setNewAsset({ ...newAsset, model: e.target.value })}
                       />
                     </div>
@@ -756,7 +817,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                       <input
                         type="number"
                         className="form-control"
-                        value={newAsset.warrantyMonths || ""}
+                        value={newAsset.warrantyMonths || ''}
                         onChange={(e) =>
                           setNewAsset({ ...newAsset, warrantyMonths: parseInt(e.target.value, 10) })
                         }
@@ -764,27 +825,7 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                     </div>
                   </div>
 
-                  <div className="col-md-12">
-                    <div className="mb-3">
-                      <label className="form-label">
-                        Asset User <span className="text-danger">*</span> {employees.length > 0 && <span className="text-muted">({employees.length} available)</span>}
-                      </label>
-                      <CommonSelect
-                        options={getEmployeeOptions()}
-                        value={getEmployeeOptions().find((opt) => opt.value === newAsset.employeeId) || null}
-                        onChange={(opt) => {
-                          if (opt) setNewAsset({ ...newAsset, employeeId: opt.value });
-                        }}
-                        isSearchable={true}
-                        disabled={!employeesLoaded}
-                      />
-                      {!employeesLoaded && (
-                        <small className="text-muted">Loading employees...</small>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="col-md-12">
+                  <div className="col-md-6">
                     <div className="mb-3 ">
                       <label className="form-label">Status</label>
                       <CommonSelect
@@ -792,10 +833,10 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                         options={status}
                         value={status.find((s) => s.value === newAsset.status) || null}
                         onChange={(opt) => {
-                            if (opt) setNewAsset({ ...newAsset, status: opt.value });
-                          }}   
+                          if (opt) setNewAsset({ ...newAsset, status: opt.value });
+                        }}
+                        disabled={true}
                       />
-
                     </div>
                   </div>
                 </div>
@@ -805,11 +846,21 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
-                  onClick={() => setNewAsset({})}
+                  onClick={() => {
+                    setNewAsset({ status: 'active' });
+                    setFieldErrors({});
+                  }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleAddAsset(newAsset);
+                  }}
+                >
                   Add Asset
                 </button>
               </div>
@@ -819,236 +870,300 @@ const handleUpdateSubmit = (e: React.FormEvent) => {
       </div>
       {/* /Add Assets */}
       {/* Edit Assets */}
-<div className="modal fade" id="edit_assets">
-  <div className="modal-dialog modal-dialog-centered modal-lg">
-    <div className="modal-content">
-      <div className="modal-header">
-        <h4 className="modal-title">Edit Asset</h4>
-        <button
-          type="button"
-          className="btn-close custom-btn-close"
-          data-bs-dismiss="modal"
-          aria-label="Close"
-          onClick={() => {
-            setEditingAsset(null);
-            setEditForm({});
-          }}
-        >
-          <i className="ti ti-x" />
-        </button>
-      </div>
-      <form onSubmit={handleUpdateSubmit}>
-        <div className="modal-body pb-0">
-          <div className="row">
-            {/* Asset Name */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Asset Name <span className="text-danger">*</span></label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editForm.assetName || ""}
-                  onChange={(e) => setEditForm({ ...editForm, assetName: e.target.value })}
-                  required
-                />
-              </div>
+      <div className="modal fade" id="edit_assets">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Edit Asset</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={() => {
+                  setEditingAsset(null);
+                  setEditForm({});
+                  setFieldErrors({});
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
+            <form onSubmit={handleUpdateSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  {/* Asset Category */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Asset Category <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className={`select ${fieldErrors.assetCategory ? 'is-invalid' : ''}`}
+                        options={categories.map((cat) => ({ value: cat._id, label: cat.name }))}
+                        value={
+                          categories
+                            .map((cat) => ({ value: cat._id, label: cat.name }))
+                            .find((opt) => opt.value === editForm.categoryId) || null
+                        }
+                        onChange={(opt) => {
+                          if (opt) {
+                            setEditForm({ ...editForm, categoryId: opt.value });
+                            clearFieldError('assetCategory');
+                          }
+                        }}
+                        isSearchable={true}
+                      />
+                      {fieldErrors.assetCategory && (
+                        <div className="invalid-feedback d-block">{fieldErrors.assetCategory}</div>
+                      )}
+                    </div>
+                  </div>
 
-            {/* Purchase Date */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Purchased Date</label>
-                <div className="input-icon-end position-relative">
-                  <DatePicker
-                    className="form-control datetimepicker"
-                    value={editForm.purchaseDate ? dayjs(editForm.purchaseDate) : null}
-                    onChange={(date) =>
-                      setEditForm({
-                        ...editForm,
-                        purchaseDate: date ? dayjs(date).toISOString() : undefined,
-                      })
-                    }
+                  {/* Asset Name */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Asset Name <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control ${fieldErrors.assetName ? 'is-invalid' : ''}`}
+                        value={editForm.assetName || ''}
+                        onChange={(e) => {
+                          setEditForm({ ...editForm, assetName: e.target.value });
+                          clearFieldError('assetName');
+                        }}
+                      />
+                      {fieldErrors.assetName && (
+                        <div className="invalid-feedback d-block">{fieldErrors.assetName}</div>
+                      )}
+                    </div>
+                  </div>
 
-                    format="DD-MM-YYYY"
-                    getPopupContainer={getModalContainer}
-                    placeholder="DD-MM-YYYY"
-                  />
+                  {/* Purchase Date */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Purchased Date <span className="text-danger">*</span>
+                      </label>
+                      <div
+                        className={`input-icon-end position-relative ${fieldErrors.purchaseDate ? 'border border-danger rounded' : ''}`}
+                      >
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          value={editForm.purchaseDate ? dayjs(editForm.purchaseDate) : null}
+                          onChange={(date) => {
+                            setEditForm({
+                              ...editForm,
+                              purchaseDate: date ? dayjs(date).toISOString() : undefined,
+                            });
+                            clearFieldError('purchaseDate');
+                          }}
+                          format="DD-MM-YYYY"
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                        />
 
-                  <span className="input-icon-addon">
-                    <i className="ti ti-calendar text-gray-7" />
-                  </span>
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                      {fieldErrors.purchaseDate && (
+                        <div className="invalid-feedback d-block">{fieldErrors.purchaseDate}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Purchase From */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Purchase From <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control ${fieldErrors.purchaseFrom ? 'is-invalid' : ''}`}
+                        value={editForm.purchaseFrom || ''}
+                        onChange={(e) => {
+                          setEditForm({ ...editForm, purchaseFrom: e.target.value });
+                          clearFieldError('purchaseFrom');
+                        }}
+                      />
+                      {fieldErrors.purchaseFrom && (
+                        <div className="invalid-feedback d-block">{fieldErrors.purchaseFrom}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Serial Number */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Serial Number</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editForm.serialNumber || ''}
+                        onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Model */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Model</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editForm.model || ''}
+                        onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Warranty */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Warranty (Months)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={editForm.warrantyMonths || ''}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, warrantyMonths: parseInt(e.target.value, 10) })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Status</label>
+                      <CommonSelect
+                        className="select"
+                        options={status}
+                        value={status.find((s) => s.value === editForm.status) || null}
+                        onChange={(opt) => {
+                          if (opt) setEditForm({ ...editForm, status: opt.value });
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Purchase From */}
-            <div className="col-md-12">
-              <div className="mb-3">
-                <label className="form-label">Purchase From</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editForm.purchaseFrom|| ""}
-                  onChange={(e) => setEditForm({ ...editForm, purchaseFrom: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Manufacture */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Manufacture</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editForm.manufacture || ""}
-                  onChange={(e) => setEditForm({ ...editForm, manufacture: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Serial Number */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Serial Number</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editForm.serialNumber || ""}
-                  onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Model */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Model</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={editForm.model || ""}
-                  onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Warranty */}
-            <div className="col-md-6">
-              <div className="mb-3">
-                <label className="form-label">Warranty (Months)</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  value={editForm.warrantyMonths || ""}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, warrantyMonths: parseInt(e.target.value, 10) })
-                  }
-                />
-              </div>
-            </div>
-
-
-            {/* Asset User */}
-            <div className="col-md-12">
-              <div className="mb-3">
-                <label className="form-label">
-                  Asset User <span className="text-danger">*</span> {employees.length > 0 && <span className="text-muted">({employees.length} available)</span>}
-                </label>
-                <CommonSelect
-                  options={getEmployeeOptions()}
-                  value={getEmployeeOptions().find((opt) => opt.value === editForm.employeeId) || null}
-                  onChange={(opt) => {
-                    if (opt) setEditForm({ ...editForm, employeeId: opt.value });
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                  onClick={() => {
+                    setEditingAsset(null);
+                    setFieldErrors({});
+                    setEditForm({});
                   }}
-                  isSearchable={true}
-                  disabled={!employeesLoaded}
-                />
-                {!employeesLoaded && (
-                  <small className="text-muted">Loading employees...</small>
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Asset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Assets */}
+
+      {/* Delete Modal */}
+      <div className="modal fade" id="delete_modal">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
+          <div className="modal-content">
+            <div className="modal-body">
+              <div className="text-center p-3">
+                <span className="avatar avatar-lg avatar-rounded bg-danger mb-3">
+                  <i className="ti ti-trash fs-24" />
+                </span>
+                <h5 className="mb-2">Delete Asset</h5>
+                {assetToDelete && (
+                  <>
+                    <div className="bg-light p-3 rounded mb-3">
+                      <h6 className="mb-1">{assetToDelete.assetName}</h6>
+                      <p className="mb-1 text-muted">
+                        Category: <strong>{assetToDelete.assetCategory || 'N/A'}</strong>
+                      </p>
+                      <p className="mb-0 text-muted">
+                        Assigned to: <strong>{assetToDelete.employeeName || 'N/A'}</strong>
+                      </p>
+                    </div>
+                    <div className="text-start mb-3">
+                      <p className="text-danger fw-medium mb-2" style={{ fontSize: '13px' }}>
+                        This action is permanent. The asset will be removed from the employee's
+                        assets.
+                      </p>
+                      <label className="form-label text-muted" style={{ fontSize: '13px' }}>
+                        Type <strong>{assetToDelete.assetName}</strong> to confirm deletion:
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control form-control-sm ${
+                          confirmAssetName &&
+                          confirmAssetName.trim().toLowerCase() !==
+                            assetToDelete.assetName.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmAssetName.trim().toLowerCase() ===
+                          assetToDelete.assetName.trim().toLowerCase()
+                            ? 'is-valid'
+                            : ''
+                        }`}
+                        placeholder={`Type "${assetToDelete.assetName}" to confirm`}
+                        value={confirmAssetName}
+                        onChange={(e) => setConfirmAssetName(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {confirmAssetName &&
+                        confirmAssetName.trim().toLowerCase() !==
+                          assetToDelete.assetName.trim().toLowerCase() && (
+                          <div className="invalid-feedback">Name does not match</div>
+                        )}
+                    </div>
+                  </>
                 )}
-              </div>
-            </div>
-
-
-            {/* Status */}
-            <div className="col-md-12">
-              <div className="mb-3 ">
-                <label className="form-label">Status</label>
-                <CommonSelect
-                  className="select"
-                  options={status}
-                  value={status.find((s) => s.value === editForm.status) || null}
-                  onChange={(opt) => {
-                    if (opt) setEditForm({ ...editForm, status: opt.value });
-                  }}
-                />
+                <div className="d-flex justify-content-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    data-bs-dismiss="modal"
+                    onClick={() => {
+                      setAssetToDelete(null);
+                      setConfirmAssetName('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={confirmDelete}
+                    disabled={
+                      !assetToDelete ||
+                      confirmAssetName.trim().toLowerCase() !==
+                        assetToDelete.assetName.trim().toLowerCase()
+                    }
+                  >
+                    Delete Asset
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="btn btn-light me-2"
-            data-bs-dismiss="modal"
-            onClick={() => {
-              setEditingAsset(null);
-              setEditForm({});
-            }}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary">
-            Save Asset
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{/* /Edit Assets */}
-
-{/* Delete Modal */}
-<div className="modal fade" id="delete_modal">
-  <div className="modal-dialog modal-dialog-centered">
-    <div className="modal-content">
-      <div className="modal-header">
-        <h4 className="modal-title">Delete Asset</h4>
-        <button
-          type="button"
-          className="btn-close custom-btn-close"
-          data-bs-dismiss="modal"
-          aria-label="Close"
-        >
-          <i className="ti ti-x" />
-        </button>
       </div>
-      <div className="modal-body">
-        <p>Are you sure you want to delete this asset? This action cannot be undone.</p>
-      </div>
-      <div className="modal-footer">
-        <button
-          type="button"
-          className="btn btn-light me-2"
-          data-bs-dismiss="modal"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="btn btn-danger"
-          onClick={confirmDelete}
-        >
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-{/* /Delete Modal */}
-
+      {/* /Delete Modal */}
     </>
   );
 };

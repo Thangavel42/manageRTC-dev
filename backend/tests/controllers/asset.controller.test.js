@@ -78,7 +78,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -86,7 +86,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'assigned',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -109,7 +109,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -117,13 +117,13 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'assigned',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
 
       const response = await request(app)
-        .get('/api/assets?status=available')
+        .get('/api/assets?status=active')
         .set('Authorization', authToken)
         .expect(200);
 
@@ -138,7 +138,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -146,7 +146,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'CHR-001',
           type: 'furniture',
           category: 'furniture',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -167,7 +167,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -175,7 +175,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -197,7 +197,7 @@ describe('Asset Controller Tests', () => {
           barcode: '123456789',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -205,7 +205,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -233,7 +233,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -270,7 +270,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         purchaseDate: new Date('2026-01-01'),
         purchaseCost: 2499.99,
         warrantyExpiry: new Date('2027-01-01')
@@ -294,7 +294,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -303,7 +303,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available'
+        status: 'active'
       };
 
       await request(app)
@@ -322,7 +322,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'assigned',
+        status: 'active',
         assignedTo: employee._id.toString()
       };
 
@@ -344,7 +344,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'assigned',
+        status: 'active',
         assignedTo: fakeEmployeeId.toString()
       };
 
@@ -370,13 +370,13 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
       const updateData = {
         name: 'MacBook Pro 16" M3 Max',
-        status: 'assigned'
+        status: 'active'
       };
 
       const response = await request(app)
@@ -396,7 +396,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -405,7 +405,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'DELL-001',
         type: 'monitor',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -426,7 +426,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -451,7 +451,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'MBP-001',
         type: 'laptop',
         category: 'electronics',
-        status: 'available',
+        status: 'active',
         companyId: 'test-company-id'
       });
 
@@ -466,7 +466,7 @@ describe('Asset Controller Tests', () => {
       // Verify soft delete
       const deletedAsset = await Asset.findById(asset._id);
       expect(deletedAsset.isDeleted).toBe(true);
-      expect(deletedAsset.status).toBe('retired');
+      expect(deletedAsset.status).toBe('inactive');
     });
 
     it('should return 404 for non-existent asset', async () => {
@@ -487,7 +487,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -495,7 +495,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'CHR-001',
           type: 'furniture',
           category: 'furniture',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -503,7 +503,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -527,7 +527,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -535,13 +535,13 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'assigned',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
 
       const response = await request(app)
-        .get('/api/assets/status/available')
+        .get('/api/assets/status/active')
         .set('Authorization', authToken)
         .expect(200);
 
@@ -566,7 +566,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           purchaseCost: 2499.99,
           currentValue: 1999.99,
           depreciation: 500,
@@ -577,7 +577,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'assigned',
+          status: 'active',
           purchaseCost: 499.99,
           currentValue: 399.99,
           depreciation: 100,
@@ -606,7 +606,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: `SER-${i}`,
           type: 'test',
           category: 'test',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         });
       }
@@ -631,7 +631,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'ZEB-001',
           type: 'test',
           category: 'test',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -639,7 +639,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'ALP-001',
           type: 'test',
           category: 'test',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
@@ -663,7 +663,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'MBP-001',
           type: 'laptop',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           assignedTo: employee._id,
           companyId: 'test-company-id'
         },
@@ -672,7 +672,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'DELL-001',
           type: 'monitor',
           category: 'electronics',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         },
         {
@@ -680,18 +680,18 @@ describe('Asset Controller Tests', () => {
           serialNumber: 'CHR-001',
           type: 'furniture',
           category: 'furniture',
-          status: 'assigned',
+          status: 'active',
           companyId: 'test-company-id'
         }
       ]);
 
       const response = await request(app)
-        .get('/api/assets?category=electronics&status=available')
+        .get('/api/assets?category=electronics&status=active')
         .set('Authorization', authToken)
         .expect(200);
 
       expect(response.body.data).toHaveLength(2);
-      expect(response.body.data.every(asset => asset.category === 'electronics' && asset.status === 'available')).toBe(true);
+      expect(response.body.data.every(asset => asset.category === 'electronics' && asset.status === 'active')).toBe(true);
     });
 
     it('should handle search with pagination', async () => {
@@ -703,7 +703,7 @@ describe('Asset Controller Tests', () => {
           serialNumber: `SER-${i}`,
           type: 'test',
           category: 'test',
-          status: 'available',
+          status: 'active',
           companyId: 'test-company-id'
         });
       }
@@ -724,7 +724,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'TEST-001',
         type: 'test',
         category: 'test',
-        status: 'available',
+        status: 'active',
         purchaseCost: 'invalid-number'
       };
 
@@ -743,7 +743,7 @@ describe('Asset Controller Tests', () => {
         serialNumber: 'TEST-001',
         type: 'test',
         category: 'test',
-        status: 'available',
+        status: 'active',
         purchaseDate: '2026-01-01',
         warrantyExpiry: '2027-01-01'
       };

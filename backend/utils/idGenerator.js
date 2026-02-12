@@ -4,6 +4,7 @@
  */
 
 import mongoose from 'mongoose';
+import { getTenantCollections } from '../config/db.js';
 import Project from '../models/project/project.schema.js';
 import { getTenantModel } from './mongooseMultiTenant.js';
 
@@ -274,18 +275,21 @@ export const generateShiftId = async (companyId) => {
  * @returns {Promise<string>} Generated asset ID
  */
 export const generateAssetId = async (companyId) => {
-  const Asset = mongoose.model('Asset');
+  const { assets } = getTenantCollections(companyId);
   const year = new Date().getFullYear();
 
-  const lastAsset = await Asset.findOne({
-    companyId,
-    assetId: new RegExp(`^AST-${year}-`),
-  }).sort({ assetId: -1 });
+  const lastAsset = await assets
+    .find({
+      assetId: new RegExp(`^AST-${year}-`),
+    })
+    .sort({ assetId: -1 })
+    .limit(1)
+    .toArray();
 
   let sequence = 1;
 
-  if (lastAsset && lastAsset.assetId) {
-    const lastSequence = parseInt(lastAsset.assetId.split('-')[2]);
+  if (lastAsset && lastAsset.length > 0 && lastAsset[0].assetId) {
+    const lastSequence = parseInt(lastAsset[0].assetId.split('-')[2]);
     sequence = lastSequence + 1;
   }
 

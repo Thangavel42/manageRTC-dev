@@ -1,268 +1,327 @@
 // backend/services/assets/assets.services.js
-import { ObjectId } from "mongodb";
-import { getTenantCollections } from "../../config/db.js";
+import { ObjectId } from 'mongodb';
+import { getTenantCollections } from '../../config/db.js';
+import { generateAssetId } from '../../utils/idGenerator.js';
 
 /**
- * Get assets with pagination + filters.
- * params = { page = 1, pageSize = 10, filters = {}, sortBy = 'purchase_desc' }
- * filters: { status, search, purchaseDate: { from, to }, assetUser }
+ * Get assets with pagination + filters from assets collection
+ * params = { page = 1, pageSize = 20, filters = {}, sortBy = 'createdAt', order = 'desc' }
  */
 export const getAssets = async (companyId, params = {}) => {
-  const { page = 1, pageSize = 10, filters = {}, sortBy = "purchase_desc" } = params;
-  const { employees } = getTenantCollections(companyId);
+  const { page = 1, pageSize = 20, filters = {}, sortBy = 'createdAt', order = 'desc' } = params;
+  const { assets, employees } = getTenantCollections(companyId);
 
-  // Build $match for asset-level fields
+  // Build match query
   const match = {};
 
-  // Status
-  if (filters.status && filters.status !== "All") {
-    match["assets.status"] = filters.status;
+  // Status filter
+  if (filters.status && filters.status !== 'all') {
+    match.status = filters.status.toLowerCase();
   }
 
-  // Search on assetName or serialNumber
+  // Category filter
+  if (filters.category) {
+    match.category = new ObjectId(filters.category);
+  }
+
+  // AssignedTo filter
+  if (filters.assignedTo) {
+    match.assignedTo = new ObjectId(filters.assignedTo);
+  }
+
+  // Search filter
   if (filters.search && String(filters.search).trim().length) {
     const q = String(filters.search).trim();
     match.$or = [
-      { "assets.assetName": { $regex: q, $options: "i" } },
-      { "assets.serialNumber": { $regex: q, $options: "i" } },
+      { name: { $regex: q, $options: 'i' } },
+      { serialNumber: { $regex: q, $options: 'i' } },
+      { barcode: { $regex: q, $options: 'i' } },
     ];
   }
 
-  // Purchase date range
-  if ((filters.purchaseDate && (filters.purchaseDate.from || filters.purchaseDate.to))) {
-    const pd = {};
-    if (filters.purchaseDate.from) pd.$gte = new Date(filters.purchaseDate.from);
-    if (filters.purchaseDate.to) pd.$lte = new Date(filters.purchaseDate.to);
-    match["assets.purchaseDate"] = pd;
-  }
-
-  // Filter by owner (employee) id
-  if (filters.assetUser) {
-    try {
-     if (filters.assetUser) {
-  match["_id"] = new ObjectId(filters.assetUser);
-}
-    } catch (e) {}
-  }
+  // Not deleted
+  match.isDeleted = false;
 
   // Determine sort
   const sort = {};
-  switch (sortBy) {
-    case "purchase_asc":
-      sort["purchaseDate"] = 1;
-      break;
-    case "purchase_desc":
-      sort["purchaseDate"] = -1;
-      break;
-    case "warranty_asc":
-      sort["warrantyEndDate"] = 1;
-      break;
-    case "warranty_desc":
-      sort["warrantyEndDate"] = -1;
-      break;
-    case "name_asc":
-      sort["assetName"] = 1;
-      break;
-    case "name_desc":
-      sort["assetName"] = -1;
-      break;
-    default:
-      sort["purchaseDate"] = -1;
+  sort[sortBy] = order === 'asc' ? 1 : -1;
+
+  try {
+    // Build aggregation pipeline
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: employees.collectionName,
+          let: { assignedToId: '$assignedTo' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$_id', '$$assignedToId'] },
+              },
+            },
+            {
+              $project: {
+                firstName: 1,
+                lastName: 1,
+                fullName: 1,
+                employeeId: 1,
+              },
+            },
+          ],
+          as: 'assignedToData',
+        },
+      },
+      {
+        $addFields: {
+          assignedToName: {
+            $cond: {
+              if: { $eq: ['$assignedTo', null] },
+              then: 'Not Assigned',
+              else: {
+                $ifNull: [
+                  { $arrayElemAt: ['$assignedToData.fullName', 0] },
+                  {
+                    $cond: {
+                      if: {
+                        $or: [
+                          { $ne: [{ $arrayElemAt: ['$assignedToData.firstName', 0] }, null] },
+                          { $ne: [{ $arrayElemAt: ['$assignedToData.lastName', 0] }, null] },
+                        ],
+                      },
+                      then: {
+                        $concat: [
+                          { $ifNull: [{ $arrayElemAt: ['$assignedToData.firstName', 0] }, ''] },
+                          ' ',
+                          { $ifNull: [{ $arrayElemAt: ['$assignedToData.lastName', 0] }, ''] },
+                        ],
+                      },
+                      else: 'Not Assigned',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      { $project: { assignedToData: 0 } },
+      { $sort: sort },
+      {
+        $facet: {
+          data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    const result = await assets.aggregate(pipeline).toArray();
+    const data = result[0]?.data || [];
+    const total = result[0]?.total?.[0]?.count || 0;
+
+    // Convert ObjectIds to strings
+    const formatted = data.map((asset) => ({
+      ...asset,
+      _id: asset._id.toString(),
+      category: asset.category ? asset.category.toString() : null,
+      assignedTo: asset.assignedTo ? asset.assignedTo.toString() : null,
+    }));
+
+    return {
+      done: true,
+      data: formatted,
+      pagination: {
+        page,
+        limit: pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  } catch (err) {
+    console.error('Error in getAssets:', err);
+    return { done: false, error: err.message };
   }
-
-  // Build pipeline
-  const pipeline = [
-  { $unwind: "$assets" },
-  {
-    $addFields: {
-      employeeId: "$_id",
-      employeeName: { $concat: ["$firstName", " ", "$lastName"] },
-      employeeAvatar: "$avatarUrl",
-    },
-  },
-  { $match: Object.keys(match).length ? match : {} },
-  {
-    $project: {
-      _id: "$assets._id",
-      assetName: "$assets.assetName",
-      serialNumber: "$assets.serialNumber",
-      purchaseFrom: "$assets.purchaseFrom",
-      manufacture: "$assets.manufacture",
-      model: "$assets.model",
-      purchaseDate: "$assets.purchaseDate",
-      warrantyMonths: "$assets.warrantyMonths",
-      warrantyEndDate: "$assets.warrantyEndDate",
-      status: "$assets.status",
-      createdAt: "$assets.createdAt",
-      updatedAt: "$assets.updatedAt",
-      employeeId: "$employeeId",
-      employeeName: "$employeeName",
-      employeeAvatar: "$employeeAvatar",
-    },
-  },
-  { $sort: sort },
-  {
-    $facet: {
-      data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
-      total: [{ $count: "count" }],
-    },
-  },
-];
-
-
-  const agg = await employees.aggregate(pipeline).toArray();
-  const data = agg[0]?.data || [];
-  const totalCount = agg[0]?.total?.[0]?.count || 0;
-
-  // Convert ObjectId to strings
-  const formatted = data.map((a) => ({
-    ...a,
-    _id: a._id ? a._id.toString() : null,
-    employeeId: a.employeeId ? a.employeeId.toString() : null,
-  }));
-
-  return {
-    done: true,
-    data: formatted,
-    page,
-    pageSize,
-    totalCount,
-  };
 };
 
 /**
- * Add asset to employee
- * assetData should include: assetName, purchaseDate (ISO string), warrantyMonths (number), serialNumber, manufacture, model, purchaseFrom, status
+ * Get single asset by ID
  */
-export const addAsset = async (companyId, employeeId, assetData) => {
-  const { employees } = getTenantCollections(companyId);
+export const getAssetById = async (companyId, assetId) => {
+  const { assets } = getTenantCollections(companyId);
 
-  // compute dates safely
-  const purchaseDate = assetData.purchaseDate ? new Date(assetData.purchaseDate) : null;
-  const warrantyMonths = Number(assetData.warrantyMonths || 0);
+  try {
+    const asset = await assets.findOne({
+      _id: new ObjectId(assetId),
+      isDeleted: false,
+    });
 
-  let warrantyEndDate = null;
-  if (purchaseDate && !isNaN(purchaseDate.getTime())) {
-    warrantyEndDate = new Date(purchaseDate);
-    warrantyEndDate.setMonth(warrantyEndDate.getMonth() + warrantyMonths);
+    if (!asset) {
+      return { done: false, error: 'Asset not found' };
+    }
+
+    return {
+      done: true,
+      data: {
+        ...asset,
+        _id: asset._id.toString(),
+        category: asset.category ? asset.category.toString() : null,
+        assignedTo: asset.assignedTo ? asset.assignedTo.toString() : null,
+      },
+    };
+  } catch (err) {
+    console.error('Error in getAssetById:', err);
+    return { done: false, error: err.message };
   }
-
-  const newAsset = {
-    _id: new ObjectId(),
-    assetName: String(assetData.assetName || "").trim(),
-    serialNumber: assetData.serialNumber || null,
-    purchaseFrom: assetData.purchaseFrom || null,
-    manufacture: assetData.manufacture || null,
-    model: assetData.model || null,
-    purchaseDate,
-    warrantyMonths,
-    warrantyEndDate,
-    status: assetData.status || "Active",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const res = await employees.updateOne(
-    { _id: new ObjectId(employeeId) },
-    { $push: { assets: newAsset } }
-  );
-
-  if (!res.matchedCount) throw new Error("Employee not found");
-
-  return {
-    done: true,
-    data: { ...newAsset, _id: newAsset._id.toString(), employeeId: employeeId.toString() },
-  };
 };
 
 /**
- * Update an asset.
- * - If newOwnerId provided and different: move asset between employees (transaction).
- * - If not, update fields on the containing employee doc using positional operator.
- * updateData may contain any asset fields (assetName, serialNumber, purchaseDate, warrantyMonths, status, etc.)
+ * Create new asset
  */
-export const updateAsset = async (companyId, assetId, updateData) => {
-  const { employees } = getTenantCollections(companyId);
+export const createAsset = async (companyId, assetData, userId) => {
+  const { assets } = getTenantCollections(companyId);
 
-  // Fetch current asset + owner
-  const assetDoc = await employees.findOne(
-    { "assets._id": new ObjectId(assetId) },
-    { projection: { _id: 1, assets: { $elemMatch: { _id: new ObjectId(assetId) } } } }
-  );
-  if (!assetDoc || !assetDoc.assets || !assetDoc.assets[0]) {
-    throw new Error("Asset not found");
+  try {
+    // Generate unique asset ID
+    const assetId = await generateAssetId(companyId);
+
+    const newAsset = {
+      assetId, // Add generated asset ID
+      name: assetData.name,
+      category: assetData.category ? new ObjectId(assetData.category) : null,
+      serialNumber: assetData.serialNumber || null,
+      barcode: assetData.barcode || null,
+      model: assetData.model || null,
+      vendor: assetData.vendor || {},
+      purchaseDate: assetData.purchaseDate ? new Date(assetData.purchaseDate) : new Date(),
+      purchaseValue: Number(assetData.purchaseValue) || 0,
+      warrantyMonths: Number(assetData.warrantyMonths) || 0,
+      status: assetData.status?.toLowerCase() || 'active',
+      assigned: false, // Track assignment status - will be updated when asset is assigned via AssetUsers
+      isDeleted: false,
+      createdBy: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Calculate warranty expiry date
+    if (newAsset.purchaseDate && newAsset.warrantyMonths > 0) {
+      const expiryDate = new Date(newAsset.purchaseDate);
+      expiryDate.setMonth(expiryDate.getMonth() + newAsset.warrantyMonths);
+      newAsset.warranty = {
+        expiryDate,
+      };
+    }
+
+    const result = await assets.insertOne(newAsset);
+
+    if (!result.acknowledged) {
+      throw new Error('Failed to create asset');
+    }
+
+    return {
+      done: true,
+      data: {
+        ...newAsset,
+        _id: result.insertedId.toString(),
+        category: newAsset.category ? newAsset.category.toString() : null,
+        assignedTo: newAsset.assignedTo ? newAsset.assignedTo.toString() : null,
+      },
+    };
+  } catch (err) {
+    console.error('Error in createAsset:', err);
+    return { done: false, error: err.message };
   }
+};
 
-  const ownerId = assetDoc._id;
-  const existingAsset = assetDoc.assets[0];
+/**
+ * Update asset
+ */
+export const updateAsset = async (companyId, assetId, updateData, userId) => {
+  const { assets } = getTenantCollections(companyId);
 
-  // Ownership transfer
-  if (updateData.employeeId && String(updateData.employeeId) !== String(ownerId)) {
-    const newOwnerId = new ObjectId(updateData.employeeId);
-    const { employeeId, ...assetFields } = updateData;
+  try {
+    const updates = {
+      ...(updateData.name && { name: updateData.name }),
+      ...(updateData.category && { category: new ObjectId(updateData.category) }),
+      ...(updateData.serialNumber !== undefined && { serialNumber: updateData.serialNumber }),
+      ...(updateData.barcode !== undefined && { barcode: updateData.barcode }),
+      ...(updateData.model !== undefined && { model: updateData.model }),
+      ...(updateData.vendor !== undefined && { vendor: updateData.vendor }),
+      ...(updateData.purchaseDate && { purchaseDate: new Date(updateData.purchaseDate) }),
+      ...(updateData.purchaseValue !== undefined && {
+        purchaseValue: Number(updateData.purchaseValue),
+      }),
+      ...(updateData.warrantyMonths !== undefined && {
+        warrantyMonths: Number(updateData.warrantyMonths),
+      }),
+      ...(updateData.status && { status: updateData.status.toLowerCase() }),
+      updatedBy: userId,
+      updatedAt: new Date(),
+    };
 
-    const mergedAsset = { ...existingAsset, ...assetFields, updatedAt: new Date() };
+    // NOTE: Asset assignment is now handled through AssetUsers collection
+    // Use AssetUsers API endpoints to assign/unassign assets
 
-    // Sequential transfer (simpler, avoids fragile transaction code)
-    await employees.updateOne(
-      { _id: ownerId },
-      { $pull: { assets: { _id: new ObjectId(assetId) } } }
+    // Recalculate warranty if purchase date or warranty months changed
+    if (updateData.purchaseDate || updateData.warrantyMonths !== undefined) {
+      const asset = await assets.findOne({ _id: new ObjectId(assetId) });
+      const purchaseDate = updateData.purchaseDate
+        ? new Date(updateData.purchaseDate)
+        : asset.purchaseDate;
+      const warrantyMonths =
+        updateData.warrantyMonths !== undefined
+          ? Number(updateData.warrantyMonths)
+          : asset.warrantyMonths;
+
+      if (purchaseDate && warrantyMonths > 0) {
+        const expiryDate = new Date(purchaseDate);
+        expiryDate.setMonth(expiryDate.getMonth() + warrantyMonths);
+        updates['warranty.expiryDate'] = expiryDate;
+      }
+    }
+
+    const result = await assets.updateOne(
+      { _id: new ObjectId(assetId), isDeleted: false },
+      { $set: updates }
     );
-    await employees.updateOne(
-      { _id: newOwnerId },
-      { $push: { assets: mergedAsset } }
-    );
 
-    return { done: true, data: { ...mergedAsset, employeeId: newOwnerId.toString() } };
+    if (result.matchedCount === 0) {
+      throw new Error('Asset not found');
+    }
+
+    return { done: true };
+  } catch (err) {
+    console.error('Error in updateAsset:', err);
+    return { done: false, error: err.message };
   }
-
-  // Same-owner update
-  const setObj = {};
-  for (const key of Object.keys(updateData)) {
-    if (["employeeId", "_id"].includes(key)) continue;
-    let val = updateData[key];
-    if (key === "purchaseDate" && val) val = new Date(val);
-    if (key === "warrantyMonths") val = Number(val || 0);
-    setObj[`assets.$.${key}`] = val;
-  }
-
-  // Warranty recalculation
-  const pd = setObj["assets.$.purchaseDate"] || existingAsset.purchaseDate;
-  const wm = setObj["assets.$.warrantyMonths"] ?? existingAsset.warrantyMonths ?? 0;
-  if (pd) {
-    const we = new Date(pd);
-    we.setMonth(we.getMonth() + wm);
-    setObj["assets.$.warrantyEndDate"] = we;
-  }
-
-  setObj["assets.$.updatedAt"] = new Date();
-
-  await employees.updateOne(
-    { "assets._id": new ObjectId(assetId) },
-    { $set: setObj }
-  );
-
-  return { done: true, data: { ...existingAsset, ...updateData, _id: assetId.toString(), employeeId: ownerId.toString() } };
 };
 
-
 /**
- * Hard delete an asset by assetId.
- * If employeeId provided, will use that; otherwise it finds the owner first.
+ * Delete asset (soft delete)
  */
-export const deleteAsset = async (companyId, assetId, employeeId = null) => {
-  const { employees } = getTenantCollections(companyId);
+export const deleteAsset = async (companyId, assetId, userId) => {
+  const { assets } = getTenantCollections(companyId);
 
-  let ownerQuery;
-  if (employeeId) {
-    ownerQuery = { _id: new ObjectId(employeeId) };
-  } else {
-    const owner = await employees.findOne({ "assets._id": new ObjectId(assetId) }, { projection: { _id: 1 } });
-    if (!owner) throw new Error("Asset not found");
-    ownerQuery = { _id: owner._id };
+  try {
+    const result = await assets.updateOne(
+      { _id: new ObjectId(assetId), isDeleted: false },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy: userId,
+          status: 'inactive',
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error('Asset not found');
+    }
+
+    return { done: true };
+  } catch (err) {
+    console.error('Error in deleteAsset:', err);
+    return { done: false, error: err.message };
   }
-
-  const res = await employees.updateOne(ownerQuery, { $pull: { assets: { _id: new ObjectId(assetId) } } });
-  if (!res.matchedCount) throw new Error("Asset not found or already deleted");
-  return { done: true };
 };

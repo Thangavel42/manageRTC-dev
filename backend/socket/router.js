@@ -1,7 +1,5 @@
 import activityController from '../controllers/activities/activities.controllers.js';
 import adminController from '../controllers/admin/admin.controller.js';
-import assetSocketController from '../controllers/assets/asset.socket.controller.js';
-import assetCategorySocketController from '../controllers/assets/assetCategory.socket.controller.js';
 import { ChatController } from '../controllers/chat/chat.controller.js';
 import { ChatUsersController } from '../controllers/chat/users.controller.js';
 import employeeController from '../controllers/employee/employee.controller.js';
@@ -71,8 +69,6 @@ const router = (socket, io, role) => {
       ticketsSocketController(socket, io);
       candidateController(socket, io);
       jobsController(socket, io);
-      assetSocketController(socket, io);
-      assetCategorySocketController(socket, io);
       trainersController(socket, io);
       trainingTypesController(socket, io);
       trainingListController(socket, io);
@@ -108,8 +104,6 @@ const router = (socket, io, role) => {
       goalTrackingController(socket, io);
       promotionController(socket, io);
       jobController(socket, io);
-      assetSocketController(socket, io);
-      assetCategorySocketController(socket, io);
       trainersController(socket, io);
       trainingTypesController(socket, io);
       trainingListController(socket, io);

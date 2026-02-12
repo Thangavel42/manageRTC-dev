@@ -772,7 +772,7 @@ export const broadcastAssetEvents = {
       type: asset.type,
       category: asset.category,
       status: asset.status,
-      assignedTo: asset.assignedTo,
+      assigned: asset.assigned,
       createdBy: asset.createdBy,
     });
   },
@@ -788,33 +788,40 @@ export const broadcastAssetEvents = {
       type: asset.type,
       category: asset.category,
       status: asset.status,
-      assignedTo: asset.assignedTo,
+      assigned: asset.assigned,
       updatedBy: asset.updatedBy,
     });
   },
 
   /**
    * Broadcast asset assigned event
+   * NOTE: Assignment details now come from AssetUsers collection
+   * This should be called from AssetUsers controller with assignment details
    */
-  assigned: (io, companyId, asset) => {
+  assigned: (io, companyId, asset, assignmentDetails = null) => {
     broadcastToCompany(io, companyId, 'asset:assigned', {
       assetId: asset.assetId,
       _id: asset._id,
       name: asset.name,
       type: asset.type,
-      assignedTo: asset.assignedTo,
-      assignedDate: asset.assignedDate,
-      assignmentType: asset.assignmentType,
+      assigned: asset.assigned,
+      // Assignment details from AssetUsers collection if provided
+      ...(assignmentDetails && {
+        assignedToEmployeeId: assignmentDetails.employeeId,
+        assignedDate: assignmentDetails.assignedDate,
+        assignmentType: assignmentDetails.assignmentType,
+      }),
     });
 
-    // Notify the assigned employee
-    if (asset.assignedTo) {
-      broadcastToUser(io, asset.assignedTo.toString(), 'asset:assigned_to_you', {
+    // Notify the assigned employee if assignment details are provided
+    if (assignmentDetails && assignmentDetails.employeeId) {
+      broadcastToUser(io, assignmentDetails.employeeId.toString(), 'asset:assigned_to_you', {
         assetId: asset.assetId,
         _id: asset._id,
         name: asset.name,
         type: asset.type,
-        assignedDate: asset.assignedDate,
+        assignedDate: assignmentDetails.assignedDate,
+        assignmentType: assignmentDetails.assignmentType,
       });
     }
   },

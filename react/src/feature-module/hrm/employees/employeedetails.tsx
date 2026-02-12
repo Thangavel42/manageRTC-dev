@@ -1,781 +1,908 @@
-import { DatePicker } from "antd";
+import { DatePicker } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { toast, ToastContainer } from "react-toastify";
-import { Socket } from "socket.io-client";
+import { toast, ToastContainer } from 'react-toastify';
+import { Socket } from 'socket.io-client';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import CommonSelect from '../../../core/common/commonSelect';
-import Footer from "../../../core/common/footer";
+import Footer from '../../../core/common/footer';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import EditEmployeeModal from '../../../core/modals/EditEmployeeModal';
 import PromotionDetailsModal from '../../../core/modals/PromotionDetailsModal';
 import ResignationDetailsModal from '../../../core/modals/ResignationDetailsModal';
 import TerminationDetailsModal from '../../../core/modals/TerminationDetailsModal';
-import { useSocket } from "../../../SocketContext";
+import { useSocket } from '../../../SocketContext';
 import { all_routes } from '../../router/all_routes';
 // REST API Hooks for HRM operations
-import { useBatchesREST } from "../../../hooks/useBatchesREST";
-import { useDepartmentsREST } from "../../../hooks/useDepartmentsREST";
-import { useDesignationsREST } from "../../../hooks/useDesignationsREST";
-import { useEmployeesREST } from "../../../hooks/useEmployeesREST";
-import { usePoliciesREST, type Policy, type PolicyAssignment } from "../../../hooks/usePoliciesREST";
-import { usePromotionsREST, type Promotion } from "../../../hooks/usePromotionsREST";
-import { useResignationsREST, type Resignation } from "../../../hooks/useResignationsREST";
-import { useShiftsREST } from "../../../hooks/useShiftsREST";
-import { useTerminationsREST, type Termination } from "../../../hooks/useTerminationsREST";
+import { useAssetUsersREST } from '../../../hooks/useAssetUsersREST';
+import { useBatchesREST } from '../../../hooks/useBatchesREST';
+import { useDepartmentsREST } from '../../../hooks/useDepartmentsREST';
+import { useDesignationsREST } from '../../../hooks/useDesignationsREST';
+import { useEmployeesREST } from '../../../hooks/useEmployeesREST';
+import {
+  usePoliciesREST,
+  type Policy,
+  type PolicyAssignment,
+} from '../../../hooks/usePoliciesREST';
+import { usePromotionsREST, type Promotion } from '../../../hooks/usePromotionsREST';
+import { useResignationsREST, type Resignation } from '../../../hooks/useResignationsREST';
+import { useShiftsREST } from '../../../hooks/useShiftsREST';
+import { useTerminationsREST, type Termination } from '../../../hooks/useTerminationsREST';
 
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 
-type PermissionAction = "read" | "write" | "create" | "delete" | "import" | "export";
-type PermissionModule = "holidays" | "leaves" | "clients" | "projects" | "tasks" | "chats" | "assets" | "timingSheets";
+type PermissionAction = 'read' | 'write' | 'create' | 'delete' | 'import' | 'export';
+type PermissionModule =
+  | 'holidays'
+  | 'leaves'
+  | 'clients'
+  | 'projects'
+  | 'tasks'
+  | 'chats'
+  | 'assets'
+  | 'timingSheets';
 
 interface PermissionSet {
-    read: boolean;
-    write: boolean;
-    create: boolean;
-    delete: boolean;
-    import: boolean;
-    export: boolean;
+  read: boolean;
+  write: boolean;
+  create: boolean;
+  delete: boolean;
+  import: boolean;
+  export: boolean;
 }
 
 interface PermissionsState {
-    enabledModules: Record<PermissionModule, boolean>;
-    permissions: Record<PermissionModule, PermissionSet>;
-    selectAll: Record<PermissionModule, boolean>;
+  enabledModules: Record<PermissionModule, boolean>;
+  permissions: Record<PermissionModule, PermissionSet>;
+  selectAll: Record<PermissionModule, boolean>;
 }
 
 const MODULES: PermissionModule[] = [
-    "holidays", "leaves", "clients", "projects", "tasks", "chats", "assets", "timingSheets"
+  'holidays',
+  'leaves',
+  'clients',
+  'projects',
+  'tasks',
+  'chats',
+  'assets',
+  'timingSheets',
 ];
 
-const ACTIONS: PermissionAction[] = [
-    "read", "write", "create", "delete", "import", "export"
-];
+const ACTIONS: PermissionAction[] = ['read', 'write', 'create', 'delete', 'import', 'export'];
 
 const initialPermissionsState = {
-    enabledModules: {
-        holidays: false,
-        leaves: false,
-        clients: false,
-        projects: false,
-        tasks: false,
-        chats: false,
-        assets: false,
-        timingSheets: false,
+  enabledModules: {
+    holidays: false,
+    leaves: false,
+    clients: false,
+    projects: false,
+    tasks: false,
+    chats: false,
+    assets: false,
+    timingSheets: false,
+  },
+  permissions: {
+    holidays: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
     },
-    permissions: {
-        holidays: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        leaves: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        clients: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        projects: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        tasks: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        chats: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        assets: { read: false, write: false, create: false, delete: false, import: false, export: false },
-        timingSheets: { read: false, write: false, create: false, delete: false, import: false, export: false },
+    leaves: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
     },
-    selectAll: {
-        holidays: false,
-        leaves: false,
-        clients: false,
-        projects: false,
-        tasks: false,
-        chats: false,
-        assets: false,
-        timingSheets: false,
-    }
+    clients: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+    projects: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+    tasks: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+    chats: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+    assets: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+    timingSheets: {
+      read: false,
+      write: false,
+      create: false,
+      delete: false,
+      import: false,
+      export: false,
+    },
+  },
+  selectAll: {
+    holidays: false,
+    leaves: false,
+    clients: false,
+    projects: false,
+    tasks: false,
+    chats: false,
+    assets: false,
+    timingSheets: false,
+  },
 };
 
 interface Passport {
-    number: string;
-    issueDate: string; // ISO date string
-    expiryDate: string; // ISO date string
-    country: string;
+  number: string;
+  issueDate: string; // ISO date string
+  expiryDate: string; // ISO date string
+  country: string;
 }
 
 interface Address {
-    street: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
 }
 
 interface PersonalInfo {
-    gender: string;
-    birthday: string; // DD-MM-YYYY
-    maritalStatus: string;
-    religion: string;
-    employmentOfSpouse: boolean;
-    noOfChildren: number;
-    passport: Passport;
-    address: Address;
+  gender: string;
+  birthday: string; // DD-MM-YYYY
+  maritalStatus: string;
+  religion: string;
+  employmentOfSpouse: boolean;
+  noOfChildren: number;
+  passport: Passport;
+  address: Address;
 }
 
 interface ContactInfo {
-    phone: string;
-    email: string;
+  phone: string;
+  email: string;
 }
 
 interface AccountInfo {
-    userName: string;
-    password: string;
-    role: string;
+  userName: string;
+  password: string;
+  role: string;
 }
 
 interface EmergencyContact {
-    name: string;
-    relationship: string;
-    phone: string[];
+  name: string;
+  relationship: string;
+  phone: string[];
 }
 
 interface BankInfo {
-    accountHolderName: string;
-    accountNumber: string;
-    bankName: string;
-    branch: string;
-    ifscCode: string;
+  accountHolderName: string;
+  accountNumber: string;
+  bankName: string;
+  branch: string;
+  ifscCode: string;
 }
 
 interface FamilyInfo {
-    Name: string;
-    relationship: string;
-    phone: string;
+  Name: string;
+  relationship: string;
+  phone: string;
 }
 
 interface EducationEntry {
-    degree: string;
-    institution: string;
-    startDate: string;
-    endDate: string;
-    grade: string;
+  degree: string;
+  institution: string;
+  startDate: string;
+  endDate: string;
+  grade: string;
 }
 
 interface ExperienceEntry {
-    previousCompany: string;
-    designation: string;
-    startDate: string; // ISO date string
-    endDate: string; // ISO date string
-    currentlyWorking?: boolean;
+  previousCompany: string;
+  designation: string;
+  startDate: string; // ISO date string
+  endDate: string; // ISO date string
+  currentlyWorking?: boolean;
 }
 
 interface Asset {
-    assetName: string;
-    serialNumber: string;
-    issuedDate: string; // ISO date string
-    status: string;
-    assignedBy: string;
-    assetImageUrl: string;
-    assigneeAvatar: string;
+  assetId?: string;
+  assetName: string;
+  serialNumber: string;
+  issuedDate: string; // ISO date string
+  assignedDate?: string; // Assignment date
+  status: string;
+  assignedBy: string;
+  assetImageUrl: string;
+  assigneeAvatar: string;
 }
 
 interface SalaryInfo {
-    basic: number;
-    hra: number;
-    allowance: number;
-    total: number;
+  basic: number;
+  hra: number;
+  allowance: number;
+  total: number;
 }
 
 interface PFInfo {
-    accountNumber: string;
-    contributionPercent: number;
-    employerContributionPercent: number;
+  accountNumber: string;
+  contributionPercent: number;
+  employerContributionPercent: number;
 }
 
 interface ESIInfo {
-    number: string;
-    contributionPercent: number;
-    employerContributionPercent: number;
+  number: string;
+  contributionPercent: number;
+  employerContributionPercent: number;
 }
 
 interface Statutory {
-    salary: SalaryInfo;
-    pf: PFInfo;
-    esi: ESIInfo;
+  salary: SalaryInfo;
+  pf: PFInfo;
+  esi: ESIInfo;
 }
 
 export interface Employee {
-    _id: string;
-    employeeId: string;
-    firstName: string;
-    lastName: string;
-    dateOfJoining: string; // ISO date string
-    departmentId: string;
-    designation: string;
-    department: string;
-    role: string;
-    timeZone: string;
-    companyName: string;
-    about: string;
-    status: "Active" | "Inactive" | "On Notice" | "Resigned" | "Terminated" | "On Leave";
-    reportOffice?: string;
-    managerId?: string;
-    leadId?: string;
-    reportingTo?: string;
-    reportingManagerName?: string;
-    avatar: string;
-    yearsOfExperience?: number;
-    email: string;
-    phone: string;
-    gender?: string;
-    dateOfBirth?: string;
-    address?: Address;
-    passport?: Passport;
-    account?: AccountInfo;
-    emergencyContacts?: EmergencyContact | EmergencyContact[];
-    bank?: BankInfo;
-    family?: FamilyInfo | FamilyInfo[];
-    education?: EducationEntry | EducationEntry[];
-    experience?: ExperienceEntry | ExperienceEntry[];
-    assets: Asset[];
-    statutory?: Statutory;
-    updatedBy: string;
-    designationId: string;
-    avatarUrl: string;
-    profileImage?: string;
-    clientId: string;
-    shiftId?: string;
-    shiftName?: string;
-    shiftColor?: string;
-    shiftTiming?: string;
-    batchId?: string;
-    batchName?: string;
-    batchShiftName?: string;
-    batchShiftTiming?: string;
-    batchShiftColor?: string;
-    employmentType?: "Full-time" | "Part-time" | "Contract" | "Intern";
+  _id: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  dateOfJoining: string; // ISO date string
+  departmentId: string;
+  designation: string;
+  department: string;
+  role: string;
+  timeZone: string;
+  companyName: string;
+  about: string;
+  status: 'Active' | 'Inactive' | 'On Notice' | 'Resigned' | 'Terminated' | 'On Leave';
+  reportOffice?: string;
+  managerId?: string;
+  leadId?: string;
+  reportingTo?: string;
+  reportingManagerName?: string;
+  avatar: string;
+  yearsOfExperience?: number;
+  email: string;
+  phone: string;
+  gender?: string;
+  dateOfBirth?: string;
+  address?: Address;
+  passport?: Passport;
+  account?: AccountInfo;
+  emergencyContacts?: EmergencyContact | EmergencyContact[];
+  bank?: BankInfo;
+  family?: FamilyInfo | FamilyInfo[];
+  education?: EducationEntry | EducationEntry[];
+  experience?: ExperienceEntry | ExperienceEntry[];
+  assets: Asset[];
+  statutory?: Statutory;
+  updatedBy: string;
+  designationId: string;
+  avatarUrl: string;
+  profileImage?: string;
+  clientId: string;
+  shiftId?: string;
+  shiftName?: string;
+  shiftColor?: string;
+  shiftTiming?: string;
+  batchId?: string;
+  batchName?: string;
+  batchShiftName?: string;
+  batchShiftTiming?: string;
+  batchShiftColor?: string;
+  employmentType?: 'Full-time' | 'Part-time' | 'Contract' | 'Intern';
 }
 
 // Use PolicyAssignment from usePoliciesREST instead of local DepartmentDesignationMapping
 type DepartmentDesignationMapping = PolicyAssignment;
 
 const EmployeeDetails = () => {
-    // Dropdown options
-    const roleOptions = [
-        { value: "", label: "Select Role" },
-        { value: "HR", label: "HR" },
-        { value: "Employee", label: "Employee" }
-    ];
+  // Dropdown options
+  const roleOptions = [
+    { value: '', label: 'Select Role' },
+    { value: 'HR', label: 'HR' },
+    { value: 'Employee', label: 'Employee' },
+  ];
 
-    const [permissions, setPermissions] = useState<PermissionsState>(initialPermissionsState);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [imageUpload, setImageUpload] = useState(false);
-    const editEmployeeModalRef = useRef<HTMLButtonElement>(null);
-    const [editFormData, setEditFormData] = useState<Partial<Employee>>({});
-    // const [maritalStatus, setMaritalStatus] = useState<string>("");
-    const [bankFormData, setBankFormData] = useState({
-        accountHolderName: "",
-        bankName: "",
-        accountNumber: "",
-        ifscCode: "",
-        branch: ""
-    });
-    const [familyFormData, setFamilyFormData] = useState({
-        familyMemberName: "",
-        relationship: "",
-        phone: ""
-    });
-    const [personalFormData, setPersonalFormData] = useState({
-        passportNo: "",
-        passportExpiryDate: null as any,
-        nationality: "",
-        religion: "",
-        maritalStatus: "Select",
-        employmentOfSpouse: false,
-        noOfChildren: 0
-    });
-    const [educationFormData, setEducationFormData] = useState<{
-        institution: string;
-        course: string;
-        startDate: Dayjs | null;
-        endDate: Dayjs | null;
-    }>({
-        institution: "",
-        course: "",
-        startDate: null,
-        endDate: null,
-    });
-    const [emergencyFormData, setEmergencyFormData] = useState({
-        name: "",
-        relationship: "",
-        phone1: "",
-        phone2: ""
-    });
+  const [permissions, setPermissions] = useState<PermissionsState>(initialPermissionsState);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUpload, setImageUpload] = useState(false);
+  const editEmployeeModalRef = useRef<HTMLButtonElement>(null);
+  const [editFormData, setEditFormData] = useState<Partial<Employee>>({});
+  // const [maritalStatus, setMaritalStatus] = useState<string>("");
+  const [bankFormData, setBankFormData] = useState({
+    accountHolderName: '',
+    bankName: '',
+    accountNumber: '',
+    ifscCode: '',
+    branch: '',
+  });
+  const [familyFormData, setFamilyFormData] = useState({
+    familyMemberName: '',
+    relationship: '',
+    phone: '',
+  });
+  const [personalFormData, setPersonalFormData] = useState({
+    passportNo: '',
+    passportExpiryDate: null as any,
+    nationality: '',
+    religion: '',
+    maritalStatus: 'Select',
+    employmentOfSpouse: false,
+    noOfChildren: 0,
+  });
+  const [educationFormData, setEducationFormData] = useState<{
+    institution: string;
+    course: string;
+    startDate: Dayjs | null;
+    endDate: Dayjs | null;
+  }>({
+    institution: '',
+    course: '',
+    startDate: null,
+    endDate: null,
+  });
+  const [emergencyFormData, setEmergencyFormData] = useState({
+    name: '',
+    relationship: '',
+    phone1: '',
+    phone2: '',
+  });
 
-    const [experienceFormData, setExperienceFormData] = useState({
-        company: "",
-        designation: "",
-        startDate: "",
-        endDate: "",
+  const [experienceFormData, setExperienceFormData] = useState({
+    company: '',
+    designation: '',
+    startDate: '',
+    endDate: '',
+  });
+  const [aboutFormData, setAboutFormData] = useState({
+    about: '',
+  });
+  const [familyEntries, setFamilyEntries] = useState<FamilyInfo[]>([]);
+  const [educationEntries, setEducationEntries] = useState<EducationEntry[]>([]);
+  const [experienceEntries, setExperienceEntries] = useState<ExperienceEntry[]>([]);
+  const [editingFamilyIndex, setEditingFamilyIndex] = useState<number | null>(null);
+  const [editingEducationIndex, setEditingEducationIndex] = useState<number | null>(null);
+  const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
+  const [familyFormLoading, setFamilyFormLoading] = useState(false);
+  const [bankFormLoading, setBankFormLoading] = useState(false);
+  const [educationFormLoading, setEducationFormLoading] = useState(false);
+  const [experienceFormLoading, setExperienceFormLoading] = useState(false);
+  const [personalFormLoading, setPersonalFormLoading] = useState(false);
+
+  const DATE_FORMAT = 'DD-MM-YYYY';
+  const DATE_REGEX = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-(\d{4})$/;
+
+  const isValidDateString = (value?: string | null) => !!value && DATE_REGEX.test(value);
+
+  const toDayjsDate = (value?: string | null) => {
+    if (!value) return null;
+    if (isValidDateString(value)) {
+      const parsed = dayjs(value, DATE_FORMAT);
+      return parsed.isValid() ? parsed : null;
+    }
+    const fallback = dayjs(value);
+    return fallback.isValid() ? fallback : null;
+  };
+  // Handle Next button click
+  const handleNext = () => {
+    handleEditSubmit(undefined as any).then(() => {
+      // Switch to permissions tab
+      const addressTab = document.getElementById('address-tab3');
+      if (addressTab) {
+        addressTab.click();
+      }
     });
-    const [aboutFormData, setAboutFormData] = useState({
-        about: "",
-    });
-    const [familyEntries, setFamilyEntries] = useState<FamilyInfo[]>([]);
-    const [educationEntries, setEducationEntries] = useState<EducationEntry[]>([]);
-    const [experienceEntries, setExperienceEntries] = useState<ExperienceEntry[]>([]);
-    const [editingFamilyIndex, setEditingFamilyIndex] = useState<number | null>(null);
-    const [editingEducationIndex, setEditingEducationIndex] = useState<number | null>(null);
-    const [editingExperienceIndex, setEditingExperienceIndex] = useState<number | null>(null);
-    const [familyFormLoading, setFamilyFormLoading] = useState(false);
-    const [bankFormLoading, setBankFormLoading] = useState(false);
-    const [educationFormLoading, setEducationFormLoading] = useState(false);
-    const [experienceFormLoading, setExperienceFormLoading] = useState(false);
-    const [personalFormLoading, setPersonalFormLoading] = useState(false);
+  };
 
-    const DATE_FORMAT = "DD-MM-YYYY";
-    const DATE_REGEX = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-(\d{4})$/;
+  const normalizeFamilyEntries = (familyData: any): FamilyInfo[] => {
+    const list = Array.isArray(familyData) ? familyData : familyData ? [familyData] : [];
+    return list
+      .map((entry: any) => ({
+        Name: entry?.Name || entry?.name || entry?.familyMemberName || '',
+        relationship: entry?.relationship || '',
+        phone: entry?.phone || '',
+      }))
+      .filter((entry: FamilyInfo) => entry.Name || entry.relationship || entry.phone);
+  };
 
-    const isValidDateString = (value?: string | null) =>
-        !!value && DATE_REGEX.test(value);
+  const normalizeEducationEntries = (educationData: any): EducationEntry[] => {
+    const list = Array.isArray(educationData)
+      ? educationData
+      : educationData
+        ? [educationData]
+        : [];
+    return list
+      .map((entry: any) => ({
+        institution: entry?.institution || '',
+        degree: entry?.degree || entry?.course || '',
+        startDate: entry?.startDate || '',
+        endDate: entry?.endDate || '',
+        grade: entry?.grade || '',
+      }))
+      .filter(
+        (entry: EducationEntry) =>
+          entry.institution || entry.degree || entry.startDate || entry.endDate || entry.grade
+      );
+  };
 
-    const toDayjsDate = (value?: string | null) => {
-        if (!value) return null;
-        if (isValidDateString(value)) {
-            const parsed = dayjs(value, DATE_FORMAT);
-            return parsed.isValid() ? parsed : null;
+  const normalizeExperienceEntries = (experienceData: any): ExperienceEntry[] => {
+    const list = Array.isArray(experienceData)
+      ? experienceData
+      : experienceData
+        ? [experienceData]
+        : [];
+    return list
+      .map((entry: any) => ({
+        previousCompany: entry?.previousCompany || entry?.company || entry?.companyName || '',
+        designation: entry?.designation || entry?.position || entry?.role || '',
+        startDate: entry?.startDate || '',
+        endDate: entry?.endDate || '',
+        currentlyWorking: entry?.currentlyWorking ?? entry?.current ?? false,
+      }))
+      .filter(
+        (entry: ExperienceEntry) =>
+          entry.previousCompany || entry.designation || entry.startDate || entry.endDate
+      );
+  };
+
+  // Handle permissions update
+  const handlePermissionUpdateSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!employee) return;
+    try {
+      setLoading(true);
+      const payload = {
+        employeeId: employee._id,
+        permissions: permissions.permissions,
+        enabledModules: permissions.enabledModules,
+      };
+      const success = await employeesREST.updatePermissions(payload);
+      if (success) {
+        toast.success('Permissions updated successfully!');
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-        const fallback = dayjs(value);
-        return fallback.isValid() ? fallback : null;
+      } else {
+        toast.error('Failed to update permissions');
+      }
+    } catch (error) {
+      toast.error('Failed to update permissions');
+      console.error('Permissions update error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedFormats = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedFormats.includes(file.type)) {
+      toast.error('Please upload image file only (JPG, JPEG, PNG).', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      event.target.value = '';
+      return;
+    }
+
+    // Validate file size - max 2MB
+    const maxSize = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxSize) {
+      toast.error('File size must be less than 2MB.', { position: 'top-right', autoClose: 3000 });
+      event.target.value = '';
+      return;
+    }
+
+    setImageUpload(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'amasqis');
+      const res = await fetch('https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error('Image upload failed');
+      }
+
+      const data = await res.json();
+      setEditFormData((prev) => ({
+        ...prev,
+        avatarUrl: data.secure_url,
+        profileImage: data.secure_url,
+      }));
+      setImageUpload(false);
+      toast.success('Image uploaded successfully!', { position: 'top-right', autoClose: 3000 });
+    } catch (error) {
+      setImageUpload(false);
+      toast.error('Failed to upload image. Please try again.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      event.target.value = '';
+    }
+  };
+
+  const removeLogo = () => {
+    setEditFormData((prev) => ({ ...prev, avatarUrl: '', profileImage: '' }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Handle bank form validation and submission
+  const handleBankFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (bankFormLoading) return;
+
+    // Validate all fields are filled
+    if (
+      !bankFormData.accountHolderName ||
+      !bankFormData.bankName ||
+      !bankFormData.accountNumber ||
+      !bankFormData.ifscCode ||
+      !bankFormData.branch
+    ) {
+      toast.error('All bank details fields are required!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    if (!employee) {
+      toast.error('Cannot save bank details at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    setBankFormLoading(true);
+
+    // Submit bank details to backend using REST API
+    const bankData = {
+      ...bankFormData,
     };
-    // Handle Next button click
-    const handleNext = () => {
-        handleEditSubmit(undefined as any).then(() => {
-            // Switch to permissions tab
-            const addressTab = document.getElementById('address-tab3');
-            if (addressTab) {
-                addressTab.click();
-            }
+
+    try {
+      const success = await employeesREST.updateBankDetails(employee._id, bankData);
+      if (success) {
+        toast.success('Bank details updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-
-    const normalizeFamilyEntries = (familyData: any): FamilyInfo[] => {
-        const list = Array.isArray(familyData) ? familyData : familyData ? [familyData] : [];
-        return list
-            .map((entry: any) => ({
-                Name: entry?.Name || entry?.name || entry?.familyMemberName || "",
-                relationship: entry?.relationship || "",
-                phone: entry?.phone || ""
-            }))
-            .filter((entry: FamilyInfo) => entry.Name || entry.relationship || entry.phone);
-    };
-
-    const normalizeEducationEntries = (educationData: any): EducationEntry[] => {
-        const list = Array.isArray(educationData) ? educationData : educationData ? [educationData] : [];
-        return list
-            .map((entry: any) => ({
-                institution: entry?.institution || "",
-                degree: entry?.degree || entry?.course || "",
-                startDate: entry?.startDate || "",
-                endDate: entry?.endDate || "",
-                grade: entry?.grade || ""
-            }))
-            .filter((entry: EducationEntry) =>
-                entry.institution || entry.degree || entry.startDate || entry.endDate || entry.grade
-            );
-    };
-
-    const normalizeExperienceEntries = (experienceData: any): ExperienceEntry[] => {
-        const list = Array.isArray(experienceData) ? experienceData : experienceData ? [experienceData] : [];
-        return list
-            .map((entry: any) => ({
-                previousCompany: entry?.previousCompany || entry?.company || entry?.companyName || "",
-                designation: entry?.designation || entry?.position || entry?.role || "",
-                startDate: entry?.startDate || "",
-                endDate: entry?.endDate || "",
-                currentlyWorking: entry?.currentlyWorking ?? entry?.current ?? false
-            }))
-            .filter((entry: ExperienceEntry) =>
-                entry.previousCompany || entry.designation || entry.startDate || entry.endDate
-            );
-    };
-
-    // Handle permissions update
-    const handlePermissionUpdateSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        if (!employee) return;
-        try {
-            setLoading(true);
-            const payload = {
-                employeeId: employee._id,
-                permissions: permissions.permissions,
-                enabledModules: permissions.enabledModules,
-            };
-            const success = await employeesREST.updatePermissions(payload);
-            if (success) {
-                toast.success("Permissions updated successfully!");
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-            } else {
-                toast.error("Failed to update permissions");
-            }
-        } catch (error) {
-            toast.error("Failed to update permissions");
-            console.error("Permissions update error:", error);
-        } finally {
-            setLoading(false);
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-    };
-
-    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        // Validate file type
-        const allowedFormats = ['image/jpeg', 'image/png', 'image/jpg'];
-        if (!allowedFormats.includes(file.type)) {
-            toast.error("Please upload image file only (JPG, JPEG, PNG).", { position: "top-right", autoClose: 3000 });
-            event.target.value = "";
-            return;
-        }
-
-        // Validate file size - max 2MB
-        const maxSize = 2 * 1024 * 1024; // 2MB
-        if (file.size > maxSize) {
-            toast.error("File size must be less than 2MB.", { position: "top-right", autoClose: 3000 });
-            event.target.value = "";
-            return;
-        }
-
-        setImageUpload(true);
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("upload_preset", "amasqis");
-            const res = await fetch(
-                "https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload",
-                { method: "POST", body: formData }
-            );
-
-            if (!res.ok) {
-                throw new Error('Image upload failed');
-            }
-
-            const data = await res.json();
-            setEditFormData(prev => ({ ...prev, avatarUrl: data.secure_url, profileImage: data.secure_url }));
-            setImageUpload(false);
-            toast.success("Image uploaded successfully!", { position: "top-right", autoClose: 3000 });
-        } catch (error) {
-            setImageUpload(false);
-            toast.error("Failed to upload image. Please try again.", { position: "top-right", autoClose: 3000 });
-            event.target.value = "";
-        }
-    };
-
-    const removeLogo = () => {
-        setEditFormData(prev => ({ ...prev, avatarUrl: "", profileImage: "" }));
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
-    };
-
-    // Handle bank form validation and submission
-    const handleBankFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Prevent duplicate submissions
-        if (bankFormLoading) return;
-
-        // Validate all fields are filled
-        if (!bankFormData.accountHolderName || !bankFormData.bankName || !bankFormData.accountNumber ||
-            !bankFormData.ifscCode || !bankFormData.branch) {
-            toast.error("All bank details fields are required!", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        if (!employee) {
-            toast.error("Cannot save bank details at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        setBankFormLoading(true);
-
-        // Submit bank details to backend using REST API
-        const bankData = {
-            ...bankFormData
-        };
-
-        try {
-            const success = await employeesREST.updateBankDetails(employee._id, bankData);
-            if (success) {
-                toast.success("Bank details updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal programmatically
-                const closeButton = document.querySelector('#edit_bank [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update bank details.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update bank details.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        } finally {
-            setBankFormLoading(false);
-        }
-    };
-    const  resetBankForm = () => {
-        setBankFormData({
-            accountHolderName: employee.bank?.accountHolderName || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
-            bankName: employee.bank?.bankName || "",
-            accountNumber: employee.bank?.accountNumber || "",
-            ifscCode: employee.bank?.ifscCode || "",
-            branch: employee.bank?.branch || ""
+        // Close modal programmatically
+        const closeButton = document.querySelector(
+          '#edit_bank [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update bank details.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
+      }
+    } catch (error) {
+      toast.error('Failed to update bank details.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setBankFormLoading(false);
+    }
+  };
+  const resetBankForm = () => {
+    setBankFormData({
+      accountHolderName:
+        employee.bank?.accountHolderName ||
+        `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
+      bankName: employee.bank?.bankName || '',
+      accountNumber: employee.bank?.accountNumber || '',
+      ifscCode: employee.bank?.ifscCode || '',
+      branch: employee.bank?.branch || '',
+    });
+  };
+
+  // handle education form validation and submission
+  const handleEducationFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (educationFormLoading) return;
+
+    if (
+      !educationFormData.institution ||
+      !educationFormData.course ||
+      !educationFormData.startDate ||
+      !educationFormData.endDate
+    ) {
+      toast.error('All education details fields are required!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    if (!employee) {
+      toast.error('Cannot save education details at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    setEducationFormLoading(true);
+
+    const newEntry: EducationEntry = {
+      institution: educationFormData.institution,
+      degree: educationFormData.course,
+      startDate: educationFormData.startDate ? educationFormData.startDate.format(DATE_FORMAT) : '',
+      endDate: educationFormData.endDate ? educationFormData.endDate.format(DATE_FORMAT) : '',
+      grade: '',
     };
 
-    // handle education form validation and submission
-    const handleEducationFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const updatedEntries =
+      editingEducationIndex === null
+        ? [...educationEntries, newEntry]
+        : educationEntries.map((entry, index) =>
+            index === editingEducationIndex ? newEntry : entry
+          );
 
-        // Prevent duplicate submissions
-        if (educationFormLoading) return;
-
-        if(!educationFormData.institution || !educationFormData.course || !educationFormData.startDate || !educationFormData.endDate) {
-            toast.error("All education details fields are required!", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        if(!employee) {
-            toast.error("Cannot save education details at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        setEducationFormLoading(true);
-
-        const newEntry: EducationEntry = {
-            institution: educationFormData.institution,
-            degree: educationFormData.course,
-            startDate: educationFormData.startDate ? educationFormData.startDate.format(DATE_FORMAT) : "",
-            endDate: educationFormData.endDate ? educationFormData.endDate.format(DATE_FORMAT) : "",
-            grade: ""
-        };
-
-        const updatedEntries =
-            editingEducationIndex === null
-                ? [...educationEntries, newEntry]
-                : educationEntries.map((entry, index) =>
-                    index === editingEducationIndex ? newEntry : entry
-                );
-
-        try {
-            const success = await employeesREST.updateEducationInfo(employee._id, updatedEntries);
-            if (success) {
-                toast.success("Education details updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                setEducationEntries(updatedEntries);
-                setEditingEducationIndex(null);
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal programmatically
-                const closeButton = document.querySelector('#edit_education [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update education details.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update education details.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        } finally {
-            setEducationFormLoading(false);
-        }
-    };
-
-    const resetEducationForm = () => {
-        const entry = editingEducationIndex !== null ? educationEntries[editingEducationIndex] : null;
-        setEducationFormData({
-            institution: entry?.institution || "",
-            course: entry?.degree || "",
-            startDate: entry?.startDate ? toDayjsDate(entry.startDate) : null,
-            endDate: entry?.endDate ? toDayjsDate(entry.endDate) : null
+    try {
+      const success = await employeesREST.updateEducationInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Education details updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-
-    const openEducationAddModal = () => {
+        setEducationEntries(updatedEntries);
         setEditingEducationIndex(null);
-        setEducationFormData({
-            institution: "",
-            course: "",
-            startDate: null,
-            endDate: null
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
+        }
+        // Close modal programmatically
+        const closeButton = document.querySelector(
+          '#edit_education [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update education details.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to update education details.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setEducationFormLoading(false);
+    }
+  };
 
-    const openEducationEditModal = (index: number) => {
-        const entry = educationEntries[index];
-        setEditingEducationIndex(index);
-        setEducationFormData({
-            institution: entry?.institution || "",
-            course: entry?.degree || "",
-            startDate: entry?.startDate ? toDayjsDate(entry.startDate) : null,
-            endDate: entry?.endDate ? toDayjsDate(entry.endDate) : null
+  const resetEducationForm = () => {
+    const entry = editingEducationIndex !== null ? educationEntries[editingEducationIndex] : null;
+    setEducationFormData({
+      institution: entry?.institution || '',
+      course: entry?.degree || '',
+      startDate: entry?.startDate ? toDayjsDate(entry.startDate) : null,
+      endDate: entry?.endDate ? toDayjsDate(entry.endDate) : null,
+    });
+  };
+
+  const openEducationAddModal = () => {
+    setEditingEducationIndex(null);
+    setEducationFormData({
+      institution: '',
+      course: '',
+      startDate: null,
+      endDate: null,
+    });
+  };
+
+  const openEducationEditModal = (index: number) => {
+    const entry = educationEntries[index];
+    setEditingEducationIndex(index);
+    setEducationFormData({
+      institution: entry?.institution || '',
+      course: entry?.degree || '',
+      startDate: entry?.startDate ? toDayjsDate(entry.startDate) : null,
+      endDate: entry?.endDate ? toDayjsDate(entry.endDate) : null,
+    });
+  };
+
+  const handleEducationDelete = async (index: number) => {
+    if (!employee) return;
+    const updatedEntries = educationEntries.filter((_, idx) => idx !== index);
+    try {
+      const success = await employeesREST.updateEducationInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Education entry removed successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-
-    const handleEducationDelete = async (index: number) => {
-        if (!employee) return;
-        const updatedEntries = educationEntries.filter((_, idx) => idx !== index);
-        try {
-            const success = await employeesREST.updateEducationInfo(employee._id, updatedEntries);
-            if (success) {
-                toast.success("Education entry removed successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                setEducationEntries(updatedEntries);
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-            } else {
-                toast.error("Failed to remove education entry.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to remove education entry.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
+        setEducationEntries(updatedEntries);
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-    };
-
-    // handleFamily form validation and submission
-    const handleFamilyFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Prevent duplicate submissions
-        if (familyFormLoading) return;
-
-        // Validate all fields are filled
-        if (!familyFormData.familyMemberName || !familyFormData.relationship || !familyFormData.phone) {
-            console.log("Validation failed - missing required fields");
-            toast.error("All family details fields are required!", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        if (!employee) {
-            toast.error("Cannot save family details at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        setFamilyFormLoading(true);
-
-        const newEntry: FamilyInfo = {
-            Name: familyFormData.familyMemberName,
-            relationship: familyFormData.relationship,
-            phone: familyFormData.phone
-        };
-
-        const updatedEntries =
-            editingFamilyIndex === null
-                ? [...familyEntries, newEntry]
-                : familyEntries.map((entry, index) =>
-                    index === editingFamilyIndex ? newEntry : entry
-                );
-
-        try {
-            const success = await employeesREST.updateFamilyInfo(employee._id, updatedEntries);
-            if (success) {
-                toast.success("Family details updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                setFamilyEntries(updatedEntries);
-                setEditingFamilyIndex(null);
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal programmatically
-                const closeButton = document.querySelector('#edit_family [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update family details.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update family details.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        } finally {
-            setFamilyFormLoading(false);
-        }
-    };
-
-    const resetFamilyForm = () => {
-        const entry = editingFamilyIndex !== null ? familyEntries[editingFamilyIndex] : null;
-        setFamilyFormData({
-            familyMemberName: entry?.Name || "",
-            relationship: entry?.relationship || "",
-            phone: entry?.phone || ""
+      } else {
+        toast.error('Failed to remove education entry.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
+      }
+    } catch (error) {
+      toast.error('Failed to remove education entry.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
+
+  // handleFamily form validation and submission
+  const handleFamilyFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (familyFormLoading) return;
+
+    // Validate all fields are filled
+    if (!familyFormData.familyMemberName || !familyFormData.relationship || !familyFormData.phone) {
+      console.log('Validation failed - missing required fields');
+      toast.error('All family details fields are required!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    if (!employee) {
+      toast.error('Cannot save family details at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    setFamilyFormLoading(true);
+
+    const newEntry: FamilyInfo = {
+      Name: familyFormData.familyMemberName,
+      relationship: familyFormData.relationship,
+      phone: familyFormData.phone,
     };
 
-    const openFamilyAddModal = () => {
+    const updatedEntries =
+      editingFamilyIndex === null
+        ? [...familyEntries, newEntry]
+        : familyEntries.map((entry, index) => (index === editingFamilyIndex ? newEntry : entry));
+
+    try {
+      const success = await employeesREST.updateFamilyInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Family details updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+        setFamilyEntries(updatedEntries);
         setEditingFamilyIndex(null);
-        setFamilyFormData({
-            familyMemberName: "",
-            relationship: "",
-            phone: ""
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
+        }
+        // Close modal programmatically
+        const closeButton = document.querySelector(
+          '#edit_family [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update family details.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to update family details.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setFamilyFormLoading(false);
+    }
+  };
 
-    const openFamilyEditModal = (index: number) => {
-        const entry = familyEntries[index];
-        setEditingFamilyIndex(index);
-        setFamilyFormData({
-            familyMemberName: entry?.Name || "",
-            relationship: entry?.relationship || "",
-            phone: entry?.phone || ""
+  const resetFamilyForm = () => {
+    const entry = editingFamilyIndex !== null ? familyEntries[editingFamilyIndex] : null;
+    setFamilyFormData({
+      familyMemberName: entry?.Name || '',
+      relationship: entry?.relationship || '',
+      phone: entry?.phone || '',
+    });
+  };
+
+  const openFamilyAddModal = () => {
+    setEditingFamilyIndex(null);
+    setFamilyFormData({
+      familyMemberName: '',
+      relationship: '',
+      phone: '',
+    });
+  };
+
+  const openFamilyEditModal = (index: number) => {
+    const entry = familyEntries[index];
+    setEditingFamilyIndex(index);
+    setFamilyFormData({
+      familyMemberName: entry?.Name || '',
+      relationship: entry?.relationship || '',
+      phone: entry?.phone || '',
+    });
+  };
+
+  const handleFamilyDelete = async (index: number) => {
+    if (!employee) return;
+    const updatedEntries = familyEntries.filter((_, idx) => idx !== index);
+    try {
+      const success = await employeesREST.updateFamilyInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Family member removed successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
+        setFamilyEntries(updatedEntries);
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
     };
 
     const handleFamilyDelete = async (index: number) => {
@@ -824,2057 +951,2187 @@ const EmployeeDetails = () => {
             });
             return;
         }
-
-        if (!employee) {
-            toast.error("Cannot save personal details at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-
-        setPersonalFormLoading(true);
-
-        // Submit personal details to backend using REST API
-        const personalData = {
-            passport: {
-                ...(employee.passport || {}),
-                number: personalFormData.passportNo,
-                expiryDate: personalFormData.passportExpiryDate
-                    ? dayjs(personalFormData.passportExpiryDate).format(DATE_FORMAT)
-                    : "",
-                country: personalFormData.nationality
-            },
-            religion: personalFormData.religion,
-            maritalStatus: personalFormData.maritalStatus,
-            employmentOfSpouse: personalFormData.maritalStatus === "Yes" ? personalFormData.employmentOfSpouse : false,
-            noOfChildren: personalFormData.maritalStatus === "Yes" ? personalFormData.noOfChildren : 0
-        };
-
-        try {
-            const success = await employeesREST.updatePersonalInfo(employee._id, personalData);
-            if (success) {
-                toast.success("Personal details updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal programmatically
-                const closeButton = document.querySelector('#edit_personal [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update personal details.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update personal details.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        } finally {
-            setPersonalFormLoading(false);
-        }
-    };
-    const resetPersonalForm = () => {
-        setPersonalFormData({
-            passportNo: employee.passport?.number || "",
-            passportExpiryDate: employee.passport?.expiryDate
-                ? toDayjsDate(employee.passport.expiryDate)
-                : null,
-            nationality: employee.passport?.country || "",
-            religion: (employee as any).religion || "",
-            maritalStatus: (employee as any).maritalStatus || "Select",
-            employmentOfSpouse: !!(employee as any).employmentOfSpouse,
-            noOfChildren: (employee as any).noOfChildren || 0
+      } else {
+        toast.error('Failed to remove family member.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-    // handleEmergency form validation and submission
-    const handleEmergencyFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+      }
+    } catch (error) {
+      toast.error('Failed to remove family member.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
 
-        // 1. Validate required fields
-        if (!emergencyFormData.name || !emergencyFormData.relationship || !emergencyFormData.phone1) {
-            console.log("Validation failed - missing required fields");
-            toast.error("Name, Relationship, and Phone No 1 are required!", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return; // STOP here – don't close modal
-        }
+  // Handle personal info form validation and submission
+  const handlePersonalFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-        console.log("Validation passed");
+    // Prevent duplicate submissions
+    if (personalFormLoading) return;
 
-        if (!employee) {
-            toast.error("Cannot save emergency contact at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
+    // Validate required fields
+    if (
+      !personalFormData.passportNo ||
+      !personalFormData.passportExpiryDate ||
+      !personalFormData.nationality ||
+      !personalFormData.religion ||
+      personalFormData.maritalStatus === 'Select'
+    ) {
+      console.log('Validation failed - missing required fields');
+      toast.error('Please fill all required fields!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
 
-        // 2. Prepare payload
-        const phones = [emergencyFormData.phone1];
-        if (emergencyFormData.phone2) {
-            phones.push(emergencyFormData.phone2);
-        }
+    if (!employee) {
+      toast.error('Cannot save personal details at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
 
-        const emergencyContacts = [{
-            name: emergencyFormData.name,
-            relationship: emergencyFormData.relationship,
-            phone: phones
-        }];
+    setPersonalFormLoading(true);
 
-        try {
-            const success = await employeesREST.updateEmergencyContacts(employee._id, emergencyContacts);
-            if (success) {
-                toast.success("Emergency contact updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal ONLY after everything passes
-                const closeButton = document.querySelector(
-                    '#edit_emergency [data-bs-dismiss="modal"]'
-                ) as HTMLButtonElement | null;
-
-                if (closeButton){
-                    closeButton.click();
-                }
-            } else {
-                toast.error("Failed to update emergency contact.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update emergency contact.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        }
+    // Submit personal details to backend using REST API
+    const personalData = {
+      passport: {
+        ...(employee.passport || {}),
+        number: personalFormData.passportNo,
+        expiryDate: personalFormData.passportExpiryDate
+          ? dayjs(personalFormData.passportExpiryDate).format(DATE_FORMAT)
+          : '',
+        country: personalFormData.nationality,
+      },
+      religion: personalFormData.religion,
+      maritalStatus: personalFormData.maritalStatus,
+      employmentOfSpouse:
+        personalFormData.maritalStatus === 'Yes' ? personalFormData.employmentOfSpouse : false,
+      noOfChildren: personalFormData.maritalStatus === 'Yes' ? personalFormData.noOfChildren : 0,
     };
 
-    const resetEmergencyModel = () => {
-        const contact = getEmergencyContact();
-        setEmergencyFormData({
-            name: contact?.name || "",
-            relationship: contact?.relationship || "",
-            phone1: contact?.phone?.[0] || "",
-            phone2: contact?.phone?.[1] || ""
+    try {
+      const success = await employeesREST.updatePersonalInfo(employee._id, personalData);
+      if (success) {
+        toast.success('Personal details updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-
-    // Handle experience form validation and submission
-    const handleExperienceFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Prevent duplicate submissions
-        if (experienceFormLoading) return;
-
-        if(!employee) {
-            toast.error("Cannot save experience details at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-
-        setExperienceFormLoading(true);
-        const newEntry: ExperienceEntry = {
-            previousCompany: experienceFormData.company,
-            designation: experienceFormData.designation,
-            startDate: experienceFormData.startDate,
-            endDate: experienceFormData.endDate,
-            currentlyWorking: false
-        };
-        const updatedEntries =
-            editingExperienceIndex === null
-                ? [...experienceEntries, newEntry]
-                : experienceEntries.map((entry, index) =>
-                    index === editingExperienceIndex ? newEntry : entry
-                );
-        try {
-            const success = await employeesREST.updateExperienceInfo(employee._id, updatedEntries);
-            if (success) {
-                toast.success("Experience details updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                setExperienceEntries(updatedEntries);
-                setEditingExperienceIndex(null);
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Close modal programmatically
-                const closeButton = document.querySelector('#add_experience [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update experience details.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update experience details.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        } finally {
-            setExperienceFormLoading(false);
-        }
-    };
-
-    const resetExperienceForm = () => {
-        const entry = editingExperienceIndex !== null ? experienceEntries[editingExperienceIndex] : null;
-        setExperienceFormData({
-            company: entry?.previousCompany || "",
-            designation: entry?.designation || "",
-            startDate: entry?.startDate || "",
-            endDate: entry?.endDate || "",
+        // Close modal programmatically
+        const closeButton = document.querySelector(
+          '#edit_personal [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update personal details.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to update personal details.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setPersonalFormLoading(false);
+    }
+  };
+  const resetPersonalForm = () => {
+    setPersonalFormData({
+      passportNo: employee.passport?.number || '',
+      passportExpiryDate: employee.passport?.expiryDate
+        ? toDayjsDate(employee.passport.expiryDate)
+        : null,
+      nationality: employee.passport?.country || '',
+      religion: (employee as any).religion || '',
+      maritalStatus: (employee as any).maritalStatus || 'Select',
+      employmentOfSpouse: !!(employee as any).employmentOfSpouse,
+      noOfChildren: (employee as any).noOfChildren || 0,
+    });
+  };
+  // handleEmergency form validation and submission
+  const handleEmergencyFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    const openExperienceAddModal = () => {
+    // 1. Validate required fields
+    if (!emergencyFormData.name || !emergencyFormData.relationship || !emergencyFormData.phone1) {
+      console.log('Validation failed - missing required fields');
+      toast.error('Name, Relationship, and Phone No 1 are required!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return; // STOP here – don't close modal
+    }
+
+    console.log('Validation passed');
+
+    if (!employee) {
+      toast.error('Cannot save emergency contact at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    // 2. Prepare payload
+    const phones = [emergencyFormData.phone1];
+    if (emergencyFormData.phone2) {
+      phones.push(emergencyFormData.phone2);
+    }
+
+    const emergencyContacts = [
+      {
+        name: emergencyFormData.name,
+        relationship: emergencyFormData.relationship,
+        phone: phones,
+      },
+    ];
+
+    try {
+      const success = await employeesREST.updateEmergencyContacts(employee._id, emergencyContacts);
+      if (success) {
+        toast.success('Emergency contact updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
+        }
+        // Close modal ONLY after everything passes
+        const closeButton = document.querySelector(
+          '#edit_emergency [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement | null;
+
+        if (closeButton) {
+          closeButton.click();
+        }
+      } else {
+        toast.error('Failed to update emergency contact.', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to update emergency contact.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
+
+  const resetEmergencyModel = () => {
+    const contact = getEmergencyContact();
+    setEmergencyFormData({
+      name: contact?.name || '',
+      relationship: contact?.relationship || '',
+      phone1: contact?.phone?.[0] || '',
+      phone2: contact?.phone?.[1] || '',
+    });
+  };
+
+  // Handle experience form validation and submission
+  const handleExperienceFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Prevent duplicate submissions
+    if (experienceFormLoading) return;
+
+    if (!employee) {
+      toast.error('Cannot save experience details at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    setExperienceFormLoading(true);
+    const newEntry: ExperienceEntry = {
+      previousCompany: experienceFormData.company,
+      designation: experienceFormData.designation,
+      startDate: experienceFormData.startDate,
+      endDate: experienceFormData.endDate,
+      currentlyWorking: false,
+    };
+    const updatedEntries =
+      editingExperienceIndex === null
+        ? [...experienceEntries, newEntry]
+        : experienceEntries.map((entry, index) =>
+            index === editingExperienceIndex ? newEntry : entry
+          );
+    try {
+      const success = await employeesREST.updateExperienceInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Experience details updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+        setExperienceEntries(updatedEntries);
         setEditingExperienceIndex(null);
-        setExperienceFormData({
-            company: "",
-            designation: "",
-            startDate: "",
-            endDate: "",
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
+        }
+        // Close modal programmatically
+        const closeButton = document.querySelector(
+          '#add_experience [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update experience details.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to update experience details.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setExperienceFormLoading(false);
+    }
+  };
 
-    const openExperienceEditModal = (index: number) => {
-        const entry = experienceEntries[index];
-        setEditingExperienceIndex(index);
-        setExperienceFormData({
-            company: entry?.previousCompany || "",
-            designation: entry?.designation || "",
-            startDate: entry?.startDate || "",
-            endDate: entry?.endDate || "",
+  const resetExperienceForm = () => {
+    const entry =
+      editingExperienceIndex !== null ? experienceEntries[editingExperienceIndex] : null;
+    setExperienceFormData({
+      company: entry?.previousCompany || '',
+      designation: entry?.designation || '',
+      startDate: entry?.startDate || '',
+      endDate: entry?.endDate || '',
+    });
+  };
+
+  const openExperienceAddModal = () => {
+    setEditingExperienceIndex(null);
+    setExperienceFormData({
+      company: '',
+      designation: '',
+      startDate: '',
+      endDate: '',
+    });
+  };
+
+  const openExperienceEditModal = (index: number) => {
+    const entry = experienceEntries[index];
+    setEditingExperienceIndex(index);
+    setExperienceFormData({
+      company: entry?.previousCompany || '',
+      designation: entry?.designation || '',
+      startDate: entry?.startDate || '',
+      endDate: entry?.endDate || '',
+    });
+  };
+
+  const handleExperienceDelete = async (index: number) => {
+    if (!employee) return;
+    const updatedEntries = experienceEntries.filter((_, idx) => idx !== index);
+    try {
+      const success = await employeesREST.updateExperienceInfo(employee._id, updatedEntries);
+      if (success) {
+        toast.success('Experience entry removed successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
-
-    const handleExperienceDelete = async (index: number) => {
-        if (!employee) return;
-        const updatedEntries = experienceEntries.filter((_, idx) => idx !== index);
-        try {
-            const success = await employeesREST.updateExperienceInfo(employee._id, updatedEntries);
-            if (success) {
-                toast.success("Experience entry removed successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                setExperienceEntries(updatedEntries);
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-            } else {
-                toast.error("Failed to remove experience entry.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to remove experience entry.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
+        setExperienceEntries(updatedEntries);
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-    };
-
-    const handleAboutSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        // Validate about field
-        if (!aboutFormData.about || aboutFormData.about.trim() === "") {
-            toast.error("About content cannot be empty!", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-        if (!employee) {
-            toast.error("Cannot update about at this time.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            return;
-        }
-        try {
-            setLoading(true);
-            const success = await employeesREST.updateAboutInfo(employee._id, aboutFormData.about);
-            if (success) {
-                toast.success("About information updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-                // Optionally close modal if present
-                const closeButton = document.querySelector('#edit_about [data-bs-dismiss="modal"]') as HTMLButtonElement;
-                if (closeButton) closeButton.click();
-            } else {
-                toast.error("Failed to update about", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update about", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-            console.error("About update error:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const resetAboutForm = () => {
-        setAboutFormData({
-            about: typeof employee?.about === 'string' ? employee.about : "",
+      } else {
+        toast.error('Failed to remove experience entry.', {
+          position: 'top-right',
+          autoClose: 3000,
         });
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to remove experience entry.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
 
-    // Permissions handlers
-    const toggleModule = (module: PermissionModule) => {
-        setPermissions((prev) => ({
+  const handleAboutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Validate about field
+    if (!aboutFormData.about || aboutFormData.about.trim() === '') {
+      toast.error('About content cannot be empty!', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+    if (!employee) {
+      toast.error('Cannot update about at this time.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
+    try {
+      setLoading(true);
+      const success = await employeesREST.updateAboutInfo(employee._id, aboutFormData.about);
+      if (success) {
+        toast.success('About information updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
+        }
+        // Optionally close modal if present
+        const closeButton = document.querySelector(
+          '#edit_about [data-bs-dismiss="modal"]'
+        ) as HTMLButtonElement;
+        if (closeButton) closeButton.click();
+      } else {
+        toast.error('Failed to update about', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to update about', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+      console.error('About update error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetAboutForm = () => {
+    setAboutFormData({
+      about: typeof employee?.about === 'string' ? employee.about : '',
+    });
+  };
+
+  // Permissions handlers
+  const toggleModule = (module: PermissionModule) => {
+    setPermissions((prev) => ({
+      ...prev,
+      enabledModules: {
+        ...prev.enabledModules,
+        [module]: !prev.enabledModules[module],
+      },
+    }));
+  };
+
+  const toggleAllModules = (enable: boolean) => {
+    setPermissions((prev) => {
+      const newEnabledModules: Record<PermissionModule, boolean> = MODULES.reduce(
+        (acc, module) => {
+          acc[module] = enable;
+          return acc;
+        },
+        {} as Record<PermissionModule, boolean>
+      );
+
+      return {
+        ...prev,
+        enabledModules: newEnabledModules,
+      };
+    });
+  };
+
+  const toggleGlobalSelectAll = (checked: boolean) => {
+    setPermissions((prev) => {
+      // Build new permissions for every module & action
+      const newPermissions: Record<PermissionModule, PermissionSet> = MODULES.reduce(
+        (accModules, module) => {
+          const newModulePermissions: PermissionSet = ACTIONS.reduce((accActions, action) => {
+            accActions[action] = checked;
+            return accActions;
+          }, {} as PermissionSet);
+          accModules[module] = newModulePermissions;
+          return accModules;
+        },
+        {} as Record<PermissionModule, PermissionSet>
+      );
+
+      // Build new selectAll flags for every module
+      const newSelectAll: Record<PermissionModule, boolean> = MODULES.reduce(
+        (acc, module) => {
+          acc[module] = checked;
+          return acc;
+        },
+        {} as Record<PermissionModule, boolean>
+      );
+
+      return {
+        ...prev,
+        permissions: newPermissions,
+        selectAll: newSelectAll,
+      };
+    });
+  };
+
+  const handlePermissionChange = (
+    module: PermissionModule,
+    action: PermissionAction,
+    checked: boolean
+  ) => {
+    setPermissions((prev) => {
+      const updatedModulePermissions = {
+        ...prev.permissions[module],
+        [action]: checked,
+      };
+
+      // Check if all actions selected for this module
+      const allSelected = ACTIONS.every((act) => updatedModulePermissions[act]);
+
+      return {
+        ...prev,
+        permissions: {
+          ...prev.permissions,
+          [module]: updatedModulePermissions,
+        },
+        selectAll: {
+          ...prev.selectAll,
+          [module]: allSelected,
+        },
+      };
+    });
+  };
+
+  const allPermissionsSelected = () => {
+    return MODULES.every((module) =>
+      ACTIONS.every((action) => permissions.permissions[module][action])
+    );
+  };
+  const { employeeId } = useParams();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  // Separate state for modal to prevent modal from opening when employee data loads
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [employeeAssets, setEmployeeAssets] = useState<Asset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const getEmergencyContact = React.useCallback((): EmergencyContact | null => {
+    const contact = Array.isArray(employee?.emergencyContacts)
+      ? employee?.emergencyContacts?.[0]
+      : employee?.emergencyContacts;
+    const fallback = (employee as any)?.emergencyContact;
+    if (contact) {
+      return {
+        name: contact.name || '',
+        relationship: contact.relationship || '',
+        phone: Array.isArray(contact.phone) ? contact.phone : contact.phone ? [contact.phone] : [],
+      };
+    }
+    if (fallback) {
+      return {
+        name: fallback.name || '',
+        relationship: fallback.relationship || '',
+        phone: Array.isArray(fallback.phone)
+          ? fallback.phone
+          : fallback.phone
+            ? [fallback.phone]
+            : [],
+      };
+    }
+    return null;
+  }, [employee]);
+
+  // REST API Hooks for HRM operations
+  const employeesREST = useEmployeesREST();
+  const { getEmployeeDetails } = employeesREST;
+  const { getEmployeeAssets } = useAssetUsersREST();
+  const { fetchDepartments, departments } = useDepartmentsREST();
+  const { fetchDesignations, designations } = useDesignationsREST();
+  const { batches, fetchBatches } = useBatchesREST();
+  const { shifts: allShifts } = useShiftsREST();
+  const navigate = useNavigate();
+
+  // REST API Hooks for policies, promotions, resignations, and terminations
+  const { policies, fetchPolicies, loading: policiesLoading } = usePoliciesREST();
+  const { promotions } = usePromotionsREST();
+  const { resignations, fetchResignations } = useResignationsREST();
+  const { terminations, fetchTerminations } = useTerminationsREST();
+
+  const socket = useSocket() as Socket | null;
+
+  const socketInitRef = useRef(false);
+  const employeesRESTRef = useRef(employeesREST);
+  const employeeIdRef = useRef(employeeId);
+  employeesRESTRef.current = employeesREST;
+  employeeIdRef.current = employeeId;
+
+  // Local UI state (not replaced by REST hooks)
+  const [viewingPolicy, setViewingPolicy] = useState<Policy | null>(null);
+  const [department, setDepartment] = useState<Option[]>([]);
+  const [designation, setDesignation] = useState<Option[]>([]);
+
+  // Initialize edit form data when employee data is loaded
+  useEffect(() => {
+    if (employee) {
+      setEditFormData({
+        ...employee,
+        dateOfJoining: employee.dateOfJoining || '',
+        dateOfBirth: employee.dateOfBirth || null,
+        gender: employee.gender || '',
+        address: {
+          street: employee.address?.street || '',
+          city: employee.address?.city || '',
+          state: employee.address?.state || '',
+          postalCode: employee.address?.postalCode || '',
+          country: employee.address?.country || '',
+        },
+      });
+
+      // Initialize bank form data
+      setBankFormData({
+        accountHolderName:
+          employee.bank?.accountHolderName ||
+          `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
+        bankName: employee.bank?.bankName || '',
+        accountNumber: employee.bank?.accountNumber || '',
+        ifscCode: employee.bank?.ifscCode || '',
+        branch: employee.bank?.branch || '',
+      });
+
+      // Initialize personal form data
+      setPersonalFormData({
+        passportNo: employee.passport?.number || '',
+        passportExpiryDate: employee.passport?.expiryDate
+          ? toDayjsDate(employee.passport.expiryDate)
+          : null,
+        nationality: employee.passport?.country || '',
+        religion: (employee as any).religion || '',
+        maritalStatus: (employee as any).maritalStatus || 'Select',
+        employmentOfSpouse: !!(employee as any).employmentOfSpouse,
+        noOfChildren: (employee as any).noOfChildren || 0,
+      });
+
+      const normalizedFamily = normalizeFamilyEntries(employee.family);
+      setFamilyEntries(normalizedFamily);
+      setFamilyFormData({
+        familyMemberName: normalizedFamily[0]?.Name || '',
+        relationship: normalizedFamily[0]?.relationship || '',
+        phone: normalizedFamily[0]?.phone || '',
+      });
+
+      const normalizedEducation = normalizeEducationEntries(employee.education);
+      setEducationEntries(normalizedEducation);
+      setEducationFormData({
+        institution: normalizedEducation[0]?.institution || '',
+        course: normalizedEducation[0]?.degree || '',
+        startDate: normalizedEducation[0]?.startDate
+          ? toDayjsDate(normalizedEducation[0]?.startDate)
+          : null,
+        endDate: normalizedEducation[0]?.endDate
+          ? toDayjsDate(normalizedEducation[0]?.endDate)
+          : null,
+      });
+
+      const emergencyContact = getEmergencyContact();
+      setEmergencyFormData({
+        name: emergencyContact?.name || '',
+        relationship: emergencyContact?.relationship || '',
+        phone1: emergencyContact?.phone?.[0] || '',
+        phone2: emergencyContact?.phone?.[1] || '',
+      });
+
+      const normalizedExperience = normalizeExperienceEntries(employee.experience);
+      setExperienceEntries(normalizedExperience);
+      setExperienceFormData({
+        company: normalizedExperience[0]?.previousCompany || '',
+        designation: normalizedExperience[0]?.designation || '',
+        startDate: normalizedExperience[0]?.startDate || '',
+        endDate: normalizedExperience[0]?.endDate || '',
+      });
+
+      setAboutFormData({
+        about: typeof employee.about === 'string' ? employee.about : '',
+      });
+
+      setEditingFamilyIndex(null);
+      setEditingEducationIndex(null);
+      setEditingExperienceIndex(null);
+    }
+  }, [employee, getEmergencyContact]);
+
+  // Handle edit form changes
+  const handleEditFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    if (name.includes('.')) {
+      const parts = name.split('.');
+      setEditFormData((prev) => {
+        if (parts.length === 2 && parts[0] === 'address') {
+          // Handle address.field updates
+          const currentAddress = prev.address || {
+            street: '',
+            city: '',
+            state: '',
+            postalCode: '',
+            country: '',
+          };
+          return {
             ...prev,
-            enabledModules: {
-                ...prev.enabledModules,
-                [module]: !prev.enabledModules[module],
+            address: {
+              ...currentAddress,
+              [parts[1]]: value,
             },
-        }));
-    };
-
-    const toggleAllModules = (enable: boolean) => {
-        setPermissions((prev) => {
-            const newEnabledModules: Record<PermissionModule, boolean> = MODULES.reduce(
-                (acc, module) => {
-                    acc[module] = enable;
-                    return acc;
-                },
-                {} as Record<PermissionModule, boolean>
-            );
-
-            return {
-                ...prev,
-                enabledModules: newEnabledModules,
-            };
-        });
-    };
-
-    const toggleGlobalSelectAll = (checked: boolean) => {
-        setPermissions((prev) => {
-            // Build new permissions for every module & action
-            const newPermissions: Record<PermissionModule, PermissionSet> = MODULES.reduce(
-                (accModules, module) => {
-                    const newModulePermissions: PermissionSet = ACTIONS.reduce(
-                        (accActions, action) => {
-                            accActions[action] = checked;
-                            return accActions;
-                        },
-                        {} as PermissionSet
-                    );
-                    accModules[module] = newModulePermissions;
-                    return accModules;
-                },
-                {} as Record<PermissionModule, PermissionSet>
-            );
-
-            // Build new selectAll flags for every module
-            const newSelectAll: Record<PermissionModule, boolean> = MODULES.reduce(
-                (acc, module) => {
-                    acc[module] = checked;
-                    return acc;
-                },
-                {} as Record<PermissionModule, boolean>
-            );
-
-            return {
-                ...prev,
-                permissions: newPermissions,
-                selectAll: newSelectAll,
-            };
-        });
-    };
-
-    const handlePermissionChange = (
-        module: PermissionModule,
-        action: PermissionAction,
-        checked: boolean
-    ) => {
-        setPermissions((prev) => {
-            const updatedModulePermissions = {
-                ...prev.permissions[module],
-                [action]: checked,
-            };
-
-            // Check if all actions selected for this module
-            const allSelected = ACTIONS.every(
-                (act) => updatedModulePermissions[act]
-            );
-
-            return {
-                ...prev,
-                permissions: {
-                    ...prev.permissions,
-                    [module]: updatedModulePermissions,
-                },
-                selectAll: {
-                    ...prev.selectAll,
-                    [module]: allSelected,
-                },
-            };
-        });
-    };
-
-    const allPermissionsSelected = () => {
-        return MODULES.every(module =>
-            ACTIONS.every(action => permissions.permissions[module][action])
-        );
-    };
-    const { employeeId } = useParams();
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [employee, setEmployee] = useState<Employee | null>(null);
-    // Separate state for modal to prevent modal from opening when employee data loads
-    const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-    const getEmergencyContact = React.useCallback((): EmergencyContact | null => {
-        const contact = Array.isArray(employee?.emergencyContacts)
-            ? employee?.emergencyContacts?.[0]
-            : employee?.emergencyContacts;
-        const fallback = (employee as any)?.emergencyContact;
-        if (contact) {
-            return {
-                name: contact.name || "",
-                relationship: contact.relationship || "",
-                phone: Array.isArray(contact.phone) ? contact.phone : contact.phone ? [contact.phone] : []
-            };
+          };
+        } else if (parts.length === 2) {
+          // Handle other nested fields
+          const [parent, child] = parts;
+          return {
+            ...prev,
+            [parent]: {
+              ...(prev[parent as keyof Employee] as any),
+              [child]: value,
+            },
+          };
         }
-        if (fallback) {
-            return {
-                name: fallback.name || "",
-                relationship: fallback.relationship || "",
-                phone: Array.isArray(fallback.phone) ? fallback.phone : fallback.phone ? [fallback.phone] : []
-            };
+        return prev;
+      });
+    } else {
+      setEditFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleEditSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editFormData) {
+      toast.error('No employee data available for editing.');
+      return;
+    }
+
+    // Lifecycle statuses that should only be set through HR workflows
+    const lifecycleStatuses = ['Terminated', 'Resigned', 'On Notice'];
+    const currentStatus = editFormData.status || 'Active';
+
+    // Merge address if present in editFormData
+    const mergedAddress = editFormData.address || employee?.address || {};
+
+    // Merge passport if present in editFormData
+    const mergedPassport = editFormData.passport || employee?.passport || {};
+
+    const payload: any = {
+      employeeId: editFormData.employeeId || '',
+      firstName: editFormData.firstName || '',
+      lastName: editFormData.lastName || '',
+      account: {
+        userName: editFormData.account?.userName || '',
+      },
+      email: editFormData.email || employee?.email || '',
+      phone: editFormData.phone || employee?.phone || '',
+      gender: editFormData.gender || employee?.gender || '',
+      dateOfBirth: editFormData.dateOfBirth || employee?.dateOfBirth || null,
+      address: mergedAddress,
+      passport: mergedPassport,
+      companyName: editFormData.companyName || '',
+      departmentId: editFormData.departmentId || '',
+      designationId: editFormData.designationId || '',
+      dateOfJoining: editFormData.dateOfJoining || null,
+      about: editFormData.about || '',
+      // Use profileImage for backend (or avatarUrl if provided)
+      profileImage: editFormData.avatarUrl || editFormData.profileImage || '',
+    };
+
+    // Only include status if it's NOT a lifecycle status
+    // Lifecycle statuses should only be set through termination/resignation workflows
+    if (!lifecycleStatuses.includes(currentStatus)) {
+      payload.status = currentStatus;
+    }
+
+    try {
+      const employeeObjectId = employee?._id || editFormData._id || payload.employeeId;
+      const success = await employeesREST.updateEmployee(employeeObjectId, payload);
+      if (success) {
+        toast.success('Employee updated successfully!', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+        // Refresh employee details
+        const updatedEmployee = await employeesREST.getEmployeeDetails(employeeObjectId);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-        return null;
-    }, [employee]);
+      } else {
+        toast.error('Failed to update employee.', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to update employee.', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  };
 
-    // REST API Hooks for HRM operations
-    const employeesREST = useEmployeesREST();
-    const { getEmployeeDetails } = employeesREST;
-    const { fetchDepartments, departments } = useDepartmentsREST();
-    const { fetchDesignations, designations } = useDesignationsREST();
-    const { batches, fetchBatches } = useBatchesREST();
-    const { shifts: allShifts } = useShiftsREST();
-    const navigate = useNavigate();
+  // Fetch employee assets
+  useEffect(() => {
+    const loadEmployeeAssets = async () => {
+      if (!employee?._id) return;
 
-    // REST API Hooks for policies, promotions, resignations, and terminations
-    const { policies, fetchPolicies, loading: policiesLoading } = usePoliciesREST();
-    const { promotions } = usePromotionsREST();
-    const { resignations, fetchResignations } = useResignationsREST();
-    const { terminations, fetchTerminations } = useTerminationsREST();
+      setAssetsLoading(true);
+      try {
+        const assetUsers = await getEmployeeAssets(employee._id);
 
-    const socket = useSocket() as Socket | null;
+        // Map AssetUser to Asset format
+        const mappedAssets: Asset[] = assetUsers
+          .filter((au) => au.status === 'assigned')
+          .map((au) => ({
+            assetId: au.assetIdDisplay || '',
+            assetName: au.assetName || 'Unknown Asset',
+            serialNumber: au.assetSerialNumber || '',
+            issuedDate: au.assignedDate || '',
+            assignedDate: au.assignedDate,
+            status: au.assetStatus || 'active',
+            assignedBy: '',
+            assetImageUrl: '',
+            assigneeAvatar: '',
+          }));
 
-    const socketInitRef = useRef(false);
-    const employeesRESTRef = useRef(employeesREST);
-    const employeeIdRef = useRef(employeeId);
-    employeesRESTRef.current = employeesREST;
-    employeeIdRef.current = employeeId;
+        setEmployeeAssets(mappedAssets);
+      } catch (error) {
+        console.error('Failed to load employee assets:', error);
+      } finally {
+        setAssetsLoading(false);
+      }
+    };
 
-    // Local UI state (not replaced by REST hooks)
-    const [viewingPolicy, setViewingPolicy] = useState<Policy | null>(null);
-    const [department, setDepartment] = useState<Option[]>([]);
-    const [designation, setDesignation] = useState<Option[]>([]);
+    loadEmployeeAssets();
+  }, [employee?._id, getEmployeeAssets]);
 
-    // Initialize edit form data when employee data is loaded
-    useEffect(() => {
-        if (employee) {
-            setEditFormData({
-                ...employee,
-                dateOfJoining: employee.dateOfJoining || "",
-                dateOfBirth: employee.dateOfBirth || null,
-                gender: employee.gender || "",
-                address: {
-                    street: employee.address?.street || "",
-                    city: employee.address?.city || "",
-                    state: employee.address?.state || "",
-                    postalCode: employee.address?.postalCode || "",
-                    country: employee.address?.country || "",
-                }
-            });
+  useEffect(() => {
+    if (!employeeId) return;
 
-            // Initialize bank form data
-            setBankFormData({
-                accountHolderName: employee.bank?.accountHolderName || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim(),
-                bankName: employee.bank?.bankName || "",
-                accountNumber: employee.bank?.accountNumber || "",
-                ifscCode: employee.bank?.ifscCode || "",
-                branch: employee.bank?.branch || ""
-            });
+    let isMounted = true;
+    let didFinish = false;
+    setLoading(true);
 
-            // Initialize personal form data
-            setPersonalFormData({
-                passportNo: employee.passport?.number || "",
-                passportExpiryDate: employee.passport?.expiryDate
-                    ? toDayjsDate(employee.passport.expiryDate)
-                    : null,
-                nationality: employee.passport?.country || "",
-                religion: (employee as any).religion || "",
-                maritalStatus: (employee as any).maritalStatus || "Select",
-                employmentOfSpouse: !!(employee as any).employmentOfSpouse,
-                noOfChildren: (employee as any).noOfChildren || 0
-            });
+    const timeoutId = setTimeout(() => {
+      if (!didFinish && isMounted) {
+        console.warn('Employees loading timeout - showing fallback');
+        setError('Employees loading timed out. Please refresh the page.');
+        setLoading(false);
+      }
+    }, 30000);
 
-            const normalizedFamily = normalizeFamilyEntries(employee.family);
-            setFamilyEntries(normalizedFamily);
-            setFamilyFormData({
-                familyMemberName: normalizedFamily[0]?.Name || "",
-                relationship: normalizedFamily[0]?.relationship || "",
-                phone: normalizedFamily[0]?.phone || ""
-            });
-
-            const normalizedEducation = normalizeEducationEntries(employee.education);
-            setEducationEntries(normalizedEducation);
-            setEducationFormData({
-                institution: normalizedEducation[0]?.institution || "",
-                course: normalizedEducation[0]?.degree || "",
-                startDate: normalizedEducation[0]?.startDate ? toDayjsDate(normalizedEducation[0]?.startDate) : null,
-                endDate: normalizedEducation[0]?.endDate ? toDayjsDate(normalizedEducation[0]?.endDate) : null
-            });
-
-            const emergencyContact = getEmergencyContact();
-            setEmergencyFormData({
-                name: emergencyContact?.name || "",
-                relationship: emergencyContact?.relationship || "",
-                phone1: emergencyContact?.phone?.[0] || "",
-                phone2: emergencyContact?.phone?.[1] || ""
-            });
-
-            const normalizedExperience = normalizeExperienceEntries(employee.experience);
-            setExperienceEntries(normalizedExperience);
-            setExperienceFormData({
-                company: normalizedExperience[0]?.previousCompany || "",
-                designation: normalizedExperience[0]?.designation || "",
-                startDate: normalizedExperience[0]?.startDate || "",
-                endDate: normalizedExperience[0]?.endDate || "",
-            });
-
-            setAboutFormData({
-                about: typeof employee.about === 'string' ? employee.about : "",
-            });
-
-            setEditingFamilyIndex(null);
-            setEditingEducationIndex(null);
-            setEditingExperienceIndex(null);
-        }
-    }, [employee, getEmergencyContact]);
-
-
-    // Handle edit form changes
-    const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        if (name.includes('.')) {
-            const parts = name.split('.');
-            setEditFormData(prev => {
-                if (parts.length === 2 && parts[0] === 'address') {
-                    // Handle address.field updates
-                    const currentAddress = prev.address || {
-                        street: "",
-                        city: "",
-                        state: "",
-                        postalCode: "",
-                        country: ""
-                    };
-                    return {
-                        ...prev,
-                        address: {
-                            ...currentAddress,
-                            [parts[1]]: value
-                        }
-                    };
-                } else if (parts.length === 2) {
-                    // Handle other nested fields
-                    const [parent, child] = parts;
-                    return {
-                        ...prev,
-                        [parent]: {
-                            ...(prev[parent as keyof Employee] as any),
-                            [child]: value
-                        }
-                    };
-                }
-                return prev;
-            });
+    // Fetch employee details using REST API
+    const fetchEmployeeDetails = async () => {
+      if (!employeeId) return;
+      try {
+        const data = await getEmployeeDetails(employeeId);
+        if (!isMounted) return;
+        didFinish = true;
+        if (data) {
+          setEmployee(data as any);
+          setError(null);
         } else {
-            setEditFormData(prev => ({ ...prev, [name]: value }));
+          setError('Failed to fetch employee details');
         }
+        setLoading(false);
+      } catch (err: any) {
+        if (!isMounted) return;
+        didFinish = true;
+        console.error('Error fetching employee details:', err);
+        setError(err.message || 'Failed to fetch details');
+        setLoading(false);
+      }
     };
 
-    const handleEditSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        if (!editFormData) {
-            toast.error("No employee data available for editing.");
-            return;
-        }
+    fetchEmployeeDetails();
 
-        // Lifecycle statuses that should only be set through HR workflows
-        const lifecycleStatuses = ["Terminated", "Resigned", "On Notice"];
-        const currentStatus = editFormData.status || "Active";
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [employeeId, getEmployeeDetails]);
 
-        // Merge address if present in editFormData
-        const mergedAddress = editFormData.address || employee?.address || {};
-
-        // Merge passport if present in editFormData
-        const mergedPassport = editFormData.passport || employee?.passport || {};
-
-        const payload: any = {
-            employeeId: editFormData.employeeId || "",
-            firstName: editFormData.firstName || "",
-            lastName: editFormData.lastName || "",
-            account: {
-                userName: editFormData.account?.userName || "",
-            },
-            email: editFormData.email || employee?.email || "",
-            phone: editFormData.phone || employee?.phone || "",
-            gender: editFormData.gender || employee?.gender || "",
-            dateOfBirth: editFormData.dateOfBirth || employee?.dateOfBirth || null,
-            address: mergedAddress,
-            passport: mergedPassport,
-            companyName: editFormData.companyName || "",
-            departmentId: editFormData.departmentId || "",
-            designationId: editFormData.designationId || "",
-            dateOfJoining: editFormData.dateOfJoining || null,
-            about: editFormData.about || "",
-            // Use profileImage for backend (or avatarUrl if provided)
-            profileImage: editFormData.avatarUrl || editFormData.profileImage || "",
-        };
-
-        // Only include status if it's NOT a lifecycle status
-        // Lifecycle statuses should only be set through termination/resignation workflows
-        if (!lifecycleStatuses.includes(currentStatus)) {
-            payload.status = currentStatus;
-        }
-
-        try {
-            const employeeObjectId = employee?._id || editFormData._id || payload.employeeId;
-            const success = await employeesREST.updateEmployee(employeeObjectId, payload);
-            if (success) {
-                toast.success("Employee updated successfully!", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-                // Refresh employee details
-                const updatedEmployee = await employeesREST.getEmployeeDetails(employeeObjectId);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-            } else {
-                toast.error("Failed to update employee.", {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to update employee.", {
-                position: "top-right",
-                autoClose: 3000,
-            });
-        }
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        await fetchDepartments();
+      } catch (err) {
+        console.error('Error fetching departments:', err);
+      }
     };
 
-    useEffect(() => {
-        if (!employeeId) return;
+    loadDepartments();
+  }, [fetchDepartments]);
 
-        let isMounted = true;
-        let didFinish = false;
-        setLoading(true);
-
-        const timeoutId = setTimeout(() => {
-            if (!didFinish && isMounted) {
-                console.warn("Employees loading timeout - showing fallback");
-                setError("Employees loading timed out. Please refresh the page.");
-                setLoading(false);
-            }
-        }, 30000);
-
-        // Fetch employee details using REST API
-        const fetchEmployeeDetails = async () => {
-            if (!employeeId) return;
-            try {
-                const data = await getEmployeeDetails(employeeId);
-                if (!isMounted) return;
-                didFinish = true;
-                if (data) {
-                    setEmployee(data as any);
-                    setError(null);
-                } else {
-                    setError("Failed to fetch employee details");
-                }
-                setLoading(false);
-            } catch (err: any) {
-                if (!isMounted) return;
-                didFinish = true;
-                console.error("Error fetching employee details:", err);
-                setError(err.message || "Failed to fetch details");
-                setLoading(false);
-            }
-        };
-
-        fetchEmployeeDetails();
-
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
-        };
-
-    }, [employeeId, getEmployeeDetails]);
-
-    useEffect(() => {
-        const loadDepartments = async () => {
-            try {
-                await fetchDepartments();
-            } catch (err) {
-                console.error("Error fetching departments:", err);
-            }
-        };
-
-        loadDepartments();
-    }, [fetchDepartments]);
-
-    // Initialize batches and shifts for the edit modal
-    useEffect(() => {
-        const loadBatchesAndShifts = async () => {
-            try {
-                await fetchBatches();
-            } catch (err) {
-                console.error("Error fetching batches:", err);
-            }
-        };
-
-        loadBatchesAndShifts();
-    }, [fetchBatches]);
-
-    // Fetch policies, resignations, and terminations on mount
-    // (promotions are auto-fetched by usePromotionsREST hook)
-    useEffect(() => {
-        console.log('[EmployeeDetails] Fetching initial data via REST API');
-        fetchPolicies();
-        fetchResignations({ type: 'alltime' });
-        fetchTerminations({ type: 'alltime' });
-    }, [fetchPolicies, fetchResignations, fetchTerminations]);
-
-    // Listen for promotion broadcasts to refresh employee data
-    useEffect(() => {
-        if (!socket) return;
-
-        const handlePromotionChanged = async () => {
-            const latestEmployeeId = employeeIdRef.current;
-            const restApi = employeesRESTRef.current;
-
-            if (latestEmployeeId && restApi) {
-                const updatedEmployee = await restApi.getEmployeeDetails(latestEmployeeId);
-                if (updatedEmployee) {
-                    setEmployee(updatedEmployee as any);
-                }
-            }
-        };
-
-        socket.on("promotion:created", handlePromotionChanged);
-        socket.on("promotion:updated", handlePromotionChanged);
-
-        return () => {
-            socket.off("promotion:created", handlePromotionChanged);
-            socket.off("promotion:updated", handlePromotionChanged);
-        };
-    }, [socket]);
-
-    // Sync departments from REST hook to local state
-    useEffect(() => {
-        if (departments.length > 0) {
-            const mappedDepartments = departments.map((d: any) => ({
-                value: d._id,
-                label: d.department,
-            }));
-            setDepartment([{ value: "", label: "Select" }, ...mappedDepartments]);
-        }
-    }, [departments]);
-
-    // Sync designations from REST hook to local state
-    useEffect(() => {
-        if (designations.length > 0) {
-            const mappedDesignations = designations.map((d: any) => ({
-                value: d._id,
-                label: d.designation,
-            }));
-            setDesignation([{ value: "", label: "Select" }, ...mappedDesignations]);
-        }
-    }, [designations]);
-
-    // Filter policies that apply to the current employee
-    const getApplicablePolicies = (): Policy[] => {
-        if (!employee || !policies.length) return [];
-
-        return policies.filter(policy => {
-            // If applyToAll is true, this policy applies to ALL employees (current and future)
-            if (policy.applyToAll === true) return true;
-
-            // If no assignTo mappings and not applyToAll, the policy doesn't apply to anyone
-            if (!policy.assignTo || policy.assignTo.length === 0) return false;
-
-            // Check if any department-designation mapping matches the employee
-            return policy.assignTo.some(mapping => {
-                // Check if the department matches
-                if (mapping.departmentId !== employee.departmentId) return false;
-
-                // Check if the employee's designation is included
-                return mapping.designationIds.includes(employee.designationId);
-            });
-        });
+  // Initialize batches and shifts for the edit modal
+  useEffect(() => {
+    const loadBatchesAndShifts = async () => {
+      try {
+        await fetchBatches();
+      } catch (err) {
+        console.error('Error fetching batches:', err);
+      }
     };
 
-    const applicablePolicies = getApplicablePolicies();
+    loadBatchesAndShifts();
+  }, [fetchBatches]);
 
-    const getDepartmentLabel = (dept: Employee["department"]) => {
-        if (!dept) return '—';
-        if (typeof dept === 'string') return dept;
-        if (typeof dept === 'object') {
-            const label = (dept as any).department || (dept as any).name;
-            return typeof label === 'string' && label.trim() ? label : '—';
+  // Fetch policies, resignations, and terminations on mount
+  // (promotions are auto-fetched by usePromotionsREST hook)
+  useEffect(() => {
+    console.log('[EmployeeDetails] Fetching initial data via REST API');
+    fetchPolicies();
+    fetchResignations({ type: 'alltime' });
+    fetchTerminations({ type: 'alltime' });
+  }, [fetchPolicies, fetchResignations, fetchTerminations]);
+
+  // Listen for promotion broadcasts to refresh employee data
+  useEffect(() => {
+    if (!socket) return;
+
+    const handlePromotionChanged = async () => {
+      const latestEmployeeId = employeeIdRef.current;
+      const restApi = employeesRESTRef.current;
+
+      if (latestEmployeeId && restApi) {
+        const updatedEmployee = await restApi.getEmployeeDetails(latestEmployeeId);
+        if (updatedEmployee) {
+          setEmployee(updatedEmployee as any);
         }
-        return '—';
+      }
     };
 
-    const getDesignationLabel = (desg: Employee["designation"]) => {
-        if (!desg) return '—';
-        if (typeof desg === 'string') return desg;
-        if (typeof desg === 'object') {
-            const label = (desg as any).designation || (desg as any).name;
-            return typeof label === 'string' && label.trim() ? label : '—';
-        }
-        return '—';
+    socket.on('promotion:created', handlePromotionChanged);
+    socket.on('promotion:updated', handlePromotionChanged);
+
+    return () => {
+      socket.off('promotion:created', handlePromotionChanged);
+      socket.off('promotion:updated', handlePromotionChanged);
     };
+  }, [socket]);
 
-    // Capitalize first letter of a string
-    const capitalizeFirstLetter = (str: string | undefined | null): string => {
-        if (!str || typeof str !== 'string') return '';
-        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-    };
+  // Sync departments from REST hook to local state
+  useEffect(() => {
+    if (departments.length > 0) {
+      const mappedDepartments = departments.map((d: any) => ({
+        value: d._id,
+        label: d.department,
+      }));
+      setDepartment([{ value: '', label: 'Select' }, ...mappedDepartments]);
+    }
+  }, [departments]);
 
-    // Get employee's most recent promotion (if any)
-    const getEmployeePromotion = (): Promotion | null => {
-        if (!employee || !promotions.length) {
-            console.log('[EmployeeDetails] No promotion data:', {
-                hasEmployee: !!employee,
-                promotionsCount: promotions.length
-            });
-            return null;
-        }
+  // Sync designations from REST hook to local state
+  useEffect(() => {
+    if (designations.length > 0) {
+      const mappedDesignations = designations.map((d: any) => ({
+        value: d._id,
+        label: d.designation,
+      }));
+      setDesignation([{ value: '', label: 'Select' }, ...mappedDesignations]);
+    }
+  }, [designations]);
 
-        console.log('[EmployeeDetails] Checking promotions:', {
-            employeeId: employee._id,
-            employeeEmployeeId: employee.employeeId,
-            totalPromotions: promotions.length,
-            promotionEmployeeIds: promotions.map(p => ({
-                promotionId: p._id,
-                employeeId: p.employeeId,
-                employeeName: p.employeeName
-            }))
-        });
+  // Filter policies that apply to the current employee
+  const getApplicablePolicies = (): Policy[] => {
+    if (!employee || !policies.length) return [];
 
-        // Filter promotions for this specific employee
-        // Check multiple possible ID fields to ensure we find the promotion
-        const employeePromotions = promotions.filter(promo => {
-            const promoEmployeeId = promo.employeeId;
-            const matches = promoEmployeeId === employee._id ||
-                           promoEmployeeId === employee.employeeId ||
-                           promoEmployeeId === employeeId; // Also check the route param
+    return policies.filter((policy) => {
+      // If applyToAll is true, this policy applies to ALL employees (current and future)
+      if (policy.applyToAll === true) return true;
 
-            if (matches) {
-                console.log('[EmployeeDetails] Found matching promotion:', promo);
-            }
+      // If no assignTo mappings and not applyToAll, the policy doesn't apply to anyone
+      if (!policy.assignTo || policy.assignTo.length === 0) return false;
 
-            return matches;
-        });
+      // Check if any department-designation mapping matches the employee
+      return policy.assignTo.some((mapping) => {
+        // Check if the department matches
+        if (mapping.departmentId !== employee.departmentId) return false;
 
-        console.log('[EmployeeDetails] Filtered promotions for employee:', employeePromotions.length);
+        // Check if the employee's designation is included
+        return mapping.designationIds.includes(employee.designationId);
+      });
+    });
+  };
 
-        if (employeePromotions.length === 0) return null;
+  const applicablePolicies = getApplicablePolicies();
 
-        // Sort by promotion date (most recent first) and return the first one
-        const sortedPromotions = employeePromotions.sort((a, b) =>
-            new Date(b.promotionDate).getTime() - new Date(a.promotionDate).getTime()
-        );
+  const getDepartmentLabel = (dept: Employee['department']) => {
+    if (!dept) return '—';
+    if (typeof dept === 'string') return dept;
+    if (typeof dept === 'object') {
+      const label = (dept as any).department || (dept as any).name;
+      return typeof label === 'string' && label.trim() ? label : '—';
+    }
+    return '—';
+  };
 
-        console.log('[EmployeeDetails] Returning promotion:', sortedPromotions[0]);
-        return sortedPromotions[0];
-    };
+  const getDesignationLabel = (desg: Employee['designation']) => {
+    if (!desg) return '—';
+    if (typeof desg === 'string') return desg;
+    if (typeof desg === 'object') {
+      const label = (desg as any).designation || (desg as any).name;
+      return typeof label === 'string' && label.trim() ? label : '—';
+    }
+    return '—';
+  };
 
-    const employeePromotion = getEmployeePromotion();
+  // Capitalize first letter of a string
+  const capitalizeFirstLetter = (str: string | undefined | null): string => {
+    if (!str || typeof str !== 'string') return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  };
 
-    // Get employee's most recent resignation (if any)
-    const getEmployeeResignation = (): Resignation | null => {
-        if (!employee || !resignations.length) {
-            console.log('[EmployeeDetails] No resignation data:', {
-                hasEmployee: !!employee,
-                resignationsCount: resignations.length
-            });
-            return null;
-        }
-
-        if (!employee._id && !employee.employeeId) {
-            console.log('[EmployeeDetails] Employee missing ID fields:', {
-                _id: employee._id,
-                employeeId: employee.employeeId
-            });
-            return null;
-        }
-
-        console.log('[EmployeeDetails] Checking resignations:', {
-            employeeId: employee._id,
-            employeeEmployeeId: employee.employeeId,
-            totalResignations: resignations.length,
-            resignationEmployeeIds: resignations.map(r => ({
-                resignationId: r.resignationId,
-                employeeId: r.employeeId,
-                employeeName: r.employeeName
-            }))
-        });
-
-        // Filter resignations for this specific employee
-        const employeeResignations = resignations.filter(resignation => {
-            const matches = resignation.employeeId === employee._id ||
-                           resignation.employeeId === employee.employeeId ||
-                           resignation.employeeId === employeeId; // Also check the route param
-
-            if (matches) {
-                console.log('[EmployeeDetails] Found matching resignation:', resignation);
-            }
-
-            return matches;
-        });
-
-        console.log('[EmployeeDetails] Filtered resignations for employee:', employeeResignations.length);
-
-        if (employeeResignations.length === 0) return null;
-
-        // Sort by resignation date (most recent first) and return the first one
-        const sortedResignations = employeeResignations.sort((a, b) =>
-            new Date(b.resignationDate).getTime() - new Date(a.resignationDate).getTime()
-        );
-
-        console.log('[EmployeeDetails] Returning resignation:', sortedResignations[0]);
-        return sortedResignations[0];
-    };
-
-    const employeeResignation = getEmployeeResignation();
-
-    // Get employee's most recent termination (if any)
-    const getEmployeeTermination = (): Termination | null => {
-        if (!employee || !terminations.length) {
-            console.log('[EmployeeDetails] No termination data:', {
-                hasEmployee: !!employee,
-                terminationsCount: terminations.length
-            });
-            return null;
-        }
-
-        if (!employee._id && !employee.employeeId) {
-            console.log('[EmployeeDetails] Employee missing ID fields:', {
-                _id: employee._id,
-                employeeId: employee.employeeId
-            });
-            return null;
-        }
-
-        console.log('[EmployeeDetails] Checking terminations:', {
-            employeeId: employee._id,
-            employeeEmployeeId: employee.employeeId,
-            totalTerminations: terminations.length,
-            terminationEmployeeIds: terminations.map(t => ({
-                terminationId: t.terminationId,
-                employeeId: t.employeeId,
-                employeeName: t.employeeName
-            }))
-        });
-
-        // Filter terminations for this specific employee
-        const employeeTerminations = terminations.filter(termination => {
-            // Handle both employee_id (ObjectId string) and employeeId (EMP-XXXX)
-            const matches = termination.employee_id === employee._id ||
-                           termination.employee_id === employee.employeeId ||
-                           termination.employee_id === employeeId; // Also check the route param
-
-            if (matches) {
-                console.log('[EmployeeDetails] Found matching termination:', termination);
-            }
-
-            return matches;
-        });
-
-        console.log('[EmployeeDetails] Filtered terminations for employee:', employeeTerminations.length);
-
-        if (employeeTerminations.length === 0) return null;
-
-        // Sort by termination date (most recent first) and return the first one
-        const sortedTerminations = employeeTerminations.sort((a, b) =>
-            new Date(b.terminationDate).getTime() - new Date(a.terminationDate).getTime()
-        );
-
-        console.log('[EmployeeDetails] Returning termination:', sortedTerminations[0]);
-        return sortedTerminations[0];
-    };
-
-    const employeeTermination = getEmployeeTermination();
-
-    if (!employeeId) {
-        return (
-            <div className='alert alert-warning d-flex align-items-center justify-content-center pt-50 mt-5'>
-                <Link to={all_routes.employeeList} className="btn btn-outline-primary btn-sm">
-                    Select an employee from the Employee List
-                </Link>
-            </div>
-        )
+  // Get employee's most recent promotion (if any)
+  const getEmployeePromotion = (): Promotion | null => {
+    if (!employee || !promotions.length) {
+      console.log('[EmployeeDetails] No promotion data:', {
+        hasEmployee: !!employee,
+        promotionsCount: promotions.length,
+      });
+      return null;
     }
 
-    if (loading) {
-        return <p className='text-center'>Loading employee data</p>
+    console.log('[EmployeeDetails] Checking promotions:', {
+      employeeId: employee._id,
+      employeeEmployeeId: employee.employeeId,
+      totalPromotions: promotions.length,
+      promotionEmployeeIds: promotions.map((p) => ({
+        promotionId: p._id,
+        employeeId: p.employeeId,
+        employeeName: p.employeeName,
+      })),
+    });
+
+    // Filter promotions for this specific employee
+    // Check multiple possible ID fields to ensure we find the promotion
+    const employeePromotions = promotions.filter((promo) => {
+      const promoEmployeeId = promo.employeeId;
+      const matches =
+        promoEmployeeId === employee._id ||
+        promoEmployeeId === employee.employeeId ||
+        promoEmployeeId === employeeId; // Also check the route param
+
+      if (matches) {
+        console.log('[EmployeeDetails] Found matching promotion:', promo);
+      }
+
+      return matches;
+    });
+
+    console.log('[EmployeeDetails] Filtered promotions for employee:', employeePromotions.length);
+
+    if (employeePromotions.length === 0) return null;
+
+    // Sort by promotion date (most recent first) and return the first one
+    const sortedPromotions = employeePromotions.sort(
+      (a, b) => new Date(b.promotionDate).getTime() - new Date(a.promotionDate).getTime()
+    );
+
+    console.log('[EmployeeDetails] Returning promotion:', sortedPromotions[0]);
+    return sortedPromotions[0];
+  };
+
+  const employeePromotion = getEmployeePromotion();
+
+  // Get employee's most recent resignation (if any)
+  const getEmployeeResignation = (): Resignation | null => {
+    if (!employee || !resignations.length) {
+      console.log('[EmployeeDetails] No resignation data:', {
+        hasEmployee: !!employee,
+        resignationsCount: resignations.length,
+      });
+      return null;
     }
 
-    if ( error && !employee) {
-        return (<div className="page-wrapper">
-            <div className="content">
-                <div className="alert alert-danger" role="alert">
-                    <h4 className="alert-heading">Error!</h4>
-                    <p>{error}</p>
-                </div>
-            </div>
-        </div>
-        )
+    if (!employee._id && !employee.employeeId) {
+      console.log('[EmployeeDetails] Employee missing ID fields:', {
+        _id: employee._id,
+        employeeId: employee.employeeId,
+      });
+      return null;
     }
 
-    const getModalContainer = () => {
-        const activeModal = document.querySelector('.modal.show');
-        if (activeModal instanceof HTMLElement) {
-            return activeModal;
-        }
+    console.log('[EmployeeDetails] Checking resignations:', {
+      employeeId: employee._id,
+      employeeEmployeeId: employee.employeeId,
+      totalResignations: resignations.length,
+      resignationEmployeeIds: resignations.map((r) => ({
+        resignationId: r.resignationId,
+        employeeId: r.employeeId,
+        employeeName: r.employeeName,
+      })),
+    });
 
-        const fallbackModal = document.getElementById('modal-datepicker');
-        return fallbackModal || document.body;
-    };
+    // Filter resignations for this specific employee
+    const employeeResignations = resignations.filter((resignation) => {
+      const matches =
+        resignation.employeeId === employee._id ||
+        resignation.employeeId === employee.employeeId ||
+        resignation.employeeId === employeeId; // Also check the route param
 
-    // Helper function to safely prepare employee for editing
-    const prepareEmployeeForEdit = (emp: Employee): Employee => {
-        return {
-            ...emp,
-            account: emp.account || ({ role: "", userName: "", password: "" } as AccountInfo),
-            email: emp.email || "",
-            phone: emp.phone || "",
-            gender: emp.gender || "",
-            dateOfBirth: emp.dateOfBirth || null,
-            address: emp.address || {
-                street: "",
-                city: "",
-                state: "",
-                postalCode: "",
-                country: "",
-            },
-            firstName: emp.firstName || "",
-            lastName: emp.lastName || "",
-            companyName: emp.companyName || "",
-            departmentId: emp.departmentId || "",
-            designationId: emp.designationId || "",
-            reportingTo: emp.reportingTo || "",
-            reportingManagerName: emp.reportingManagerName || "",
-            reportOffice: emp.reportOffice || "",
-            shiftId: emp.shiftId || "",
-            batchId: emp.batchId || "",
-            shiftName: emp.shiftName || "",
-            batchName: emp.batchName || "",
-            about: emp.about || "",
-            avatarUrl: emp.avatarUrl || "",
-            profileImage: emp.profileImage || "",
-            status: emp.status,
-            dateOfJoining: emp.dateOfJoining || null,
-        };
-    };
+      if (matches) {
+        console.log('[EmployeeDetails] Found matching resignation:', resignation);
+      }
 
-    interface Option {
-        value: string;
-        label: string;
+      return matches;
+    });
+
+    console.log(
+      '[EmployeeDetails] Filtered resignations for employee:',
+      employeeResignations.length
+    );
+
+    if (employeeResignations.length === 0) return null;
+
+    // Sort by resignation date (most recent first) and return the first one
+    const sortedResignations = employeeResignations.sort(
+      (a, b) => new Date(b.resignationDate).getTime() - new Date(a.resignationDate).getTime()
+    );
+
+    console.log('[EmployeeDetails] Returning resignation:', sortedResignations[0]);
+    return sortedResignations[0];
+  };
+
+  const employeeResignation = getEmployeeResignation();
+
+  // Get employee's most recent termination (if any)
+  const getEmployeeTermination = (): Termination | null => {
+    if (!employee || !terminations.length) {
+      console.log('[EmployeeDetails] No termination data:', {
+        hasEmployee: !!employee,
+        terminationsCount: terminations.length,
+      });
+      return null;
     }
 
-    // Department and designation options are now fetched dynamically from database
-    // via socket events and stored in state variables: department, designation
-    const martialstatus = [
-        { value: "Select", label: "Select" },
-        { value: "Yes", label: "Yes" },
-        { value: "No", label: "No" },
-    ];
-    const salaryChoose = [
-        { value: "Select", label: "Select" },
-        { value: "Monthly", label: "Monthly" },
-        { value: "Annualy", label: "Annualy" },
-    ];
-    const paymenttype = [
-        { value: "Select", label: "Select" },
-        { value: "Cash", label: "Cash" },
-        { value: "Debit Card", label: "Debit Card" },
-        { value: "Mobile Payment", label: "Mobile Payment" },
-    ];
-    const pfcontribution = [
-        { value: "Select", label: "Select" },
-        { value: "Employee Contribution", label: "Employee Contribution" },
-        { value: "Employer Contribution", label: "Employer Contribution" },
-        { value: "Provident Fund Interest", label: "Provident Fund Interest" },
-    ];
-    const additionalrate = [
-        { value: "Select", label: "Select" },
-        { value: "ESI", label: "ESI" },
-        { value: "EPS", label: "EPS" },
-        { value: "EPF", label: "EPF" },
-    ];
-    const esi = [
-        { value: "Select", label: "Select" },
-        { value: "Employee Contribution", label: "Employee Contribution" },
-        { value: "Employer Contribution", label: "Employer Contribution" },
-        { value: "Maternity Benefit ", label: "Maternity Benefit " },
-    ];
-
-    function formatDate(dateString?: string) {
-        if (!dateString) return "";
-        const parsed = toDayjsDate(dateString);
-        return parsed ? parsed.format(DATE_FORMAT) : "";
+    if (!employee._id && !employee.employeeId) {
+      console.log('[EmployeeDetails] Employee missing ID fields:', {
+        _id: employee._id,
+        employeeId: employee.employeeId,
+      });
+      return null;
     }
 
-    const handleInlineEmployeeUpdate = (updatedEmployee: any) => {
-        setEmployee(updatedEmployee as any);
-        setEditingEmployee(null);
-        toast.success("Employee updated successfully!");
-    };
+    console.log('[EmployeeDetails] Checking terminations:', {
+      employeeId: employee._id,
+      employeeEmployeeId: employee.employeeId,
+      totalTerminations: terminations.length,
+      terminationEmployeeIds: terminations.map((t) => ({
+        terminationId: t.terminationId,
+        employeeId: t.employeeId,
+        employeeName: t.employeeName,
+      })),
+    });
 
+    // Filter terminations for this specific employee
+    const employeeTerminations = terminations.filter((termination) => {
+      // Handle both employee_id (ObjectId string) and employeeId (EMP-XXXX)
+      const matches =
+        termination.employee_id === employee._id ||
+        termination.employee_id === employee.employeeId ||
+        termination.employee_id === employeeId; // Also check the route param
+
+      if (matches) {
+        console.log('[EmployeeDetails] Found matching termination:', termination);
+      }
+
+      return matches;
+    });
+
+    console.log(
+      '[EmployeeDetails] Filtered terminations for employee:',
+      employeeTerminations.length
+    );
+
+    if (employeeTerminations.length === 0) return null;
+
+    // Sort by termination date (most recent first) and return the first one
+    const sortedTerminations = employeeTerminations.sort(
+      (a, b) => new Date(b.terminationDate).getTime() - new Date(a.terminationDate).getTime()
+    );
+
+    console.log('[EmployeeDetails] Returning termination:', sortedTerminations[0]);
+    return sortedTerminations[0];
+  };
+
+  const employeeTermination = getEmployeeTermination();
+
+  if (!employeeId) {
     return (
-        <>
-            {/* Page Wrapper */}
-            <div className="page-wrapper">
-                <div className="content">
-                    {/* Breadcrumb */}
-                    <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
-                        <div className="my-auto mb-2">
-                            <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
-                                <Link to={all_routes.employeeList}>
-                                    <i className="ti ti-arrow-left me-2" />
-                                    Employee List
-                                </Link>
-                            </h6>
-                        </div>
-                        <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-                            <div className="mb-2">
-                                <Link
-                                    to="#"
-                                    data-bs-toggle="modal" data-inert={true}
-                                    data-bs-target="#add_bank_satutory"
-                                    className="btn btn-primary d-flex align-items-center"
-                                >
-                                    <i className="ti ti-circle-plus me-2" />
-                                    Bank & Statutory
-                                </Link>
-                            </div>
-                            <div className="head-icons ms-2">
-                                <CollapseHeader />
-                            </div>
-                        </div>
+      <div className="alert alert-warning d-flex align-items-center justify-content-center pt-50 mt-5">
+        <Link to={all_routes.employeeList} className="btn btn-outline-primary btn-sm">
+          Select an employee from the Employee List
+        </Link>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <p className="text-center">Loading employee data</p>;
+  }
+
+  if (error && !employee) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const getModalContainer = () => {
+    const activeModal = document.querySelector('.modal.show');
+    if (activeModal instanceof HTMLElement) {
+      return activeModal;
+    }
+
+    const fallbackModal = document.getElementById('modal-datepicker');
+    return fallbackModal || document.body;
+  };
+
+  // Helper function to safely prepare employee for editing
+  const prepareEmployeeForEdit = (emp: Employee): Employee => {
+    return {
+      ...emp,
+      account: emp.account || ({ role: '', userName: '', password: '' } as AccountInfo),
+      email: emp.email || '',
+      phone: emp.phone || '',
+      gender: emp.gender || '',
+      dateOfBirth: emp.dateOfBirth || null,
+      address: emp.address || {
+        street: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: '',
+      },
+      firstName: emp.firstName || '',
+      lastName: emp.lastName || '',
+      companyName: emp.companyName || '',
+      departmentId: emp.departmentId || '',
+      designationId: emp.designationId || '',
+      reportingTo: emp.reportingTo || '',
+      reportingManagerName: emp.reportingManagerName || '',
+      reportOffice: emp.reportOffice || '',
+      shiftId: emp.shiftId || '',
+      batchId: emp.batchId || '',
+      shiftName: emp.shiftName || '',
+      batchName: emp.batchName || '',
+      about: emp.about || '',
+      avatarUrl: emp.avatarUrl || '',
+      profileImage: emp.profileImage || '',
+      status: emp.status,
+      dateOfJoining: emp.dateOfJoining || null,
+    };
+  };
+
+  interface Option {
+    value: string;
+    label: string;
+  }
+
+  // Department and designation options are now fetched dynamically from database
+  // via socket events and stored in state variables: department, designation
+  const martialstatus = [
+    { value: 'Select', label: 'Select' },
+    { value: 'Yes', label: 'Yes' },
+    { value: 'No', label: 'No' },
+  ];
+  const salaryChoose = [
+    { value: 'Select', label: 'Select' },
+    { value: 'Monthly', label: 'Monthly' },
+    { value: 'Annualy', label: 'Annualy' },
+  ];
+  const paymenttype = [
+    { value: 'Select', label: 'Select' },
+    { value: 'Cash', label: 'Cash' },
+    { value: 'Debit Card', label: 'Debit Card' },
+    { value: 'Mobile Payment', label: 'Mobile Payment' },
+  ];
+  const pfcontribution = [
+    { value: 'Select', label: 'Select' },
+    { value: 'Employee Contribution', label: 'Employee Contribution' },
+    { value: 'Employer Contribution', label: 'Employer Contribution' },
+    { value: 'Provident Fund Interest', label: 'Provident Fund Interest' },
+  ];
+  const additionalrate = [
+    { value: 'Select', label: 'Select' },
+    { value: 'ESI', label: 'ESI' },
+    { value: 'EPS', label: 'EPS' },
+    { value: 'EPF', label: 'EPF' },
+  ];
+  const esi = [
+    { value: 'Select', label: 'Select' },
+    { value: 'Employee Contribution', label: 'Employee Contribution' },
+    { value: 'Employer Contribution', label: 'Employer Contribution' },
+    { value: 'Maternity Benefit ', label: 'Maternity Benefit ' },
+  ];
+
+  function formatDate(dateString?: string) {
+    if (!dateString) return '';
+    const parsed = toDayjsDate(dateString);
+    return parsed ? parsed.format(DATE_FORMAT) : '';
+  }
+
+  const handleInlineEmployeeUpdate = (updatedEmployee: any) => {
+    setEmployee(updatedEmployee as any);
+    setEditingEmployee(null);
+    toast.success('Employee updated successfully!');
+  };
+
+  return (
+    <>
+      {/* Page Wrapper */}
+      <div className="page-wrapper">
+        <div className="content">
+          {/* Breadcrumb */}
+          <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+            <div className="my-auto mb-2">
+              <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
+                <Link to={all_routes.employeeList}>
+                  <i className="ti ti-arrow-left me-2" />
+                  Employee List
+                </Link>
+              </h6>
+            </div>
+            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
+              <div className="mb-2">
+                <Link
+                  to="#"
+                  data-bs-toggle="modal"
+                  data-inert={true}
+                  data-bs-target="#add_bank_satutory"
+                  className="btn btn-primary d-flex align-items-center"
+                >
+                  <i className="ti ti-circle-plus me-2" />
+                  Bank & Statutory
+                </Link>
+              </div>
+              <div className="head-icons ms-2">
+                <CollapseHeader />
+              </div>
+            </div>
+          </div>
+          {/* /Breadcrumb */}
+          <div className="row">
+            <div className="col-xl-4 theiaStickySidebar">
+              <div className="card card-bg-1">
+                <div className="card-body p-0">
+                  <span className="avatar avatar-xl avatar-rounded border border-2 border-white m-auto d-flex mb-2">
+                    {employee?.avatarUrl || employee?.profileImage ? (
+                      <img
+                        src={employee.avatarUrl || employee.profileImage}
+                        alt="Profile"
+                        className="w-100 h-100 object-fit-cover"
+                      />
+                    ) : (
+                      <div className="d-flex align-items-center justify-content-center w-100 h-100 bg-light rounded-circle">
+                        <i className="ti ti-user fs-24 text-gray-5" />
+                      </div>
+                    )}
+                  </span>
+                  <div className="text-center px-3 pb-3 border-bottom">
+                    <div className="mb-3">
+                      <h5 className="d-flex align-items-center justify-content-center mb-1">
+                        {employee?.firstName} {employee?.lastName}
+                        <i className="ti ti-discount-check-filled text-success ms-1" />
+                      </h5>
+                      <span className="badge badge-soft-dark fw-medium me-2">
+                        <i className="ti ti-point-filled me-1" />
+                        {employee?.account?.role || employee?.role || 'User'}
+                      </span>
+                      <span className="badge badge-soft-secondary fw-medium">
+                        <i className="ti ti-point-filled me-1" />
+                        Designation: {getDesignationLabel(employee?.designation)}
+                      </span>
                     </div>
-                    {/* /Breadcrumb */}
-                    <div className="row">
-                        <div className="col-xl-4 theiaStickySidebar">
-                            <div className="card card-bg-1">
-                                <div className="card-body p-0">
-                                    <span className="avatar avatar-xl avatar-rounded border border-2 border-white m-auto d-flex mb-2">
-                                        {employee?.avatarUrl || employee?.profileImage ? (
-                                            <img
-                                                src={employee.avatarUrl || employee.profileImage}
-                                                alt="Profile"
-                                                className="w-100 h-100 object-fit-cover"
-                                            />
-                                        ) : (
-                                            <div className="d-flex align-items-center justify-content-center w-100 h-100 bg-light rounded-circle">
-                                                <i className="ti ti-user fs-24 text-gray-5" />
-                                            </div>
-                                        )}
-                                    </span>
-                                    <div className="text-center px-3 pb-3 border-bottom">
-                                        <div className="mb-3">
-                                            <h5 className="d-flex align-items-center justify-content-center mb-1">
-                                                {employee?.firstName} {employee?.lastName}
-                                                <i className="ti ti-discount-check-filled text-success ms-1" />
-                                            </h5>
-                                            <span className="badge badge-soft-dark fw-medium me-2">
-                                                <i className="ti ti-point-filled me-1" />
-                                                {employee?.account?.role || employee?.role || 'User'}
-                                            </span>
-                                            <span className="badge badge-soft-secondary fw-medium">
-                                                <i className="ti ti-point-filled me-1" />
-                                                Designation: {getDesignationLabel(employee?.designation)}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <div className="d-flex align-items-center justify-content-between mb-2">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-id me-2" />
-                                                    Employee ID
-                                                </span>
-                                                <p className="text-dark">{employee?.employeeId || '-'}</p>
-                                            </div>
-                                            <div className="d-flex align-items-center justify-content-between mb-2">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-user-shield me-2" />
-                                                    Role
-                                                </span>
-                                                <p className="text-dark">{employee?.account?.role || '-'}</p>
-                                            </div>
-                                            <div className="d-flex align-items-center justify-content-between mb-2">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-calendar-check me-2" />
-                                                    Date Of Join
-                                                </span>
-                                                <p className="text-dark">{formatDate(employee?.dateOfJoining) || '-'}</p>
-                                            </div>
+                    <div>
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <span className="d-inline-flex align-items-center">
+                          <i className="ti ti-id me-2" />
+                          Employee ID
+                        </span>
+                        <p className="text-dark">{employee?.employeeId || '-'}</p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <span className="d-inline-flex align-items-center">
+                          <i className="ti ti-user-shield me-2" />
+                          Role
+                        </span>
+                        <p className="text-dark">{employee?.account?.role || '-'}</p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <span className="d-inline-flex align-items-center">
+                          <i className="ti ti-calendar-check me-2" />
+                          Date Of Join
+                        </span>
+                        <p className="text-dark">{formatDate(employee?.dateOfJoining) || '-'}</p>
+                      </div>
 
-                                            <div className="d-flex align-items-center justify-content-between mt-2">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-building me-2" />
-                                                    Department
-                                                </span>
-                                                <p className="text-dark">{getDepartmentLabel(employee?.department)}</p>
-                                            </div>
-                                            <div className="d-flex align-items-center justify-content-between mt-2">
-                                                <span className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-briefcase me-2" />
-                                                    Designation
-                                                </span>
-                                                <p className="text-dark">{getDesignationLabel(employee?.designation)}</p>
-                                            </div>
-                                            {employee?.reportingManagerName && (
-                                                <div className="d-flex align-items-center justify-content-between mt-2">
-                                                    <span className="d-inline-flex align-items-center">
-                                                        <i className="ti ti-user-check me-2" />
-                                                        Reporting Manager
-                                                    </span>
-                                                    <p className="text-dark">{employee?.reportingManagerName || '-'}</p>
-                                                </div>
-                                            )}
-                                            {(employee?.batchId || employee?.batchName || employee?.shiftId || employee?.shiftName) && (
-                                                <div className="d-flex align-items-center justify-content-between mt-2">
-                                                    <span className="d-inline-flex align-items-center">
-                                                        <i className="ti ti-clock me-2" />
-                                                        Shift Assignment
-                                                    </span>
-                                                    <div className="text-end">
-                                                        {employee?.batchName ? (
-                                                            // Shift Batch Assignment
-                                                            <>
-                                                                <p className="text-dark mb-0">
-                                                                    {employee?.batchName}
-                                                                    {employee?.batchShiftName && ` - ${employee.batchShiftName}`}
-                                                                </p>
-                                                                <small className="text-muted">
-                                                                    <span
-                                                                        className="d-inline-block me-1"
-                                                                        style={{
-                                                                            width: "8px",
-                                                                            height: "8px",
-                                                                            borderRadius: "2px",
-                                                                            backgroundColor: employee?.batchShiftColor || "#6c757d",
-                                                                            display: "inline-block"
-                                                                        }}
-                                                                    />
-                                                                    {employee?.batchShiftTiming && `(${employee.batchShiftTiming})`}
-                                                                    <span className="badge badge-info ms-2">Rotation Enabled</span>
-                                                                </small>
-                                                            </>
-                                                        ) : employee?.shiftName ? (
-                                                            // Direct Shift Assignment
-                                                            <>
-                                                                <p className="text-dark mb-0">{employee?.shiftName}</p>
-                                                                <small className="text-muted">
-                                                                    <span
-                                                                        className="d-inline-block me-1"
-                                                                        style={{
-                                                                            width: "8px",
-                                                                            height: "8px",
-                                                                            borderRadius: "2px",
-                                                                            backgroundColor: employee?.shiftColor || "#6c757d",
-                                                                            display: "inline-block"
-                                                                        }}
-                                                                    />
-                                                                    {employee?.shiftTiming && `(${employee.shiftTiming})`}
-                                                                    <span className="badge badge-secondary ms-2">Permanent</span>
-                                                                </small>
-                                                            </>
-                                                        ) : (
-                                                            <p className="text-muted mb-0">—</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {employeePromotion && (
-                                                <div className="d-flex align-items-center justify-content-between mt-2">
-                                                    <span className="d-inline-flex align-items-center">
-                                                        <i className="ti ti-trending-up me-2" />
-                                                        Promotion
-                                                    </span>
-                                                    <Link
-                                                        to="#"
-                                                        className="text-success fw-medium mb-0 text-decoration-none"
-                                                        data-bs-toggle="modal"
-                                                        data-inert={true}
-                                                        data-bs-target="#view_employee_promotion"
-                                                        title="Click to view promotion details"
-                                                    >
-                                                        {employeePromotion.promotionTo.designation}
-                                                        <i className="ti ti-external-link ms-1 fs-12" />
-                                                    </Link>
-                                                </div>
-                                            )}
-                                            {employeeResignation && (
-                                                <div className="d-flex align-items-center justify-content-between mt-2">
-                                                    <span className="d-inline-flex align-items-center">
-                                                        <i className="ti ti-door-exit me-2" />
-                                                        Resignation
-                                                    </span>
-                                                    <Link
-                                                        to="#"
-                                                        className="text-danger fw-medium mb-0 text-decoration-none"
-                                                        data-bs-toggle="modal"
-                                                        data-inert={true}
-                                                        data-bs-target="#view_employee_resignation"
-                                                        title="Click to view resignation details"
-                                                    >
-                                                        {dayjs(employeeResignation.resignationDate).format("DD MMM YYYY")}
-                                                        <i className="ti ti-external-link ms-1 fs-12" />
-                                                    </Link>
-                                                </div>
-                                            )}
-                                            {employeeTermination && (
-                                                <div className="d-flex align-items-center justify-content-between mt-2">
-                                                    <span className="d-inline-flex align-items-center">
-                                                        <i className="ti ti-user-x me-2" />
-                                                        Termination
-                                                    </span>
-                                                    <Link
-                                                        to="#"
-                                                        className="text-danger fw-medium mb-0 text-decoration-none"
-                                                        data-bs-toggle="modal"
-                                                        data-inert={true}
-                                                        data-bs-target="#view_employee_termination"
-                                                        title="Click to view termination details"
-                                                    >
-                                                        {dayjs(employeeTermination.terminationDate).format("DD MMM YYYY")}
-                                                        <i className="ti ti-external-link ms-1 fs-12" />
-                                                    </Link>
-                                                </div>
-                                            )}
-                                            <div className="row gx-2 mt-3">
-                                                <div className="col-6">
-                                                    <div>
-                                                        <Link
-                                                            to="#"
-                                                            className="btn btn-dark w-100"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                // Prepare and set editing employee - modal will open automatically
-                                                                const preparedEmployee = prepareEmployeeForEdit(employee);
-                                                                setEditingEmployee(preparedEmployee);
-                                                            }}
-                                                        >
-                                                            <i className="ti ti-edit me-1" />
-                                                            Edit Info
-                                                        </Link>
-                                                    </div>
-                                                </div>
-                                                <div className="col-6">
-                                                    <div>
-                                                        <Link to={all_routes.chat} className="btn btn-primary w-100">
-                                                            <i className="ti ti-message-heart me-1" />
-                                                            Message
-                                                        </Link>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="p-3 border-bottom">
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <h6>Basic information</h6>
-                                            <Link
-                                                to="#"
-                                                className="btn btn-icon btn-sm"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    // Prepare and set editing employee - modal will open automatically
-                                                    const preparedEmployee = prepareEmployeeForEdit(employee);
-                                                    setEditingEmployee(preparedEmployee);
-                                                }}
-                                            >
-                                                <i className="ti ti-edit" />
-                                            </Link>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-phone me-2" />
-                                                Phone
-                                            </span>
-                                            <p className="text-dark">{employee?.phone || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-mail-check me-2" />
-                                                Email
-                                            </span>
-                                            <Link
-                                                to="#"
-                                                className="text-info d-inline-flex align-items-center"
-                                            >
-                                                {employee?.email || '-'}
-                                                <i className="ti ti-copy text-dark ms-2" />
-                                            </Link>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-gender-male me-2" />
-                                                Gender
-                                            </span>
-                                            <p className="text-dark text-end">{employee?.gender || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-cake me-2" />
-                                                Birdthday
-                                            </span>
-                                            <p className="text-dark text-end">{formatDate(employee?.dateOfBirth) || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-map-pin-check me-2" />
-                                                Address
-                                            </span>
-                                            <p className="text-dark text-end">
-                                                {employee?.address?.street} {employee?.address?.city || '-'} <br /> {employee?.address?.state || '-'} {employee?.address?.country || '-'} {employee?.address?.postalCode || '-'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="p-3 border-bottom">
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <h6>Personal Information</h6>
-                                            <Link
-                                                to="#"
-                                                className="btn btn-icon btn-sm"
-                                                data-bs-toggle="modal" data-inert={true}
-                                                data-bs-target="#edit_personal"
-                                            >
-                                                <i className="ti ti-edit" />
-                                            </Link>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-e-passport me-2" />
-                                                Passport No
-                                            </span>
-                                            <p className="text-dark">{employee?.passport?.number || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-calendar-x me-2" />
-                                                Passport Exp Date
-                                            </span>
-                                            <p className="text-dark text-end">{formatDate(employee?.passport?.expiryDate) || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-gender-male me-2" />
-                                                Nationality
-                                            </span>
-                                            <p className="text-dark text-end">{employee?.passport?.country || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-bookmark-plus me-2" />
-                                                Religion
-                                            </span>
-                                            <p className="text-dark text-end">{(employee as any)?.religion || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-hotel-service me-2" />
-                                                Marital status
-                                            </span>
-                                            <p className="text-dark text-end">{(employee as any)?.maritalStatus || '-'}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-briefcase-2 me-2" />
-                                                Employment of spouse
-                                            </span>
-                                            <p className="text-dark text-end">{(employee as any)?.employmentOfSpouse || "-"}</p>
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                            <span className="d-inline-flex align-items-center">
-                                                <i className="ti ti-baby-bottle me-2" />
-                                                No. of children
-                                                {employee?.bank?.bankName || '-'}
-                                            </span>
-                                            <p className="text-dark text-end">{(employee as any)?.noOfChildren || '-'}</p>
-                                        </div>
-
-                                        {/* Emergency Contact Number Section - Now inside Personal Information */}
-                                        <div className="border-top mt-3 pt-3">
-                                            <div className="d-flex align-items-center justify-content-between mb-2">
-                                                <h6 className="mb-0">Emergency Contact Number</h6>
-                                                <Link
-                                                    to="#"
-                                                    className="btn btn-icon btn-sm"
-                                                    data-bs-toggle="modal" data-inert={true}
-                                                    data-bs-target="#edit_emergency"
-                                                >
-                                                    <i className="ti ti-edit" />
-                                                </Link>
-                                            </div>
-                                            {getEmergencyContact() ? (
-                                                <div>
-                                                    <div className="mb-3">
-                                                        <div className="d-flex align-items-center gap-3 mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                                <i className="ti ti-e-passport me-2" />
-                                                                Name:
-                                                            </span>
-
-                                                            <p className="text-dark mb-0">{getEmergencyContact()?.name || '-'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="mb-3">
-                                                        <div className="d-flex align-items-center gap-3 mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                                <i className="ti ti-e-passport me-2" />
-                                                                Relationship:
-                                                            </span>
-
-                                                            <p className="text-dark mb-0">{getEmergencyContact()?.relationship || '-'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="mb-3">
-                                                        <div className="d-flex align-items-center gap-3 mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                                <i className="ti ti-e-passport me-2" />
-                                                                Phone Number1:
-                                                            </span>
-                                                            <p className="text-dark mb-0">{getEmergencyContact()?.phone?.[0] || '-'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="mb-3">
-                                                        <div className="d-flex align-items-center gap-3 mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                                <i className="ti ti-e-passport me-2" />
-                                                                Phone Number2:
-                                                            </span>
-
-                                                            <p className="text-dark mb-0">{getEmergencyContact()?.phone?.[1] || '-'}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted">No emergency contacts available</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                      <div className="d-flex align-items-center justify-content-between mt-2">
+                        <span className="d-inline-flex align-items-center">
+                          <i className="ti ti-building me-2" />
+                          Department
+                        </span>
+                        <p className="text-dark">{getDepartmentLabel(employee?.department)}</p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between mt-2">
+                        <span className="d-inline-flex align-items-center">
+                          <i className="ti ti-briefcase me-2" />
+                          Designation
+                        </span>
+                        <p className="text-dark">{getDesignationLabel(employee?.designation)}</p>
+                      </div>
+                      {employee?.reportingManagerName && (
+                        <div className="d-flex align-items-center justify-content-between mt-2">
+                          <span className="d-inline-flex align-items-center">
+                            <i className="ti ti-user-check me-2" />
+                            Reporting Manager
+                          </span>
+                          <p className="text-dark">{employee?.reportingManagerName || '-'}</p>
                         </div>
-                        <div className="col-xl-8">
-                            <div>
-                                <div className="tab-content custom-accordion-items">
-                                    <div
-                                        className="tab-pane active show"
-                                        id="bottom-justified-tab1"
-                                        role="tabpanel"
-                                    >
-                                        <div
-                                            className="accordion accordions-items-seperate"
-                                            id="accordionExample"
-                                        >
-                                            <div className="accordion-item">
-                                                <div className="accordion-header" id="headingOne">
-                                                    <div className="accordion-button">
-                                                        <div className="d-flex align-items-center flex-fill">
-                                                            <h5>About Employee</h5>
-                                                            <Link
-                                                                to="#"
-                                                                className="btn btn-sm btn-icon ms-auto"
-                                                                data-bs-toggle="modal" data-inert={true}
-                                                                data-bs-target="#edit_about"
-                                                            >
-                                                                <i className="ti ti-edit" />
-                                                            </Link>
-                                                            <Link
-                                                                to="#"
-                                                                className="d-flex align-items-center collapsed collapse-arrow"
-                                                                data-bs-toggle="collapse"
-                                                                data-bs-target="#primaryBorderOne"
-                                                                aria-expanded="false"
-                                                                aria-controls="primaryBorderOne"
-                                                            >
-                                                                <i className="ti ti-chevron-down fs-18" />
-                                                            </Link>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    id="primaryBorderOne"
-                                                    className="accordion-collapse collapse show border-top"
-                                                    aria-labelledby="headingOne"
-                                                    data-bs-parent="#accordionExample"
-                                                >
-                                                    <div className="accordion-body mt-2">
-                                                        {aboutFormData.about || '-'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                             {/* bank details shown */}
-                                            <div className="accordion-item">
-                                                <div className="accordion-header" id="headingTwo">
-                                                    <div className="accordion-button">
-                                                        <div className="d-flex align-items-center flex-fill">
-                                                            <h5>Bank Information</h5>
-                                                            <Link
-                                                                to="#"
-                                                                className="btn btn-sm btn-icon ms-auto"
-                                                                data-bs-toggle="modal" data-inert={true}
-                                                                data-bs-target="#edit_bank"
-                                                            >
-                                                                <i className="ti ti-edit" />
-                                                            </Link>
-                                                            <Link
-                                                                to="#"
-                                                                className="d-flex align-items-center collapsed collapse-arrow"
-                                                                data-bs-toggle="collapse"
-                                                                data-bs-target="#primaryBorderTwo"
-                                                                aria-expanded="false"
-                                                                aria-controls="primaryBorderTwo"
-                                                            >
-                                                                <i className="ti ti-chevron-down fs-18" />
-                                                            </Link>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    id="primaryBorderOne"
-                                                    className="accordion-collapse collapse show border-top "
-                                                    aria-labelledby="headingOne"
-                                                    data-bs-parent="#accordionExample"
-                                                >
-                                                    <div className="accordion-body mt-2 ">
-                                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                            <i className="ti ti-user me-2" />
-                                                                Account Holder Name
-                                                            </span>
-                                                            <p className="text-dark">{employee?.bank?.accountHolderName || '-'}</p>
-                                                        </div>
-                                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                            <i className="ti ti-e-passport me-2" />
-                                                                Bank Name
-                                                            </span>
-                                                            <p className="text-dark">{employee?.bank?.bankName || '-'}</p>
-                                                        </div>
-                                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                            <i className="ti ti-id me-2" />
-                                                                Account Number
-                                                            </span>
-                                                            <p className="text-dark">{employee?.bank?.accountNumber || '-'}</p>
-                                                        </div>
-                                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                            <i className="ti ti-id me-2" />
-                                                                IFSC Code
-                                                            </span>
-                                                            <p className="text-dark">{employee?.bank?.ifscCode || '-'}</p>
-                                                        </div>
-                                                        <div className="d-flex align-items-center justify-content-between mb-2">
-                                                            <span className="d-inline-flex align-items-center">
-                                                            <i className="ti ti-map-pin-check me-2" />
-                                                                Branch
-                                                            </span>
-                                                            <p className="text-dark">{employee?.bank?.branch || '-'}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {/* end bank details */}
-                                            {/* Family details show */}
-                                            <div className="accordion-item">
-                                                <div className="accordion-header" id="headingThree">
-                                                    <div className="accordion-button">
-                                                        <div className="d-flex align-items-center justify-content-between flex-fill">
-                                                            <h5>Family Information</h5>
-                                                            <div className="d-flex">
-                                                                <Link
-                                                                    to="#"
-                                                                    className="btn btn-icon btn-sm"
-                                                                    data-bs-toggle="modal" data-inert={true}
-                                                                    data-bs-target="#edit_family"
-                                                                    onClick={openFamilyAddModal}
-                                                                >
-                                                                    <i className="ti ti-plus" />
-                                                                </Link>
-                                                                <Link
-                                                                    to="#"
-                                                                    className="d-flex align-items-center collapsed collapse-arrow"
-                                                                    data-bs-toggle="collapse"
-                                                                    data-bs-target="#primaryBorderThree"
-                                                                    aria-expanded="false"
-                                                                    aria-controls="primaryBorderThree"
-                                                                >
-                                                                    <i className="ti ti-chevron-down fs-18" />
-                                                                </Link>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    id="primaryBorderThree"
-                                                    className="accordion-collapse collapse show border-top"
-                                                    aria-labelledby="headingThree"
-                                                    data-bs-parent="#accordionExample"
-                                                >
-                                                    <div className="accordion-body">
-                                                        {familyEntries.length > 0 ? (
-                                                            familyEntries.map((member, index) => (
-                                                                <div
-                                                                    key={`${member.Name || "family"}-${index}`}
-                                                                    className="border-bottom pb-2 mb-2"
-                                                                >
-                                                                    <div className="d-flex align-items-start justify-content-between">
-                                                                        <div className="row flex-grow-1">
-                                                                            <div className="col-md-4">
-                                                                                <span className="d-inline-flex align-items-center">
-                                                                                    Name
-                                                                                </span>
-                                                                                <h6 className="d-flex align-items-center fw-medium mt-1">
-                                                                                    {member.Name || '-'}
-                                                                                </h6>
-                                                                            </div>
-                                                                            <div className="col-md-4">
-                                                                                <span className="d-inline-flex align-items-center">
-                                                                                    Relationship
-                                                                                </span>
-                                                                                <h6 className="d-flex align-items-center fw-medium mt-1">
-                                                                                    {member.relationship || '-'}
-                                                                                </h6>
-                                                                            </div>
-                                                                            <div className="col-md-4">
-                                                                                <span className="d-inline-flex align-items-center">
-                                                                                    Phone
-                                                                                </span>
-                                                                                <h6 className="d-flex align-items-center fw-medium mt-1">
-                                                                                    {member.phone || '-'}
-                                                                                </h6>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="d-flex gap-2 ms-2">
-                                                                            <Link
-                                                                                to="#"
-                                                                                className="btn btn-icon btn-sm"
-                                                                                data-bs-toggle="modal"
-                                                                                data-inert={true}
-                                                                                data-bs-target="#edit_family"
-                                                                                onClick={() => openFamilyEditModal(index)}
-                                                                            >
-                                                                                <i className="ti ti-edit" />
-                                                                            </Link>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="btn btn-icon btn-sm text-danger"
-                                                                                onClick={() => handleFamilyDelete(index)}
-                                                                            >
-                                                                                <i className="ti ti-trash" />
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))
-                                                        ) : (
-                                                            <p className="text-muted">No family records available</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {/* end Family details show */}
+                      )}
+                      {(employee?.batchId ||
+                        employee?.batchName ||
+                        employee?.shiftId ||
+                        employee?.shiftName) && (
+                        <div className="d-flex align-items-center justify-content-between mt-2">
+                          <span className="d-inline-flex align-items-center">
+                            <i className="ti ti-clock me-2" />
+                            Shift Assignment
+                          </span>
+                          <div className="text-end">
+                            {employee?.batchName ? (
+                              // Shift Batch Assignment
+                              <>
+                                <p className="text-dark mb-0">
+                                  {employee?.batchName}
+                                  {employee?.batchShiftName && ` - ${employee.batchShiftName}`}
+                                </p>
+                                <small className="text-muted">
+                                  <span
+                                    className="d-inline-block me-1"
+                                    style={{
+                                      width: '8px',
+                                      height: '8px',
+                                      borderRadius: '2px',
+                                      backgroundColor: employee?.batchShiftColor || '#6c757d',
+                                      display: 'inline-block',
+                                    }}
+                                  />
+                                  {employee?.batchShiftTiming && `(${employee.batchShiftTiming})`}
+                                  <span className="badge badge-info ms-2">Rotation Enabled</span>
+                                </small>
+                              </>
+                            ) : employee?.shiftName ? (
+                              // Direct Shift Assignment
+                              <>
+                                <p className="text-dark mb-0">{employee?.shiftName}</p>
+                                <small className="text-muted">
+                                  <span
+                                    className="d-inline-block me-1"
+                                    style={{
+                                      width: '8px',
+                                      height: '8px',
+                                      borderRadius: '2px',
+                                      backgroundColor: employee?.shiftColor || '#6c757d',
+                                      display: 'inline-block',
+                                    }}
+                                  />
+                                  {employee?.shiftTiming && `(${employee.shiftTiming})`}
+                                  <span className="badge badge-secondary ms-2">Permanent</span>
+                                </small>
+                              </>
+                            ) : (
+                              <p className="text-muted mb-0">—</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {employeePromotion && (
+                        <div className="d-flex align-items-center justify-content-between mt-2">
+                          <span className="d-inline-flex align-items-center">
+                            <i className="ti ti-trending-up me-2" />
+                            Promotion
+                          </span>
+                          <Link
+                            to="#"
+                            className="text-success fw-medium mb-0 text-decoration-none"
+                            data-bs-toggle="modal"
+                            data-inert={true}
+                            data-bs-target="#view_employee_promotion"
+                            title="Click to view promotion details"
+                          >
+                            {employeePromotion.promotionTo.designation}
+                            <i className="ti ti-external-link ms-1 fs-12" />
+                          </Link>
+                        </div>
+                      )}
+                      {employeeResignation && (
+                        <div className="d-flex align-items-center justify-content-between mt-2">
+                          <span className="d-inline-flex align-items-center">
+                            <i className="ti ti-door-exit me-2" />
+                            Resignation
+                          </span>
+                          <Link
+                            to="#"
+                            className="text-danger fw-medium mb-0 text-decoration-none"
+                            data-bs-toggle="modal"
+                            data-inert={true}
+                            data-bs-target="#view_employee_resignation"
+                            title="Click to view resignation details"
+                          >
+                            {dayjs(employeeResignation.resignationDate).format('DD MMM YYYY')}
+                            <i className="ti ti-external-link ms-1 fs-12" />
+                          </Link>
+                        </div>
+                      )}
+                      {employeeTermination && (
+                        <div className="d-flex align-items-center justify-content-between mt-2">
+                          <span className="d-inline-flex align-items-center">
+                            <i className="ti ti-user-x me-2" />
+                            Termination
+                          </span>
+                          <Link
+                            to="#"
+                            className="text-danger fw-medium mb-0 text-decoration-none"
+                            data-bs-toggle="modal"
+                            data-inert={true}
+                            data-bs-target="#view_employee_termination"
+                            title="Click to view termination details"
+                          >
+                            {dayjs(employeeTermination.terminationDate).format('DD MMM YYYY')}
+                            <i className="ti ti-external-link ms-1 fs-12" />
+                          </Link>
+                        </div>
+                      )}
+                      <div className="row gx-2 mt-3">
+                        <div className="col-6">
+                          <div>
+                            <Link
+                              to="#"
+                              className="btn btn-dark w-100"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                // Prepare and set editing employee - modal will open automatically
+                                const preparedEmployee = prepareEmployeeForEdit(employee);
+                                setEditingEmployee(preparedEmployee);
+                              }}
+                            >
+                              <i className="ti ti-edit me-1" />
+                              Edit Info
+                            </Link>
+                          </div>
+                        </div>
+                        <div className="col-6">
+                          <div>
+                            <Link to={all_routes.chat} className="btn btn-primary w-100">
+                              <i className="ti ti-message-heart me-1" />
+                              Message
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-3 border-bottom">
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <h6>Basic information</h6>
+                      <Link
+                        to="#"
+                        className="btn btn-icon btn-sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Prepare and set editing employee - modal will open automatically
+                          const preparedEmployee = prepareEmployeeForEdit(employee);
+                          setEditingEmployee(preparedEmployee);
+                        }}
+                      >
+                        <i className="ti ti-edit" />
+                      </Link>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-phone me-2" />
+                        Phone
+                      </span>
+                      <p className="text-dark">{employee?.phone || '-'}</p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-mail-check me-2" />
+                        Email
+                      </span>
+                      <Link to="#" className="text-info d-inline-flex align-items-center">
+                        {employee?.email || '-'}
+                        <i className="ti ti-copy text-dark ms-2" />
+                      </Link>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-gender-male me-2" />
+                        Gender
+                      </span>
+                      <p className="text-dark text-end">{employee?.gender || '-'}</p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-cake me-2" />
+                        Birdthday
+                      </span>
+                      <p className="text-dark text-end">
+                        {formatDate(employee?.dateOfBirth) || '-'}
+                      </p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-map-pin-check me-2" />
+                        Address
+                      </span>
+                      <p className="text-dark text-end">
+                        {employee?.address?.street} {employee?.address?.city || '-'} <br />{' '}
+                        {employee?.address?.state || '-'} {employee?.address?.country || '-'}{' '}
+                        {employee?.address?.postalCode || '-'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="p-3 border-bottom">
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <h6>Personal Information</h6>
+                      <Link
+                        to="#"
+                        className="btn btn-icon btn-sm"
+                        data-bs-toggle="modal"
+                        data-inert={true}
+                        data-bs-target="#edit_personal"
+                      >
+                        <i className="ti ti-edit" />
+                      </Link>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-e-passport me-2" />
+                        Passport No
+                      </span>
+                      <p className="text-dark">{employee?.passport?.number || '-'}</p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-calendar-x me-2" />
+                        Passport Exp Date
+                      </span>
+                      <p className="text-dark text-end">
+                        {formatDate(employee?.passport?.expiryDate) || '-'}
+                      </p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-gender-male me-2" />
+                        Nationality
+                      </span>
+                      <p className="text-dark text-end">{employee?.passport?.country || '-'}</p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-bookmark-plus me-2" />
+                        Religion
+                      </span>
+                      <p className="text-dark text-end">{(employee as any)?.religion || '-'}</p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-hotel-service me-2" />
+                        Marital status
+                      </span>
+                      <p className="text-dark text-end">
+                        {(employee as any)?.maritalStatus || '-'}
+                      </p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-briefcase-2 me-2" />
+                        Employment of spouse
+                      </span>
+                      <p className="text-dark text-end">
+                        {(employee as any)?.employmentOfSpouse || '-'}
+                      </p>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <span className="d-inline-flex align-items-center">
+                        <i className="ti ti-baby-bottle me-2" />
+                        No. of children
+                        {employee?.bank?.bankName || '-'}
+                      </span>
+                      <p className="text-dark text-end">{(employee as any)?.noOfChildren || '-'}</p>
+                    </div>
 
-                                            <div className="row">
-                                                 {/* Education Details shown */}
-                                                <div className="col-md-6">
-                                                    <div className="accordion-item">
-                                                        <div className="row">
-                                                            <div className="accordion-header" id="headingFour">
-                                                                <div className="accordion-button">
-                                                                    <div className="d-flex align-items-center justify-content-between flex-fill">
-                                                                        <h5>Education Details</h5>
-                                                                        <div className="d-flex">
-                                                                            <Link
-                                                                                to="#"
-                                                                                className="btn btn-icon btn-sm"
-                                                                                data-bs-toggle="modal" data-inert={true}
-                                                                                data-bs-target="#edit_education"
-                                                                                onClick={openEducationAddModal}
-                                                                            >
-                                                                                <i className="ti ti-plus" />
-                                                                            </Link>
-                                                                            <Link
-                                                                                to="#"
-                                                                                className="d-flex align-items-center collapsed collapse-arrow"
-                                                                                data-bs-toggle="collapse"
-                                                                                data-bs-target="#primaryBorderFour"
-                                                                                aria-expanded="false"
-                                                                                aria-controls="primaryBorderFour"
-                                                                            >
-                                                                                <i className="ti ti-chevron-down fs-18" />
-                                                                            </Link>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div
-                                                                id="primaryBorderFour"
-                                                                className="accordion-collapse collapse show border-top"
-                                                                aria-labelledby="headingFour"
-                                                                data-bs-parent="#accordionExample"
-                                                            >
-                                                                <div className="accordion-body">
-                                                                    {educationEntries.length > 0 ? (
-                                                                        educationEntries.map((entry, index) => (
-                                                                            <div
-                                                                                key={`${entry.institution || "education"}-${index}`}
-                                                                                className="border-bottom pb-2 mb-2"
-                                                                            >
-                                                                                <div className="d-flex align-items-start justify-content-between">
-                                                                                    <div className="flex-grow-1">
-                                                                                        <div className="mb-3">
-                                                                                            <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                <span className="d-inline-flex align-items-center">
-                                                                                                    <i className="ti ti-e-passport me-2" />
-                                                                                                    Institution Name:
-                                                                                                </span>
-                                                                                                <p className="text-dark mb-0">{entry.institution || '-'}</p>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="mb-3">
-                                                                                            <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                <span className="d-inline-flex align-items-center">
-                                                                                                    <i className="ti ti-e-passport me-2" />
-                                                                                                    Course Name:
-                                                                                                </span>
-                                                                                                <p className="text-dark mb-0">{entry.degree || '-'}</p>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="mb-3">
-                                                                                            <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                <span className="d-inline-flex align-items-center">
-                                                                                                    <i className="ti ti-e-passport me-2" />
-                                                                                                    Start Date:
-                                                                                                </span>
-                                                                                                <p className="text-dark mb-0">{formatDate(entry.startDate) || '-'}</p>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="mb-3">
-                                                                                            <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                <span className="d-inline-flex align-items-center">
-                                                                                                    <i className="ti ti-e-passport me-2" />
-                                                                                                    End Date:
-                                                                                                </span>
-                                                                                                <p className="text-dark mb-0">{formatDate(entry.endDate) || '-'}</p>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div className="d-flex gap-2 ms-2">
-                                                                                        <Link
-                                                                                            to="#"
-                                                                                            className="btn btn-icon btn-sm"
-                                                                                            data-bs-toggle="modal"
-                                                                                            data-inert={true}
-                                                                                            data-bs-target="#edit_education"
-                                                                                            onClick={() => openEducationEditModal(index)}
-                                                                                        >
-                                                                                            <i className="ti ti-edit" />
-                                                                                        </Link>
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            className="btn btn-icon btn-sm text-danger"
-                                                                                            onClick={() => handleEducationDelete(index)}
-                                                                                        >
-                                                                                            <i className="ti ti-trash" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <p className="text-muted">No education records available</p>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {/* End Education Details */}
-                                                {/* Experience shown */}
-                                                <div className="col-md-6">
-                                                    <div className="accordion-item">
-                                                        <div className="row">
-                                                            <div className="accordion-header" id="headingFive">
-                                                                <div className="accordion-button collapsed">
-                                                                    <div className="d-flex align-items-center justify-content-between flex-fill">
-                                                                        <h5>Experience</h5>
-                                                                        <div className="d-flex">
-                                                                            <Link
-                                                                                to="#"
-                                                                                className="btn btn-icon btn-sm"
-                                                                                data-bs-toggle="modal" data-inert={true}
-                                                                                data-bs-target="#add_experience"
-                                                                                onClick={openExperienceAddModal}
-                                                                            >
-                                                                                <i className="ti ti-plus" />
-                                                                            </Link>
-                                                                            <Link
-                                                                                to="#"
-                                                                                className="d-flex align-items-center collapsed collapse-arrow"
-                                                                                data-bs-toggle="collapse"
-                                                                                data-bs-target="#primaryBorderFive"
-                                                                                aria-expanded="false"
-                                                                                aria-controls="primaryBorderFive"
-                                                                            >
-                                                                                <i className="ti ti-chevron-down fs-18" />
-                                                                            </Link>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div
-                                                                id="primaryBorderFive"
-                                                                className="accordion-collapse collapse show border-top"
-                                                                aria-labelledby="headingFive"
-                                                                data-bs-parent="#accordionExample"
-                                                            >
-                                                                <div className="accordion-body">
-                                                                    <div>
-                                                                        {experienceEntries.length > 0 ? (
-                                                                            experienceEntries.map((entry, index) => (
-                                                                                <div
-                                                                                    key={`${entry.previousCompany || "experience"}-${index}`}
-                                                                                    className="border-bottom pb-2 mb-2"
-                                                                                >
-                                                                                    <div className="d-flex align-items-start justify-content-between">
-                                                                                        <div className="flex-grow-1">
-                                                                                            <div className="mb-3">
-                                                                                                <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                    <span className="d-inline-flex align-items-center">
-                                                                                                        <i className="ti ti-e-passport me-2" />
-                                                                                                        Company Name:
-                                                                                                    </span>
-                                                                                                    <p className="text-dark mb-0">{entry.previousCompany || '-'}</p>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                            <div className="mb-3">
-                                                                                                <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                    <span className="d-inline-flex align-items-center">
-                                                                                                        <i className="ti ti-e-passport me-2" />
-                                                                                                        Role:
-                                                                                                    </span>
-                                                                                                    <p className="text-dark mb-0">{entry.designation || '-'}</p>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                            <div className="mb-3">
-                                                                                                <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                    <span className="d-inline-flex align-items-center">
-                                                                                                        <i className="ti ti-e-passport me-2" />
-                                                                                                        Start Date:
-                                                                                                    </span>
-                                                                                                    <p className="text-dark mb-0">{formatDate(entry.startDate) || '-'}</p>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                            <div className="mb-3">
-                                                                                                <div className="d-flex align-items-center gap-3 mb-2">
-                                                                                                    <span className="d-inline-flex align-items-center">
-                                                                                                        <i className="ti ti-e-passport me-2" />
-                                                                                                        End Date:
-                                                                                                    </span>
-                                                                                                    <p className="text-dark mb-0">{formatDate(entry.endDate) || '-'}</p>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <div className="d-flex gap-2 ms-2">
-                                                                                            <Link
-                                                                                                to="#"
-                                                                                                className="btn btn-icon btn-sm"
-                                                                                                data-bs-toggle="modal"
-                                                                                                data-inert={true}
-                                                                                                data-bs-target="#add_experience"
-                                                                                                onClick={() => openExperienceEditModal(index)}
-                                                                                            >
-                                                                                                <i className="ti ti-edit" />
-                                                                                            </Link>
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                className="btn btn-icon btn-sm text-danger"
-                                                                                                onClick={() => handleExperienceDelete(index)}
-                                                                                            >
-                                                                                                <i className="ti ti-trash" />
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))
-                                                                        ) : (
-                                                                            <p className="text-muted">No experience records available</p>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {/* End Experience Details */}
+                    {/* Emergency Contact Number Section - Now inside Personal Information */}
+                    <div className="border-top mt-3 pt-3">
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <h6 className="mb-0">Emergency Contact Number</h6>
+                        <Link
+                          to="#"
+                          className="btn btn-icon btn-sm"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#edit_emergency"
+                        >
+                          <i className="ti ti-edit" />
+                        </Link>
+                      </div>
+                      {getEmergencyContact() ? (
+                        <div>
+                          <div className="mb-3">
+                            <div className="d-flex align-items-center gap-3 mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-e-passport me-2" />
+                                Name:
+                              </span>
+
+                              <p className="text-dark mb-0">{getEmergencyContact()?.name || '-'}</p>
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <div className="d-flex align-items-center gap-3 mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-e-passport me-2" />
+                                Relationship:
+                              </span>
+
+                              <p className="text-dark mb-0">
+                                {getEmergencyContact()?.relationship || '-'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <div className="d-flex align-items-center gap-3 mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-e-passport me-2" />
+                                Phone Number1:
+                              </span>
+                              <p className="text-dark mb-0">
+                                {getEmergencyContact()?.phone?.[0] || '-'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <div className="d-flex align-items-center gap-3 mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-e-passport me-2" />
+                                Phone Number2:
+                              </span>
+
+                              <p className="text-dark mb-0">
+                                {getEmergencyContact()?.phone?.[1] || '-'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted">No emergency contacts available</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-xl-8">
+              <div>
+                <div className="tab-content custom-accordion-items">
+                  <div className="tab-pane active show" id="bottom-justified-tab1" role="tabpanel">
+                    <div className="accordion accordions-items-seperate" id="accordionExample">
+                      <div className="accordion-item">
+                        <div className="accordion-header" id="headingOne">
+                          <div className="accordion-button">
+                            <div className="d-flex align-items-center flex-fill">
+                              <h5>About Employee</h5>
+                              <Link
+                                to="#"
+                                className="btn btn-sm btn-icon ms-auto"
+                                data-bs-toggle="modal"
+                                data-inert={true}
+                                data-bs-target="#edit_about"
+                              >
+                                <i className="ti ti-edit" />
+                              </Link>
+                              <Link
+                                to="#"
+                                className="d-flex align-items-center collapsed collapse-arrow"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#primaryBorderOne"
+                                aria-expanded="false"
+                                aria-controls="primaryBorderOne"
+                              >
+                                <i className="ti ti-chevron-down fs-18" />
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          id="primaryBorderOne"
+                          className="accordion-collapse collapse show border-top"
+                          aria-labelledby="headingOne"
+                          data-bs-parent="#accordionExample"
+                        >
+                          <div className="accordion-body mt-2">{aboutFormData.about || '-'}</div>
+                        </div>
+                      </div>
+                      {/* bank details shown */}
+                      <div className="accordion-item">
+                        <div className="accordion-header" id="headingTwo">
+                          <div className="accordion-button">
+                            <div className="d-flex align-items-center flex-fill">
+                              <h5>Bank Information</h5>
+                              <Link
+                                to="#"
+                                className="btn btn-sm btn-icon ms-auto"
+                                data-bs-toggle="modal"
+                                data-inert={true}
+                                data-bs-target="#edit_bank"
+                              >
+                                <i className="ti ti-edit" />
+                              </Link>
+                              <Link
+                                to="#"
+                                className="d-flex align-items-center collapsed collapse-arrow"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#primaryBorderTwo"
+                                aria-expanded="false"
+                                aria-controls="primaryBorderTwo"
+                              >
+                                <i className="ti ti-chevron-down fs-18" />
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          id="primaryBorderOne"
+                          className="accordion-collapse collapse show border-top "
+                          aria-labelledby="headingOne"
+                          data-bs-parent="#accordionExample"
+                        >
+                          <div className="accordion-body mt-2 ">
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-user me-2" />
+                                Account Holder Name
+                              </span>
+                              <p className="text-dark">
+                                {employee?.bank?.accountHolderName || '-'}
+                              </p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-e-passport me-2" />
+                                Bank Name
+                              </span>
+                              <p className="text-dark">{employee?.bank?.bankName || '-'}</p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-id me-2" />
+                                Account Number
+                              </span>
+                              <p className="text-dark">{employee?.bank?.accountNumber || '-'}</p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-id me-2" />
+                                IFSC Code
+                              </span>
+                              <p className="text-dark">{employee?.bank?.ifscCode || '-'}</p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-map-pin-check me-2" />
+                                Branch
+                              </span>
+                              <p className="text-dark">{employee?.bank?.branch || '-'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* end bank details */}
+                      {/* Family details show */}
+                      <div className="accordion-item">
+                        <div className="accordion-header" id="headingThree">
+                          <div className="accordion-button">
+                            <div className="d-flex align-items-center justify-content-between flex-fill">
+                              <h5>Family Information</h5>
+                              <div className="d-flex">
+                                <Link
+                                  to="#"
+                                  className="btn btn-icon btn-sm"
+                                  data-bs-toggle="modal"
+                                  data-inert={true}
+                                  data-bs-target="#edit_family"
+                                  onClick={openFamilyAddModal}
+                                >
+                                  <i className="ti ti-plus" />
+                                </Link>
+                                <Link
+                                  to="#"
+                                  className="d-flex align-items-center collapsed collapse-arrow"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#primaryBorderThree"
+                                  aria-expanded="false"
+                                  aria-controls="primaryBorderThree"
+                                >
+                                  <i className="ti ti-chevron-down fs-18" />
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          id="primaryBorderThree"
+                          className="accordion-collapse collapse show border-top"
+                          aria-labelledby="headingThree"
+                          data-bs-parent="#accordionExample"
+                        >
+                          <div className="accordion-body">
+                            {familyEntries.length > 0 ? (
+                              familyEntries.map((member, index) => (
+                                <div
+                                  key={`${member.Name || 'family'}-${index}`}
+                                  className="border-bottom pb-2 mb-2"
+                                >
+                                  <div className="d-flex align-items-start justify-content-between">
+                                    <div className="row flex-grow-1">
+                                      <div className="col-md-4">
+                                        <span className="d-inline-flex align-items-center">
+                                          Name
+                                        </span>
+                                        <h6 className="d-flex align-items-center fw-medium mt-1">
+                                          {member.Name || '-'}
+                                        </h6>
+                                      </div>
+                                      <div className="col-md-4">
+                                        <span className="d-inline-flex align-items-center">
+                                          Relationship
+                                        </span>
+                                        <h6 className="d-flex align-items-center fw-medium mt-1">
+                                          {member.relationship || '-'}
+                                        </h6>
+                                      </div>
+                                      <div className="col-md-4">
+                                        <span className="d-inline-flex align-items-center">
+                                          Phone
+                                        </span>
+                                        <h6 className="d-flex align-items-center fw-medium mt-1">
+                                          {member.phone || '-'}
+                                        </h6>
+                                      </div>
+                                    </div>
+                                    <div className="d-flex gap-2 ms-2">
+                                      <Link
+                                        to="#"
+                                        className="btn btn-icon btn-sm"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_family"
+                                        onClick={() => openFamilyEditModal(index)}
+                                      >
+                                        <i className="ti ti-edit" />
+                                      </Link>
+                                      <button
+                                        type="button"
+                                        className="btn btn-icon btn-sm text-danger"
+                                        onClick={() => handleFamilyDelete(index)}
+                                      >
+                                        <i className="ti ti-trash" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-muted">No family records available</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {/* end Family details show */}
+
+                      <div className="row">
+                        {/* Education Details shown */}
+                        <div className="col-md-6">
+                          <div className="accordion-item">
+                            <div className="row">
+                              <div className="accordion-header" id="headingFour">
+                                <div className="accordion-button">
+                                  <div className="d-flex align-items-center justify-content-between flex-fill">
+                                    <h5>Education Details</h5>
+                                    <div className="d-flex">
+                                      <Link
+                                        to="#"
+                                        className="btn btn-icon btn-sm"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#edit_education"
+                                        onClick={openEducationAddModal}
+                                      >
+                                        <i className="ti ti-plus" />
+                                      </Link>
+                                      <Link
+                                        to="#"
+                                        className="d-flex align-items-center collapsed collapse-arrow"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#primaryBorderFour"
+                                        aria-expanded="false"
+                                        aria-controls="primaryBorderFour"
+                                      >
+                                        <i className="ti ti-chevron-down fs-18" />
+                                      </Link>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                id="primaryBorderFour"
+                                className="accordion-collapse collapse show border-top"
+                                aria-labelledby="headingFour"
+                                data-bs-parent="#accordionExample"
+                              >
+                                <div className="accordion-body">
+                                  {educationEntries.length > 0 ? (
+                                    educationEntries.map((entry, index) => (
+                                      <div
+                                        key={`${entry.institution || 'education'}-${index}`}
+                                        className="border-bottom pb-2 mb-2"
+                                      >
+                                        <div className="d-flex align-items-start justify-content-between">
+                                          <div className="flex-grow-1">
+                                            <div className="mb-3">
+                                              <div className="d-flex align-items-center gap-3 mb-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                  <i className="ti ti-e-passport me-2" />
+                                                  Institution Name:
+                                                </span>
+                                                <p className="text-dark mb-0">
+                                                  {entry.institution || '-'}
+                                                </p>
+                                              </div>
                                             </div>
-                                            <div className="card">
-                                                <div className="card-body">
-                                                    <div className="contact-grids-tab p-0 mb-3">
-                                                        <ul
-                                                            className="nav nav-underline"
-                                                            id="myTab"
-                                                            role="tablist"
-                                                        >
-                                                            {/* Commented out Projects tab */}
-                                                            {/* <li className="nav-item" role="presentation">
+                                            <div className="mb-3">
+                                              <div className="d-flex align-items-center gap-3 mb-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                  <i className="ti ti-e-passport me-2" />
+                                                  Course Name:
+                                                </span>
+                                                <p className="text-dark mb-0">
+                                                  {entry.degree || '-'}
+                                                </p>
+                                              </div>
+                                            </div>
+                                            <div className="mb-3">
+                                              <div className="d-flex align-items-center gap-3 mb-2">
+
+                                            <div className="d-flex align-items-center justify-content-between mt-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                  <i className="ti ti-e-passport me-2" />
+                                                  Start Date:
+                                                </span>
+                                                <p className="text-dark mb-0">
+                                                  {formatDate(entry.startDate) || '-'}
+                                                </p>
+                                              </div>
+                                            </div>
+                                            <div className="mb-3">
+                                              <div className="d-flex align-items-center gap-3 mb-2">
+                                                <span className="d-inline-flex align-items-center">
+                                                  <i className="ti ti-e-passport me-2" />
+                                                  End Date:
+                                                </span>
+                                                <p className="text-dark mb-0">
+                                                  {formatDate(entry.endDate) || '-'}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="d-flex gap-2 ms-2">
+                                            <Link
+                                              to="#"
+                                              className="btn btn-icon btn-sm"
+                                              data-bs-toggle="modal"
+                                              data-inert={true}
+                                              data-bs-target="#edit_education"
+                                              onClick={() => openEducationEditModal(index)}
+                                            >
+                                              <i className="ti ti-edit" />
+                                            </Link>
+                                            <button
+                                              type="button"
+                                              className="btn btn-icon btn-sm text-danger"
+                                              onClick={() => handleEducationDelete(index)}
+                                            >
+                                              <i className="ti ti-trash" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-muted">No education records available</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* End Education Details */}
+                        {/* Experience shown */}
+                        <div className="col-md-6">
+                          <div className="accordion-item">
+                            <div className="row">
+                              <div className="accordion-header" id="headingFive">
+                                <div className="accordion-button collapsed">
+                                  <div className="d-flex align-items-center justify-content-between flex-fill">
+                                    <h5>Experience</h5>
+                                    <div className="d-flex">
+                                      <Link
+                                        to="#"
+                                        className="btn btn-icon btn-sm"
+                                        data-bs-toggle="modal"
+                                        data-inert={true}
+                                        data-bs-target="#add_experience"
+                                        onClick={openExperienceAddModal}
+                                      >
+                                        <i className="ti ti-plus" />
+                                      </Link>
+                                      <Link
+                                        to="#"
+                                        className="d-flex align-items-center collapsed collapse-arrow"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#primaryBorderFive"
+                                        aria-expanded="false"
+                                        aria-controls="primaryBorderFive"
+                                      >
+                                        <i className="ti ti-chevron-down fs-18" />
+                                      </Link>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                id="primaryBorderFive"
+                                className="accordion-collapse collapse show border-top"
+                                aria-labelledby="headingFive"
+                                data-bs-parent="#accordionExample"
+                              >
+                                <div className="accordion-body">
+                                  <div>
+                                    {experienceEntries.length > 0 ? (
+                                      experienceEntries.map((entry, index) => (
+                                        <div
+                                          key={`${entry.previousCompany || 'experience'}-${index}`}
+                                          className="border-bottom pb-2 mb-2"
+                                        >
+                                          <div className="d-flex align-items-start justify-content-between">
+                                            <div className="flex-grow-1">
+                                              <div className="mb-3">
+                                                <div className="d-flex align-items-center gap-3 mb-2">
+                                                  <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-e-passport me-2" />
+                                                    Company Name:
+                                                  </span>
+                                                  <p className="text-dark mb-0">
+                                                    {entry.previousCompany || '-'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="mb-3">
+                                                <div className="d-flex align-items-center gap-3 mb-2">
+                                                  <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-e-passport me-2" />
+                                                    Role:
+                                                  </span>
+                                                  <p className="text-dark mb-0">
+                                                    {entry.designation || '-'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="mb-3">
+                                                <div className="d-flex align-items-center gap-3 mb-2">
+                                                  <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-e-passport me-2" />
+                                                    Start Date:
+                                                  </span>
+                                                  <p className="text-dark mb-0">
+                                                    {formatDate(entry.startDate) || '-'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="mb-3">
+                                                <div className="d-flex align-items-center gap-3 mb-2">
+                                                  <span className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-e-passport me-2" />
+                                                    End Date:
+                                                  </span>
+                                                  <p className="text-dark mb-0">
+                                                    {formatDate(entry.endDate) || '-'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <div className="d-flex gap-2 ms-2">
+                                              <Link
+                                                to="#"
+                                                className="btn btn-icon btn-sm"
+                                                data-bs-toggle="modal"
+                                                data-inert={true}
+                                                data-bs-target="#add_experience"
+                                                onClick={() => openExperienceEditModal(index)}
+                                              >
+                                                <i className="ti ti-edit" />
+                                              </Link>
+                                              <button
+                                                type="button"
+                                                className="btn btn-icon btn-sm text-danger"
+                                                onClick={() => handleExperienceDelete(index)}
+                                              >
+                                                <i className="ti ti-trash" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-muted">No experience records available</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* End Experience Details */}
+                      </div>
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="contact-grids-tab p-0 mb-3">
+                            <ul className="nav nav-underline" id="myTab" role="tablist">
+                              {/* Commented out Projects tab */}
+                              {/* <li className="nav-item" role="presentation">
                                                                 <button
                                                                     className="nav-link active"
                                                                     id="info-tab2"
@@ -2887,43 +3144,43 @@ const EmployeeDetails = () => {
                                                                     Projects
                                                                 </button>
                                                             </li> */}
-                                                            <li className="nav-item" role="presentation">
-                                                                <button
-                                                                    className="nav-link active"
-                                                                    id="policy-tab2"
-                                                                    data-bs-toggle="tab"
-                                                                    data-bs-target="#policy2"
-                                                                    type="button"
-                                                                    role="tab"
-                                                                    aria-selected="true"
-                                                                >
-                                                                    Policy
-                                                                </button>
-                                                            </li>
-                                                            <li className="nav-item" role="presentation">
-                                                                <button
-                                                                    className="nav-link"
-                                                                    id="address-tab2"
-                                                                    data-bs-toggle="tab"
-                                                                    data-bs-target="#address2"
-                                                                    type="button"
-                                                                    role="tab"
-                                                                    aria-selected="false"
-                                                                >
-                                                                    Assets
-                                                                </button>
-                                                            </li>
-                                                        </ul>
-                                                    </div>
-                                                    <div className="tab-content" id="myTabContent3">
-                                                        {/* <div
+                              <li className="nav-item" role="presentation">
+                                <button
+                                  className="nav-link active"
+                                  id="policy-tab2"
+                                  data-bs-toggle="tab"
+                                  data-bs-target="#policy2"
+                                  type="button"
+                                  role="tab"
+                                  aria-selected="true"
+                                >
+                                  Policy
+                                </button>
+                              </li>
+                              <li className="nav-item" role="presentation">
+                                <button
+                                  className="nav-link"
+                                  id="address-tab2"
+                                  data-bs-toggle="tab"
+                                  data-bs-target="#address2"
+                                  type="button"
+                                  role="tab"
+                                  aria-selected="false"
+                                >
+                                  Assets
+                                </button>
+                              </li>
+                            </ul>
+                          </div>
+                          <div className="tab-content" id="myTabContent3">
+                            {/* <div
                                                             className="tab-pane fade show active"
                                                             id="basic-info2"
                                                             role="tabpanel"
                                                             aria-labelledby="info-tab2"
                                                             tabIndex={0}
                                                         > */}
-                                                        {/* <div className="row">
+                            {/* <div className="row">
                                                                 <div className="col-md-6 d-flex">
                                                                     <div className="card flex-fill mb-4 mb-md-0">
                                                                         <div className="card-body">
@@ -3052,190 +3309,89 @@ const EmployeeDetails = () => {
                                                                 </div>
                                                             </div>
                                                         </div> */}
-                                                        {/* Policy Tab Pane */}
-                                                        <div
-                                                            className="tab-pane fade show active"
-                                                            id="policy2"
-                                                            role="tabpanel"
-                                                            aria-labelledby="policy-tab2"
-                                                            tabIndex={0}
-                                                        >
-                                                            <div className="row">
-                                                                {policiesLoading ? (
-                                                                    <div className="col-12 text-center py-4">
-                                                                        <div className="spinner-border text-primary" role="status">
-                                                                            <span className="visually-hidden">Loading policies...</span>
-                                                                        </div>
-                                                                        <p className="mt-2 text-muted">Loading policies...</p>
-                                                                    </div>
-                                                                ) : applicablePolicies.length > 0 ? (
-                                                                    applicablePolicies.map((policy, idx) => (
-                                                                        <div key={policy._id} className="col-md-12 d-flex mb-3">
-                                                                            <div className="card flex-fill">
-                                                                                <div className="card-body">
-                                                                                    <div className="d-flex align-items-start justify-content-between">
-                                                                                        <div className="flex-grow-1">
-                                                                                            <h5
-                                                                                                className="mb-2"
-                                                                                                style={{ cursor: 'pointer' }}
-                                                                                                onClick={() => setViewingPolicy(policy)}
-                                                                                                data-bs-toggle="modal"
-                                                                                                data-bs-target="#view_policy_employee"
-                                                                                            >
-                                                                                                <i className="ti ti-file-text me-2 text-primary"></i>
-                                                                                                {policy.policyName}
-                                                                                            </h5>
-                                                                                            <p className="text-muted mb-2">
-                                                                                                {policy.policyDescription || 'No description provided'}
-                                                                                            </p>
-                                                                                            <div className="d-flex align-items-center gap-3 mt-3">
-                                                                                                <span className="badge bg-light text-dark">
-                                                                                                    <i className="ti ti-calendar me-1"></i>
-                                                                                                    Effective: {new Date(policy.effectiveDate).toLocaleDateString('en-US', {
-                                                                                                        year: 'numeric',
-                                                                                                        month: 'short',
-                                                                                                        day: 'numeric'
-                                                                                                    })}
-                                                                                                </span>
-                                                                                                <span className="badge bg-success-transparent">
-                                                                                                    <i className="ti ti-check me-1"></i>
-                                                                                                    Active
-                                                                                                </span>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="col-12">
-                                                                        <div className="card">
-                                                                            <div className="card-body text-center py-5">
-                                                                                <i className="ti ti-file-off fs-1 text-muted mb-3 d-block"></i>
-                                                                                <h5 className="text-muted">No Policies Assigned</h5>
-                                                                                <p className="text-muted mb-0">
-                                                                                    There are currently no policies assigned to your department and designation.
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {/* Assets Tab Pane */}
-                                                        <div
-                                                            className="tab-pane fade"
-                                                            id="address2"
-                                                            role="tabpanel"
-                                                            aria-labelledby="address-tab2"
-                                                            tabIndex={0}
-                                                        >
-                                                            <div className="row">
-                                                                {employee?.assets?.map((asset, idx) => (
-                                                                    <div key={idx} className="col-md-12 d-flex mb-3">
-                                                                        <div className="card flex-fill">
-                                                                            <div className="card-body">
-                                                                                <div className="row align-items-center">
-                                                                                    <div className="col-md-8">
-                                                                                        <div className="d-flex align-items-center">
-                                                                                            <Link
-                                                                                                to={all_routes.projectdetails}
-                                                                                                className="flex-shrink-0 me-2"
-                                                                                            >
-                                                                                                <img
-                                                                                                    src={asset.assetImageUrl || "assets/img/products/default.jpg"}
-                                                                                                    className="img-fluid rounded-circle"
-                                                                                                    alt={asset.assetName}
-                                                                                                    style={{ width: "48px", height: "48px" }}
-                                                                                                />
-                                                                                            </Link>
-                                                                                            <div>
-                                                                                                <h6 className="mb-1">
-                                                                                                    <Link to={all_routes.projectdetails}>
-                                                                                                        {asset.assetName} - #{asset.serialNumber}
-                                                                                                    </Link>
-                                                                                                </h6>
-                                                                                                <div className="d-flex align-items-center">
-                                                                                                    <p>
-                                                                                                        <span className="text-primary">
-                                                                                                            AST - 001{" "}
-                                                                                                            <i className="ti ti-point-filled text-primary mx-1" />
-                                                                                                        </span>
-                                                                                                        Assigned on {new Date(asset.issuedDate).toLocaleDateString()}{" "}
-                                                                                                        {new Date(asset.issuedDate).toLocaleTimeString()}
-                                                                                                    </p>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div className="col-md-3">
-                                                                                        <div>
-                                                                                            <span className="mb-1 d-block">Assigned by</span>
-                                                                                            <Link
-                                                                                                to="#"
-                                                                                                className="fw-normal d-flex align-items-center"
-                                                                                            >
-                                                                                                <img
-                                                                                                    className="avatar avatar-sm rounded-circle me-2"
-                                                                                                    src={asset.assigneeAvatar || "assets/img/profiles/default.jpg"}
-                                                                                                    alt="Assignee"
-                                                                                                    style={{ width: "32px", height: "32px" }}
-                                                                                                />
-                                                                                                {asset.assignedBy || "Unknown"}
-                                                                                            </Link>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div className="col-md-1">
-                                                                                        <div className="dropdown ms-2">
-                                                                                            <Link
-                                                                                                to="#"
-                                                                                                className="d-inline-flex align-items-center"
-                                                                                                data-bs-toggle="dropdown"
-                                                                                                aria-expanded="false"
-                                                                                            >
-                                                                                                <i className="ti ti-dots-vertical" />
-                                                                                            </Link>
-                                                                                            {/* <ul className="dropdown-menu dropdown-menu-end p-3">
-                                                                                                <li>
-                                                                                                    <Link
-                                                                                                        to="#"
-                                                                                                        className="dropdown-item rounded-1"
-                                                                                                        data-bs-toggle="modal"
-                                                                                                        data-inert={true}
-                                                                                                        data-bs-target="#asset_info"
-                                                                                                    >
-                                                                                                        View Info
-                                                                                                    </Link>
-                                                                                                </li>
-                                                                                                <li>
-                                                                                                    <Link
-                                                                                                        to="#"
-                                                                                                        className="dropdown-item rounded-1"
-                                                                                                        data-bs-toggle="modal"
-                                                                                                        data-inert={true}
-                                                                                                        data-bs-target="#refuse_msg"
-                                                                                                    >
-                                                                                                        Raise Issue
-                                                                                                    </Link>
-                                                                                                </li>
-                                                                                            </ul> */}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                            {/* Policy Tab Pane */}
+                            <div
+                              className="tab-pane fade show active"
+                              id="policy2"
+                              role="tabpanel"
+                              aria-labelledby="policy-tab2"
+                              tabIndex={0}
+                            >
+                              <div className="row">
+                                {policiesLoading ? (
+                                  <div className="col-12 text-center py-4">
+                                    <div className="spinner-border text-primary" role="status">
+                                      <span className="visually-hidden">Loading policies...</span>
                                     </div>
-                                </div>
+                                    <p className="mt-2 text-muted">Loading policies...</p>
+                                  </div>
+                                ) : applicablePolicies.length > 0 ? (
+                                  applicablePolicies.map((policy, idx) => (
+                                    <div key={policy._id} className="col-md-12 d-flex mb-3">
+                                      <div className="card flex-fill">
+                                        <div className="card-body">
+                                          <div className="d-flex align-items-start justify-content-between">
+                                            <div className="flex-grow-1">
+                                              <h5
+                                                className="mb-2"
+                                                style={{ cursor: 'pointer' }}
+                                                onClick={() => setViewingPolicy(policy)}
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#view_policy_employee"
+                                              >
+                                                <i className="ti ti-file-text me-2 text-primary"></i>
+                                                {policy.policyName}
+                                              </h5>
+                                              <p className="text-muted mb-2">
+                                                {policy.policyDescription ||
+                                                  'No description provided'}
+                                              </p>
+                                              <div className="d-flex align-items-center gap-3 mt-3">
+                                                <span className="badge bg-light text-dark">
+                                                  <i className="ti ti-calendar me-1"></i>
+                                                  Effective:{' '}
+                                                  {new Date(
+                                                    policy.effectiveDate
+                                                  ).toLocaleDateString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                  })}
+                                                </span>
+                                                <span className="badge bg-success-transparent">
+                                                  <i className="ti ti-check me-1"></i>
+                                                  Active
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="col-12">
+                                    <div className="card">
+                                      <div className="card-body text-center py-5">
+                                        <i className="ti ti-file-off fs-1 text-muted mb-3 d-block"></i>
+                                        <h5 className="text-muted">No Policies Assigned</h5>
+                                        <p className="text-muted mb-0">
+                                          There are currently no policies assigned to your
+                                          department and designation.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
+                            {/* Assets Tab Pane */}
+                            <div
+                              className="tab-pane fade"
+                              id="address2"
+                              role="tabpanel"
+                              aria-labelledby="address-tab2"
+                              tabIndex={0}
                         </div>
                     </div>
                 </div>
@@ -3268,78 +3424,127 @@ const EmployeeDetails = () => {
                                 aria-label="Close"
                                 onClick={resetAboutForm}
                             >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleAboutSubmit}>
-                            <div className="tab-content" id="myTabContent2">
-                                    <div
-                                        className="tab-pane fade show active"
-                                        id="basic-info3"
-                                        role="tabpanel"
-                                        aria-labelledby="info-tab3"
-                                        tabIndex={0}
-                                    >
-                                        <div className="modal-body pb-0">
-                                            <div className="row">
-                                                <div className="col-md-12">
-                                                    <div className="mb-3">
-                                                        <label className="form-label">
-                                                            About <span className="text-danger">*</span>
-                                                        </label>
-
-                                                        <textarea
-                                                            className="form-control"
-                                                            rows={4}
-                                                            name="about"
-                                                            value={aboutFormData.about || ""}
-                                                            required
-                                                            onChange={(e) => setAboutFormData({ about: e.target.value })}
-                                                            placeholder="Write something about the employee..."
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="modal-footer">
-                                            <button
-                                                type="button"
-                                                className="btn btn-outline-light border me-2"
-                                                data-bs-dismiss="modal"
-                                                onClick={resetAboutForm}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="submit"
-                                                className="btn btn-primary"
-                                            >
-                                                Save
-                                            </button>
-                                        </div>
+                              <div className="row">
+                                {assetsLoading ? (
+                                  <div className="col-12 text-center py-4">
+                                    <div className="spinner-border text-primary" role="status">
+                                      <span className="visually-hidden">Loading assets...</span>
                                     </div>
-                                </div>
-                            </form>
+                                    <p className="mt-2 text-muted">Loading assets...</p>
+                                  </div>
+                                ) : employeeAssets.length > 0 ? (
+                                  employeeAssets.map((asset, idx) => (
+                                    <div key={idx} className="col-md-12 d-flex mb-3">
+                                      <div className="card flex-fill">
+                                        <div className="card-body">
+                                          <div className="row align-items-center">
+                                            <div className="col-md-12">
+                                              <div>
+                                                <h6 className="mb-1">{asset.assetName}</h6>
+                                                <div className="d-flex align-items-center">
+                                                  <p className="mb-0">
+                                                    <span className="text-primary fw-medium">
+                                                      {asset.assetId || asset.serialNumber || 'N/A'}
+                                                    </span>
+                                                    <i className="ti ti-point-filled text-primary mx-1" />
+                                                    <span className="text-muted">
+                                                      Assigned:{' '}
+                                                      {formatDate(
+                                                        asset.assignedDate || asset.issuedDate
+                                                      )}
+                                                    </span>
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="col-12 text-center py-5">
+                                    <div className="mb-3">
+                                      <i className="ti ti-package fs-48 text-muted" />
+                                    </div>
+                                    <p className="text-muted">
+                                      No assets assigned to this employee
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
+                      </div>
                     </div>
+                  </div>
                 </div>
-            {/* /Edit Employee */}
-            {/* Edit Personal */}
-            <div className="modal fade" id="edit_personal">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Edit Personal Info</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetPersonalForm}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </div>
+      <ToastContainer />
+      {/* /Page Wrapper */}
+      {/* Edit Employee Modal */}
+      <EditEmployeeModal
+        employee={editingEmployee}
+        modalId="edit_employee_details"
+        onUpdate={(updatedEmployee) => {
+          // Update both employee and editingEmployee with new data
+          // Don't set editingEmployee to null here - let modal's cleanup handle it
+          setEmployee(updatedEmployee as any);
+          setEditingEmployee(updatedEmployee as Employee);
+          toast.success('Employee updated successfully!');
+        }}
+        getModalContainer={getModalContainer}
+        showLifecycleWarning={true}
+      />
+      <div className="modal fade" id="edit_about">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Edit Personal Info</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetAboutForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleAboutSubmit}>
+              <div className="tab-content" id="myTabContent2">
+                <div
+                  className="tab-pane fade show active"
+                  id="basic-info3"
+                  role="tabpanel"
+                  aria-labelledby="info-tab3"
+                  tabIndex={0}
+                >
+                  <div className="modal-body pb-0">
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            About <span className="text-danger">*</span>
+                          </label>
+
+                          <textarea
+                            className="form-control"
+                            rows={4}
+                            name="about"
+                            value={aboutFormData.about || ''}
+                            required
+                            onChange={(e) => setAboutFormData({ about: e.target.value })}
+                            placeholder="Write something about the employee..."
+                          />
                         </div>
+                      </div>
                         <form onSubmit={handlePersonalFormSubmit}>
                             <div className="modal-body pb-0">
                                 <div className="row">
@@ -3487,1004 +3692,1262 @@ const EmployeeDetails = () => {
                             </div>
                         </form>
                     </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button
+                      type="button"
+                      className="btn btn-outline-light border me-2"
+                      data-bs-dismiss="modal"
+                      onClick={resetAboutForm}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Save
+                    </button>
+                  </div>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Employee */}
+      {/* Edit Personal */}
+      <div className="modal fade" id="edit_personal">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Edit Personal Info</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetPersonalForm}
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
-            {/* /Edit Personal */}
-            {/* Edit Emergency Contact */}
-            <div className="modal fade" id="edit_emergency">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Emergency Contact Details</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetEmergencyModel}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleEmergencyFormSubmit}>
-                            <div className="modal-body pb-0">
-                                <div className="border-bottom mb-3 ">
-                                    <div className="row">
-                                        <h5 className="mb-3">Secondary Contact Details</h5>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    Name <span className="text-danger"> *</span>
-                                                </label>
-                                                <input type="text" className="form-control"
-                                                value={emergencyFormData.name}
-                                                required
-                                                onChange={(e)=> setEmergencyFormData({...emergencyFormData, name: e.target.value})}/>
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    Relationship <span className="text-danger"> *</span>
-                                                </label>
-                                                <input type="text" className="form-control"
-                                                value={emergencyFormData.relationship}
-                                                required
-                                                onChange={(e)=> setEmergencyFormData({...emergencyFormData, relationship: e.target.value})}/>
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    Phone No 1 <span className="text-danger"> *</span>
-                                                </label>
-                                                <input type="text" className="form-control"
-                                                value={emergencyFormData.phone1}
-                                                required
-                                                onChange={(e)=> setEmergencyFormData({...emergencyFormData, phone1: e.target.value})}/>
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    Phone No 2
-                                                </label>
-                                                <input type="text" className="form-control"
-                                                value={emergencyFormData.phone2}
-                                                onChange={(e)=> setEmergencyFormData({...emergencyFormData, phone2: e.target.value})}/>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                    onClick={resetEmergencyModel}
-                                >
-                                    Cancel
-                                </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Save
-                                </button>
-                            </div>
-                        </form>
+            <form onSubmit={handlePersonalFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Passport No <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.passportNo}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, passportNo: e.target.value }))
+                        }
+                        required
+                      />
                     </div>
-                </div>
-            </div>
-            {/* /Edit Emergency Contact */}
-            {/* Edit Bank */}
-            <div className="modal fade" id="edit_bank">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Bank Details</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetBankForm}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleBankFormSubmit}>
-                            <div className="modal-body pb-0">
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Account Holder Name <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                placeholder="Enter account holder name"
-                                                value={bankFormData.accountHolderName}
-                                                onChange={(e) => setBankFormData(prev => ({ ...prev, accountHolderName: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Bank Name <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                placeholder="Enter bank name"
-                                                value={bankFormData.bankName}
-                                                onChange={(e) => setBankFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Bank Account No <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={bankFormData.accountNumber}
-                                                onChange={(e) => setBankFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                IFSC Code <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={bankFormData.ifscCode}
-                                                onChange={(e) => setBankFormData(prev => ({ ...prev, ifscCode: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Branch Address <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={bankFormData.branch}
-                                                onChange={(e) => setBankFormData(prev => ({ ...prev, branch: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                    onClick={resetBankForm}
-                                    disabled={bankFormLoading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={bankFormLoading}
-                                >
-                                    {bankFormLoading ? (
-                                        <>
-                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Save'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Passport Expiry Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={() =>
+                            document.getElementById('edit_personal') || document.body
+                          }
+                          placeholder="DD-MM-YYYY"
+                          value={personalFormData.passportExpiryDate}
+                          onChange={(date) =>
+                            setPersonalFormData((prev) => ({ ...prev, passportExpiryDate: date }))
+                          }
+                          required
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
                     </div>
-                </div>
-            </div>
-            {/* /Edit Bank */}
-            {/* Add Family */}
-            <div className="modal fade" id="edit_family">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">
-                                {editingFamilyIndex !== null ? "Edit Family Member" : "Add Family Member"}
-                            </h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetFamilyForm}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleFamilyFormSubmit}>
-                            <div className="modal-body pb-0">
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Name <span className="text-danger"> *</span>
-                                            </label>
-                                            <input type="text" className="form-control"
-                                            value={familyFormData.familyMemberName}
-                                            required
-                                            onChange={(e) => setFamilyFormData(prev => ({ ...prev, familyMemberName: e.target.value }))}/>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">Relationship </label>
-                                            <input type="text" className="form-control"
-                                            value={familyFormData.relationship}
-                                            required
-                                            onChange={(e) => setFamilyFormData(prev => ({ ...prev, relationship: e.target.value }))}/>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">Phone </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={familyFormData.phone}
-                                                required
-                                                pattern="[0-9+() ]*"
-                                                title="Only numbers, +, (), and spaces are allowed"
-                                                onChange={(e) => {
-                                                    const value = e.target.value.replace(/[^0-9+() ]/g, '');
-                                                    setFamilyFormData(prev => ({ ...prev, phone: value }));
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                    onClick={resetFamilyForm}
-                                    disabled={familyFormLoading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={familyFormLoading}
-                                >
-                                    {familyFormLoading ? (
-                                        <>
-                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Save'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Nationality <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.nationality}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, nationality: e.target.value }))
+                        }
+                        required
+                      />
                     </div>
-                </div>
-            </div>
-            {/* /Add Family */}
-            {/* Add Education */}
-            <div className="modal fade" id="edit_education">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">
-                                {editingEducationIndex !== null ? "Edit Education Entry" : "Add Education Entry"}
-                            </h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetEducationForm}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleEducationFormSubmit}>
-                            <div className="modal-body pb-0">
-                                <div className="row">
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Institution Name <span className="text-danger"> *</span>
-                                            </label>
-                                            <input type="text" className="form-control"
-                                            value={educationFormData.institution}
-                                            required
-                                            onChange={(e) => {
-                                                setEducationFormData(prev => ({ ...prev, institution: e.target.value }));
-                                            }}/>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Course <span className="text-danger"> *</span>
-                                            </label>
-                                            <input type="text" className="form-control"
-                                            value={educationFormData.course}
-                                            required
-                                            onChange={(e) => {
-                                                setEducationFormData(prev => ({ ...prev, course: e.target.value }));
-                                            }}/>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Start Date <span className="text-danger"> *</span>
-                                            </label>
-                                            <div className="input-icon-end position-relative">
-                                                <DatePicker
-                                                    className="form-control datetimepicker"
-                                                    format={{
-                                                        format: "DD-MM-YYYY",
-                                                        type: "mask",
-                                                    }}
-                                                    getPopupContainer={getModalContainer}
-                                                    placeholder="DD-MM-YYYY"
-                                                    value={educationFormData.startDate}
-                                                    onChange={(date) => setEducationFormData(prev => ({
-                                                        ...prev,
-                                                        startDate: date || null
-                                                    }))}
-                                                />
-                                                <span className="input-icon-addon">
-                                                    <i className="ti ti-calendar text-gray-7" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                End Date <span className="text-danger"> *</span>
-                                            </label>
-                                            <div className="input-icon-end position-relative">
-                                                <DatePicker
-                                                    className="form-control datetimepicker"
-                                                    format={{
-                                                        format: "DD-MM-YYYY",
-                                                        type: "mask",
-                                                    }}
-                                                    required
-                                                    getPopupContainer={getModalContainer}
-                                                    placeholder="DD-MM-YYYY"
-                                                    value={educationFormData.endDate}
-                                                    onChange={(date) => {
-                                                        setEducationFormData(prev => ({ ...prev, endDate: date || null }));
-                                                    }}
-                                                />
-                                                <span className="input-icon-addon">
-                                                    <i className="ti ti-calendar text-gray-7" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                    onClick={resetEducationForm}
-                                    disabled={educationFormLoading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={educationFormLoading}
-                                >
-                                    {educationFormLoading ? (
-                                        <>
-                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Save'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Religion</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.religion}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, religion: e.target.value }))
+                        }
+                        required
+                      />
                     </div>
-                </div>
-            </div>
-            {/* /Add Education */}
-            {/* Add Experience */}
-            <div className="modal fade" id="add_experience">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">
-                                {editingExperienceIndex !== null ? "Edit Experience Entry" : "Add Experience Entry"}
-                            </h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                                onClick={resetExperienceForm}
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleExperienceFormSubmit}>
-                            <div className="modal-body pb-0">
-                                <div className="row">
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Previous Company Name{" "}
-                                                <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={experienceFormData.company}
-                                                required
-                                                onChange={(e) => setExperienceFormData({...experienceFormData, company: e.target.value})}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Designation <span className="text-danger"> *</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={experienceFormData.designation}
-                                                required
-                                                onChange={(e) => setExperienceFormData({...experienceFormData, designation: e.target.value})}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Start Date <span className="text-danger"> *</span>
-                                            </label>
-                                            <div className="input-icon-end position-relative">
-                                                <DatePicker
-                                                    className="form-control datetimepicker"
-                                                    format={{
-                                                        format: "DD-MM-YYYY",
-                                                        type: "mask",
-                                                    }}
-                                                    getPopupContainer={getModalContainer}
-                                                    placeholder="DD-MM-YYYY"
-                                                    required
-                                                    value={experienceFormData.startDate ? toDayjsDate(experienceFormData.startDate) : null}
-                                                    onChange={(_date, dateString) =>
-                                                        setExperienceFormData({
-                                                            ...experienceFormData,
-                                                            startDate: (dateString as string) || ""
-                                                        })
-                                                    }
-                                                />
-                                                <span className="input-icon-addon">
-                                                    <i className="ti ti-calendar text-gray-7" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                End Date <span className="text-danger"> *</span>
-                                            </label>
-                                            <div className="input-icon-end position-relative">
-                                                <DatePicker
-                                                    className="form-control datetimepicker"
-                                                    format={{
-                                                        format: "DD-MM-YYYY",
-                                                        type: "mask",
-                                                    }}
-                                                    getPopupContainer={getModalContainer}
-                                                    placeholder="DD-MM-YYYY"
-                                                    required
-                                                    value={experienceFormData.endDate ? toDayjsDate(experienceFormData.endDate) : null}
-                                                    onChange={(_date, dateString) =>
-                                                        setExperienceFormData({
-                                                            ...experienceFormData,
-                                                            endDate: (dateString as string) || ""
-                                                        })
-                                                    }
-                                                />
-                                                <span className="input-icon-addon">
-                                                    <i className="ti ti-calendar text-gray-7" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-check-label d-flex align-items-center mt-0">
-                                                <input
-                                                    className="form-check-input mt-0 me-2"
-                                                    type="checkbox"
-                                                    defaultChecked
-                                                />
-                                                <span className="text-dark">
-                                                    Check if you working present
-                                                </span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                    onClick={resetExperienceForm}
-                                    disabled={experienceFormLoading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={experienceFormLoading}
-                                >
-                                    {experienceFormLoading ? (
-                                        <>
-                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Save'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Marital status <span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect
+                        className="select"
+                        options={martialstatus}
+                        value={
+                          martialstatus.find(
+                            (opt) => opt.value === personalFormData.maritalStatus
+                          ) || martialstatus[0]
+                        }
+                        onChange={(option) => {
+                          if (option) {
+                            setPersonalFormData((prev) => ({
+                              ...prev,
+                              maritalStatus: option.value,
+                            }));
+                          }
+                        }}
+                      />
                     </div>
-                </div>
-            </div>
-            {/* /Add Experience */}
-            {/* Add Statuorty */}
-            <div className="modal fade" id="add_bank_satutory">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Bank &amp; Statutory</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                            >
-                                <i className="ti ti-x" />
-                            </button>
+                  </div>
+                  {personalFormData.maritalStatus === 'Yes' && (
+                    <>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Employment spouse</label>
+                          <select
+                            className="form-control"
+                            value={personalFormData.employmentOfSpouse ? 'Yes' : 'No'}
+                            onChange={(e) =>
+                              setPersonalFormData((prev) => ({
+                                ...prev,
+                                employmentOfSpouse: e.target.value === 'Yes',
+                              }))
+                            }
+                            required
+                          >
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
                         </div>
-                        <form>
-                            <div className="modal-body pb-0">
-                                <div className="border-bottom mb-4">
-                                    <h5 className="mb-3">Basic Salary Information</h5>
-                                    <div className="row mb-2">
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    Salary basis <span className="text-danger"> *</span>
-                                                </label>
-                                                <CommonSelect
-                                                    className='select'
-                                                    options={salaryChoose}
-                                                    defaultValue={salaryChoose[0]}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">Salary basis</label>
-                                                <input
-                                                    type="text"
-                                                    className="form-control"
-                                                    defaultValue="$"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">Payment type</label>
-                                                <CommonSelect
-                                                    className='select'
-                                                    options={paymenttype}
-                                                    defaultValue={paymenttype[0]}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="border-bottom mb-4">
-                                    <h5 className="mb-3">PF Information</h5>
-                                    <div className="row mb-2">
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">
-                                                    PF contribution <span className="text-danger"> *</span>
-                                                </label>
-                                                <CommonSelect
-                                                    className='select'
-                                                    options={pfcontribution}
-                                                    defaultValue={pfcontribution[0]}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">PF No</label>
-                                                <input type="text" className="form-control" required />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-4">
-                                            <div className="mb-3">
-                                                <label className="form-label">Employee PF rate</label>
-                                                <input type="text" className="form-control" required />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">Additional rate</label>
-                                                <CommonSelect
-                                                    className='select'
-                                                    options={additionalrate}
-                                                    defaultValue={additionalrate[0]}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label">Total rate</label>
-                                                <input type="text" className="form-control" required />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <h5 className="mb-3">ESI Information</h5>
-                                <div className="row">
-                                    <div className="col-md-4">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                ESI contribution<span className="text-danger"> *</span>
-                                            </label>
-                                            <CommonSelect
-                                                className='select'
-                                                options={esi}
-                                                defaultValue={esi[0]}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-4">
-                                        <div className="mb-3">
-                                            <label className="form-label">ESI Number</label>
-                                            <input type="text" className="form-control" required />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-4">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Employee ESI rate<span className="text-danger"> *</span>
-                                            </label>
-                                            <input type="text" className="form-control" required />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">Additional rate</label>
-                                            <CommonSelect
-                                                className='select'
-                                                options={additionalrate}
-                                                defaultValue={additionalrate[0]}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <label className="form-label">Total rate</label>
-                                            <input type="text" className="form-control" required />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                >
-                                    Cancel
-                                </button>
-                                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
-                                    Save
-                                </button>
-                            </div>
-                        </form>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">No. of children</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            value={personalFormData.noOfChildren}
+                            onChange={(e) =>
+                              setPersonalFormData((prev) => ({
+                                ...prev,
+                                noOfChildren: parseInt(e.target.value) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetPersonalForm}
+                  disabled={personalFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={personalFormLoading}>
+                  {personalFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Personal */}
+      {/* Edit Emergency Contact */}
+      <div className="modal fade" id="edit_emergency">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Emergency Contact Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetEmergencyModel}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleEmergencyFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="border-bottom mb-3 ">
+                  <div className="row">
+                    <h5 className="mb-3">Secondary Contact Details</h5>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Name <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.name}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, name: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
-                </div>
-            </div>
-            {/* /Add Statuorty */}
-            {/* Asset Information */}
-            <div className="modal fade" id="asset_info">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Asset Information</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="bg-light p-3 rounded show d-flex align-items-center mb-3">
-                                <span className="avatar avatar-lg flex-shrink-0 me-2">
-                                    <ImageWithBasePath
-                                        src="assets/img/laptop.jpg"
-                                        alt="img"
-                                        className="ig-fluid rounded-circle"
-                                    />
-                                </span>
-                                <div>
-                                    <h6>Dell Laptop - #343556656</h6>
-                                    <p className="fs-13">
-                                        <span className="text-primary">AST - 001 </span>
-                                        <i className="ti ti-point-filled text-primary" /> Assigned on 22
-                                        Nov, 2022 10:32AM
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="row">
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Type</p>
-                                        <p className="text-gray-9">Laptop</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Brand</p>
-                                        <p className="text-gray-9">Dell</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Category</p>
-                                        <p className="text-gray-9">Computer</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Serial No</p>
-                                        <p className="text-gray-9">3647952145678</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Cost</p>
-                                        <p className="text-gray-9">$800</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Vendor</p>
-                                        <p className="text-gray-9">Compusoft Systems Ltd.,</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Warranty</p>
-                                        <p className="text-gray-9">12 Jan 2022 - 12 Jan 2026</p>
-                                    </div>
-                                </div>
-                                <div className="col-md-6">
-                                    <div className="mb-3">
-                                        <p className="fs-13 mb-0">Location</p>
-                                        <p className="text-gray-9">46 Laurel Lane, TX 79701</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <p className="fs-13 mb-2">Asset Images</p>
-                                <div className="d-flex align-items-center">
-                                    <ImageWithBasePath
-                                        src="assets/img/laptop-01.jpg"
-                                        alt="img"
-                                        className="img-fluid rounded me-2"
-                                    />
-                                    <ImageWithBasePath
-                                        src="assets/img/laptop-2.jpg"
-                                        alt="img"
-                                        className="img-fluid rounded me-2"
-                                    />
-                                    <ImageWithBasePath
-                                        src="assets/img/laptop-3.jpg"
-                                        alt="img"
-                                        className="img-fluid rounded"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Relationship <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.relationship}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({
+                              ...emergencyFormData,
+                              relationship: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
-                </div>
-            </div>
-            {/* /Asset Information */}
-            {/* Refuse */}
-            <div className="modal fade" id="refuse_msg">
-                <div className="modal-dialog modal-dialog-centered modal-md">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Raise Issue</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <form>
-                            <div className="modal-body pb-0">
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <div className="mb-3">
-                                            <label className="form-label">
-                                                Description<span className="text-danger"> *</span>
-                                            </label>
-                                            <textarea
-                                                className="form-control"
-                                                rows={4}
-                                                defaultValue={""}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn btn-white border me-2"
-                                    data-bs-dismiss="modal"
-                                >
-                                    Cancel
-                                </button>
-                                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
-                                    Submit
-                                </button>
-                            </div>
-                        </form>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Phone No 1 <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.phone1}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, phone1: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Phone No 2</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.phone2}
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, phone2: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetEmergencyModel}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Emergency Contact */}
+      {/* Edit Bank */}
+      <div className="modal fade" id="edit_bank">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Bank Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetBankForm}
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
-            {/* /Refuse */}
+            <form onSubmit={handleBankFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Account Holder Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter account holder name"
+                        value={bankFormData.accountHolderName}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({
+                            ...prev,
+                            accountHolderName: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Bank Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter bank name"
+                        value={bankFormData.bankName}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, bankName: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Bank Account No <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.accountNumber}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, accountNumber: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        IFSC Code <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.ifscCode}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, ifscCode: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Branch Address <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.branch}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, branch: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetBankForm}
+                  disabled={bankFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={bankFormLoading}>
+                  {bankFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Bank */}
+      {/* Add Family */}
+      <div className="modal fade" id="edit_family">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingFamilyIndex !== null ? 'Edit Family Member' : 'Add Family Member'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetFamilyForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleFamilyFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.familyMemberName}
+                        required
+                        onChange={(e) =>
+                          setFamilyFormData((prev) => ({
+                            ...prev,
+                            familyMemberName: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Relationship </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.relationship}
+                        required
+                        onChange={(e) =>
+                          setFamilyFormData((prev) => ({ ...prev, relationship: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Phone </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.phone}
+                        required
+                        pattern="[0-9+() ]*"
+                        title="Only numbers, +, (), and spaces are allowed"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9+() ]/g, '');
+                          setFamilyFormData((prev) => ({ ...prev, phone: value }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetFamilyForm}
+                  disabled={familyFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={familyFormLoading}>
+                  {familyFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Family */}
+      {/* Add Education */}
+      <div className="modal fade" id="edit_education">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingEducationIndex !== null ? 'Edit Education Entry' : 'Add Education Entry'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetEducationForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleEducationFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Institution Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={educationFormData.institution}
+                        required
+                        onChange={(e) => {
+                          setEducationFormData((prev) => ({
+                            ...prev,
+                            institution: e.target.value,
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Course <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={educationFormData.course}
+                        required
+                        onChange={(e) => {
+                          setEducationFormData((prev) => ({ ...prev, course: e.target.value }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Start Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={educationFormData.startDate}
+                          onChange={(date) =>
+                            setEducationFormData((prev) => ({
+                              ...prev,
+                              startDate: date || null,
+                            }))
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        End Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          required
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={educationFormData.endDate}
+                          onChange={(date) => {
+                            setEducationFormData((prev) => ({ ...prev, endDate: date || null }));
+                          }}
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetEducationForm}
+                  disabled={educationFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={educationFormLoading}>
+                  {educationFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Education */}
+      {/* Add Experience */}
+      <div className="modal fade" id="add_experience">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingExperienceIndex !== null ? 'Edit Experience Entry' : 'Add Experience Entry'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetExperienceForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleExperienceFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Previous Company Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={experienceFormData.company}
+                        required
+                        onChange={(e) =>
+                          setExperienceFormData({ ...experienceFormData, company: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Designation <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={experienceFormData.designation}
+                        required
+                        onChange={(e) =>
+                          setExperienceFormData({
+                            ...experienceFormData,
+                            designation: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Start Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          required
+                          value={
+                            experienceFormData.startDate
+                              ? toDayjsDate(experienceFormData.startDate)
+                              : null
+                          }
+                          onChange={(_date, dateString) =>
+                            setExperienceFormData({
+                              ...experienceFormData,
+                              startDate: (dateString as string) || '',
+                            })
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        End Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          required
+                          value={
+                            experienceFormData.endDate
+                              ? toDayjsDate(experienceFormData.endDate)
+                              : null
+                          }
+                          onChange={(_date, dateString) =>
+                            setExperienceFormData({
+                              ...experienceFormData,
+                              endDate: (dateString as string) || '',
+                            })
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-check-label d-flex align-items-center mt-0">
+                        <input
+                          className="form-check-input mt-0 me-2"
+                          type="checkbox"
+                          defaultChecked
+                        />
+                        <span className="text-dark">Check if you working present</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetExperienceForm}
+                  disabled={experienceFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={experienceFormLoading}>
+                  {experienceFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Experience */}
+      {/* Add Statuorty */}
+      <div className="modal fade" id="add_bank_satutory">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Bank &amp; Statutory</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body pb-0">
+                <div className="border-bottom mb-4">
+                  <h5 className="mb-3">Basic Salary Information</h5>
+                  <div className="row mb-2">
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Salary basis <span className="text-danger"> *</span>
+                        </label>
+                        <CommonSelect
+                          className="select"
+                          options={salaryChoose}
+                          defaultValue={salaryChoose[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Salary basis</label>
+                        <input type="text" className="form-control" defaultValue="$" required />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Payment type</label>
+                        <CommonSelect
+                          className="select"
+                          options={paymenttype}
+                          defaultValue={paymenttype[0]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-bottom mb-4">
+                  <h5 className="mb-3">PF Information</h5>
+                  <div className="row mb-2">
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          PF contribution <span className="text-danger"> *</span>
+                        </label>
+                        <CommonSelect
+                          className="select"
+                          options={pfcontribution}
+                          defaultValue={pfcontribution[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">PF No</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Employee PF rate</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Additional rate</label>
+                        <CommonSelect
+                          className="select"
+                          options={additionalrate}
+                          defaultValue={additionalrate[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Total rate</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <h5 className="mb-3">ESI Information</h5>
+                <div className="row">
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        ESI contribution<span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect className="select" options={esi} defaultValue={esi[0]} />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">ESI Number</label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Employee ESI rate<span className="text-danger"> *</span>
+                      </label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Additional rate</label>
+                      <CommonSelect
+                        className="select"
+                        options={additionalrate}
+                        defaultValue={additionalrate[0]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Total rate</label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-white border me-2" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Statuorty */}
+      {/* Asset Information */}
+      <div className="modal fade" id="asset_info">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Asset Information</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="bg-light p-3 rounded show d-flex align-items-center mb-3">
+                <span className="avatar avatar-lg flex-shrink-0 me-2">
+                  <ImageWithBasePath
+                    src="assets/img/laptop.jpg"
+                    alt="img"
+                    className="ig-fluid rounded-circle"
+                  />
+                </span>
+                <div>
+                  <h6>Dell Laptop - #343556656</h6>
+                  <p className="fs-13">
+                    <span className="text-primary">AST - 001 </span>
+                    <i className="ti ti-point-filled text-primary" /> Assigned on 22 Nov, 2022
+                    10:32AM
+                  </p>
+                </div>
+              </div>
+              <div className="row">
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Type</p>
+                    <p className="text-gray-9">Laptop</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Brand</p>
+                    <p className="text-gray-9">Dell</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Category</p>
+                    <p className="text-gray-9">Computer</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Serial No</p>
+                    <p className="text-gray-9">3647952145678</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Cost</p>
+                    <p className="text-gray-9">$800</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Vendor</p>
+                    <p className="text-gray-9">Compusoft Systems Ltd.,</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Warranty</p>
+                    <p className="text-gray-9">12 Jan 2022 - 12 Jan 2026</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Location</p>
+                    <p className="text-gray-9">46 Laurel Lane, TX 79701</p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="fs-13 mb-2">Asset Images</p>
+                <div className="d-flex align-items-center">
+                  <ImageWithBasePath
+                    src="assets/img/laptop-01.jpg"
+                    alt="img"
+                    className="img-fluid rounded me-2"
+                  />
+                  <ImageWithBasePath
+                    src="assets/img/laptop-2.jpg"
+                    alt="img"
+                    className="img-fluid rounded me-2"
+                  />
+                  <ImageWithBasePath
+                    src="assets/img/laptop-3.jpg"
+                    alt="img"
+                    className="img-fluid rounded"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Asset Information */}
+      {/* Refuse */}
+      <div className="modal fade" id="refuse_msg">
+        <div className="modal-dialog modal-dialog-centered modal-md">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Raise Issue</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Description<span className="text-danger"> *</span>
+                      </label>
+                      <textarea className="form-control" rows={4} defaultValue={''} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-white border me-2" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                  Submit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Refuse */}
 
-            {/* View Policy Modal */}
-            <div className="modal fade" id="view_policy_employee">
-                <div className="modal-dialog modal-dialog-centered modal-lg">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title">Policy Details</h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                data-bs-dismiss="modal"
-                                aria-label="Close"
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
-                        <div className="modal-body">
-                            {viewingPolicy && (
-                                <div className="policy-details-container">
-                                    {/* Policy Name */}
-                                    <div className="mb-4">
-                                        <div className="d-flex align-items-center mb-2">
-                                            <i className="ti ti-file-text text-primary me-2 fs-20"></i>
-                                            <h5 className="mb-0 text-muted">Policy Name</h5>
-                                        </div>
-                                        <div className="ps-4">
-                                            <p className="fs-16 mb-0">{viewingPolicy.policyName}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* In-effect Date */}
-                                    <div className="mb-4">
-                                        <div className="d-flex align-items-center mb-2">
-                                            <i className="ti ti-calendar text-primary me-2 fs-20"></i>
-                                            <h5 className="mb-0 text-muted">In-effect Date</h5>
-                                        </div>
-                                        <div className="ps-4">
-                                            <p className="fs-16 mb-0">
-                                                {new Date(viewingPolicy.effectiveDate).toLocaleDateString('en-US', {
-                                                    year: 'numeric',
-                                                    month: 'long',
-                                                    day: 'numeric'
-                                                })}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Policy Description */}
-                                    <div className="mb-3">
-                                        <div className="d-flex align-items-center mb-2">
-                                            <i className="ti ti-file-description text-primary me-2 fs-20"></i>
-                                            <h5 className="mb-0 text-muted">Description</h5>
-                                        </div>
-                                        <div className="ps-4">
-                                            <div className="border rounded p-3 bg-light">
-                                                <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>
-                                                    {viewingPolicy.policyDescription || 'No description provided'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <div className="modal-footer">
-                            <button
-                                type="button"
-                                className="btn btn-light"
-                                data-bs-dismiss="modal"
-                            >
-                                <i className="ti ti-x me-1"></i>
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
+      {/* View Policy Modal */}
+      <div className="modal fade" id="view_policy_employee">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Policy Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
-            {/* /View Policy Modal */}
+            <div className="modal-body">
+              {viewingPolicy && (
+                <div className="policy-details-container">
+                  {/* Policy Name */}
+                  <div className="mb-4">
+                    <div className="d-flex align-items-center mb-2">
+                      <i className="ti ti-file-text text-primary me-2 fs-20"></i>
+                      <h5 className="mb-0 text-muted">Policy Name</h5>
+                    </div>
+                    <div className="ps-4">
+                      <p className="fs-16 mb-0">{viewingPolicy.policyName}</p>
+                    </div>
+                  </div>
 
-            {/* Promotion Details Modal */}
-            <PromotionDetailsModal promotion={employeePromotion} modalId="view_employee_promotion" />
-            {/* /Promotion Details Modal */}
+                  {/* In-effect Date */}
+                  <div className="mb-4">
+                    <div className="d-flex align-items-center mb-2">
+                      <i className="ti ti-calendar text-primary me-2 fs-20"></i>
+                      <h5 className="mb-0 text-muted">In-effect Date</h5>
+                    </div>
+                    <div className="ps-4">
+                      <p className="fs-16 mb-0">
+                        {new Date(viewingPolicy.effectiveDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  </div>
 
-            {/* Resignation Details Modal */}
-            <ResignationDetailsModal resignation={employeeResignation} modalId="view_employee_resignation" />
-            {/* /Resignation Details Modal */}
+                  {/* Policy Description */}
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center mb-2">
+                      <i className="ti ti-file-description text-primary me-2 fs-20"></i>
+                      <h5 className="mb-0 text-muted">Description</h5>
+                    </div>
+                    <div className="ps-4">
+                      <div className="border rounded p-3 bg-light">
+                        <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>
+                          {viewingPolicy.policyDescription || 'No description provided'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-light" data-bs-dismiss="modal">
+                <i className="ti ti-x me-1"></i>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /View Policy Modal */}
 
-            {/* Termination Details Modal */}
-            <TerminationDetailsModal termination={employeeTermination} modalId="view_employee_termination" />
-            {/* /Termination Details Modal */}
-        </>
-    )
-}
+      {/* Promotion Details Modal */}
+      <PromotionDetailsModal promotion={employeePromotion} modalId="view_employee_promotion" />
+      {/* /Promotion Details Modal */}
 
-export default EmployeeDetails
+      {/* Resignation Details Modal */}
+      <ResignationDetailsModal
+        resignation={employeeResignation}
+        modalId="view_employee_resignation"
+      />
+      {/* /Resignation Details Modal */}
+
+      {/* Termination Details Modal */}
+      <TerminationDetailsModal
+        termination={employeeTermination}
+        modalId="view_employee_termination"
+      />
+      {/* /Termination Details Modal */}
+    </>
+  );
+};
+
+export default EmployeeDetails;

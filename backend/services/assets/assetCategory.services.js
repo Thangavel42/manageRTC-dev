@@ -1,41 +1,41 @@
 // backend/services/assets/assetCategory.services.js
-import { ObjectId } from "mongodb";
-import { getTenantCollections } from "../../config/db.js";
+import { ObjectId } from 'mongodb';
+import { getTenantCollections } from '../../config/db.js';
 
 /**
  * Get all asset categories for a company
  */
 export const getAssetCategories = async (companyId, params = {}) => {
-  const { page = 1, pageSize = 100, filters = {}, sortBy = "name_asc" } = params;
-  const { assetCategories } = getTenantCollections(companyId);
+  const { page = 1, pageSize = 100, filters = {}, sortBy = 'name_asc' } = params;
+  const { assetCategories, employees } = getTenantCollections(companyId);
 
   // Build match query
   const match = {};
 
   // Status filter
-  if (filters.status && filters.status !== "All") {
+  if (filters.status && filters.status !== 'All') {
     match.status = filters.status.toLowerCase();
   }
 
   // Search filter
   if (filters.search && String(filters.search).trim().length) {
     const q = String(filters.search).trim();
-    match.name = { $regex: q, $options: "i" };
+    match.name = { $regex: q, $options: 'i' };
   }
 
   // Determine sort
   const sort = {};
   switch (sortBy) {
-    case "name_asc":
+    case 'name_asc':
       sort.name = 1;
       break;
-    case "name_desc":
+    case 'name_desc':
       sort.name = -1;
       break;
-    case "createdAt_desc":
+    case 'createdAt_desc':
       sort.createdAt = -1;
       break;
-    case "createdAt_asc":
+    case 'createdAt_asc':
       sort.createdAt = 1;
       break;
     default:
@@ -45,11 +45,33 @@ export const getAssetCategories = async (companyId, params = {}) => {
   try {
     const pipeline = [
       { $match: match },
+      {
+        $lookup: {
+          from: employees.collectionName,
+          let: { categoryName: '$name' },
+          pipeline: [
+            { $unwind: { path: '$assets', preserveNullAndEmptyArrays: false } },
+            {
+              $match: {
+                $expr: { $eq: ['$assets.assetCategory', '$$categoryName'] },
+              },
+            },
+            { $count: 'count' },
+          ],
+          as: 'assetsCounted',
+        },
+      },
+      {
+        $addFields: {
+          assetsCount: { $ifNull: [{ $arrayElemAt: ['$assetsCounted.count', 0] }, 0] },
+        },
+      },
+      { $project: { assetsCounted: 0 } },
       { $sort: sort },
       {
         $facet: {
           data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
-          total: [{ $count: "count" }],
+          total: [{ $count: 'count' }],
         },
       },
     ];
@@ -72,7 +94,7 @@ export const getAssetCategories = async (companyId, params = {}) => {
       pageSize,
     };
   } catch (err) {
-    console.error("Error in getAssetCategories:", err);
+    console.error('Error in getAssetCategories:', err);
     return { done: false, error: err.message };
   }
 };
@@ -86,7 +108,7 @@ export const createAssetCategory = async (companyId, categoryData) => {
   try {
     const newCategory = {
       name: categoryData.name,
-      status: categoryData.status?.toLowerCase() || "active",
+      status: categoryData.status?.toLowerCase() || 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -94,7 +116,7 @@ export const createAssetCategory = async (companyId, categoryData) => {
     const result = await assetCategories.insertOne(newCategory);
 
     if (!result.acknowledged) {
-      throw new Error("Failed to create asset category");
+      throw new Error('Failed to create asset category');
     }
 
     return {
@@ -105,7 +127,7 @@ export const createAssetCategory = async (companyId, categoryData) => {
       },
     };
   } catch (err) {
-    console.error("Error in createAssetCategory:", err);
+    console.error('Error in createAssetCategory:', err);
     return { done: false, error: err.message };
   }
 };
@@ -119,7 +141,7 @@ export const updateAssetCategory = async (companyId, categoryId, updateData) => 
   try {
     const updates = {
       name: updateData.name,
-      status: updateData.status?.toLowerCase() || "active",
+      status: updateData.status?.toLowerCase() || 'active',
       updatedAt: new Date(),
     };
 
@@ -129,12 +151,12 @@ export const updateAssetCategory = async (companyId, categoryId, updateData) => 
     );
 
     if (result.matchedCount === 0) {
-      throw new Error("Asset category not found");
+      throw new Error('Asset category not found');
     }
 
     return { done: true };
   } catch (err) {
-    console.error("Error in updateAssetCategory:", err);
+    console.error('Error in updateAssetCategory:', err);
     return { done: false, error: err.message };
   }
 };
@@ -151,12 +173,12 @@ export const deleteAssetCategory = async (companyId, categoryId) => {
     });
 
     if (result.deletedCount === 0) {
-      throw new Error("Asset category not found");
+      throw new Error('Asset category not found');
     }
 
     return { done: true };
   } catch (err) {
-    console.error("Error in deleteAssetCategory:", err);
+    console.error('Error in deleteAssetCategory:', err);
     return { done: false, error: err.message };
   }
 };

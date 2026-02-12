@@ -1,25 +1,24 @@
 /**
  * Asset REST Controller
  * Handles all Asset CRUD operations via REST API
+ * Uses tenant-specific collections for multi-tenant architecture
  */
 
 import mongoose from 'mongoose';
-import Asset from '../../models/asset/asset.schema.js';
+import { getTenantCollections } from '../../config/db.js';
 import {
+  asyncHandler,
   buildNotFoundError,
-  buildConflictError,
   buildValidationError,
-  asyncHandler
 } from '../../middleware/errorHandler.js';
 import {
-  sendSuccess,
-  sendCreated,
-  filterAndPaginate,
-  buildSearchFilter,
-  extractUser,
-  getRequestId
-} from '../../utils/apiResponse.js';
-import { getSocketIO, broadcastAssetEvents } from '../../utils/socketBroadcaster.js';
+  createAsset as createAssetService,
+  deleteAsset as deleteAssetService,
+  getAssetById as getAssetByIdService,
+  getAssets as getAssetsService,
+  updateAsset as updateAssetService,
+} from '../../services/assets/assets.services.js';
+import { extractUser, sendCreated, sendSuccess } from '../../utils/apiResponse.js';
 
 /**
  * @desc    Get all assets with pagination and filtering
@@ -27,63 +26,45 @@ import { getSocketIO, broadcastAssetEvents } from '../../utils/socketBroadcaster
  * @access  Private (Admin, HR, Superadmin)
  */
 export const getAssets = asyncHandler(async (req, res) => {
-  const { page, limit, search, status, type, category, assignedTo, sortBy, order } = req.query;
+  const { page, limit, search, status, category, sortBy, order } = req.query;
   const user = extractUser(req);
 
-  // Build filter
-  let filter = {
-    companyId: user.companyId,
-    isDeleted: false
+  const params = {
+    page: parseInt(page) || 1,
+    pageSize: parseInt(limit) || 20,
+    sortBy: sortBy || 'createdAt',
+    order: order || 'desc',
+    filters: {
+      ...(status ? { status } : {}),
+      ...(category ? { category } : {}),
+      ...(search ? { search } : {}),
+    },
   };
 
-  // Apply status filter
-  if (status) {
-    filter.status = status;
+  const result = await getAssetsService(user.companyId, params);
+
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to fetch assets');
   }
 
-  // Apply type filter
-  if (type) {
-    filter.type = type;
-  }
+  // Get category names from tenant collection
+  const { assetCategories } = getTenantCollections(user.companyId);
+  const categoryList = await assetCategories.find({}).toArray();
+  const categoryMap = new Map(categoryList.map((cat) => [cat._id.toString(), cat.name]));
 
-  // Apply category filter
-  if (category) {
-    filter.category = category;
-  }
+  // Add category name to each asset
+  const assetsWithCategoryName = result.data.map((asset) => ({
+    ...asset,
+    categoryName: asset.category ? categoryMap.get(asset.category) : null,
+  }));
 
-  // Apply assignedTo filter
-  if (assignedTo) {
-    filter.assignedTo = assignedTo;
-  }
-
-  // Apply search filter
-  if (search && search.trim()) {
-    const searchFilter = buildSearchFilter(search, ['name', 'serialNumber', 'barcode']);
-    filter = { ...filter, ...searchFilter };
-  }
-
-  // Build sort option
-  const sort = {};
-  if (sortBy) {
-    sort[sortBy] = order === 'asc' ? 1 : -1;
-  } else {
-    sort.purchaseDate = -1;
-  }
-
-  // Get paginated results
-  const result = await filterAndPaginate(Asset, filter, {
-    page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20,
-    sort,
-    populate: [
-      {
-        path: 'assignedTo',
-        select: 'firstName lastName fullName employeeId'
-      }
-    ]
-  });
-
-  return sendSuccess(res, result.data, 'Assets retrieved successfully', 200, result.pagination);
+  return sendSuccess(
+    res,
+    assetsWithCategoryName,
+    'Assets retrieved successfully',
+    200,
+    result.pagination
+  );
 });
 
 /**
@@ -100,20 +81,23 @@ export const getAssetById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid asset ID format');
   }
 
-  // Find asset
-  const asset = await Asset.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
-  }).populate('assignedTo', 'firstName lastName fullName employeeId')
-    .populate('createdBy', 'firstName lastName fullName')
-    .populate('updatedBy', 'firstName lastName fullName');
+  const result = await getAssetByIdService(user.companyId, id);
 
-  if (!asset) {
+  if (!result.done) {
     throw buildNotFoundError('Asset', id);
   }
 
-  return sendSuccess(res, asset);
+  // Get category name from tenant collection
+  const { assetCategories } = getTenantCollections(user.companyId);
+
+  if (result.data.category) {
+    const category = await assetCategories.findOne({
+      _id: new mongoose.Types.ObjectId(result.data.category),
+    });
+    result.data.categoryName = category?.name || null;
+  }
+
+  return sendSuccess(res, result.data, 'Asset retrieved successfully');
 });
 
 /**
@@ -125,49 +109,28 @@ export const createAsset = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const assetData = req.body;
 
-  // Check for duplicate serial number
-  if (assetData.serialNumber) {
-    const existingAsset = await Asset.findOne({
-      serialNumber: assetData.serialNumber,
-      companyId: user.companyId,
-      isDeleted: false
+  // Validate category if provided
+  if (assetData.category && !mongoose.Types.ObjectId.isValid(assetData.category)) {
+    throw buildValidationError('category', 'Invalid category ID format');
+  }
+
+  const result = await createAssetService(user.companyId, assetData, user.userId);
+
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to create asset');
+  }
+
+  // Get category name from tenant collection
+  const { assetCategories } = getTenantCollections(user.companyId);
+
+  if (result.data.category) {
+    const category = await assetCategories.findOne({
+      _id: new mongoose.Types.ObjectId(result.data.category),
     });
-
-    if (existingAsset) {
-      throw buildConflictError('An asset with this serial number already exists');
-    }
+    result.data.categoryName = category?.name || null;
   }
 
-  // Verify assignedTo employee exists if provided
-  if (assetData.assignedTo) {
-    const Employee = mongoose.model('Employee');
-    const employee = await Employee.findOne({
-      _id: assetData.assignedTo,
-      isDeleted: false
-    });
-
-    if (!employee) {
-      throw buildNotFoundError('Employee', assetData.assignedTo);
-    }
-  }
-
-  // Prepare asset data
-  assetData.companyId = user.companyId;
-  assetData.createdBy = user.userId;
-
-  // Create asset
-  const asset = await Asset.create(assetData);
-
-  // Populate references for response
-  await asset.populate('assignedTo', 'firstName lastName fullName employeeId');
-
-  // Broadcast Socket.IO event
-  const io = getSocketIO(req);
-  if (io) {
-    broadcastAssetEvents.created(io, user.companyId, asset);
-  }
-
-  return sendCreated(res, asset, 'Asset created successfully');
+  return sendCreated(res, result.data, 'Asset created successfully');
 });
 
 /**
@@ -185,46 +148,32 @@ export const updateAsset = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid asset ID format');
   }
 
-  // Find asset
-  const asset = await Asset.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
-  });
-
-  if (!asset) {
-    throw buildNotFoundError('Asset', id);
+  // Validate category if provided
+  if (updateData.category && !mongoose.Types.ObjectId.isValid(updateData.category)) {
+    throw buildValidationError('category', 'Invalid category ID format');
   }
 
-  // Check for duplicate serial number if being updated
-  if (updateData.serialNumber && updateData.serialNumber !== asset.serialNumber) {
-    const existingAsset = await Asset.findOne({
-      serialNumber: updateData.serialNumber,
-      companyId: user.companyId,
-      _id: { $ne: id },
-      isDeleted: false
-    });
+  const result = await updateAssetService(user.companyId, id, updateData, user.userId);
 
-    if (existingAsset) {
-      throw buildConflictError('An asset with this serial number already exists');
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to update asset');
+  }
+
+  // Get updated asset
+  const assetResult = await getAssetByIdService(user.companyId, id);
+  if (assetResult.done) {
+    // Get category name
+    const { assetCategories } = getTenantCollections(user.companyId);
+    if (assetResult.data.category) {
+      const category = await assetCategories.findOne({
+        _id: new mongoose.Types.ObjectId(assetResult.data.category),
+      });
+      assetResult.data.categoryName = category?.name || null;
     }
+    return sendSuccess(res, assetResult.data, 'Asset updated successfully');
   }
 
-  // Update asset
-  Object.assign(asset, updateData);
-  asset.updatedBy = user.userId;
-  await asset.save();
-
-  // Populate references for response
-  await asset.populate('assignedTo', 'firstName lastName fullName employeeId');
-
-  // Broadcast Socket.IO event
-  const io = getSocketIO(req);
-  if (io) {
-    broadcastAssetEvents.updated(io, user.companyId, asset);
-  }
-
-  return sendSuccess(res, asset, 'Asset updated successfully');
+  return sendSuccess(res, {}, 'Asset updated successfully');
 });
 
 /**
@@ -241,35 +190,20 @@ export const deleteAsset = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Invalid asset ID format');
   }
 
-  // Find asset
-  const asset = await Asset.findOne({
-    _id: id,
-    companyId: user.companyId,
-    isDeleted: false
-  });
+  const result = await deleteAssetService(user.companyId, id, user.userId);
 
-  if (!asset) {
-    throw buildNotFoundError('Asset', id);
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to delete asset');
   }
 
-  // Soft delete
-  asset.isDeleted = true;
-  asset.deletedAt = new Date();
-  asset.deletedBy = user.userId;
-  asset.status = 'retired';
-  await asset.save();
-
-  // Broadcast Socket.IO event
-  const io = getSocketIO(req);
-  if (io) {
-    broadcastAssetEvents.deleted(io, user.companyId, asset.assetId, user.userId);
-  }
-
-  return sendSuccess(res, {
-    _id: asset._id,
-    assetId: asset.assetId,
-    isDeleted: true
-  }, 'Asset deleted successfully');
+  return sendSuccess(
+    res,
+    {
+      _id: id,
+      isDeleted: true,
+    },
+    'Asset deleted successfully'
+  );
 });
 
 /**
@@ -282,23 +216,32 @@ export const getAssetsByCategory = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
   const user = extractUser(req);
 
-  const result = await filterAndPaginate(Asset, {
-    companyId: user.companyId,
-    category,
-    isDeleted: false
-  }, {
-    page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20,
-    sort: { name: 1 },
-    populate: [
-      {
-        path: 'assignedTo',
-        select: 'firstName lastName fullName employeeId'
-      }
-    ]
-  });
+  // Validate and convert category to ObjectId
+  if (!mongoose.Types.ObjectId.isValid(category)) {
+    throw buildValidationError('category', 'Invalid category ID format');
+  }
 
-  return sendSuccess(res, result.data, `Assets in category '${category}' retrieved successfully`, 200, result.pagination);
+  const params = {
+    page: parseInt(page) || 1,
+    pageSize: parseInt(limit) || 20,
+    sortBy: 'name',
+    order: 'asc',
+    filters: { category },
+  };
+
+  const result = await getAssetsService(user.companyId, params);
+
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to fetch assets');
+  }
+
+  return sendSuccess(
+    res,
+    result.data,
+    `Assets in category '${category}' retrieved successfully`,
+    200,
+    result.pagination
+  );
 });
 
 /**
@@ -312,28 +255,35 @@ export const getAssetsByStatus = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
   // Validate status
-  const validStatuses = ['available', 'assigned', 'in-maintenance', 'retired', 'lost', 'damaged', 'sold', 'disposed'];
+  const validStatuses = ['active', 'inactive'];
   if (!validStatuses.includes(status)) {
-    throw buildValidationError('status', `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    throw buildValidationError(
+      'status',
+      `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+    );
   }
 
-  const result = await filterAndPaginate(Asset, {
-    companyId: user.companyId,
-    status,
-    isDeleted: false
-  }, {
+  const params = {
     page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20,
-    sort: { name: 1 },
-    populate: [
-      {
-        path: 'assignedTo',
-        select: 'firstName lastName fullName employeeId'
-      }
-    ]
-  });
+    pageSize: parseInt(limit) || 20,
+    sortBy: 'name',
+    order: 'asc',
+    filters: { status },
+  };
 
-  return sendSuccess(res, result.data, `Assets with status '${status}' retrieved successfully`, 200, result.pagination);
+  const result = await getAssetsService(user.companyId, params);
+
+  if (!result.done) {
+    throw new Error(result.error || 'Failed to fetch assets');
+  }
+
+  return sendSuccess(
+    res,
+    result.data,
+    `Assets with status '${status}' retrieved successfully`,
+    200,
+    result.pagination
+  );
 });
 
 /**
@@ -343,17 +293,29 @@ export const getAssetsByStatus = asyncHandler(async (req, res) => {
  */
 export const getAssetStats = asyncHandler(async (req, res) => {
   const user = extractUser(req);
+  const { assets } = getTenantCollections(user.companyId);
 
-  const stats = await Asset.getStats(user.companyId);
+  // Aggregate statistics
+  const pipeline = [
+    { $match: { isDeleted: false } },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+        inactive: { $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] } },
+        totalValue: { $sum: '$purchaseValue' },
+      },
+    },
+  ];
 
-  // Add calculated metrics
-  stats.depreciationRate = stats.totalValue > 0
-    ? ((stats.totalDepreciation / stats.totalValue) * 100).toFixed(2)
-    : 0;
+  const result = await assets.aggregate(pipeline).toArray();
+  const stats = result[0] || { total: 0, active: 0, inactive: 0, totalValue: 0 };
 
-  stats.assignmentRate = stats.total > 0
-    ? ((stats.assigned / stats.total) * 100).toFixed(2)
-    : 0;
+  // Remove depreciation calculation since currentValue field no longer exists
+  // If depreciation stats are needed, calculate from individual asset.depreciatedValue virtual
+
+  stats.activeRate = stats.total > 0 ? ((stats.active / stats.total) * 100).toFixed(2) : 0;
 
   return sendSuccess(res, stats, 'Asset statistics retrieved successfully');
 });
@@ -366,5 +328,5 @@ export default {
   deleteAsset,
   getAssetsByCategory,
   getAssetsByStatus,
-  getAssetStats
+  getAssetStats,
 };
