@@ -816,7 +816,7 @@ const EmployeeDetails = () => {
 
         // Validate required fields
         if (!personalFormData.passportNo || !personalFormData.passportExpiryDate ||
-            !personalFormData.nationality || !personalFormData.religion || personalFormData.maritalStatus === "Select") {
+            !personalFormData.nationality || personalFormData.maritalStatus === "Select") {
             console.log("Validation failed - missing required fields");
             toast.error("Please fill all required fields!", {
                 position: "top-right",
@@ -2059,7 +2059,7 @@ const EmployeeDetails = () => {
                                                 </span>
                                                 <p className="text-dark">{formatDate(employee?.dateOfJoining) || '-'}</p>
                                             </div>
-                                            
+
                                             <div className="d-flex align-items-center justify-content-between mt-2">
                                                 <span className="d-inline-flex align-items-center">
                                                     <i className="ti ti-building me-2" />
@@ -3252,7 +3252,6 @@ const EmployeeDetails = () => {
                     // Don't set editingEmployee to null here - let modal's cleanup handle it
                     setEmployee(updatedEmployee as any);
                     setEditingEmployee(updatedEmployee as Employee);
-                    toast.success("Employee updated successfully!");
                 }}
                 getModalContainer={getModalContainer}
                 showLifecycleWarning={true}
@@ -3404,7 +3403,6 @@ const EmployeeDetails = () => {
                                                 className="form-control"
                                                 value={personalFormData.religion}
                                                 onChange={(e) => setPersonalFormData(prev => ({ ...prev, religion: e.target.value }))}
-                                                required
                                             />
                                         </div>
                                     </div>

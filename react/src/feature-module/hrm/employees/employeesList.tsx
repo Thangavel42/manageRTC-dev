@@ -180,7 +180,7 @@ const EmployeeList = () => {
     status: "",
     departmentId: "",
   });
-  const [sortedEmployee, setSortedEmployee] = useState<Employee[]>([]);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stats, setStats] = useState<EmployeeStats>({
     totalEmployees: 0,
@@ -278,7 +278,7 @@ const EmployeeList = () => {
         ...emp,
         status: normalizeStatus(emp.status)
       }));
-      setEmployees(normalizedEmployees);
+      setAllEmployees(normalizedEmployees);
     }
   }, [restEmployees]);
 
@@ -438,7 +438,63 @@ const EmployeeList = () => {
     return Array.from(uniqueStatuses)
       .sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b))
       .map((status) => ({ text: status, value: status }));
-  }, [employees]);
+  }, [allEmployees]);
+
+  const parseDateValue = (value: string | null | undefined): Date | null => {
+    if (!value) return null;
+    if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+      const [day, month, year] = value.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  useEffect(() => {
+    const filtered = allEmployees.filter((emp) => {
+      if (filters.departmentId && emp.departmentId !== filters.departmentId) {
+        return false;
+      }
+
+      if (filters.status && filters.status !== "all") {
+        if (normalizeStatus(emp.status) !== normalizeStatus(filters.status)) {
+          return false;
+        }
+      }
+
+      if (filters.startDate && filters.endDate) {
+        const rangeStart = parseDateValue(filters.startDate);
+        const rangeEnd = parseDateValue(filters.endDate);
+        const employeeDate = parseDateValue(emp.dateOfJoining) || parseDateValue((emp as any).createdAt);
+
+        if (!rangeStart || !rangeEnd || !employeeDate) {
+          return false;
+        }
+
+        if (employeeDate < rangeStart || employeeDate > rangeEnd) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (sortOrder) {
+      filtered.sort((a, b) => {
+        const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
+        const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
+        if (sortOrder === "ascending") {
+          return nameA.localeCompare(nameB);
+        }
+        if (sortOrder === "descending") {
+          return nameB.localeCompare(nameA);
+        }
+        return 0;
+      });
+    }
+
+    setEmployees(filtered);
+  }, [allEmployees, filters, sortOrder]);
 
   // Clean up modal backdrops whenever modals might have closed
   useEffect(() => {
@@ -620,31 +676,20 @@ const EmployeeList = () => {
 
   const onSelectStatus = (status: string) => {
     if (!status) return;
-    setSelectedStatus(status);
-    applyFilters({ status });
+    const nextStatus = status === "all" ? "" : status;
+    setSelectedStatus(nextStatus);
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      status: nextStatus,
+    }));
   };
 
   const onSelectDepartment = (id: string) => {
-    console.log(id);
-    applyFilters({ departmentId: id });
-  };
-
-  const applyFilters = async (updatedFields: {
-    departmentId?: string;
-    status?: string;
-    startDate?: string;
-    endDate?: string;
-  }) => {
-    try {
-      setFilters((prevFilters) => {
-        const newFilters = { ...prevFilters, ...updatedFields };
-        // Fetch employees with new filters using REST API
-        fetchEmployeesWithStats(newFilters);
-        return newFilters;
-      });
-    } catch (error) {
-      console.error("Error applying filters:", error);
-    }
+    setSelectedDepartment(id);
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      departmentId: id,
+    }));
   };
 
   // Clear all filters
@@ -661,9 +706,6 @@ const EmployeeList = () => {
       setSelectedStatus("");
       setSortOrder("");
 
-      // Fetch employees without filters using REST API
-      await fetchEmployeesWithStats(clearedFilters);
-
       toast.success("All filters cleared", {
         position: "top-right",
         autoClose: 2000,
@@ -678,9 +720,17 @@ const EmployeeList = () => {
   ) => {
     try {
       if (ranges.start && ranges.end) {
-        applyFilters({ startDate: ranges.start, endDate: ranges.end });
+        setFilters((prevFilters) => ({
+          ...prevFilters,
+          startDate: ranges.start || "",
+          endDate: ranges.end || "",
+        }));
       } else {
-        applyFilters({ startDate: "", endDate: "" });
+        setFilters((prevFilters) => ({
+          ...prevFilters,
+          startDate: "",
+          endDate: "",
+        }));
       }
     } catch (error) {
       console.error("Error handling time range selection:", error);
@@ -689,26 +739,6 @@ const EmployeeList = () => {
 
   const handleSort = (order: string) => {
     setSortOrder(order);
-    if (!order) {
-      setSortedEmployee(employees);
-      return;
-    }
-    const sortedData = [...employees].sort((a, b) => {
-      console.log("from sorted data", employees);
-
-      const nameA = a.firstName.toLowerCase() || "a";
-      const nameB = b.firstName.toLowerCase() || "b";
-
-      if (order === "ascending") {
-        return nameA < nameB ? -1 : nameA > nameB ? 1 : 0;
-      }
-      if (order === "descending") {
-        return nameA > nameB ? -1 : nameA < nameB ? 1 : 0;
-      }
-      return 0;
-    });
-    setSortedEmployee(sortedData); // may not need this later
-    setEmployees(sortedData);
   };
 
   const deleteEmployee = async (id: string): Promise<boolean> => {
@@ -1062,6 +1092,20 @@ const EmployeeList = () => {
                       : ": None"}
                   </a>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
+                    <li>
+                      <Link
+                        to="#"
+                        className={`dropdown-item rounded-1${
+                          selectedDepartment === "" ? " bg-primary text-white" : ""
+                        }`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          onSelectDepartment("");
+                        }}
+                      >
+                        None
+                      </Link>
+                    </li>
                     {department
                       .filter((dep) => dep.value)
                       .map((dep) => (
@@ -1075,7 +1119,6 @@ const EmployeeList = () => {
                             }`}
                             onClick={(e) => {
                               e.preventDefault();
-                              setSelectedDepartment(dep.value);
                               onSelectDepartment(dep.value);
                             }}
                           >

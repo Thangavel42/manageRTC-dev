@@ -4,9 +4,9 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../middleware/auth.js';
-import leaveController from '../../controllers/rest/leave.controller.js';
 import { uploadSingleAttachment } from '../../config/multer.config.js';
+import leaveController from '../../controllers/rest/leave.controller.js';
+import { authenticate } from '../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -89,6 +89,13 @@ router.post('/:id/approve', leaveController.approveLeave);
  * @access  Private (Admin, HR, Manager)
  */
 router.post('/:id/reject', leaveController.rejectLeave);
+
+/**
+ * @route   PATCH /api/leaves/:id/manager-action
+ * @desc    Manager approval/rejection action
+ * @access  Private (Manager, Admin, Superadmin)
+ */
+router.patch('/:id/manager-action', leaveController.managerActionLeave);
 
 /**
  * @route   POST /api/leaves/:id/cancel

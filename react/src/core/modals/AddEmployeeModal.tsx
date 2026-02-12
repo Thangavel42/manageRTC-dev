@@ -1,15 +1,14 @@
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import React, { useEffect, useRef, useState } from "react";
-import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
-import CommonSelect from "../common/commonSelect";
-import ImageWithBasePath from "../common/imageWithBasePath";
+import { toast } from "react-toastify";
+import { useBatchesREST } from "../../hooks/useBatchesREST";
 import { useDepartmentsREST } from "../../hooks/useDepartmentsREST";
 import { useDesignationsREST } from "../../hooks/useDesignationsREST";
-import { useBatchesREST } from "../../hooks/useBatchesREST";
-import { useShiftsREST } from "../../hooks/useShiftsREST";
 import { useEmployeesREST } from "../../hooks/useEmployeesREST";
+import { useShiftsREST } from "../../hooks/useShiftsREST";
+import CommonSelect from "../common/commonSelect";
 
 interface Option {
   label: string;
@@ -175,28 +174,37 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const { designations, fetchDesignations } = useDesignationsREST();
   const { batches, fetchBatches } = useBatchesREST();
   const { shifts: allShifts } = useShiftsREST();
-  const { createEmployee, checkDuplicates, checkEmailAvailability, fetchEmployees, employees } = useEmployeesREST();
+  const { createEmployee, checkDuplicates, checkEmailAvailability, fetchActiveEmployeesList, employees } = useEmployeesREST();
 
   // Load departments, batches, and employees on mount
   useEffect(() => {
     fetchDepartments();
     fetchBatches();
-    fetchEmployees();
-  }, [fetchDepartments, fetchBatches, fetchEmployees]);
+    fetchActiveEmployeesList();
+  }, [fetchDepartments, fetchBatches, fetchActiveEmployeesList]);
 
-  // Sync managers from employees (filter for Manager role)
+  const getEmployeeOptionLabel = (emp: any) => {
+    const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.fullName || 'Unknown';
+    const id = emp.employeeId ? ` (${emp.employeeId})` : '';
+    const departmentLabel = emp.department
+      ? emp.department
+      : department.find((dep) => dep.value === emp.departmentId)?.label;
+    const departmentText = departmentLabel ? ` - ${departmentLabel}` : '';
+    return `${name}${id}${departmentText}`;
+  };
+
+  // Sync managers from employees (all active employees)
   useEffect(() => {
     if (employees && employees.length > 0) {
-      // Filter employees with role 'Manager' (case-insensitive)
       const managersList = employees
-        .filter((emp: any) => emp.account?.role?.toLowerCase() === 'manager')
+        .filter((emp: any) => (emp.status || '').toLowerCase() === 'active')
         .map((emp: any) => ({
           value: emp._id,
-          label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`,
+          label: getEmployeeOptionLabel(emp),
         }));
       setManagers([{ value: '', label: 'Select Reporting Manager' }, ...managersList]);
     }
-  }, [employees]);
+  }, [employees, department]);
 
   // Sync departments from REST hook to local state
   useEffect(() => {

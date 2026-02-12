@@ -7,6 +7,7 @@ import Table from "../../../../core/common/dataTable/index";
 import PredefinedDateRanges from "../../../../core/common/datePicker";
 import Footer from "../../../../core/common/footer";
 import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
+import { useAuth } from "../../../../hooks/useAuth";
 import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
 import { leaveTypeDisplayMap, statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveType } from "../../../../hooks/useLeaveREST";
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
@@ -21,11 +22,29 @@ const LoadingSpinner = () => (
 
 // Status badge component
 const StatusBadge = ({ status }: { status: LeaveStatus }) => {
-  const config = statusDisplayMap[status] || statusDisplayMap.pending;
+  // Ensure we have a valid status, default to pending if not
+  const validStatus = (status || 'pending') as LeaveStatus;
+  const config = statusDisplayMap[validStatus] || statusDisplayMap.pending;
+
+  // Color mapping for leave statuses
+  const statusColors: Record<LeaveStatus, { backgroundColor: string; color: string }> = {
+    approved: { backgroundColor: '#03c95a', color: '#ffffff' },
+    rejected: { backgroundColor: '#f8220a', color: '#ffffff' },
+    pending: { backgroundColor: '#fed24e', color: '#ffffff' },
+    cancelled: { backgroundColor: '#6c757d', color: '#ffffff' },
+    'on-hold': { backgroundColor: '#17a2b8', color: '#ffffff' },
+  };
+
+  const colors = statusColors[validStatus] || statusColors.pending;
+
   return (
     <span
-      className={`badge ${config.badgeClass} d-flex justify-content-center align-items-center`}
-      style={{ minWidth: '80px' }}
+      className="badge d-flex justify-content-center align-items-center"
+      style={{
+        minWidth: '80px',
+        backgroundColor: colors.backgroundColor,
+        color: colors.color
+      }}
     >
       {config.label}
     </span>
@@ -86,9 +105,10 @@ const getLeaveIdentifier = (leave: any) => {
 
 const LeaveAdmin = () => {
   // API hooks
-  const { leaves, loading, fetchLeaves, approveLeave, rejectLeave, deleteLeave, pagination, createLeave, updateLeave } = useLeaveREST();
+  const { leaves, loading, fetchLeaves, approveLeave, rejectLeave, managerActionLeave, deleteLeave, pagination, createLeave, updateLeave } = useLeaveREST();
   const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
   const { employees, fetchEmployees } = useEmployeesREST();
+  const { role } = useAuth();
 
   // Local state for filters
   const [filters, setFilters] = useState<{
@@ -118,6 +138,7 @@ const LeaveAdmin = () => {
   // Form state for Add Leave modal
   const [addFormData, setAddFormData] = useState({
     employeeId: '',
+    reportingManagerId: '',
     leaveType: '',
     startDate: null as any,
     endDate: null as any,
@@ -130,6 +151,7 @@ const LeaveAdmin = () => {
   const [editFormData, setEditFormData] = useState<{
     _id: string;
     employeeId: string;
+    reportingManagerId: string;
     leaveType: string;
     startDate: any;
     endDate: any;
@@ -184,19 +206,25 @@ const LeaveAdmin = () => {
   // Transform leaves for table display
   const data = leaves.map((leave) => {
     const employeeName = employeeNameById.get(leave.employeeId) || leave.employeeName || "Unknown";
+    const managerStatusValue = leave.managerStatus || 'pending';
+    const statusValue = leave.finalStatus || leave.status || 'pending';
+
     return {
-    key: leave._id,
-    _id: leave._id,
-    Image: "user-32.jpg", // Default image, should come from employee data
-    Employee: employeeName,
-    Role: "Employee", // Should come from employee data
-    LeaveType: leave.leaveType,
-    From: formatDate(leave.startDate),
-    To: formatDate(leave.endDate),
-    NoOfDays: `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
-    Status: leave.status,
-    rawLeave: leave, // Store original data for actions
-  }});
+      key: leave._id,
+      _id: leave._id,
+      Image: "user-32.jpg",
+      Employee: employeeName,
+      Role: "Employee",
+      ReportingManager: leave.reportingManagerName || "-",
+      LeaveType: leave.leaveType,
+      From: formatDate(leave.startDate),
+      To: formatDate(leave.endDate),
+      NoOfDays: `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
+      ManagerStatus: managerStatusValue,
+      Status: statusValue,
+      rawLeave: leave,
+    };
+  });
 
   // Helper function to format dates
   function formatDate(dateString: string): string {
@@ -211,7 +239,14 @@ const LeaveAdmin = () => {
       message.error('Missing leave identifier');
       return;
     }
-    const success = await approveLeave(id, "Approved");
+    if (role === 'hr') {
+      message.error('HR cannot approve leave requests');
+      return;
+    }
+
+    const success = role === 'manager'
+      ? await managerActionLeave(id, 'approved', undefined, 'Approved')
+      : await approveLeave(id, "Approved");
     if (success) {
       fetchLeaves(filters); // Refresh list
     }
@@ -232,7 +267,14 @@ const LeaveAdmin = () => {
 
   const handleRejectConfirm = async () => {
     if (rejectModal.leaveId && rejectModal.reason.trim()) {
-      const success = await rejectLeave(rejectModal.leaveId, rejectModal.reason);
+      if (role === 'hr') {
+        message.error('HR cannot reject leave requests');
+        return;
+      }
+
+      const success = role === 'manager'
+        ? await managerActionLeave(rejectModal.leaveId, 'rejected', rejectModal.reason)
+        : await rejectLeave(rejectModal.leaveId, rejectModal.reason);
       if (success) {
         fetchLeaves(filters); // Refresh list
       }
@@ -268,6 +310,10 @@ const LeaveAdmin = () => {
       message.error('Please select an employee');
       return;
     }
+    if (!addFormData.reportingManagerId) {
+      message.error('Please select a reporting manager');
+      return;
+    }
     if (!addFormData.leaveType) {
       message.error('Please select a leave type');
       return;
@@ -291,6 +337,7 @@ const LeaveAdmin = () => {
 
     const success = await createLeave({
       employeeId: addFormData.employeeId,
+      reportingManagerId: addFormData.reportingManagerId || undefined,
       leaveType: addFormData.leaveType as any,
       startDate: addFormData.startDate.format('YYYY-MM-DD'),
       endDate: addFormData.endDate.format('YYYY-MM-DD'),
@@ -301,6 +348,7 @@ const LeaveAdmin = () => {
       // Reset form and close modal
       setAddFormData({
         employeeId: '',
+        reportingManagerId: '',
         leaveType: '',
         startDate: null,
         endDate: null,
@@ -324,6 +372,7 @@ const LeaveAdmin = () => {
     setEditFormData({
       _id: leave._id,
       employeeId: leave.employeeId || '',
+      reportingManagerId: leave.reportingManagerId || '',
       leaveType: leave.leaveType,
       startDate: leave.startDate,
       endDate: leave.endDate,
@@ -339,6 +388,10 @@ const LeaveAdmin = () => {
 
     if (!editFormData.employeeId) {
       message.error('Please select an employee');
+      return;
+    }
+    if (!editFormData.reportingManagerId) {
+      message.error('Please select a reporting manager');
       return;
     }
     if (!editFormData.leaveType) {
@@ -364,6 +417,7 @@ const LeaveAdmin = () => {
 
     const success = await updateLeave(editFormData._id, {
       employeeId: editFormData.employeeId,
+      reportingManagerId: editFormData.reportingManagerId || undefined,
       leaveType: editFormData.leaveType as any,
       startDate: editFormData.startDate,
       endDate: editFormData.endDate,
@@ -384,11 +438,26 @@ const LeaveAdmin = () => {
   };
 
   // Employee options for dropdown - Phase 2: Using real employees from API
+  const getEmployeeOptionLabel = (emp: any) => {
+    const name = `${emp.firstName} ${emp.lastName}`.trim();
+    const id = emp.employeeId ? ` (${emp.employeeId})` : '';
+    const department = emp.department || emp.departmentId ? ` - ${emp.department || emp.departmentId}` : '';
+    return `${name}${id}${department}`;
+  };
+
   const employeename = [
     { value: "", label: "Select Employee" },
     ...employees.map(emp => ({
       value: emp.employeeId,
-      label: `${emp.firstName} ${emp.lastName}`.trim()
+      label: getEmployeeOptionLabel(emp)
+    }))
+  ];
+
+  const reportingManagerOptions = [
+    { value: "", label: "Select Reporting Manager" },
+    ...employees.map(emp => ({
+      value: emp.employeeId,
+      label: getEmployeeOptionLabel(emp)
     }))
   ];
 
@@ -429,6 +498,11 @@ const LeaveAdmin = () => {
       sorter: (a: any, b: any) => a.LeaveType.length - b.LeaveType.length,
     },
     {
+      title: "Reporting Manager",
+      dataIndex: "ReportingManager",
+      sorter: (a: any, b: any) => a.ReportingManager.localeCompare(b.ReportingManager),
+    },
+    {
       title: "From",
       dataIndex: "From",
       sorter: (a: any, b: any) => a.From.localeCompare(b.From),
@@ -448,17 +522,63 @@ const LeaveAdmin = () => {
       },
     },
     {
+      title: "Manager Status",
+      dataIndex: "ManagerStatus",
+      key: "ManagerStatus",
+      render: (status: string) => {
+        const bgColor = status === 'approved' ? '#03c95a' : status === 'rejected' ? '#f8220a' : '#fed24e';
+        return (
+          <div
+            style={{
+              backgroundColor: bgColor,
+              color: '#ffffff',
+              padding: '6px 16px',
+              borderRadius: '4px',
+              display: 'inline-block',
+              minWidth: '90px',
+              textAlign: 'center',
+              fontSize: '13px',
+              fontWeight: '500'
+            }}
+          >
+            {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Pending'}
+          </div>
+        );
+      },
+      sorter: (a: any, b: any) => (a.ManagerStatus || '').localeCompare(b.ManagerStatus || ''),
+    },
+    {
       title: "Status",
       dataIndex: "Status",
-      render: (status: LeaveStatus) => <StatusBadge status={status} />,
-      sorter: (a: any, b: any) => a.Status.localeCompare(b.Status),
+      key: "Status",
+      render: (status: string) => {
+        const bgColor = status === 'approved' ? '#03c95a' : status === 'rejected' ? '#f8220a' : '#fed24e';
+        return (
+          <div
+            style={{
+              backgroundColor: bgColor,
+              color: '#ffffff',
+              padding: '6px 16px',
+              borderRadius: '4px',
+              display: 'inline-block',
+              minWidth: '90px',
+              textAlign: 'center',
+              fontSize: '13px',
+              fontWeight: '500'
+            }}
+          >
+            {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Pending'}
+          </div>
+        );
+      },
+      sorter: (a: any, b: any) => (a.Status || '').localeCompare(b.Status || ''),
     },
     {
       title: "",
       dataIndex: "actions",
       render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
-          {record.Status === 'pending' && (
+          {record.Status === 'pending' && role !== 'hr' && (
             <>
               <Link
                 to="#"
@@ -480,25 +600,29 @@ const LeaveAdmin = () => {
               </Link>
             </>
           )}
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_leaves"
-            onClick={() => handleEditClick(record.rawLeave)}
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={() => setSelectedLeaveIds([record._id])}
-          >
-            <i className="ti ti-trash" />
-          </Link>
+          {role !== 'hr' && (
+            <>
+              <Link
+                to="#"
+                className="me-2"
+                data-bs-toggle="modal"
+                data-inert={true}
+                data-bs-target="#edit_leaves"
+                onClick={() => handleEditClick(record.rawLeave)}
+              >
+                <i className="ti ti-edit" />
+              </Link>
+              <Link
+                to="#"
+                data-bs-toggle="modal"
+                data-inert={true}
+                data-bs-target="#delete_modal"
+                onClick={() => setSelectedLeaveIds([record._id])}
+              >
+                <i className="ti ti-trash" />
+              </Link>
+            </>
+          )}
         </div>
       ),
     },
@@ -772,6 +896,7 @@ const LeaveAdmin = () => {
                   dataSource={data}
                   columns={columns}
                   Selection={true}
+                  rowId="key"
                 />
               )}
             </div>
@@ -794,6 +919,7 @@ const LeaveAdmin = () => {
                 aria-label="Close"
                 onClick={() => setAddFormData({
                   employeeId: '',
+                  reportingManagerId: '',
                   leaveType: '',
                   startDate: null,
                   endDate: null,
@@ -816,6 +942,17 @@ const LeaveAdmin = () => {
                         options={employeename}
                         value={addFormData.employeeId}
                         onChange={(option: any) => setAddFormData({ ...addFormData, employeeId: option?.value || '' })}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Reporting Manager</label>
+                      <CommonSelect
+                        className="select"
+                        options={reportingManagerOptions}
+                        value={addFormData.reportingManagerId}
+                        onChange={(option: any) => setAddFormData({ ...addFormData, reportingManagerId: option?.value || '' })}
                       />
                     </div>
                   </div>
@@ -944,6 +1081,7 @@ const LeaveAdmin = () => {
                   data-bs-dismiss="modal"
                   onClick={() => setAddFormData({
                     employeeId: '',
+                    reportingManagerId: '',
                     leaveType: '',
                     startDate: null,
                     endDate: null,
@@ -994,6 +1132,17 @@ const LeaveAdmin = () => {
                         options={employeename}
                         value={editFormData?.employeeId || ''}
                         onChange={(option: any) => editFormData && setEditFormData({ ...editFormData, employeeId: option?.value || '' })}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Reporting Manager</label>
+                      <CommonSelect
+                        className="select"
+                        options={reportingManagerOptions}
+                        value={editFormData?.reportingManagerId || ''}
+                        onChange={(option: any) => editFormData && setEditFormData({ ...editFormData, reportingManagerId: option?.value || '' })}
                       />
                     </div>
                   </div>
@@ -1244,6 +1393,12 @@ const LeaveAdmin = () => {
                   </div>
                 </div>
                 <div className="col-md-6 mb-3">
+                  <label className="form-label">Reporting Manager</label>
+                  <div className="fw-medium">
+                    {selectedLeave?.reportingManagerName || "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
                   <label className="form-label">Leave Type</label>
                   <div className="fw-medium">
                     {selectedLeave ? (leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType) : "-"}
@@ -1270,7 +1425,13 @@ const LeaveAdmin = () => {
                 <div className="col-md-6 mb-3">
                   <label className="form-label">Status</label>
                   <div className="fw-medium">
-                    {selectedLeave ? (statusDisplayMap[selectedLeave.status]?.label || selectedLeave.status) : "-"}
+                    {selectedLeave ? (statusDisplayMap[selectedLeave.finalStatus || selectedLeave.status]?.label || selectedLeave.finalStatus || selectedLeave.status) : "-"}
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">Manager Status</label>
+                  <div className="fw-medium">
+                    {selectedLeave ? (statusDisplayMap[selectedLeave.managerStatus || 'pending']?.label || selectedLeave.managerStatus) : "-"}
                   </div>
                 </div>
                 <div className="col-md-12 mb-3">

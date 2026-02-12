@@ -9,21 +9,21 @@ import { ObjectId } from 'mongodb';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-    asyncHandler,
-    buildNotFoundError,
-    buildValidationError
+  asyncHandler,
+  buildNotFoundError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-    buildPagination,
-    extractUser,
-    getRequestId,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  getRequestId,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import {
-    canUserDeleteAvatar,
-    getSystemDefaultAvatarUrl
+  canUserDeleteAvatar,
+  getSystemDefaultAvatarUrl
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
@@ -194,10 +194,10 @@ const formatEmployeeDates = (employee) => {
 export const getEmployees = asyncHandler(async (req, res) => {
   // Use validated query if available, otherwise use original query (for non-validated routes)
   const query = req.validatedQuery || req.query;
-  const { page, limit, search, department, designation, status, sortBy, order } = query;
+  const { page, limit, search, department, designation, status, role, sortBy, order } = query;
   const user = extractUser(req);
 
-  devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status });
+  devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status, role });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -208,6 +208,18 @@ export const getEmployees = asyncHandler(async (req, res) => {
   // Apply status filter
   if (status) {
     filter.status = status;
+  }
+
+  // Apply role filter (case-insensitive)
+  if (role) {
+    const roleRegex = new RegExp(`^${role}$`, 'i');
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { role: roleRegex },
+        { 'account.role': roleRegex }
+      ]
+    });
   }
 
   // Apply department filter
@@ -440,6 +452,78 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const pagination = buildPagination(pageNum, limitNum, total);
 
   return sendSuccess(res, formattedEmployees, 'Employees retrieved successfully', 200, pagination);
+});
+
+/**
+ * @desc    Get all active employees for dropdowns (no role restriction)
+ * @route   GET /api/employees/active-list
+ * @access  Private (Any authenticated user in company)
+ */
+export const getActiveEmployeesList = asyncHandler(async (req, res) => {
+  const query = req.validatedQuery || req.query;
+  const { search } = query;
+  const user = extractUser(req);
+
+  const collections = getTenantCollections(user.companyId);
+
+  const filter = {
+    isDeleted: { $ne: true },
+    status: 'Active'
+  };
+
+  if (search && search.trim()) {
+    filter.$or = [
+      { firstName: { $regex: search, $options: 'i' } },
+      { lastName: { $regex: search, $options: 'i' } },
+      { fullName: { $regex: search, $options: 'i' } },
+      { employeeId: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const pipeline = [
+    { $match: filter },
+    {
+      $addFields: {
+        departmentObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+            then: { $toObjectId: '$departmentId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'departmentObjId',
+        foreignField: '_id',
+        as: 'departmentInfo'
+      }
+    },
+    {
+      $addFields: {
+        department: { $arrayElemAt: ['$departmentInfo', 0] }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        employeeId: 1,
+        firstName: 1,
+        lastName: 1,
+        fullName: 1,
+        departmentId: 1,
+        department: '$department.department',
+        status: 1
+      }
+    },
+    { $sort: { firstName: 1, lastName: 1 } }
+  ];
+
+  const employees = await collections.employees.aggregate(pipeline).toArray();
+
+  return sendSuccess(res, employees, 'Active employees retrieved successfully');
 });
 
 /**
@@ -981,16 +1065,26 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  // Check email uniqueness if email is being updated (use canonical email field)
-  const newEmail = updateData.email || updateData.contact?.email;
-  if (newEmail && newEmail !== employee.email) {
-    const existingEmployee = await collections.employees.findOne({
-      email: newEmail,
-      _id: { $ne: new ObjectId(id) }
-    });
+// Check email uniqueness only if email is in the root level (not nested personal data)
+  if (updateData.email) {
+    const newEmail = updateData.email.trim().toLowerCase();
+    const currentEmail = (employee.email || '').trim().toLowerCase();
 
-    if (existingEmployee) {
-      throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
+    devLog('[Email Check] newEmail:', newEmail, 'currentEmail:', currentEmail, 'equal?', newEmail === currentEmail);
+
+    // Only check for duplicates if email is actually changing
+    if (newEmail !== currentEmail) {
+      // Simple case-insensitive email check
+      const emailExists = await collections.employees.countDocuments({
+        email: { $regex: `^${newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+        _id: { $ne: new ObjectId(id) }
+      });
+
+      devLog('[Email Check] Email exists count:', emailExists);
+
+      if (emailExists > 0) {
+        throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
+      }
     }
   }
 
@@ -1009,23 +1103,51 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   // Normalize update data - extract nested fields to root level
   const normalizedData = {
     ...updateData,
-    // Extract email from root level or contact object (for backward compatibility)
-    // Use ?? instead of || to preserve empty strings
-    email: updateData.email ?? updateData.contact?.email,
-    // Extract phone from root level or contact object (for backward compatibility)
-    phone: updateData.phone ?? updateData.contact?.phone,
-    // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
-    dateOfBirth: updateData.dateOfBirth ?? updateData.personal?.birthday,
-    // Extract gender from root level or personal.gender (for backward compatibility)
-    gender: updateData.gender ?? updateData.personal?.gender,
-    // Extract address from root level or personal.address (for backward compatibility)
-    address: updateData.address ?? updateData.personal?.address,
-    // Map avatarUrl to profileImage for frontend compatibility
-    profileImage: updateData.avatarUrl ?? updateData.profileImage,
   };
+
+  // Only set email if it's explicitly provided
+  if (updateData.email) {
+    normalizedData.email = updateData.email;
+  }
+
+  // Extract phone from root level or contact object (for backward compatibility)
+  if (updateData.phone || updateData.contact?.phone) {
+    normalizedData.phone = updateData.phone ?? updateData.contact?.phone;
+  }
+
+  // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
+  if (updateData.dateOfBirth || updateData.personal?.birthday) {
+    normalizedData.dateOfBirth = updateData.dateOfBirth ?? updateData.personal?.birthday;
+  }
+
+  // Extract gender from root level or personal.gender (for backward compatibility)
+  if (updateData.gender || updateData.personal?.gender) {
+    normalizedData.gender = updateData.gender ?? updateData.personal?.gender;
+  }
+
+  // Extract address from root level or personal.address (for backward compatibility)
+  if (updateData.address || updateData.personal?.address) {
+    normalizedData.address = updateData.address ?? updateData.personal?.address;
+  }
+
+  // Map avatarUrl to profileImage for frontend compatibility
+  if (updateData.avatarUrl || updateData.profileImage) {
+    normalizedData.profileImage = updateData.avatarUrl ?? updateData.profileImage;
+  }
 
   const normalizedUpdateData = normalizeEmployeeDates(normalizedData);
   ensureEmployeeDateLogic(normalizedUpdateData, employee);
+
+  // ⚠️ CRITICAL: If email hasn't changed, exclude it from the update to avoid MongoDB duplicate key errors
+  const currentEmailLower = (employee.email || '').trim().toLowerCase();
+  if (normalizedUpdateData.email) {
+    const newEmailLower = (normalizedUpdateData.email || '').trim().toLowerCase();
+    if (newEmailLower === currentEmailLower) {
+      // Email hasn't changed - exclude it from update
+      delete normalizedUpdateData.email;
+      devLog('[Email Check] Email unchanged - excluding from update');
+    }
+  }
 
   // Update audit fields
   normalizedUpdateData.updatedAt = new Date();
@@ -2013,6 +2135,7 @@ export const serveEmployeeProfileImage = asyncHandler(async (req, res) => {
 
 export default {
   getEmployees,
+  getActiveEmployeesList,
   getEmployeeById,
   createEmployee,
   updateEmployee,
