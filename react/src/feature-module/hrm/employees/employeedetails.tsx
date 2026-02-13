@@ -895,24 +895,71 @@ const EmployeeDetails = () => {
     try {
       const success = await employeesREST.updateFamilyInfo(employee._id, updatedEntries);
       if (success) {
-        toast.success("Family member removed successfully!", {
-          position: "top-right",
+        toast.success('Family member removed successfully!', {
+          position: 'top-right',
           autoClose: 3000,
         });
         setFamilyEntries(updatedEntries);
         const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
         if (updatedEmployee) {
           setEmployee(updatedEmployee as any);
+    };
+
+    const handleFamilyDelete = async (index: number) => {
+        if (!employee) return;
+        const updatedEntries = familyEntries.filter((_, idx) => idx !== index);
+        try {
+            const success = await employeesREST.updateFamilyInfo(employee._id, updatedEntries);
+            if (success) {
+                toast.success("Family member removed successfully!", {
+                    position: "top-right",
+                    autoClose: 3000,
+                });
+                setFamilyEntries(updatedEntries);
+                const updatedEmployee = await employeesREST.getEmployeeDetails(employee._id);
+                if (updatedEmployee) {
+                    setEmployee(updatedEmployee as any);
+                }
+            } else {
+                toast.error("Failed to remove family member.", {
+                    position: "top-right",
+                    autoClose: 3000,
+                });
+            }
+        } catch (error) {
+            toast.error("Failed to remove family member.", {
+                position: "top-right",
+                autoClose: 3000,
+            });
+        }
+    };
+
+    // Handle personal info form validation and submission
+    const handlePersonalFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        // Prevent duplicate submissions
+        if (personalFormLoading) return;
+
+        // Validate required fields
+        if (!personalFormData.passportNo || !personalFormData.passportExpiryDate ||
+            !personalFormData.nationality || personalFormData.maritalStatus === "Select") {
+            console.log("Validation failed - missing required fields");
+            toast.error("Please fill all required fields!", {
+                position: "top-right",
+                autoClose: 3000,
+            });
+            return;
         }
       } else {
-        toast.error("Failed to remove family member.", {
-          position: "top-right",
+        toast.error('Failed to remove family member.', {
+          position: 'top-right',
           autoClose: 3000,
         });
       }
     } catch (error) {
-      toast.error("Failed to remove family member.", {
-        position: "top-right",
+      toast.error('Failed to remove family member.', {
+        position: 'top-right',
         autoClose: 3000,
       });
     }
@@ -2171,6 +2218,7 @@ const EmployeeDetails = () => {
                 <Link
                   to="#"
                   data-bs-toggle="modal"
+                  data-inert={true}
                   data-bs-target="#add_bank_satutory"
                   className="btn btn-primary d-flex align-items-center"
                 >
@@ -2329,6 +2377,7 @@ const EmployeeDetails = () => {
                             to="#"
                             className="text-success fw-medium mb-0 text-decoration-none"
                             data-bs-toggle="modal"
+                            data-inert={true}
                             data-bs-target="#view_employee_promotion"
                             title="Click to view promotion details"
                           >
@@ -2347,6 +2396,7 @@ const EmployeeDetails = () => {
                             to="#"
                             className="text-danger fw-medium mb-0 text-decoration-none"
                             data-bs-toggle="modal"
+                            data-inert={true}
                             data-bs-target="#view_employee_resignation"
                             title="Click to view resignation details"
                           >
@@ -2365,6 +2415,7 @@ const EmployeeDetails = () => {
                             to="#"
                             className="text-danger fw-medium mb-0 text-decoration-none"
                             data-bs-toggle="modal"
+                            data-inert={true}
                             data-bs-target="#view_employee_termination"
                             title="Click to view termination details"
                           >
@@ -2470,6 +2521,7 @@ const EmployeeDetails = () => {
                         to="#"
                         className="btn btn-icon btn-sm"
                         data-bs-toggle="modal"
+                        data-inert={true}
                         data-bs-target="#edit_personal"
                       >
                         <i className="ti ti-edit" />
@@ -2527,6 +2579,7 @@ const EmployeeDetails = () => {
                       <span className="d-inline-flex align-items-center">
                         <i className="ti ti-baby-bottle me-2" />
                         No. of children
+                        {employee?.bank?.bankName || '-'}
                       </span>
                       <p className="text-dark text-end">{(employee as any)?.noOfChildren || '-'}</p>
                     </div>
@@ -2539,6 +2592,7 @@ const EmployeeDetails = () => {
                           to="#"
                           className="btn btn-icon btn-sm"
                           data-bs-toggle="modal"
+                          data-inert={true}
                           data-bs-target="#edit_emergency"
                         >
                           <i className="ti ti-edit" />
@@ -2614,6 +2668,7 @@ const EmployeeDetails = () => {
                                 to="#"
                                 className="btn btn-sm btn-icon ms-auto"
                                 data-bs-toggle="modal"
+                                data-inert={true}
                                 data-bs-target="#edit_about"
                               >
                                 <i className="ti ti-edit" />
@@ -2650,6 +2705,7 @@ const EmployeeDetails = () => {
                                 to="#"
                                 className="btn btn-sm btn-icon ms-auto"
                                 data-bs-toggle="modal"
+                                data-inert={true}
                                 data-bs-target="#edit_bank"
                               >
                                 <i className="ti ti-edit" />
@@ -2668,9 +2724,9 @@ const EmployeeDetails = () => {
                           </div>
                         </div>
                         <div
-                          id="primaryBorderTwo"
+                          id="primaryBorderOne"
                           className="accordion-collapse collapse show border-top "
-                          aria-labelledby="headingTwo"
+                          aria-labelledby="headingOne"
                           data-bs-parent="#accordionExample"
                         >
                           <div className="accordion-body mt-2 ">
@@ -2726,6 +2782,7 @@ const EmployeeDetails = () => {
                                   to="#"
                                   className="btn btn-icon btn-sm"
                                   data-bs-toggle="modal"
+                                  data-inert={true}
                                   data-bs-target="#edit_family"
                                   onClick={openFamilyAddModal}
                                 >
@@ -2790,6 +2847,7 @@ const EmployeeDetails = () => {
                                         to="#"
                                         className="btn btn-icon btn-sm"
                                         data-bs-toggle="modal"
+                                        data-inert={true}
                                         data-bs-target="#edit_family"
                                         onClick={() => openFamilyEditModal(index)}
                                       >
@@ -2828,6 +2886,7 @@ const EmployeeDetails = () => {
                                         to="#"
                                         className="btn btn-icon btn-sm"
                                         data-bs-toggle="modal"
+                                        data-inert={true}
                                         data-bs-target="#edit_education"
                                         onClick={openEducationAddModal}
                                       >
@@ -2886,6 +2945,8 @@ const EmployeeDetails = () => {
                                             </div>
                                             <div className="mb-3">
                                               <div className="d-flex align-items-center gap-3 mb-2">
+
+                                            <div className="d-flex align-items-center justify-content-between mt-2">
                                                 <span className="d-inline-flex align-items-center">
                                                   <i className="ti ti-e-passport me-2" />
                                                   Start Date:
@@ -2912,6 +2973,7 @@ const EmployeeDetails = () => {
                                               to="#"
                                               className="btn btn-icon btn-sm"
                                               data-bs-toggle="modal"
+                                              data-inert={true}
                                               data-bs-target="#edit_education"
                                               onClick={() => openEducationEditModal(index)}
                                             >
@@ -2950,6 +3012,7 @@ const EmployeeDetails = () => {
                                         to="#"
                                         className="btn btn-icon btn-sm"
                                         data-bs-toggle="modal"
+                                        data-inert={true}
                                         data-bs-target="#add_experience"
                                         onClick={openExperienceAddModal}
                                       >
@@ -3035,6 +3098,7 @@ const EmployeeDetails = () => {
                                                 to="#"
                                                 className="btn btn-icon btn-sm"
                                                 data-bs-toggle="modal"
+                                                data-inert={true}
                                                 data-bs-target="#add_experience"
                                                 onClick={() => openExperienceEditModal(index)}
                                               >
@@ -3328,8 +3392,87 @@ const EmployeeDetails = () => {
                               role="tabpanel"
                               aria-labelledby="address-tab2"
                               tabIndex={0}
+                        </div>
+                    </div>
+                </div>
+                <Footer />
+            </div>
+            <ToastContainer />
+            {/* /Page Wrapper */}
+            {/* Edit Employee Modal */}
+            <EditEmployeeModal
+                employee={editingEmployee}
+                modalId="edit_employee_details"
+                onUpdate={(updatedEmployee) => {
+                    // Update both employee and editingEmployee with new data
+                    // Don't set editingEmployee to null here - let modal's cleanup handle it
+                    setEmployee(updatedEmployee as any);
+                    setEditingEmployee(updatedEmployee as Employee);
+                }}
+                getModalContainer={getModalContainer}
+                showLifecycleWarning={true}
+            />
+            <div className="modal fade" id="edit_about">
+                <div className="modal-dialog modal-dialog-centered modal-lg">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h4 className="modal-title">Edit Personal Info</h4>
+                            <button
+                                type="button"
+                                className="btn-close custom-btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"
+                                onClick={resetAboutForm}
                             >
-                              {/* Assets content can be added here */}
+                              <div className="row">
+                                {assetsLoading ? (
+                                  <div className="col-12 text-center py-4">
+                                    <div className="spinner-border text-primary" role="status">
+                                      <span className="visually-hidden">Loading assets...</span>
+                                    </div>
+                                    <p className="mt-2 text-muted">Loading assets...</p>
+                                  </div>
+                                ) : employeeAssets.length > 0 ? (
+                                  employeeAssets.map((asset, idx) => (
+                                    <div key={idx} className="col-md-12 d-flex mb-3">
+                                      <div className="card flex-fill">
+                                        <div className="card-body">
+                                          <div className="row align-items-center">
+                                            <div className="col-md-12">
+                                              <div>
+                                                <h6 className="mb-1">{asset.assetName}</h6>
+                                                <div className="d-flex align-items-center">
+                                                  <p className="mb-0">
+                                                    <span className="text-primary fw-medium">
+                                                      {asset.assetId || asset.serialNumber || 'N/A'}
+                                                    </span>
+                                                    <i className="ti ti-point-filled text-primary mx-1" />
+                                                    <span className="text-muted">
+                                                      Assigned:{' '}
+                                                      {formatDate(
+                                                        asset.assignedDate || asset.issuedDate
+                                                      )}
+                                                    </span>
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="col-12 text-center py-5">
+                                    <div className="mb-3">
+                                      <i className="ti ti-package fs-48 text-muted" />
+                                    </div>
+                                    <p className="text-muted">
+                                      No assets assigned to this employee
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -3341,24 +3484,1386 @@ const EmployeeDetails = () => {
             </div>
           </div>
         </div>
+        <Footer />
       </div>
-      {/* View Policy Modal */}
-      <div
-        className="modal fade"
-        id="view_policy_employee"
-        tabIndex={-1}
-        aria-labelledby="viewPolicyEmployeeLabel"
-        aria-hidden="true"
-      >
-        <div className="modal-dialog modal-dialog-centered">
+      <ToastContainer />
+      {/* /Page Wrapper */}
+      {/* Edit Employee Modal */}
+      <EditEmployeeModal
+        employee={editingEmployee}
+        modalId="edit_employee_details"
+        onUpdate={(updatedEmployee) => {
+          // Update both employee and editingEmployee with new data
+          // Don't set editingEmployee to null here - let modal's cleanup handle it
+          setEmployee(updatedEmployee as any);
+          setEditingEmployee(updatedEmployee as Employee);
+          toast.success('Employee updated successfully!');
+        }}
+        getModalContainer={getModalContainer}
+        showLifecycleWarning={true}
+      />
+      <div className="modal fade" id="edit_about">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
-              <h5 className="modal-title" id="viewPolicyEmployeeLabel">
-                Policy Details
-              </h5>
+              <h4 className="modal-title">Edit Personal Info</h4>
               <button
                 type="button"
-                className="btn-close"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetAboutForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleAboutSubmit}>
+              <div className="tab-content" id="myTabContent2">
+                <div
+                  className="tab-pane fade show active"
+                  id="basic-info3"
+                  role="tabpanel"
+                  aria-labelledby="info-tab3"
+                  tabIndex={0}
+                >
+                  <div className="modal-body pb-0">
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">
+                            About <span className="text-danger">*</span>
+                          </label>
+
+                          <textarea
+                            className="form-control"
+                            rows={4}
+                            name="about"
+                            value={aboutFormData.about || ''}
+                            required
+                            onChange={(e) => setAboutFormData({ about: e.target.value })}
+                            placeholder="Write something about the employee..."
+                          />
+                        </div>
+                      </div>
+                        <form onSubmit={handlePersonalFormSubmit}>
+                            <div className="modal-body pb-0">
+                                <div className="row">
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <label className="form-label">
+                                                Passport No <span className="text-danger"> *</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={personalFormData.passportNo}
+                                                onChange={(e) => setPersonalFormData(prev => ({ ...prev, passportNo: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <label className="form-label">
+                                                Passport Expiry Date <span className="text-danger"> *</span>
+                                            </label>
+                                            <div className="input-icon-end position-relative">
+                                                <DatePicker
+                                                    className="form-control datetimepicker"
+                                                    format={{
+                                                        format: "DD-MM-YYYY",
+                                                        type: "mask",
+                                                    }}
+                                                    getPopupContainer={() => document.getElementById('edit_personal') || document.body}
+                                                    placeholder="DD-MM-YYYY"
+                                                    value={personalFormData.passportExpiryDate}
+                                                    onChange={(date) => setPersonalFormData(prev => ({ ...prev, passportExpiryDate: date }))}
+                                                    required
+                                                />
+                                                <span className="input-icon-addon">
+                                                    <i className="ti ti-calendar text-gray-7" />
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <label className="form-label">
+                                                Nationality <span className="text-danger"> *</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={personalFormData.nationality}
+                                                onChange={(e) => setPersonalFormData(prev => ({ ...prev, nationality: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <label className="form-label">Religion</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={personalFormData.religion}
+                                                onChange={(e) => setPersonalFormData(prev => ({ ...prev, religion: e.target.value }))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-md-12">
+                                        <div className="mb-3">
+                                            <label className="form-label">
+                                                Marital status <span className="text-danger"> *</span>
+                                            </label>
+                                            <CommonSelect
+                                                className='select'
+                                                options={martialstatus}
+                                                value={martialstatus.find(opt => opt.value === personalFormData.maritalStatus) || martialstatus[0]}
+                                                onChange={(option) => {
+                                                    if (option) {
+                                                        setPersonalFormData(prev => ({ ...prev, maritalStatus: option.value }));
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    {personalFormData.maritalStatus === "Yes" && (
+                                        <>
+                                            <div className="col-md-6">
+                                                <div className="mb-3">
+                                                    <label className="form-label">Employment spouse</label>
+                                                    <select
+                                                        className="form-control"
+                                                        value={personalFormData.employmentOfSpouse ? "Yes" : "No"}
+                                                        onChange={(e) =>
+                                                            setPersonalFormData(prev => ({
+                                                                ...prev,
+                                                                employmentOfSpouse: e.target.value === "Yes"
+                                                            }))
+                                                        }
+                                                        required
+                                                    >
+                                                        <option value="Yes">Yes</option>
+                                                        <option value="No">No</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="col-md-6">
+                                                <div className="mb-3">
+                                                    <label className="form-label">No. of children</label>
+                                                    <input
+                                                        type="number"
+                                                        className="form-control"
+                                                        value={personalFormData.noOfChildren}
+                                                        onChange={(e) => setPersonalFormData(prev => ({ ...prev, noOfChildren: parseInt(e.target.value) || 0 }))}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button
+                                    type="button"
+                                    className="btn btn-white border me-2"
+                                    data-bs-dismiss="modal"
+                                    onClick={resetPersonalForm}
+                                    disabled={personalFormLoading}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={personalFormLoading}
+                                >
+                                    {personalFormLoading ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button
+                      type="button"
+                      className="btn btn-outline-light border me-2"
+                      data-bs-dismiss="modal"
+                      onClick={resetAboutForm}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Employee */}
+      {/* Edit Personal */}
+      <div className="modal fade" id="edit_personal">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Edit Personal Info</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetPersonalForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handlePersonalFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Passport No <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.passportNo}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, passportNo: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Passport Expiry Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={() =>
+                            document.getElementById('edit_personal') || document.body
+                          }
+                          placeholder="DD-MM-YYYY"
+                          value={personalFormData.passportExpiryDate}
+                          onChange={(date) =>
+                            setPersonalFormData((prev) => ({ ...prev, passportExpiryDate: date }))
+                          }
+                          required
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Nationality <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.nationality}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, nationality: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Religion</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={personalFormData.religion}
+                        onChange={(e) =>
+                          setPersonalFormData((prev) => ({ ...prev, religion: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Marital status <span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect
+                        className="select"
+                        options={martialstatus}
+                        value={
+                          martialstatus.find(
+                            (opt) => opt.value === personalFormData.maritalStatus
+                          ) || martialstatus[0]
+                        }
+                        onChange={(option) => {
+                          if (option) {
+                            setPersonalFormData((prev) => ({
+                              ...prev,
+                              maritalStatus: option.value,
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {personalFormData.maritalStatus === 'Yes' && (
+                    <>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Employment spouse</label>
+                          <select
+                            className="form-control"
+                            value={personalFormData.employmentOfSpouse ? 'Yes' : 'No'}
+                            onChange={(e) =>
+                              setPersonalFormData((prev) => ({
+                                ...prev,
+                                employmentOfSpouse: e.target.value === 'Yes',
+                              }))
+                            }
+                            required
+                          >
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">No. of children</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            value={personalFormData.noOfChildren}
+                            onChange={(e) =>
+                              setPersonalFormData((prev) => ({
+                                ...prev,
+                                noOfChildren: parseInt(e.target.value) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetPersonalForm}
+                  disabled={personalFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={personalFormLoading}>
+                  {personalFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Personal */}
+      {/* Edit Emergency Contact */}
+      <div className="modal fade" id="edit_emergency">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Emergency Contact Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetEmergencyModel}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleEmergencyFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="border-bottom mb-3 ">
+                  <div className="row">
+                    <h5 className="mb-3">Secondary Contact Details</h5>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Name <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.name}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, name: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Relationship <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.relationship}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({
+                              ...emergencyFormData,
+                              relationship: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Phone No 1 <span className="text-danger"> *</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.phone1}
+                          required
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, phone1: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Phone No 2</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={emergencyFormData.phone2}
+                          onChange={(e) =>
+                            setEmergencyFormData({ ...emergencyFormData, phone2: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetEmergencyModel}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Emergency Contact */}
+      {/* Edit Bank */}
+      <div className="modal fade" id="edit_bank">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Bank Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetBankForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleBankFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Account Holder Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter account holder name"
+                        value={bankFormData.accountHolderName}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({
+                            ...prev,
+                            accountHolderName: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Bank Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter bank name"
+                        value={bankFormData.bankName}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, bankName: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Bank Account No <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.accountNumber}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, accountNumber: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        IFSC Code <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.ifscCode}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, ifscCode: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Branch Address <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={bankFormData.branch}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({ ...prev, branch: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetBankForm}
+                  disabled={bankFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={bankFormLoading}>
+                  {bankFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Bank */}
+      {/* Add Family */}
+      <div className="modal fade" id="edit_family">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingFamilyIndex !== null ? 'Edit Family Member' : 'Add Family Member'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetFamilyForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleFamilyFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.familyMemberName}
+                        required
+                        onChange={(e) =>
+                          setFamilyFormData((prev) => ({
+                            ...prev,
+                            familyMemberName: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Relationship </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.relationship}
+                        required
+                        onChange={(e) =>
+                          setFamilyFormData((prev) => ({ ...prev, relationship: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Phone </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={familyFormData.phone}
+                        required
+                        pattern="[0-9+() ]*"
+                        title="Only numbers, +, (), and spaces are allowed"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9+() ]/g, '');
+                          setFamilyFormData((prev) => ({ ...prev, phone: value }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetFamilyForm}
+                  disabled={familyFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={familyFormLoading}>
+                  {familyFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Family */}
+      {/* Add Education */}
+      <div className="modal fade" id="edit_education">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingEducationIndex !== null ? 'Edit Education Entry' : 'Add Education Entry'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetEducationForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleEducationFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Institution Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={educationFormData.institution}
+                        required
+                        onChange={(e) => {
+                          setEducationFormData((prev) => ({
+                            ...prev,
+                            institution: e.target.value,
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Course <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={educationFormData.course}
+                        required
+                        onChange={(e) => {
+                          setEducationFormData((prev) => ({ ...prev, course: e.target.value }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Start Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={educationFormData.startDate}
+                          onChange={(date) =>
+                            setEducationFormData((prev) => ({
+                              ...prev,
+                              startDate: date || null,
+                            }))
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        End Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          required
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          value={educationFormData.endDate}
+                          onChange={(date) => {
+                            setEducationFormData((prev) => ({ ...prev, endDate: date || null }));
+                          }}
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetEducationForm}
+                  disabled={educationFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={educationFormLoading}>
+                  {educationFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Education */}
+      {/* Add Experience */}
+      <div className="modal fade" id="add_experience">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">
+                {editingExperienceIndex !== null ? 'Edit Experience Entry' : 'Add Experience Entry'}
+              </h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={resetExperienceForm}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form onSubmit={handleExperienceFormSubmit}>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Previous Company Name <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={experienceFormData.company}
+                        required
+                        onChange={(e) =>
+                          setExperienceFormData({ ...experienceFormData, company: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Designation <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={experienceFormData.designation}
+                        required
+                        onChange={(e) =>
+                          setExperienceFormData({
+                            ...experienceFormData,
+                            designation: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Start Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          required
+                          value={
+                            experienceFormData.startDate
+                              ? toDayjsDate(experienceFormData.startDate)
+                              : null
+                          }
+                          onChange={(_date, dateString) =>
+                            setExperienceFormData({
+                              ...experienceFormData,
+                              startDate: (dateString as string) || '',
+                            })
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        End Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: 'DD-MM-YYYY',
+                            type: 'mask',
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                          required
+                          value={
+                            experienceFormData.endDate
+                              ? toDayjsDate(experienceFormData.endDate)
+                              : null
+                          }
+                          onChange={(_date, dateString) =>
+                            setExperienceFormData({
+                              ...experienceFormData,
+                              endDate: (dateString as string) || '',
+                            })
+                          }
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-check-label d-flex align-items-center mt-0">
+                        <input
+                          className="form-check-input mt-0 me-2"
+                          type="checkbox"
+                          defaultChecked
+                        />
+                        <span className="text-dark">Check if you working present</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-white border me-2"
+                  data-bs-dismiss="modal"
+                  onClick={resetExperienceForm}
+                  disabled={experienceFormLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={experienceFormLoading}>
+                  {experienceFormLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Experience */}
+      {/* Add Statuorty */}
+      <div className="modal fade" id="add_bank_satutory">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Bank &amp; Statutory</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body pb-0">
+                <div className="border-bottom mb-4">
+                  <h5 className="mb-3">Basic Salary Information</h5>
+                  <div className="row mb-2">
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          Salary basis <span className="text-danger"> *</span>
+                        </label>
+                        <CommonSelect
+                          className="select"
+                          options={salaryChoose}
+                          defaultValue={salaryChoose[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Salary basis</label>
+                        <input type="text" className="form-control" defaultValue="$" required />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Payment type</label>
+                        <CommonSelect
+                          className="select"
+                          options={paymenttype}
+                          defaultValue={paymenttype[0]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-bottom mb-4">
+                  <h5 className="mb-3">PF Information</h5>
+                  <div className="row mb-2">
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">
+                          PF contribution <span className="text-danger"> *</span>
+                        </label>
+                        <CommonSelect
+                          className="select"
+                          options={pfcontribution}
+                          defaultValue={pfcontribution[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">PF No</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-3">
+                        <label className="form-label">Employee PF rate</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Additional rate</label>
+                        <CommonSelect
+                          className="select"
+                          options={additionalrate}
+                          defaultValue={additionalrate[0]}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Total rate</label>
+                        <input type="text" className="form-control" required />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <h5 className="mb-3">ESI Information</h5>
+                <div className="row">
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        ESI contribution<span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect className="select" options={esi} defaultValue={esi[0]} />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">ESI Number</label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Employee ESI rate<span className="text-danger"> *</span>
+                      </label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Additional rate</label>
+                      <CommonSelect
+                        className="select"
+                        options={additionalrate}
+                        defaultValue={additionalrate[0]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Total rate</label>
+                      <input type="text" className="form-control" required />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-white border me-2" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Add Statuorty */}
+      {/* Asset Information */}
+      <div className="modal fade" id="asset_info">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Asset Information</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="bg-light p-3 rounded show d-flex align-items-center mb-3">
+                <span className="avatar avatar-lg flex-shrink-0 me-2">
+                  <ImageWithBasePath
+                    src="assets/img/laptop.jpg"
+                    alt="img"
+                    className="ig-fluid rounded-circle"
+                  />
+                </span>
+                <div>
+                  <h6>Dell Laptop - #343556656</h6>
+                  <p className="fs-13">
+                    <span className="text-primary">AST - 001 </span>
+                    <i className="ti ti-point-filled text-primary" /> Assigned on 22 Nov, 2022
+                    10:32AM
+                  </p>
+                </div>
+              </div>
+              <div className="row">
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Type</p>
+                    <p className="text-gray-9">Laptop</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Brand</p>
+                    <p className="text-gray-9">Dell</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Category</p>
+                    <p className="text-gray-9">Computer</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Serial No</p>
+                    <p className="text-gray-9">3647952145678</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Cost</p>
+                    <p className="text-gray-9">$800</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Vendor</p>
+                    <p className="text-gray-9">Compusoft Systems Ltd.,</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Warranty</p>
+                    <p className="text-gray-9">12 Jan 2022 - 12 Jan 2026</p>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <p className="fs-13 mb-0">Location</p>
+                    <p className="text-gray-9">46 Laurel Lane, TX 79701</p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="fs-13 mb-2">Asset Images</p>
+                <div className="d-flex align-items-center">
+                  <ImageWithBasePath
+                    src="assets/img/laptop-01.jpg"
+                    alt="img"
+                    className="img-fluid rounded me-2"
+                  />
+                  <ImageWithBasePath
+                    src="assets/img/laptop-2.jpg"
+                    alt="img"
+                    className="img-fluid rounded me-2"
+                  />
+                  <ImageWithBasePath
+                    src="assets/img/laptop-3.jpg"
+                    alt="img"
+                    className="img-fluid rounded"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Asset Information */}
+      {/* Refuse */}
+      <div className="modal fade" id="refuse_msg">
+        <div className="modal-dialog modal-dialog-centered modal-md">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Raise Issue</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <form>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Description<span className="text-danger"> *</span>
+                      </label>
+                      <textarea className="form-control" rows={4} defaultValue={''} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-white border me-2" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                  Submit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {/* /Refuse */}
+
+      {/* View Policy Modal */}
+      <div className="modal fade" id="view_policy_employee">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Policy Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
               >

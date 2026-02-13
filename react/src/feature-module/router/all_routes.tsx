@@ -31,12 +31,24 @@ export const all_routes = {
   superAdminPackagesGrid: '/super-admin/package-grid',
   superAdminDomain: '/super-admin/domain',
   superAdminPurchaseTransaction: '/super-admin/purchase-transaction',
-  superAdminModules: '/super-admin/modules',
 
   calendar: '/calendar',
   dataTables: '/data-tables',
   tablesBasic: '/tables-basic',
   notes: '/notes',
+  superAdminDashboard: "/super-admin/dashboard",
+  superAdminCompanies: "/super-admin/companies",
+  superAdminSubscriptions: "/super-admin/subscription",
+  superAdminPackages: "/super-admin/package",
+  superAdminPackagesGrid: "/super-admin/package-grid",
+  superAdminDomain: "/super-admin/domain",
+  superAdminPurchaseTransaction: "/super-admin/purchase-transaction",
+  superAdminModules: "/super-admin/modules",
+
+  calendar: "/calendar",
+  dataTables: "/data-tables",
+  tablesBasic: "/tables-basic",
+  notes: "/notes",
 
   //custom routes
   validate: '/validate',
