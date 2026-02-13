@@ -7,12 +7,12 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildNotFoundError
+    asyncHandler,
+    buildNotFoundError
 } from '../../middleware/errorHandler.js';
 import { deleteDepartment as deleteDepartmentService } from '../../services/hr/hrm.department.js';
 import { extractUser, sendCreated, sendSuccess } from '../../utils/apiResponse.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+import { devError, devLog } from '../../utils/logger.js';
 
 /**
  * Helper function to check if user has required role
@@ -95,32 +95,16 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
           }
         },
         {
-          $addFields: {
-            designationIds: {
-              $map: {
-                input: '$designations',
-                as: 'des',
-                in: { $toString: '$$des._id' }
-              }
-            }
-          }
-        },
-        {
           $lookup: {
             from: 'employees',
-            let: { designationIds: '$designationIds' },
+            let: { deptIdStr: { $toString: '$_id' } },
             pipeline: [
               {
                 $match: {
                   $expr: {
                     $and: [
-                      { $in: ['$designationId', '$$designationIds'] },
-                      {
-                        $or: [
-                          { $eq: ['$status', 'active'] },
-                          { $eq: ['$status', 'Active'] }
-                        ]
-                      }
+                      { $eq: [{ $toString: '$departmentId' }, '$$deptIdStr'] },
+                      { $ne: ['$isDeleted', true] }
                     ]
                   }
                 }
@@ -174,8 +158,7 @@ export const getAllDepartments = asyncHandler(async (req, res) => {
           $project: {
             employees: 0,
             designations: 0,
-            policies: 0,
-            designationIds: 0
+            policies: 0
           }
         }
       ])

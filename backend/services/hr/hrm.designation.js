@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { client, getTenantCollections } from "../../config/db.js";
 import { AppError, buildValidationError } from "../../middleware/errorHandler.js";
@@ -258,7 +257,6 @@ export const displayDesignations = async (companyId, hrId, filters) => {
       { $match: query },
       { $sort: { createdAt: -1 } },
       // Convert IDs to strings for matching with employees collection
-      // This ensures we match employees by BOTH designationId AND departmentId
       {
         $addFields: {
           // Convert designation _id (ObjectId) to string for matching with employee.designationId
@@ -284,37 +282,20 @@ export const displayDesignations = async (companyId, hrId, filters) => {
       {
         $lookup: {
           from: "employees",
-          let: { 
-            designationIdStr: "$designationIdString",
-            departmentIdStr: "$departmentIdString"
-          },
+          let: { designationIdStr: "$designationIdString" },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
                     // Match employee.designationId (string) with designation._id (converted to string)
-                    { 
-                      $eq: [
-                        { $ifNull: ["$designationId", ""] }, 
-                        "$$designationIdStr"
-                      ] 
-                    },
-                    // Match employee.departmentId (string) with designation.departmentId (converted to string)
-                    // This ensures we only count employees in THIS department with THIS designation
-                    { 
-                      $eq: [
-                        { $ifNull: ["$departmentId", ""] }, 
-                        "$$departmentIdStr"
-                      ] 
-                    },
-                    // Only count active employees
                     {
-                      $or: [
-                        { $eq: ["$status", "active"] },
-                        { $eq: ["$status", "Active"] }
+                      $eq: [
+                        { $ifNull: ["$designationId", ""] },
+                        "$$designationIdStr"
                       ]
-                    }
+                    },
+                    { $ne: ["$isDeleted", true] }
                   ],
                 },
               },

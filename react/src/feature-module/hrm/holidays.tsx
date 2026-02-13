@@ -1,7 +1,7 @@
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -34,6 +34,21 @@ const parseDisplayDate = (value?: string | null) => {
   if (strict.isValid()) return strict;
   const fallback = dayjs(value);
   return fallback.isValid() ? fallback : null;
+};
+
+const normalizeTypeName = (name?: string | null) =>
+  (name || "").trim().toLowerCase();
+
+const dedupeHolidayTypes = (types: HolidayType[]) => {
+  const uniqueMap = new Map<string, HolidayType>();
+  types.forEach((type) => {
+    const key = normalizeTypeName(type?.name);
+    if (!key) return;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, type);
+    }
+  });
+  return Array.from(uniqueMap.values());
 };
 
 const formatDisplayDate = (value?: string | null) => {
@@ -133,8 +148,7 @@ const Holidays = () => {
 
   // Filter states
   const [filterType, setFilterType] = useState<string>("");
-  const [filterFromDate, setFilterFromDate] = useState<string>("");
-  const [filterToDate, setFilterToDate] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Stats state for displaying holiday statistics
   const [stats, setStats] = useState({
@@ -274,8 +288,17 @@ const Holidays = () => {
       date: formatDisplayDate(holiday.date),
       description: holiday.description || '',
     }));
-    setHoliday(transformedHolidays);
-    setHolidayTypes(apiHolidayTypes);
+
+    const uniqueHolidays = new Map<string, Holidays>();
+    transformedHolidays.forEach((holidayItem) => {
+      const key = holidayItem._id || `${holidayItem.title}|${holidayItem.date}|${holidayItem.holidayTypeId || ''}`;
+      if (!uniqueHolidays.has(key)) {
+        uniqueHolidays.set(key, holidayItem);
+      }
+    });
+
+    setHoliday(Array.from(uniqueHolidays.values()));
+    setHolidayTypes(dedupeHolidayTypes(apiHolidayTypes));
     setLoading(apiLoading);
   }, [apiHolidays, apiHolidayTypes, apiLoading]);
 
@@ -300,6 +323,22 @@ const Holidays = () => {
       backdrops.forEach(backdrop => backdrop.remove());
     };
   }, [showTypesModal]);
+
+  // Listen for global search events from header
+  useEffect(() => {
+    const handleGlobalSearch = (event: CustomEvent) => {
+      const { searchTerm: newSearchTerm, currentPage } = event.detail;
+      // Only update if we're on the holidays page
+      if (currentPage.includes('holidays')) {
+        setSearchTerm(newSearchTerm);
+      }
+    };
+
+    window.addEventListener('globalSearch' as any, handleGlobalSearch as EventListener);
+    return () => {
+      window.removeEventListener('globalSearch' as any, handleGlobalSearch as EventListener);
+    };
+  }, []);
 
   const handleDeleteHoliday = async (holidayId: string) => {
     try {
@@ -584,15 +623,21 @@ const Holidays = () => {
     // Set loading state
     setIsAddingType(true);
 
+    // Generate code from name
+    const typeCode = buildHolidayTypeCode(trimmedName);
+
     console.log("[Holiday Types] Creating holiday type via REST API:", {
       name: trimmedName,
+      code: typeCode,
       status: "Active"
     });
 
     // Send to backend via REST API
-    const result = await createHolidayType({ name: trimmedName });
+    const result = await createHolidayType({ name: trimmedName, code: typeCode });
 
     if (result) {
+      // Refresh holiday types to update filter dropdown
+      await fetchHolidayTypes();
       setNewTypeName("");
       setTypeValidationError("");
       setIsAddingType(false);
@@ -607,6 +652,15 @@ const Holidays = () => {
     const result = await deleteHolidayType(typeId);
 
     if (result) {
+      // Refresh holiday types to update filter dropdown
+      await fetchHolidayTypes();
+
+      // Clear filter if the deleted type was selected
+      const deletedType = holidayTypes.find(t => t._id === typeId);
+      if (deletedType && filterType === normalizeTypeName(deletedType.name)) {
+        setFilterType("");
+      }
+
       setDeletingTypeId(null);
     } else {
       setDeletingTypeId(null);
@@ -636,10 +690,15 @@ const Holidays = () => {
       return;
     }
 
+    // Generate code from name
+    const typeCode = buildHolidayTypeCode(trimmedName);
+
     // Send to backend via REST API
-    const result = await updateHolidayType(editingTypeId, { name: trimmedName });
+    const result = await updateHolidayType(editingTypeId, { name: trimmedName, code: typeCode });
 
     if (result) {
+      // Refresh holiday types to update filter dropdown
+      await fetchHolidayTypes();
       setEditingTypeId(null);
       setEditingTypeName("");
       setEditTypeValidationError("");
@@ -672,37 +731,43 @@ const Holidays = () => {
     setEditingTypeId(null);
     setEditingTypeName("");
     setEditTypeValidationError("");
+
+    // Force refresh of holiday types to ensure filter dropdown is up to date
+    fetchHolidayTypes();
   };
 
   // Filter reset function
   const handleResetFilters = () => {
     setFilterType("");
-    setFilterFromDate("");
-    setFilterToDate("");
+    setSearchTerm("");
   };
-
-  // Validate date range
-  const validateDateRange = () => {
-    if (filterFromDate && filterToDate) {
-      const fromDate = parseDisplayDate(filterFromDate);
-      const toDate = parseDisplayDate(filterToDate);
-      if (fromDate && toDate && fromDate.isAfter(toDate, "day")) {
-        toast.error("'From' date cannot be after 'To' date");
-        return false;
-      }
-    }
-    return true;
-  };
-
-  // Effect to validate date range when dates change
-  useEffect(() => {
-    validateDateRange();
-  }, [filterFromDate, filterToDate]);
 
   // Effect to recalculate stats when data changes
   useEffect(() => {
     calculateStats();
   }, [holiday, holidayTypes]);
+
+  const holidayTypeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    holidayTypes.forEach((type) => {
+      if (type._id) {
+        map.set(type._id, type.name || "");
+      }
+    });
+    return map;
+  }, [holidayTypes]);
+
+  const holidayTypeOptions = useMemo(() => {
+    const optionsMap = new Map<string, { value: string; label: string }>();
+    holidayTypes.forEach((type) => {
+      const key = normalizeTypeName(type.name);
+      if (!key) return;
+      if (!optionsMap.has(key)) {
+        optionsMap.set(key, { value: key, label: type.name.trim() || type.name });
+      }
+    });
+    return Array.from(optionsMap.values());
+  }, [holidayTypes]);
 
   // Filter holidays based on selected filters
   const getFilteredHolidays = () => {
@@ -710,29 +775,27 @@ const Holidays = () => {
 
     // Filter by type
     if (filterType) {
-      filtered = filtered.filter(h => h.holidayTypeId === filterType);
+      filtered = filtered.filter(h => {
+        const resolvedName = h.holidayTypeName || holidayTypeNameById.get(h.holidayTypeId) || "";
+        return normalizeTypeName(resolvedName) === filterType;
+      });
     }
 
-    // Filter by date range
-    if (filterFromDate || filterToDate) {
+    // Filter by search term (searches across all fields)
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(h => {
-        if (!h.date) return false;
-        const holidayDate = parseDisplayDate(h.date);
-        if (!holidayDate) return false;
+        const title = (h.title || "").toLowerCase();
+        const description = (h.description || "").toLowerCase();
+        const typeName = (h.holidayTypeName || holidayTypeNameById.get(h.holidayTypeId) || "").toLowerCase();
+        const date = h.date || "";
 
-        // Check from date
-        if (filterFromDate) {
-          const fromDate = parseDisplayDate(filterFromDate);
-          if (fromDate && holidayDate.isBefore(fromDate, "day")) return false;
-        }
-
-        // Check to date
-        if (filterToDate) {
-          const toDate = parseDisplayDate(filterToDate);
-          if (toDate && holidayDate.isAfter(toDate, "day")) return false;
-        }
-
-        return true;
+        return (
+          title.includes(searchLower) ||
+          description.includes(searchLower) ||
+          typeName.includes(searchLower) ||
+          date.includes(searchLower)
+        );
       });
     }
 
@@ -1007,73 +1070,51 @@ const Holidays = () => {
 
               {/* Filters Section */}
               <div className="d-flex align-items-center flex-wrap gap-2">
+                {/* Search Input */}
+                <div className="position-relative" style={{ minWidth: "250px" }}>
+                  <div className="input-icon-end position-relative">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      placeholder="Search holidays..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      title="Search by title, description, type, or date"
+                    />
+                    <span className="input-icon-addon">
+                      <i className="ti ti-search text-gray-7" />
+                    </span>
+                  </div>
+                </div>
+
                 {/* Type Filter */}
-                <div style={{ minWidth: "150px" }}>
+                <div style={{ minWidth: "200px" }}>
                   <CommonSelect
                     className="select-sm"
                     options={[
-                      { value: "", label: "All Types" },
-                      ...holidayTypes.map((type) => ({
-                        value: type._id,
-                        label: type.name
-                      }))
+                      { value: "", label: "All Holiday Types" },
+                      ...holidayTypeOptions
                     ]}
-                    defaultValue={
+                    value={
                       filterType
-                        ? { value: filterType, label: holidayTypes.find(t => t._id === filterType)?.name || "" }
-                        : { value: "", label: "All Types" }
+                        ? {
+                          value: filterType,
+                          label: holidayTypeOptions.find(option => option.value === filterType)?.label || ""
+                        }
+                        : { value: "", label: "All Holiday Types" }
                     }
                     onChange={(option: any) => {
-                      if (option) {
+                      if (option && option.value) {
                         setFilterType(option.value);
+                      } else {
+                        setFilterType("");
                       }
                     }}
                   />
                 </div>
 
-                {/* Date Range Filter - From */}
-                <div className="input-icon-end position-relative">
-                  <DatePicker
-                    className="form-control datetimepicker form-control-sm"
-                    format="DD-MM-YYYY"
-                    getPopupContainer={getModalContainer}
-                    placeholder="From Date"
-                    style={{ minWidth: "150px" }}
-                    value={parseDisplayDate(filterFromDate) || null}
-                    onChange={(date) => {
-                      const formattedDate = date ? date.format(DATE_FORMAT) : "";
-                      setFilterFromDate(formattedDate);
-                    }}
-                  />
-                  <span className="input-icon-addon">
-                    <i className="ti ti-calendar text-gray-7" />
-                  </span>
-                </div>
-
-                {/* Date Range Separator */}
-                <span className="text-muted">-</span>
-
-                {/* Date Range Filter - To */}
-                <div className="input-icon-end position-relative">
-                  <DatePicker
-                    className="form-control datetimepicker form-control-sm"
-                    format="DD-MM-YYYY"
-                    getPopupContainer={getModalContainer}
-                    placeholder="To Date"
-                    style={{ minWidth: "150px" }}
-                    value={parseDisplayDate(filterToDate) || null}
-                    onChange={(date) => {
-                      const formattedDate = date ? date.format(DATE_FORMAT) : "";
-                      setFilterToDate(formattedDate);
-                    }}
-                  />
-                  <span className="input-icon-addon">
-                    <i className="ti ti-calendar text-gray-7" />
-                  </span>
-                </div>
-
                 {/* Reset Filter Button */}
-                {(filterType || filterFromDate || filterToDate) && (
+                {(filterType || searchTerm) && (
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-secondary"

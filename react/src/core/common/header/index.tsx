@@ -1,16 +1,18 @@
-import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useClerk, useUser } from "@clerk/clerk-react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useUser, useClerk, UserProfile, UserButton } from "@clerk/clerk-react";
-import { setDataLayout } from "../../data/redux/themeSettingSlice";
-import ImageWithBasePath from "../imageWithBasePath";
+import { Link, useLocation } from "react-router-dom";
+import { all_routes } from "../../../feature-module/router/all_routes";
+import { useGlobalSearch } from "../../../hooks/useGlobalSearch";
+import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
+import { HorizontalSidebarData } from "../../data/json/horizontalSidebar";
 import {
   setMobileSidebar,
-  toggleMiniSidebar,
+  toggleMiniSidebar
 } from "../../data/redux/sidebarSlice";
-import { all_routes } from "../../../feature-module/router/all_routes";
-import { HorizontalSidebarData } from "../../data/json/horizontalSidebar";
-import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
+import { setDataLayout } from "../../data/redux/themeSettingSlice";
+import ImageWithBasePath from "../imageWithBasePath";
+import SearchResultsDropdown from "../SearchResultsDropdown";
 import "./customclerk.css";
 
 const Header = (): JSX.Element => {
@@ -28,6 +30,68 @@ const Header = (): JSX.Element => {
 
   const [subOpen, setSubopen] = useState<any>("");
   const [subsidebar, setSubsidebar] = useState("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Global search hook
+  const { search, results, isLoading } = useGlobalSearch();
+
+  // Debounced search with 300ms delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm.trim()) {
+        search(searchTerm);
+        setSearchDropdownOpen(true);
+      } else {
+        setSearchDropdownOpen(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, search]);
+
+  // Handle search - emit event for page-specific handling
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    // Dispatch custom event for page-specific search handling
+    window.dispatchEvent(
+      new CustomEvent("globalSearch", { detail: { searchTerm: value, currentPage: Location.pathname } })
+    );
+  };
+
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setSearchDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // CTRL + / keyboard shortcut to focus search input
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "/") {
+        event.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Get user details with fallbacks
   const getUserName = () => {
@@ -206,18 +270,43 @@ const Header = (): JSX.Element => {
                 >
                   <i className="ti ti-arrow-bar-to-left"></i>
                 </Link>
-                <div className="input-group input-group-flat d-inline-flex me-1">
+                <div className="input-group input-group-flat d-inline-flex me-1" ref={searchContainerRef} style={{ position: 'relative' }}>
                   <span className="input-icon-addon">
                     <i className="ti ti-search"></i>
                   </span>
                   <input
+                    ref={searchInputRef}
                     type="text"
                     className="form-control"
                     placeholder="Search in HRMS"
+                    value={searchTerm}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    onFocus={() => searchTerm.trim() && setSearchDropdownOpen(true)}
+                    title="Search across pages (CTRL + /)"
+                    autoComplete="off"
                   />
-                  <span className="input-group-text">
-                    <kbd>CTRL + / </kbd>
-                  </span>
+                  {isLoading && (
+                    <span className="input-group-text" style={{ cursor: 'default' }}>
+                      <div className="spinner-border spinner-border-sm" style={{ width: '1rem', height: '1rem' }} role="status">
+                        <span className="sr-only">Loading...</span>
+                      </div>
+                    </span>
+                  )}
+                  {!isLoading && (
+                    <span className="input-group-text">
+                      <kbd>CTRL + / </kbd>
+                    </span>
+                  )}
+                  <SearchResultsDropdown
+                    results={results}
+                    isLoading={isLoading}
+                    isOpen={searchDropdownOpen}
+                    searchTerm={searchTerm}
+                    onSelect={() => {
+                      setSearchTerm("");
+                      setSearchDropdownOpen(false);
+                    }}
+                  />
                 </div>
                 <div className="dropdown crm-dropdown">
                   <Link

@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import { client, getTenantCollections } from "../../config/db.js";
 import { AppError, buildValidationError } from "../../middleware/errorHandler.js";
@@ -191,32 +190,16 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
         },
       },
       {
-        $addFields: {
-          designationIds: {
-            $map: {
-              input: "$designations",
-              as: "des",
-              in: { $toString: "$$des._id" }
-            }
-          }
-        }
-      },
-      {
         $lookup: {
           from: "employees",
-          let: { designationIds: "$designationIds" },
+          let: { deptIdStr: "$departmentIdString" },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $in: ["$designationId", "$$designationIds"] },
-                    {
-                      $or: [
-                        { $eq: ["$status", "active"] },
-                        { $eq: ["$status", "Active"] }
-                      ]
-                    }
+                    { $eq: [{ $toString: "$departmentId" }, "$$deptIdStr"] },
+                    { $ne: ["$isDeleted", true] }
                   ],
                 },
               },
@@ -264,7 +247,7 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
           policyCount: { $size: "$policies" },
         },
       },
-      { $project: { employees: 0, designations: 0, policies: 0, departmentIdString: 0, designationIds: 0 } },
+      { $project: { employees: 0, designations: 0, policies: 0, departmentIdString: 0 } },
     ];
 
     const departments = await collections.departments
@@ -343,12 +326,12 @@ export const updateDepartment = async (companyId, hrId, payload) => {
       // Check for duplicate department name (case-insensitive)
       const departmentName = payload.department.trim();
       const escapedName = departmentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
+
       const duplicateExists = await collections.departments.countDocuments({
         department: { $regex: new RegExp(`^${escapedName}$`, "i") },
         _id: { $ne: departmentId },
       });
-      
+
       if (duplicateExists > 0) {
         return { done: false, error: "Department already exists" };
       }
