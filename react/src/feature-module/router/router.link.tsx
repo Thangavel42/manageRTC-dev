@@ -251,6 +251,7 @@ import Preference from '../settings/websiteSettings/preferences';
 import Prefixes from '../settings/websiteSettings/prefixes';
 import Seosettings from '../settings/websiteSettings/seo-settings';
 import SuperAdminDashboard from '../super-admin/dashboard';
+import Modules from '../super-admin/modules';
 import PermissionPage from '../super-admin/permissionpage';
 import RolesPermission from '../super-admin/rolePermission';
 import Users from '../super-admin/users';
@@ -271,8 +272,8 @@ import Permission from '../userManagement/permission';
 import RolesPermissions from '../userManagement/rolesPermissions';
 
 import Invoices from '../finance-accounts/sales/invoices';
-import AttendanceEmployee from '../hrm/attendance/attendance_employee';
 import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
+import AttendanceEmployee from '../hrm/attendance/attendance_employee';
 import BatchesList from '../hrm/attendance/batchesList';
 import LeaveAdmin from '../hrm/attendance/leaves/leaveAdmin';
 import LeaveEmployee from '../hrm/attendance/leaves/leaveEmployee';
