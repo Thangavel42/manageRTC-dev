@@ -10,8 +10,7 @@ import CommonSelect from "../../../core/common/commonSelect";
 import { DatePicker } from "antd";
 import ReactApexChart from "react-apexcharts";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useSocket } from "../../../SocketContext";
-import { Socket } from "socket.io-client";
+import { useSuperadminCompaniesREST } from "../../../hooks/useSuperadminCompaniesREST";
 import "react-toastify/dist/ReactToastify.css";
 import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
@@ -22,8 +21,27 @@ import Footer from "../../../core/common/footer";
 type PasswordField = "password" | "confirmPassword";
 
 const Companies = () => {
-  // Socket
-  const socket = useSocket() as Socket | null;
+  // REST API Hook
+  const {
+    packages,
+    companies,
+    stats,
+    companyDetails,
+    packagesLoading,
+    companiesLoading,
+    statsLoading,
+    detailsLoading,
+    editDetailsLoading,
+    fetchPackages,
+    fetchCompanies,
+    fetchStats,
+    viewCompany,
+    fetchEditCompany,
+    addCompany,
+    updateCompany,
+    deleteCompany,
+  } = useSuperadminCompaniesREST();
+
   const [resetKey, setResetKey] = useState(0);
   const [deleteplan, setdeleteplan] = useState<any>([]);
   const [deleteLoader, setdeleteLoader] = useState(false);
@@ -67,14 +85,16 @@ const Companies = () => {
     logo: "",
   });
 
-  const viewCompanyDetails = (id: string) => {
+  const viewCompanyDetails = async (id: string) => {
     setviewcompanyloader(true);
-    socket?.emit("superadmin/companies/view-company", id);
+    await viewCompany(id);
+    setviewcompanyloader(false);
   };
 
-  const editcompany = (id: string) => {
+  const editcompany = async (id: string) => {
     seteditcompanyloader(true);
-    socket?.emit("superadmin/companies/view-company", id, true);
+    await fetchEditCompany(id);
+    seteditcompanyloader(false);
   };
 
   const columns = [
@@ -490,200 +510,43 @@ const Companies = () => {
     clearFieldError(name);
   };
 
-  // Socket Requests
-
-  // Fetch All Package Details
+  // REST API Requests - Fetch initial data
 
   useEffect(() => {
-    if (!socket) return;
-    socket.emit("superadmin/companies/fetch-packages");
-    socket.emit("superadmin/companies/fetch-companylist", "All");
-    socket.emit("superadmin/companies/fetch-companystats");
-  }, [socket]);
+    const fetchInitialData = async () => {
+      await fetchPackages();
+      await fetchCompanies();
+      await fetchStats();
+    };
+    fetchInitialData();
+  }, []);
+
+  // Update state when REST API data changes
+  useEffect(() => {
+    if (packages.length > 0) {
+      setPackage(packages);
+      setPlanName(packages.map(p => ({ label: p.plan_name, value: p.id })));
+    }
+  }, [packages]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (companies.length > 0) {
+      setData(companies);
+      settableLoading(false);
+    }
+  }, [companies]);
 
-    type PackageItem = {
-      id: string;
-      plan_name: string;
-      plan_type: string;
-      currency: string;
-    };
+  useEffect(() => {
+    if (stats) {
+      setcompany_details(stats);
+    }
+  }, [stats]);
 
-    type PackageSelectOption = {
-      label: string;
-      value: string;
-    };
-
-    type FetchPackagesResponse = {
-      done: boolean;
-      data?: PackageItem[];
-      show?: PackageSelectOption[];
-      error?: any;
-    };
-
-    const fetchpackageHandler = (response: FetchPackagesResponse) => {
-      if (response.done && response.data) {
-        console.log(response);
-        setPackage(response.data);
-        setPlanName(response.show ?? []);
-      } else {
-        toast.error("Failed to fetch packages", {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: true,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-
-        console.error("Package fetch error:", response.error);
-      }
-    };
-
-    const addCompanyHandler = (response: FetchPackagesResponse) => {
-      if (response.done) {
-        setIsLoading(false);
-        reset_form();
-        toast.success("Company Added Successfully");
-      } else {
-        setIsLoading(false);
-        toast.error("Failed to add company");
-        console.log(response.error);
-      }
-    };
-
-    const companylistResponse = (response: FetchPackagesResponse) => {
-      if (response.done && Array.isArray(response.data)) {
-        settableLoading(false);
-        setData(response.data);
-      } else {
-        console.error("Invalid data format:", response);
-      }
-    };
-
-    const companyStatsHandler = (response: FetchPackagesResponse) => {
-      if (response.done) {
-        setcompany_details(response.data);
-      } else {
-        console.error("Invalid data format, stats company:", response);
-      }
-    };
-
-    const deleteCompanyHandler = (response: FetchPackagesResponse) => {
-      setdeleteLoader(false);
-      if (response.done) {
-        toast.success("Deletion Successful");
-      } else {
-        toast.error("Deletion Failed");
-        console.log(response.error);
-      }
-    };
-
-    const viewcompanyHandler = (response: any) => {
-      if (response.done) {
-        setcompanydetail(response.data);
-        setviewcompanyloader(false);
-      } else {
-        toast.error("Cannot fetch the details");
-        setviewcompanyloader(false);
-      }
-    };
-
-    const editviewcompanyHandler = (response: any) => {
-      if (response.done) {
-        setFormData(response.data);
-        setLogo(response.data.logo);
-        seteditcompanyloader(false);
-      } else {
-        toast.error("Error fetching the details");
-        console.log(response.error);
-      }
-    };
-
-    const handleEditCompany = (response: any) => {
-      if (response.done) {
-        reset_form();
-        setisLoadingediting(false);
-        toast.success("Company Updated Successfully");
-      } else {
-        toast.error("Company Updated failed");
-        console.log(response.error);
-      }
-    };
-
-    socket.on(
-      "superadmin/companies/fetch-packages-response",
-      fetchpackageHandler
-    );
-
-    socket.on("superadmin/companies/add-company-response", addCompanyHandler);
-
-    // Page inital loading Response
-    socket.on(
-      "superadmin/companies/fetch-companylist-response",
-      companylistResponse
-    );
-
-    socket.on(
-      "superadmin/companies/fetch-companystats-response",
-      companyStatsHandler
-    );
-
-    socket.on(
-      "superadmin/companies/delete-company-response",
-      deleteCompanyHandler
-    );
-
-    // View spefic company
-    socket.on("superadmin/companies/view-company-response", viewcompanyHandler);
-
-    socket.on(
-      "superadmin/companies/editview-company-response",
-      editviewcompanyHandler
-    );
-
-    socket.on("superadmin/companies/edit-company-response", handleEditCompany);
-
-    return () => {
-      socket.off(
-        "superadmin/companies/fetch-packages-response",
-        fetchpackageHandler
-      );
-      socket.off(
-        "superadmin/companies/add-company-response",
-        addCompanyHandler
-      );
-      socket.off(
-        "superadmin/companies/fetch-companylist-response",
-        companylistResponse
-      );
-
-      socket.off(
-        "superadmin/companies/fetch-companystats-response",
-        companyStatsHandler
-      );
-      socket.off(
-        "superadmin/companies/delete-company-response",
-        deleteCompanyHandler
-      );
-      socket.off(
-        "superadmin/companies/view-company-response",
-        viewcompanyHandler
-      );
-
-      socket.off(
-        "superadmin/companies/editview-company-response",
-        editviewcompanyHandler
-      );
-
-      socket.off(
-        "superadmin/companies/edit-company-response",
-        handleEditCompany
-      );
-    };
-  }, [socket]);
+  useEffect(() => {
+    if (companyDetails) {
+      setcompanydetail(companyDetails);
+    }
+  }, [companyDetails]);
 
   // Host Fetch Dynamic
 
@@ -703,7 +566,7 @@ const Companies = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     // Validate form using the new validation function
     if (!validateForm()) {
       toast.error("Please fill in all required fields.", {
@@ -727,8 +590,17 @@ const Companies = () => {
 
     console.log("[DEV] - ", formDataWithLogo);
 
-    socket?.emit("superadmin/companies/add-company", formDataWithLogo);
+    const success = await addCompany(formDataWithLogo as any);
+    setIsLoading(false);
+
+    if (success) {
+      reset_form();
+      toast.success("Company Added Successfully");
+    } else {
+      toast.error("Failed to add company");
+    }
   };
+
   const EdithandleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     // Validate required fields
@@ -767,9 +639,6 @@ const Companies = () => {
     setisLoadingediting(true); // Enable loading state
 
     // Prepare the data to be submitted
-
-    // Emit the data via socket
-
     const formDataWithLogo = {
       ...formData,
       logo: logo,
@@ -777,7 +646,15 @@ const Companies = () => {
 
     console.log("[DEV] - ", formDataWithLogo);
 
-    socket?.emit("superadmin/companies/edit-company", formDataWithLogo);
+    const success = await updateCompany(formDataWithLogo as any);
+    setisLoadingediting(false);
+
+    if (success) {
+      reset_form();
+      toast.success("Company Updated Successfully");
+    } else {
+      toast.error("Company Update failed");
+    }
   };
 
   // Reset form
@@ -809,11 +686,18 @@ const Companies = () => {
 
   // Delete Companies
 
-  const DeletePlan = () => {
+  const DeletePlan = async () => {
     if (deleteplan.length > 0) {
       setdeleteLoader(true);
-      socket?.emit("superadmin/companies/delete-company", deleteplan);
+      const success = await deleteCompany(deleteplan[0]);
+      setdeleteLoader(false);
       setdeleteplan([]);
+
+      if (success) {
+        toast.success("Deletion Successful");
+      } else {
+        toast.error("Deletion Failed");
+      }
     }
   };
 

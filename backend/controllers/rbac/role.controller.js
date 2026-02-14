@@ -58,11 +58,14 @@ export const getRoleById = async (req, res) => {
 /**
  * Create a new role
  * @route POST /api/rbac/roles
+ * SECURITY: Checks creator's role level before allowing creation
  */
 export const createRole = async (req, res) => {
   const userId = req.user?.id || null;
+  // Get user's role ID from auth middleware or user object
+  const creatorRoleId = req.user?.roleId || req.user?.role?._id || null;
 
-  const result = await roleService.createRole(req.body, userId);
+  const result = await roleService.createRole(req.body, creatorRoleId);
 
   if (!result.success) {
     return res.status(400).json({

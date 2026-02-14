@@ -1,13 +1,65 @@
 /**
- * Role Service
+ * Role Service (Junction Table Approach)
  * Handles role-related business logic
- * Now uses embedded permissions structure (no junction table)
+ * Permissions stored in role_permissions junction table (PRIMARY)
  */
 
 import Role from '../../models/rbac/role.schema.js';
-import Permission from '../../models/rbac/permission.schema.js';
-// Keep RolePermission import for backward compatibility during migration
 import RolePermission from '../../models/rbac/rolePermission.schema.js';
+
+/**
+ * Check if a role can create another role with specified level
+ * SECURITY: Prevents privilege escalation
+ * @param {String} creatorRoleId - Role ID of the user creating the role
+ * @param {Number} targetLevel - Level of the role to be created
+ * @returns {Boolean} - True if allowed
+ */
+export async function canCreateRoleWithLevel(creatorRoleId, targetLevel) {
+  try {
+    const creatorRole = await Role.findById(creatorRoleId).lean();
+    if (!creatorRole) return false;
+
+    // Super Admin (level 1) can create any role
+    if (creatorRole.level === 1) return true;
+
+    // System roles can only be created by Super Admin
+    if (targetLevel <= 10 && creatorRole.level > 1) return false;
+
+    // Can only create roles with equal or higher level number (lower privilege)
+    return targetLevel >= creatorRole.level;
+  } catch (error) {
+    console.error('Error checking role creation permission:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if a role can assign another role
+ * SECURITY: Prevents privilege escalation via role assignment
+ * @param {String} assignerRoleId - Role ID of the user assigning the role
+ * @param {String} targetRoleId - Role ID to be assigned
+ * @returns {Boolean} - True if allowed
+ */
+export async function canAssignRole(assignerRoleId, targetRoleId) {
+  try {
+    const assignerRole = await Role.findById(assignerRoleId).lean();
+    const targetRole = await Role.findById(targetRoleId).lean();
+
+    if (!assignerRole || !targetRole) return false;
+
+    // Super Admin can assign any role
+    if (assignerRole.level === 1) return true;
+
+    // Cannot assign system roles (level <= 10)
+    if (targetRole.level <= 10) return false;
+
+    // Cannot assign roles with higher privilege (lower level number)
+    return targetRole.level >= assignerRole.level;
+  } catch (error) {
+    console.error('Error checking role assignment permission:', error);
+    return false;
+  }
+}
 
 /**
  * Get all active roles
@@ -90,9 +142,21 @@ export async function getRoleByName(roleName) {
 
 /**
  * Create a new role
+ * Includes level-based security check
  */
-export async function createRole(roleData, userId = null) {
+export async function createRole(roleData, creatorRoleId = null) {
   try {
+    // SECURITY: Check if creator's role can create role with this level
+    if (creatorRoleId && roleData.level) {
+      const canCreate = await canCreateRoleWithLevel(creatorRoleId, roleData.level);
+      if (!canCreate) {
+        return {
+          success: false,
+          error: 'You do not have permission to create a role with this privilege level',
+        };
+      }
+    }
+
     // Check if role name already exists
     const nameExists = await Role.nameExists(roleData.name);
     if (nameExists) {
@@ -105,8 +169,8 @@ export async function createRole(roleData, userId = null) {
     // Create role
     const role = new Role({
       ...roleData,
-      createdBy: userId,
-      updatedBy: userId,
+      createdBy: creatorRoleId,
+      updatedBy: creatorRoleId,
     });
     await role.save();
 
@@ -183,6 +247,7 @@ export async function updateRole(roleId, updateData, userId = null) {
 
 /**
  * Delete a role (soft delete)
+ * Also removes permissions from junction table
  */
 export async function deleteRole(roleId) {
   try {
@@ -206,18 +271,9 @@ export async function deleteRole(roleId) {
     role.isDeleted = true;
     role.deletedAt = new Date();
     role.isActive = false;
-
-    // Clear embedded permissions
-    role.permissions = [];
-    role.permissionStats = {
-      totalPermissions: 0,
-      categories: [],
-      lastUpdatedAt: new Date()
-    };
-
     await role.save();
 
-    // Also delete from junction table for backward compatibility
+    // Delete permissions from junction table
     await RolePermission.deleteMany({ roleId });
 
     return {
@@ -235,7 +291,7 @@ export async function deleteRole(roleId) {
 
 /**
  * Get roles with their permission summary
- * Now uses embedded permissions array instead of junction table
+ * Uses Junction Table for permission count
  */
 export async function GetRolesWithPermissionSummary() {
   try {
@@ -243,18 +299,11 @@ export async function GetRolesWithPermissionSummary() {
       .sort({ level: 1, displayName: 1 })
       .lean();
 
-    // Use embedded permissions count for each role
+    // Get permission count from junction table for each role
     for (const role of roles) {
-      // Check if using new embedded structure
-      if (role.permissions && Array.isArray(role.permissions)) {
-        role.permissionCount = role.permissions.length;
-        role.categories = role.permissionStats?.categories || [];
-      } else {
-        // Fallback to junction table for backward compatibility
-        const permissionCount = await RolePermission.countDocuments({ roleId: role._id });
-        role.permissionCount = permissionCount;
-        role.categories = [];
-      }
+      const summary = await RolePermission.getPermissionSummary(role._id);
+      role.permissionCount = summary.totalPermissions;
+      role.categories = summary.categories;
     }
 
     return {
@@ -298,218 +347,6 @@ export async function toggleRoleStatus(roleId) {
   }
 }
 
-// ============================================
-// EMBEDDED PERMISSIONS METHODS (New Structure)
-// ============================================
-
-/**
- * Get all permissions for a role (grouped by category)
- */
-export async function getRolePermissionsGrouped(roleId) {
-  try {
-    const role = await Role.findById(roleId).select('permissions permissionStats').lean();
-    if (!role) {
-      return {
-        success: false,
-        error: 'Role not found',
-      };
-    }
-
-    // Group permissions by category
-    const grouped = role.permissions?.reduce((acc, perm) => {
-      if (!acc[perm.category]) {
-        acc[perm.category] = [];
-      }
-      acc[perm.category].push(perm);
-      return acc;
-    }, {}) || {};
-
-    const result = Object.entries(grouped).map(([category, permissions]) => ({
-      category,
-      permissions: permissions.sort((a, b) => a.module.localeCompare(b.module))
-    })).sort((a, b) => a.category.localeCompare(b.category));
-
-    return {
-      success: true,
-      data: result,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
- * Set all permissions for a role
- */
-export async function setRolePermissions(roleId, permissionsData) {
-  try {
-    const role = await Role.findById(roleId);
-    if (!role) {
-      return {
-        success: false,
-        error: 'Role not found',
-      };
-    }
-
-    // Build permissions array with all required fields
-    const permissions = await Promise.all(permissionsData.map(async (p) => {
-      const perm = await Permission.findById(p.permissionId);
-      if (!perm) {
-        throw new Error(`Permission not found: ${p.permissionId}`);
-      }
-
-      return {
-        permissionId: perm._id,
-        module: perm.module,
-        category: perm.category,
-        displayName: perm.displayName,
-        actions: p.actions || { all: false }
-      };
-    }));
-
-    // Calculate categories
-    const categories = [...new Set(permissions.map(p => p.category))];
-
-    // Update role with embedded permissions
-    role.permissions = permissions;
-    role.permissionStats = {
-      totalPermissions: permissions.length,
-      categories: categories,
-      lastUpdatedAt: new Date()
-    };
-    role.updatedAt = new Date();
-
-    await role.save();
-
-    return {
-      success: true,
-      data: role,
-      message: `Updated ${permissions.length} permissions for role ${role.displayName}`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
- * Update a single permission action for a role
- */
-export async function updateRolePermissionAction(roleId, permissionId, actions) {
-  try {
-    const role = await Role.findById(roleId);
-    if (!role) {
-      return {
-        success: false,
-        error: 'Role not found',
-      };
-    }
-
-    // Find and update the permission
-    const permIndex = role.permissions.findIndex(p => p.permissionId.toString() === permissionId);
-    if (permIndex === -1) {
-      return {
-        success: false,
-        error: 'Permission not found in role',
-      };
-    }
-
-    // Update actions
-    role.permissions[permIndex].actions = actions;
-    role.updatedAt = new Date();
-    role.permissionStats.lastUpdatedAt = new Date();
-
-    await role.save();
-
-    return {
-      success: true,
-      data: role,
-      message: 'Permission updated successfully',
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
- * Check if role has specific permission and action
- */
-export async function checkRolePermission(roleId, module, action = 'read') {
-  try {
-    const role = await Role.findById(roleId).select('permissions').lean();
-    if (!role) {
-      return {
-        success: false,
-        hasPermission: false,
-        error: 'Role not found',
-      };
-    }
-
-    const perm = role.permissions?.find(p => p.module === module);
-    if (!perm) {
-      return {
-        success: true,
-        hasPermission: false,
-      };
-    }
-
-    // Check 'all' first
-    if (perm.actions.all) {
-      return {
-        success: true,
-        hasPermission: true,
-      };
-    }
-
-    // Check specific action
-    const hasPermission = perm.actions[action] || false;
-
-    return {
-      success: true,
-      hasPermission,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      hasPermission: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
- * Get role with all permissions (populated)
- */
-export async function getRoleWithPermissions(roleId) {
-  try {
-    const role = await Role.findById(roleId).lean();
-    if (!role) {
-      return {
-        success: false,
-        error: 'Role not found',
-      };
-    }
-
-    return {
-      success: true,
-      data: role,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
 export default {
   getAllRoles,
   getRoleById,
@@ -519,10 +356,7 @@ export default {
   deleteRole,
   GetRolesWithPermissionSummary,
   toggleRoleStatus,
-  // New methods
-  getRolePermissionsGrouped,
-  setRolePermissions,
-  updateRolePermissionAction,
-  checkRolePermission,
-  getRoleWithPermissions,
+  // Security helpers
+  canCreateRoleWithLevel,
+  canAssignRole,
 };

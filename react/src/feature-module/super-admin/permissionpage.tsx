@@ -5,7 +5,7 @@ import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
 
 // API Base URL
-const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 
 // Types
 interface PermissionAction {
@@ -16,19 +16,29 @@ interface PermissionAction {
   delete: boolean;
   import: boolean;
   export: boolean;
+  approve?: boolean;
+  assign?: boolean;
 }
 
 interface RolePermission {
   permissionId: string;
+  pageId?: string | null;  // NEW: Page reference for new RBAC structure
   module: string;
   displayName: string;
   category: string;
+  route?: string | null;   // NEW: Route from linked page
   actions: PermissionAction;
 }
 
 interface GroupedPermissions {
   category: string;
   permissions: RolePermission[];
+}
+
+// Interface for assigned permission data stored in map
+interface AssignedPermissionData {
+  actions: PermissionAction;
+  pageId?: string | null;
 }
 
 const ACTIONS = ['all', 'read', 'create', 'write', 'delete', 'import', 'export'] as const;
@@ -63,6 +73,7 @@ const PermissionPage = () => {
   const [allPermissions, setAllPermissions] = useState<GroupedPermissions[]>([]); // All available permissions
   const [groupedPermissions, setGroupedPermissions] = useState<GroupedPermissions[]>([]); // Current role's permissions
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [currentUserRole, setCurrentUserRole] = useState<any>(null);
 
   // Fetch roles and all permissions on mount
   useEffect(() => {
@@ -89,6 +100,11 @@ const PermissionPage = () => {
         // Auto-select first role if available
         if (data.data && data.data.length > 0) {
           setSelectedRole(data.data[0]);
+        }
+        // Get current user's role from window object (set by Clerk auth)
+        const userRole = (window as any).user?.role || (window as any).user?.roleId;
+        if (userRole) {
+          setCurrentUserRole(userRole);
         }
       }
     } catch (error) {
@@ -120,14 +136,17 @@ const PermissionPage = () => {
 
       if (data.success) {
         // Create a map of assigned permissions for quick lookup
-        const assignedPermsMap = new Map<string, PermissionAction>();
+        const assignedPermsMap = new Map<string, AssignedPermissionData>();
 
         if (data.data.flat && data.data.flat.length > 0) {
           // Role has embedded permissions
           data.data.flat.forEach((perm: any) => {
             // Handle both ObjectId and string permissionId
             const permId = typeof perm.permissionId === 'object' ? perm.permissionId._id || perm.permissionId.toString() : perm.permissionId;
-            assignedPermsMap.set(permId, perm.actions);
+            assignedPermsMap.set(permId, {
+              actions: perm.actions,
+              pageId: perm.pageId,  // NEW: Include pageId
+            });
           });
         }
 
@@ -137,10 +156,11 @@ const PermissionPage = () => {
           permissions: group.permissions.map(perm => {
             // Handle both ObjectId and string permissionId
             const permId = perm.permissionId ? (typeof perm.permissionId === 'object' ? (perm.permissionId as any)._id || String(perm.permissionId) : perm.permissionId) : '';
-            const assignedActions = assignedPermsMap.get(permId);
+            const assignedData = assignedPermsMap.get(permId);
             return {
               ...perm,
-              actions: assignedActions || { ...EMPTY_ACTIONS },
+              actions: assignedData?.actions || { ...EMPTY_ACTIONS },
+              pageId: assignedData?.pageId || perm.pageId,  // NEW: Include pageId
             };
           }),
         }));
@@ -164,16 +184,16 @@ const PermissionPage = () => {
     setExpandedCategories(newExpanded);
   };
 
-  const handleActionChange = async (permissionId: string, action: string, currentValue: boolean) => {
+  const handleActionChange = async (pageId: string, action: string, currentValue: boolean) => {
     // Compute new permissions state
     const newGroupedPermissions = groupedPermissions.map(group => ({
       ...group,
       permissions: group.permissions.map(perm => {
-        // Handle both ObjectId and string permissionId comparison
-        const permId = perm.permissionId ? (typeof perm.permissionId === 'object' ? (perm.permissionId as any)._id || String(perm.permissionId) : perm.permissionId) : '';
-        const targetId = permissionId ? (typeof permissionId === 'object' ? (permissionId as any)._id || String(permissionId) : permissionId) : '';
+        // Use pageId as primary key for Junction Table approach
+        const permPageId = perm.pageId ? (typeof perm.pageId === 'object' ? (perm.pageId as any)._id || String(perm.pageId) : perm.pageId) : '';
+        const targetPageId = pageId ? (typeof pageId === 'object' ? (pageId as any)._id || String(pageId) : pageId) : '';
 
-        if (permId === targetId) {
+        if (permPageId === targetPageId) {
           const newActions = { ...perm.actions, [action]: !currentValue };
 
           // If "all" is checked, check all other actions
@@ -231,6 +251,7 @@ const PermissionPage = () => {
 
           if (hasAnyAction) {
             flatPermissions.push({
+              pageId: perm.pageId,
               permissionId: perm.permissionId,
               actions: perm.actions,
             });
@@ -302,12 +323,119 @@ const PermissionPage = () => {
             </div>
           </div>
 
+          {/* Stats Cards */}
+          <div className="row">
+            {/* Current User Role */}
+            {currentUserRole && (
+              <div className="col-lg-3 col-md-6 d-flex">
+                <div className="card flex-fill">
+                  <div className="card-body d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center overflow-hidden">
+                      <div>
+                        <span className="avatar avatar-lg bg-primary rounded-circle">
+                          <i className="ti ti-user" />
+                        </span>
+                      </div>
+                      <div className="ms-2 overflow-hidden">
+                        <p className="fs-12 fw-medium mb-1 text-truncate">
+                          Your Role
+                        </p>
+                        <h6 className="text-truncate mb-0">{currentUserRole.displayName || 'Guest'}</h6>
+                        <small className="text-muted">Level: {currentUserRole.level || 'N/A'}</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Total Permissions */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-dark rounded-circle">
+                        <i className="ti ti-shield" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Total Permissions
+                      </p>
+                      <h4>{groupedPermissions.reduce((acc, g) => acc + g.permissions.length, 0)}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Total Permissions */}
+            {/* Active Permissions */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-success rounded-circle">
+                        <i className="ti ti-check" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Active Permissions
+                      </p>
+                      <h4>{groupedPermissions.reduce((acc, g) => acc + g.permissions.filter(p => p.actions.all || p.actions.read || p.actions.create || p.actions.write || p.actions.delete || p.actions.import || p.actions.export).length, 0)}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Active Permissions */}
+            {/* Selected Role */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-info rounded-circle">
+                        <i className="ti ti-folder" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Categories
+                      </p>
+                      <h4>{groupedPermissions.length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Categories */}
+          </div>
+          {/* /Stats Cards */}
+
           {/* Role Selector */}
           <div className="card mb-3">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <div>
+                <h5 className="mb-0">Role Configuration</h5>
+                <small className="text-muted">
+                  Editing: <strong className="text-primary">{selectedRole?.displayName || 'None'}</strong>
+                  {selectedRole?.type === 'system' && (
+                    <span className="badge bg-info ms-2">System Role</span>
+                  )}
+                </small>
+              </div>
+              {selectedRole?.level && currentUserRole && selectedRole.level < currentUserRole.level && (
+                <span className="badge bg-warning">
+                  <i className="ti ti-lock me-1"></i>Higher privilege than yours
+                </span>
+              )}
+            </div>
             <div className="card-body">
               <div className="row align-items-center">
-                <div className="col-md-3">
-                  <label className="form-label">Select Role</label>
+                <div className="col-md-4">
+                  <label className="form-label">Select Role to Edit</label>
                   <select
                     className="form-select"
                     value={selectedRole?._id || ''}
@@ -320,16 +448,25 @@ const PermissionPage = () => {
                     ))}
                   </select>
                 </div>
-                <div className="col-md-9">
+                <div className="col-md-8">
                   <p className="mb-0">
                     <strong>Role:</strong> <span className="text-primary">{selectedRole?.displayName}</span>
                     {selectedRole?.type === 'system' && (
                       <span className="badge bg-info ms-2">System Role</span>
                     )}
+                    {selectedRole?.level !== undefined && (
+                      <span className="badge bg-secondary ms-2">Level: {selectedRole.level}</span>
+                    )}
                     {selectedRole?.description && (
                       <span className="text-muted ms-2">- {selectedRole.description}</span>
                     )}
                   </p>
+                  {currentUserRole && selectedRole && (
+                    <small className="text-muted">
+                      <i className="ti ti-info me-1"></i>
+                      Your Level: {currentUserRole.level} {selectedRole.level < currentUserRole.level && '(This role has higher privilege than yours)'}
+                    </small>
+                  )}
                 </div>
               </div>
             </div>
@@ -373,7 +510,7 @@ const PermissionPage = () => {
                           </td>
                         </tr>
                         {expandedCategories.has(group.category) && group.permissions.map(perm => (
-                          <tr key={perm.permissionId}>
+                          <tr key={perm.pageId || perm.permissionId}>
                             <td>
                               <span className="text-gray-9">{perm.displayName}</span>
                             </td>
@@ -385,7 +522,7 @@ const PermissionPage = () => {
                                     type="checkbox"
                                     checked={perm.actions[action] || false}
                                     onChange={() => handleActionChange(
-                                      perm.permissionId,
+                                      perm.pageId,
                                       action,
                                       perm.actions[action] || false
                                     )}

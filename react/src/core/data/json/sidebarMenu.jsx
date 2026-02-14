@@ -98,6 +98,11 @@ const useSidebarData = () => {
                   link: routes.superAdminModules,
                   base: "modules",
                 },
+                {
+                  label: "Pages",
+                  link: routes.superAdminPages,
+                  base: "pages",
+                },
                 // {
                 //   label: "Purchase Transaction",
                 //   link: routes.superAdminPurchaseTransaction,

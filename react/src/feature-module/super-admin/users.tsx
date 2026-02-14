@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
+import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import CommonSelect from "../../core/common/commonSelect";
 import Table from "../../core/common/dataTable/index";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import PredefinedDateRanges from "../../core/common/datePicker";
-import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
-
-// API Base URL
-const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import { del, get, post, put } from "../../services/api";
+import { all_routes } from "../router/all_routes";
 
 interface User {
   _id: string;
@@ -91,13 +89,8 @@ const Users = () => {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/api/admin/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const result = await post('/admin/users', formData);
 
-      const result = await response.json();
       if (result.success) {
         await fetchUsers();
         // Reset form
@@ -115,11 +108,11 @@ const Users = () => {
         const modalElement = document.querySelector('#add_users .btn-close') as HTMLElement;
         if (modalElement) modalElement.click();
       } else {
-        alert(result.error || 'Failed to create user');
+        alert(result.error?.message || result.error || 'Failed to create user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating user:', error);
-      alert('Failed to create user');
+      alert(error.response?.data?.error?.message || error.message || 'Failed to create user');
     } finally {
       setSubmitting(false);
     }
@@ -142,13 +135,8 @@ const Users = () => {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/api/admin/users/${editingUser._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const result = await put(`/admin/users/${editingUser._id}`, formData);
 
-      const result = await response.json();
       if (result.success) {
         await fetchUsers();
         setEditingUser(null);
@@ -156,11 +144,11 @@ const Users = () => {
         const modalElement = document.querySelector('#edit_user .btn-close') as HTMLElement;
         if (modalElement) modalElement.click();
       } else {
-        alert(result.error || 'Failed to update user');
+        alert(result.error?.message || result.error || 'Failed to update user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating user:', error);
-      alert('Failed to update user');
+      alert(error.response?.data?.error?.message || error.message || 'Failed to update user');
     } finally {
       setSubmitting(false);
     }
@@ -175,11 +163,8 @@ const Users = () => {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/api/admin/users/${userToDelete}`, {
-        method: 'DELETE',
-      });
+      const result = await del(`/admin/users/${userToDelete}`);
 
-      const result = await response.json();
       if (result.success) {
         await fetchUsers();
         setUserToDelete(null);
@@ -187,11 +172,11 @@ const Users = () => {
         const modalElement = document.querySelector('#delete-modal .btn-danger') as HTMLElement;
         if (modalElement) modalElement.click();
       } else {
-        alert(result.error || 'Failed to delete user');
+        alert(result.error?.message || result.error || 'Failed to delete user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user');
+      alert(error.response?.data?.error?.message || error.message || 'Failed to delete user');
     } finally {
       setSubmitting(false);
     }
@@ -201,18 +186,17 @@ const Users = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const queryParams = new URLSearchParams();
-      if (filters.role !== 'All') queryParams.append('role', filters.role);
-      if (filters.status !== 'All') queryParams.append('status', filters.status);
-      if (filters.sortBy !== 'recent') queryParams.append('sortBy', filters.sortBy);
+      const params: Record<string, string> = {};
+      if (filters.role !== 'All') params.role = filters.role;
+      if (filters.status !== 'All') params.status = filters.status;
+      if (filters.sortBy !== 'recent') params.sortBy = filters.sortBy;
 
-      const response = await fetch(`${API_BASE}/api/admin/users?${queryParams.toString()}`);
-      const result = await response.json();
+      const result = await get<any[]>('/admin/users', { params });
 
       if (result.success) {
-        setData(result.data);
+        setData(result.data || []);
       } else {
-        setError(result.error || 'Failed to fetch users');
+        setError(typeof result.error === 'string' ? result.error : result.error?.message || 'Failed to fetch users');
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -397,6 +381,95 @@ const Users = () => {
               </div>
             </div>
           </div>
+
+          {/* Stats Cards */}
+          <div className="row">
+            {/* Total Users */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-dark rounded-circle">
+                        <i className="ti ti-users" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Total Users
+                      </p>
+                      <h4>{data.length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Total Users */}
+            {/* Employees */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-success rounded-circle">
+                        <i className="ti ti-user-check" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Employees
+                      </p>
+                      <h4>{data.filter(u => u.role === "Employee").length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Employees */}
+            {/* Clients */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-info rounded-circle">
+                        <i className="ti ti-briefcase" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Clients
+                      </p>
+                      <h4>{data.filter(u => u.role === "Client").length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Clients */}
+            {/* Active Users */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-warning rounded-circle">
+                        <i className="ti ti-user-bolt" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Active Users
+                      </p>
+                      <h4>{data.filter(u => u.status === "Active").length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Active Users */}
+          </div>
+          {/* /Stats Cards */}
 
           <div className="card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">

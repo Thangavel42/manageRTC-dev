@@ -174,7 +174,7 @@ const Packages = () => {
   const [modulesLoading, setModulesLoading] = useState(true);
 
   // API Base URL
-  const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+  const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 
   // Fetch modules from API
   const fetchModules = async () => {

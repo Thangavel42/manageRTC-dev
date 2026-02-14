@@ -80,11 +80,11 @@ router.get('/:roleId/permissions', permissionController.getRolePermissions);
 router.put('/:roleId/permissions', permissionController.setRolePermissions);
 
 /**
- * @route   PATCH /api/rbac/roles/:roleId/permissions/:permissionId
- * @desc    Update a single permission action for a role
+ * @route   PATCH /api/rbac/roles/:roleId/permissions/:pageId
+ * @desc    Update a single permission action for a role (by pageId)
  * @access  Private (Admin/Super Admin only)
  */
-router.patch('/:roleId/permissions/:permissionId', permissionController.updateRolePermissionAction);
+router.patch('/:roleId/permissions/:pageId', permissionController.updateRolePermissionAction);
 
 /**
  * @route   GET /api/rbac/roles/:roleId/check-permission

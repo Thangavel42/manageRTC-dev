@@ -176,7 +176,7 @@ const HRDashboard = () => {
 
     // Check birthdays (Active and On Notice employees only)
     if (dashboardData?.employeeBirthdays) {
-      dashboardData.employeeBirthdays.forEach(birthday => {
+      dashboardData?.employeeBirthdays?.forEach(birthday => {
         // Birthdays are for Active and On Notice employees
         if (birthday.status !== "Active" && birthday.status !== "On Notice") {
           return; // Skip employees with other statuses
@@ -231,7 +231,7 @@ const HRDashboard = () => {
 
     // Check anniversaries (ONLY Active employees)
     if (dashboardData?.employeeAnniversaries) {
-      dashboardData.employeeAnniversaries.forEach(anniversary => {
+      dashboardData?.employeeAnniversaries?.forEach(anniversary => {
         // Anniversaries are ONLY for Active employees (already filtered in backend)
         if (anniversary.status !== "Active") {
           return; // Extra safety check - skip non-Active employees
@@ -294,7 +294,7 @@ const HRDashboard = () => {
 
     // Check Resignations
     if (dashboardData?.resignations) {
-      dashboardData.resignations.forEach(resignation => {
+      dashboardData?.resignations?.forEach(resignation => {
         // Notice Date
         if (resignation.noticeDate && isDateMatch(resignation.noticeDate, selectedDate)) {
           events.push({
@@ -326,7 +326,7 @@ const HRDashboard = () => {
 
     // Check Terminations
     if (dashboardData?.terminations) {
-      dashboardData.terminations.forEach(termination => {
+      dashboardData?.terminations?.forEach(termination => {
         if (termination.terminationDate && isDateMatch(termination.terminationDate, selectedDate)) {
           const typeText = termination.terminationType ? ` (${termination.terminationType})` : '';
           events.push({
@@ -340,7 +340,7 @@ const HRDashboard = () => {
 
     // Check Promotions
     if (dashboardData?.promotions) {
-      dashboardData.promotions.forEach(promotion => {
+      dashboardData?.promotions?.forEach(promotion => {
         if (promotion.promotionDate && isDateMatch(promotion.promotionDate, selectedDate)) {
           events.push({
             type: 'promotion',
@@ -363,7 +363,7 @@ const HRDashboard = () => {
     checkDate.setHours(0, 0, 0, 0);
 
     if (!dashboardData?.allActiveHolidays) return null;
-    return dashboardData.allActiveHolidays.find(holiday => {
+    return dashboardData?.allActiveHolidays?.find(holiday => {
       const holidayDate = new Date(holiday.date);
       holidayDate.setHours(0, 0, 0, 0);
 
@@ -389,7 +389,7 @@ const HRDashboard = () => {
     const checkYear = checkDate.getFullYear();
 
     if (!dashboardData?.employeeBirthdays) return null;
-    return dashboardData.employeeBirthdays.find(birthday => {
+    return dashboardData?.employeeBirthdays?.find(birthday => {
       // Only show birthdays for Active and On Notice employees
       if (birthday.status !== "Active" && birthday.status !== "On Notice") {
         return false;
@@ -778,6 +778,20 @@ const HRDashboard = () => {
     return <PageLoading message="Loading dashboard data..." />;
   }
 
+  // Show error state if there's an error or no data
+  if (!dashboardData) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger">
+            <h5>Unable to load dashboard</h5>
+            <p>Please refresh the page or try again later.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <HROnly>
@@ -938,7 +952,7 @@ const HRDashboard = () => {
                   <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <div>
                       <p className="fw-medium mb-1">Total Employees</p>
-                      <h5>{dashboardData.stats?.totalEmployees || 0}</h5>
+                      <h5>{dashboardData?.stats?.totalEmployees || 0}</h5>
                     </div>
                     <div className="avatar avatar-md br-10 icon-rotate bg-primary">
                       <span className="d-flex align-items-center">
@@ -966,7 +980,7 @@ const HRDashboard = () => {
                   <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <div>
                       <p className="fw-medium mb-1">Active Employees</p>
-                      <h5>{dashboardData.stats?.activeEmployees || 0}</h5>
+                      <h5>{dashboardData?.stats?.activeEmployees || 0}</h5>
                     </div>
                     <div className="avatar avatar-md br-10 icon-rotate bg-success">
                       <span className="d-flex align-items-center">
@@ -994,7 +1008,7 @@ const HRDashboard = () => {
                   <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <div>
                       <p className="fw-medium mb-1">Inactive Employees</p>
-                      <h5>{dashboardData.stats?.inactiveEmployees || 0}</h5>
+                      <h5>{dashboardData?.stats?.inactiveEmployees || 0}</h5>
                     </div>
                     <div className="avatar avatar-md br-10 icon-rotate bg-warning">
                       <span className="d-flex align-items-center">
@@ -1022,7 +1036,7 @@ const HRDashboard = () => {
                   <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <div>
                       <p className="fw-medium mb-1">New Joiners</p>
-                      <h5>{dashboardData.stats?.newJoiners || 0}</h5>
+                      <h5>{dashboardData?.stats?.newJoiners || 0}</h5>
                     </div>
                     <div className="avatar avatar-md br-10 icon-rotate bg-info">
                       <span className="d-flex align-items-center">
@@ -1056,7 +1070,7 @@ const HRDashboard = () => {
                   <h6 className="fs-13 fw-medium text-default mb-1">
                     Total Resignations
                   </h6>
-                  <h3 className="mb-3">{dashboardData.stats?.totalResignations || 0}</h3>
+                  <h3 className="mb-3">{dashboardData?.stats?.totalResignations || 0}</h3>
                   <Link to={routes.resignation} className="link-default">
                     View Details
                   </Link>
@@ -1073,7 +1087,7 @@ const HRDashboard = () => {
                   <h6 className="fs-13 fw-medium text-default mb-1">
                     Resignations (Last 30 Days)
                   </h6>
-                  <h3 className="mb-3">{dashboardData.stats?.resignationsLast30Days || 0}</h3>
+                  <h3 className="mb-3">{dashboardData?.stats?.resignationsLast30Days || 0}</h3>
                   <Link to={routes.resignation} className="link-default">
                     View Recent
                   </Link>
@@ -1090,7 +1104,7 @@ const HRDashboard = () => {
                   <h6 className="fs-13 fw-medium text-default mb-1">
                     Total Terminations
                   </h6>
-                  <h3 className="mb-3">{dashboardData.stats?.totalTerminations || 0}</h3>
+                  <h3 className="mb-3">{dashboardData?.stats?.totalTerminations || 0}</h3>
                   <Link to={routes.termination} className="link-default">
                     View Details
                   </Link>
@@ -1107,7 +1121,7 @@ const HRDashboard = () => {
                   <h6 className="fs-13 fw-medium text-default mb-1">
                     Terminations (Last 30 Days)
                   </h6>
-                  <h3 className="mb-3">{dashboardData.stats?.terminationsLast30Days || 0}</h3>
+                  <h3 className="mb-3">{dashboardData?.stats?.terminationsLast30Days || 0}</h3>
                   <Link to={routes.termination} className="link-default">
                     View Recent
                   </Link>
@@ -1135,10 +1149,10 @@ const HRDashboard = () => {
                           {
                             label: "Attendance",
                             data: [
-                              dashboardData.attendanceOverview?.late || 0,
-                              dashboardData.attendanceOverview?.present || 0,
-                              dashboardData.attendanceOverview?.permission || 0,
-                              dashboardData.attendanceOverview?.absent || 0,
+                              dashboardData?.attendanceOverview?.late || 0,
+                              dashboardData?.attendanceOverview?.present || 0,
+                              dashboardData?.attendanceOverview?.permission || 0,
+                              dashboardData?.attendanceOverview?.absent || 0,
                             ],
                             backgroundColor: ["#0C4B5E", "#03C95A", "#FFC107", "#E70D0D"],
                             borderWidth: 5,
@@ -1170,7 +1184,7 @@ const HRDashboard = () => {
                     />
                     <div className="position-absolute text-center attendance-canvas">
                       <p className="fs-13 mb-1">Total Attendance</p>
-                      <h3>{dashboardData.attendanceOverview?.total || 0}</h3>
+                      <h3>{dashboardData?.attendanceOverview?.total || 0}</h3>
                     </div>
                   </div>
                   <h6 className="mb-3">Status</h6>
@@ -1180,7 +1194,7 @@ const HRDashboard = () => {
                       Present
                     </p>
                     <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.present || 0}
+                      {dashboardData?.attendanceOverview?.present || 0}
                     </p>
                   </div>
                   <div className="d-flex align-items-center justify-content-between">
@@ -1189,7 +1203,7 @@ const HRDashboard = () => {
                       Late
                     </p>
                     <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.late || 0}
+                      {dashboardData?.attendanceOverview?.late || 0}
                     </p>
                   </div>
                   <div className="d-flex align-items-center justify-content-between">
@@ -1198,7 +1212,7 @@ const HRDashboard = () => {
                       Permission
                     </p>
                     <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.permission || 0}
+                      {dashboardData?.attendanceOverview?.permission || 0}
                     </p>
                   </div>
                   <div className="d-flex align-items-center justify-content-between mb-2">
@@ -1207,15 +1221,15 @@ const HRDashboard = () => {
                       Absent
                     </p>
                     <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.absent || 0}
+                      {dashboardData?.attendanceOverview?.absent || 0}
                     </p>
                   </div>
-                  {dashboardData.attendanceOverview?.absentees && dashboardData.attendanceOverview.absentees.length > 0 && (
+                  {dashboardData?.attendanceOverview?.absentees && dashboardData?.attendanceOverview?.absentees.length > 0 && (
                     <div className="bg-light br-5 box-shadow-xs p-2 pb-0 d-flex align-items-center justify-content-between flex-wrap">
                       <div className="d-flex align-items-center">
                         <p className="mb-2 me-2">Total Absenties</p>
                         <div className="avatar-list-stacked avatar-group-sm mb-2">
-                          {dashboardData.attendanceOverview.absentees
+                          {dashboardData?.attendanceOverview?.absentees
                             .slice(0, 4)
                             .map((absentee) => (
                               <span
@@ -1229,12 +1243,12 @@ const HRDashboard = () => {
                                 />
                               </span>
                             ))}
-                          {dashboardData.attendanceOverview.absentees.length > 4 && (
+                          {dashboardData?.attendanceOverview?.absentees.length > 4 && (
                             <Link
                               className="avatar bg-primary avatar-rounded text-fixed-white fs-10"
                               to="#"
                             >
-                              +{dashboardData.attendanceOverview.absentees.length - 4}
+                              +{dashboardData?.attendanceOverview?.absentees.length - 4}
                             </Link>
                           )}
                         </div>
@@ -1260,8 +1274,8 @@ const HRDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div>
-                    {dashboardData.clockInOutData && dashboardData.clockInOutData.length > 0 ? (
-                      dashboardData.clockInOutData.slice(0, 3).map((employee, index) => (
+                    {dashboardData?.clockInOutData && dashboardData?.clockInOutData?.length > 0 ? (
+                      dashboardData?.clockInOutData?.slice(0, 3).map((employee, index) => (
                         <div
                           key={employee._id}
                           className={`d-flex align-items-center justify-content-between mb-3 p-2 border ${
@@ -1314,7 +1328,7 @@ const HRDashboard = () => {
                       </div>
                     )}
                   </div>
-                  {dashboardData.clockInOutData && dashboardData.clockInOutData.length > 3 && (
+                  {dashboardData?.clockInOutData && dashboardData?.clockInOutData?.length > 3 && (
                     <Link
                       to="/attendance-employee"
                       className="btn btn-light w-100 mt-2"
@@ -1340,11 +1354,11 @@ const HRDashboard = () => {
                   </Link>
                 </div>
                 <div className="card-body">
-                  {dashboardData.jobApplicants?.openings && dashboardData.jobApplicants.openings.length > 0 && (
+                  {dashboardData?.jobApplicants?.openings && dashboardData?.jobApplicants?.openings?.length > 0 && (
                     <div className="mb-3 pb-3 border-bottom">
                       <h6 className="mb-2">Open Positions</h6>
                       <div className="d-flex flex-wrap gap-2">
-                        {dashboardData.jobApplicants.openings.slice(0, 3).map((opening) => (
+                        {dashboardData?.jobApplicants?.openings?.slice(0, 3).map((opening) => (
                           <span key={opening._id} className="badge badge-soft-primary">
                             {opening.count} Opening{opening.count > 1 ? "s" : ""}
                           </span>
@@ -1354,8 +1368,8 @@ const HRDashboard = () => {
                   )}
                   <h6 className="mb-3">Recent Applicants</h6>
                   <div>
-                    {dashboardData.jobApplicants?.applicants && dashboardData.jobApplicants.applicants.length > 0 ? (
-                      dashboardData.jobApplicants.applicants.slice(0, 4).map((applicant) => (
+                    {dashboardData?.jobApplicants?.applicants && dashboardData?.jobApplicants?.applicants?.length > 0 ? (
+                      dashboardData?.jobApplicants?.applicants?.slice(0, 4).map((applicant) => (
                         <div
                           key={applicant._id}
                           className="d-flex align-items-center justify-content-between mb-3 p-2 border br-5"
@@ -1394,7 +1408,7 @@ const HRDashboard = () => {
                       </div>
                     )}
                   </div>
-                  {dashboardData.jobApplicants?.applicants && dashboardData.jobApplicants.applicants.length > 4 && (
+                  {dashboardData?.jobApplicants?.applicants && dashboardData?.jobApplicants?.applicants?.length > 4 && (
                     <Link
                       to="/job-applicants"
                       className="btn btn-light w-100 mt-2"
@@ -1459,7 +1473,7 @@ const HRDashboard = () => {
                   <h5 className="mb-0">
                     <i className="ti ti-calendar-event text-success me-2"></i>
                     Upcoming Holidays
-                    {dashboardData.upcomingHolidays && dashboardData.upcomingHolidays.length > 0 && (
+                    {dashboardData?.upcomingHolidays && dashboardData?.upcomingHolidays?.length > 0 && (
                       <span className="badge badge-success rounded-pill ms-2 fs-10">
                         {dashboardData?.upcomingHolidays?.length}
                       </span>
@@ -1467,7 +1481,7 @@ const HRDashboard = () => {
                   </h5>
                 </div>
                 <div className="card-body">
-                  {dashboardData?.upcomingHolidays && dashboardData.upcomingHolidays.length > 0 ? (
+                  {dashboardData?.upcomingHolidays && dashboardData?.upcomingHolidays?.length > 0 ? (
                     <div style={{ maxHeight: "320px", overflowY: "auto" }}>
                       {dashboardData?.upcomingHolidays?.slice(0, 7).map((holiday) => {
                         // Color rotation for borders
@@ -1758,7 +1772,7 @@ const HRDashboard = () => {
                     })()}
 
                     {/* Notice Period Ending Events */}
-                    {dashboardData?.stats?.resignationsLast30Days && dashboardData.stats.resignationsLast30Days > 0 ? (
+                    {dashboardData?.stats?.resignationsLast30Days && dashboardData?.stats?.resignationsLast30Days > 0 ? (
                       <div className="border-start border-warning border-3 mb-3 pb-2">
                         <div className="ps-3">
                           <div className="d-flex align-items-start justify-content-between mb-1">
@@ -1783,8 +1797,8 @@ const HRDashboard = () => {
                     ) : null}
 
                     {/* Today's Holidays */}
-                    {dashboardData?.todaysHolidays && dashboardData.todaysHolidays.length > 0 && (
-                      dashboardData.todaysHolidays.map(holiday => (
+                    {dashboardData?.todaysHolidays && dashboardData?.todaysHolidays?.length > 0 && (
+                      dashboardData?.todaysHolidays?.map(holiday => (
                         <div key={holiday._id} className="border-start border-primary border-3 mb-3 pb-2">
                           <div className="ps-3">
                             <div className="d-flex align-items-start justify-content-between mb-1">
@@ -1813,7 +1827,7 @@ const HRDashboard = () => {
                     )}
 
                     {/* Holidays on Selected Date or Upcoming */}
-                    {dashboardData.upcomingHolidays && dashboardData.upcomingHolidays.length > 0 && (() => {
+                    {dashboardData?.upcomingHolidays && dashboardData?.upcomingHolidays?.length > 0 && (() => {
                       const selectedDate = miniCalendarDate || new Date();
                       const selected = new Date(selectedDate);
                       selected.setHours(0, 0, 0, 0);
@@ -1901,7 +1915,7 @@ const HRDashboard = () => {
                     })()}
 
                     {/* Resource Availability Alert */}
-                    {dashboardData?.resourceStats?.overAllocated && dashboardData.resourceStats.overAllocated > 0 ? (
+                    {dashboardData?.resourceStats?.overAllocated && dashboardData?.resourceStats?.overAllocated > 0 ? (
                       <div className="border-start border-danger border-3 mb-3 pb-2">
                         <div className="ps-3">
                           <div className="d-flex align-items-start justify-content-between mb-1">
@@ -1926,16 +1940,16 @@ const HRDashboard = () => {
                     ) : null}
 
                     {/* Empty State - Only when truly no events */}
-                    {!dashboardData.stats?.resignationsLast30Days &&
-                     !dashboardData.stats?.newJoiners &&
-                     !dashboardData.trainingStats?.activeTrainings &&
-                     !dashboardData.projectStats?.activeProjects &&
+                    {!dashboardData?.stats?.resignationsLast30Days &&
+                     !dashboardData?.stats?.newJoiners &&
+                     !dashboardData?.trainingStats?.activeTrainings &&
+                     !dashboardData?.projectStats?.activeProjects &&
                      (() => {
                        const selectedDate = miniCalendarDate || new Date();
                        const selected = new Date(selectedDate);
                        selected.setHours(0, 0, 0, 0);
 
-                       const hasHolidayOnDate = dashboardData.upcomingHolidays?.some(holiday => {
+                       const hasHolidayOnDate = dashboardData?.upcomingHolidays?.some(holiday => {
                          const holidayDate = new Date(holiday.date);
                          holidayDate.setHours(0, 0, 0, 0);
                          return holidayDate.getTime() === selected.getTime();
@@ -1943,8 +1957,8 @@ const HRDashboard = () => {
 
                        return !hasHolidayOnDate;
                      })() &&
-                     !dashboardData.resourceStats?.overAllocated &&
-                     !dashboardData.policyStats?.policiesCreatedLast30Days ? (
+                     !dashboardData?.resourceStats?.overAllocated &&
+                     !dashboardData?.policyStats?.policiesCreatedLast30Days ? (
                       <div className="text-center py-4">
                         <i className="ti ti-calendar-check fs-40 text-muted mb-2"></i>
                         <p className="text-muted mb-0 fs-13">No additional events for this date</p>
@@ -1974,9 +1988,9 @@ const HRDashboard = () => {
                   </h5>
                 </div>
                 <div className="card-body">
-                  {dashboardData.recentActivities && dashboardData.recentActivities.length > 0 ? (
+                  {dashboardData?.recentActivities && dashboardData?.recentActivities?.length > 0 ? (
                     <div className="activity-feed" style={{ maxHeight: "450px", overflowY: "auto" }}>
-                      {dashboardData.recentActivities.slice(0, 10).map((activity) => (
+                      {dashboardData?.recentActivities?.slice(0, 10).map((activity) => (
                         <div key={activity._id} className="border-bottom pb-3 mb-3">
                           <div className="d-flex align-items-start">
                             <span className="avatar avatar-sm rounded-circle bg-primary-transparent flex-shrink-0 me-2">
@@ -2087,7 +2101,7 @@ const HRDashboard = () => {
                   {/* Training Distribution Chart */}
                   <div className="border-bottom pb-3 mb-3">
                     <h6 className="fw-semibold mb-3">Training Distribution</h6>
-                    {dashboardData.trainingDistribution && dashboardData.trainingDistribution.length > 0 ? (
+                    {dashboardData?.trainingDistribution && dashboardData?.trainingDistribution?.length > 0 ? (
                       <div className="row align-items-center">
                         <div className="col-6">
                           <div style={{ height: "140px" }}>
@@ -2101,7 +2115,7 @@ const HRDashboard = () => {
                         </div>
                         <div className="col-6">
                           <div className="d-flex flex-column gap-2">
-                            {dashboardData.trainingDistribution.map((training, index) => {
+                            {dashboardData?.trainingDistribution?.map((training, index) => {
                               const colors = ["primary", "info", "success", "warning", "danger", "purple"];
                               const color = colors[index % colors.length];
                               return (
@@ -2131,25 +2145,25 @@ const HRDashboard = () => {
                     <div className="row g-2">
                       <div className="col-6">
                         <div className="border rounded p-2 text-center">
-                          <h5 className="text-primary mb-1">{dashboardData.trainingStats?.totalTrainings || 0}</h5>
+                          <h5 className="text-primary mb-1">{dashboardData?.trainingStats?.totalTrainings || 0}</h5>
                           <p className="mb-0 text-muted fs-12">Total</p>
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="border rounded p-2 text-center">
-                          <h5 className="text-success mb-1">{dashboardData.trainingStats?.activeTrainings || 0}</h5>
+                          <h5 className="text-success mb-1">{dashboardData?.trainingStats?.activeTrainings || 0}</h5>
                           <p className="mb-0 text-muted fs-12">Active</p>
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="border rounded p-2 text-center">
-                          <h5 className="text-info mb-1">{dashboardData.trainingStats?.totalTrainers || 0}</h5>
+                          <h5 className="text-info mb-1">{dashboardData?.trainingStats?.totalTrainers || 0}</h5>
                           <p className="mb-0 text-muted fs-12">Trainers</p>
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="border rounded p-2 text-center">
-                          <h5 className="text-warning mb-1">{dashboardData.trainingStats?.employeesInTraining || 0}</h5>
+                          <h5 className="text-warning mb-1">{dashboardData?.trainingStats?.employeesInTraining || 0}</h5>
                           <p className="mb-0 text-muted fs-12">In Training</p>
                         </div>
                       </div>
@@ -2194,7 +2208,7 @@ const HRDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  {dashboardData?.employeesByDepartment && dashboardData.employeesByDepartment.length > 0 ? (
+                  {dashboardData?.employeesByDepartment && dashboardData?.employeesByDepartment?.length > 0 ? (
                     <ReactApexChart
                       id="emp-department"
                       options={empDepartmentOptions}
@@ -2306,25 +2320,25 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-md-3 col-sm-6">
                       <div className="border rounded p-3 text-center bg-success-transparent">
-                        <h3 className="text-success mb-1">{dashboardData.resourceStats?.allocatedResources || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.resourceStats?.allocatedResources || 0}</h3>
                         <p className="mb-0 text-muted">Allocated Resources</p>
                       </div>
                     </div>
                     <div className="col-md-3 col-sm-6">
                       <div className="border rounded p-3 text-center bg-primary-transparent">
-                        <h3 className="text-primary mb-1">{dashboardData.resourceStats?.availableResources || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.resourceStats?.availableResources || 0}</h3>
                         <p className="mb-0 text-muted">Available Resources</p>
                       </div>
                     </div>
                     <div className="col-md-3 col-sm-6">
                       <div className="border rounded p-3 text-center bg-danger-transparent">
-                        <h3 className="text-danger mb-1">{dashboardData.resourceStats?.overAllocated || 0}</h3>
+                        <h3 className="text-danger mb-1">{dashboardData?.resourceStats?.overAllocated || 0}</h3>
                         <p className="mb-0 text-muted">Over Allocated</p>
                       </div>
                     </div>
                     <div className="col-md-3 col-sm-6">
                       <div className="border rounded p-3 text-center bg-info-transparent">
-                        <h3 className="text-info mb-1">{dashboardData.resourceStats?.averageTeamSize || 0}</h3>
+                        <h3 className="text-info mb-1">{dashboardData?.resourceStats?.averageTeamSize || 0}</h3>
                         <p className="mb-0 text-muted">Avg Team Size</p>
                       </div>
                     </div>
@@ -2348,25 +2362,25 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-6">
                       <div className="border rounded p-3 text-center bg-primary-transparent">
-                        <h3 className="text-primary mb-1">{dashboardData.policyStats?.totalActivePolicies || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.policyStats?.totalActivePolicies || 0}</h3>
                         <p className="mb-0 text-muted">Total Active Policies</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center bg-success-transparent">
-                        <h3 className="text-success mb-1">{dashboardData.policyStats?.policiesCreatedLast30Days || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.policyStats?.policiesCreatedLast30Days || 0}</h3>
                         <p className="mb-0 text-muted">Created (Last 30 Days)</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center bg-info-transparent">
-                        <h3 className="text-info mb-1">{dashboardData.policyStats?.policiesAppliedToAll || 0}</h3>
+                        <h3 className="text-info mb-1">{dashboardData?.policyStats?.policiesAppliedToAll || 0}</h3>
                         <p className="mb-0 text-muted">Applied to All</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center bg-warning-transparent">
-                        <h3 className="text-warning mb-1">{dashboardData.policyStats?.policiesSelective || 0}</h3>
+                        <h3 className="text-warning mb-1">{dashboardData?.policyStats?.policiesSelective || 0}</h3>
                         <p className="mb-0 text-muted">Selective Assignment</p>
                       </div>
                     </div>
@@ -2384,19 +2398,19 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-4">
                       <div className="border rounded p-3 text-center bg-primary-transparent">
-                        <h3 className="text-primary mb-1">{dashboardData.holidayStats?.totalHolidays || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.holidayStats?.totalHolidays || 0}</h3>
                         <p className="mb-0 text-muted fs-12">Total Holidays</p>
                       </div>
                     </div>
                     <div className="col-4">
                       <div className="border rounded p-3 text-center bg-success-transparent">
-                        <h3 className="text-success mb-1">{dashboardData.holidayStats?.upcomingHolidays || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.holidayStats?.upcomingHolidays || 0}</h3>
                         <p className="mb-0 text-muted fs-12">Upcoming</p>
                       </div>
                     </div>
                     <div className="col-4">
                       <div className="border rounded p-3 text-center bg-info-transparent">
-                        <h3 className="text-info mb-1">{dashboardData.holidayStats?.holidayTypesCount || 0}</h3>
+                        <h3 className="text-info mb-1">{dashboardData?.holidayStats?.holidayTypesCount || 0}</h3>
                         <p className="mb-0 text-muted fs-12">Holiday Types</p>
                       </div>
                     </div>
@@ -2418,25 +2432,25 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-primary mb-1">{dashboardData.projectStats?.totalProjects || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.projectStats?.totalProjects || 0}</h3>
                         <p className="mb-0 text-muted">Total Projects</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-success mb-1">{dashboardData.projectStats?.activeProjects || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.projectStats?.activeProjects || 0}</h3>
                         <p className="mb-0 text-muted">Active Projects</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-info mb-1">{dashboardData.projectStats?.completedProjects || 0}</h3>
+                        <h3 className="text-info mb-1">{dashboardData?.projectStats?.completedProjects || 0}</h3>
                         <p className="mb-0 text-muted">Completed</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-warning mb-1">{dashboardData.projectStats?.onHoldProjects || 0}</h3>
+                        <h3 className="text-warning mb-1">{dashboardData?.projectStats?.onHoldProjects || 0}</h3>
                         <p className="mb-0 text-muted">On Hold</p>
                       </div>
                     </div>
@@ -2451,7 +2465,7 @@ const HRDashboard = () => {
                   <h5 className="mb-2">Department-wise Projects</h5>
                 </div>
                 <div className="card-body">
-                  {dashboardData.departmentWiseProjects && dashboardData.departmentWiseProjects.length > 0 ? (
+                  {dashboardData?.departmentWiseProjects && dashboardData?.departmentWiseProjects?.length > 0 ? (
                     <ReactApexChart
                       id="dept-projects"
                       options={deptProjectOptions}
@@ -2481,25 +2495,25 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-primary mb-1">{dashboardData.departmentStats?.totalDepartments || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.departmentStats?.totalDepartments || 0}</h3>
                         <p className="mb-0 text-muted">Total Departments</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-success mb-1">{dashboardData.departmentStats?.activeDepartments || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.departmentStats?.activeDepartments || 0}</h3>
                         <p className="mb-0 text-muted">Active Departments</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-warning mb-1">{dashboardData.departmentStats?.inactiveDepartments || 0}</h3>
+                        <h3 className="text-warning mb-1">{dashboardData?.departmentStats?.inactiveDepartments || 0}</h3>
                         <p className="mb-0 text-muted">Inactive Departments</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-info mb-1">{dashboardData.departmentStats?.recentlyAdded || 0}</h3>
+                        <h3 className="text-info mb-1">{dashboardData?.departmentStats?.recentlyAdded || 0}</h3>
                         <p className="mb-0 text-muted">Recently Added (30 days)</p>
                       </div>
                     </div>
@@ -2517,26 +2531,26 @@ const HRDashboard = () => {
                   <div className="row g-3">
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-primary mb-1">{dashboardData.designationStats?.totalDesignations || 0}</h3>
+                        <h3 className="text-primary mb-1">{dashboardData?.designationStats?.totalDesignations || 0}</h3>
                         <p className="mb-0 text-muted">Total Designations</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-success mb-1">{dashboardData.designationStats?.activeDesignations || 0}</h3>
+                        <h3 className="text-success mb-1">{dashboardData?.designationStats?.activeDesignations || 0}</h3>
                         <p className="mb-0 text-muted">Active Designations</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
-                        <h3 className="text-warning mb-1">{dashboardData.designationStats?.inactiveDesignations || 0}</h3>
+                        <h3 className="text-warning mb-1">{dashboardData?.designationStats?.inactiveDesignations || 0}</h3>
                         <p className="mb-0 text-muted">Inactive Designations</p>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="border rounded p-3 text-center">
                         <h3 className="text-info mb-1">
-                          {dashboardData.designationStats?.departmentWiseCount?.length || 0}
+                          {dashboardData?.designationStats?.departmentWiseCount?.length || 0}
                         </h3>
                         <p className="mb-0 text-muted">Departments Covered</p>
                       </div>

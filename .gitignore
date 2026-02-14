@@ -16,3 +16,4 @@ logs/
 **/src/**/dist/
 **/src/**/*.js
 !**/src/**/*.config.js
+nul

@@ -8,7 +8,17 @@ import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
 
 // API Base URL
-const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+
+// Role level configuration for UI
+const ROLE_LEVELS = [
+  { level: 1, name: 'Super Admin', type: 'system', description: 'Full system access' },
+  { level: 10, name: 'Admin', type: 'system', description: 'Administrative access' },
+  { level: 20, name: 'Manager', type: 'custom', description: 'Department management' },
+  { level: 50, name: 'HR', type: 'custom', description: 'HR functions' },
+  { level: 60, name: 'Team Lead', type: 'custom', description: 'Team leadership' },
+  { level: 100, name: 'Employee', type: 'custom', description: 'Basic employee access' },
+];
 
 const RolesPermission = () => {
   // State
@@ -17,13 +27,34 @@ const RolesPermission = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRole, setEditingRole] = useState<any>(null);
-  const [newRole, setNewRole] = useState({ name: '', displayName: '', description: '', isActive: true });
+  const [newRole, setNewRole] = useState({ name: '', displayName: '', description: '', isActive: true, level: 100 });
   const [submitting, setSubmitting] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<any>(null);
 
-  // Fetch roles
+  // Fetch roles and current user role on mount
   useEffect(() => {
     fetchRoles();
+    // Get current user's role for level-based permissions
+    const userRole = (window as any).user?.role || (window as any).user?.roleId;
+    if (userRole) {
+      setCurrentUserRole(userRole);
+    }
   }, []);
+
+  // Helper: Get max level user can create
+  const getMaxCreatableLevel = () => {
+    if (!currentUserRole) return 100;
+    return currentUserRole.level;
+  };
+
+  // Helper: Check if user can create role with given level
+  const canCreateRoleWithLevel = (targetLevel: number) => {
+    if (!currentUserRole) return true;
+    // Super Admin (level 1) can create any
+    if (currentUserRole.level === 1) return true;
+    // Can only create roles with equal or higher level number (lower privilege)
+    return targetLevel >= currentUserRole.level;
+  };
 
   const fetchRoles = async () => {
     try {
@@ -53,7 +84,7 @@ const RolesPermission = () => {
       const data = await response.json();
       if (data.success) {
         setShowAddModal(false);
-        setNewRole({ name: '', displayName: '', description: '', isActive: true });
+        setNewRole({ name: '', displayName: '', description: '', isActive: true, level: 100 });
         await fetchRoles();
       } else {
         alert(data.error?.message || 'Failed to create role');
@@ -125,17 +156,27 @@ const RolesPermission = () => {
       title: "Role Name",
       dataIndex: "displayName",
       sorter: (a: any, b: any) => a.displayName.localeCompare(b.displayName),
-      render: (text: string, record: any) => (
-        <div>
-          <span className="fw-medium">{text}</span>
-          {record.type === 'system' && (
-            <span className="badge bg-info ms-2">System</span>
-          )}
-          {record.isDefault && (
-            <span className="badge bg-secondary ms-2">Default</span>
-          )}
-        </div>
-      ),
+      render: (text: string, record: any) => {
+        const canEditThisRole = currentUserRole ?
+          (currentUserRole.level === 1 || record.level >= currentUserRole.level) : true;
+
+        return (
+          <div>
+            <span className="fw-medium">{text}</span>
+            {record.type === 'system' && (
+              <span className="badge bg-info ms-2">System</span>
+            )}
+            {record.isDefault && (
+              <span className="badge bg-secondary ms-2">Default</span>
+            )}
+            {currentUserRole && (
+              <span className={`badge ms-2 ${canEditThisRole ? 'bg-success' : 'bg-warning'}`}>
+                {canEditThisRole ? 'Can Edit' : 'View Only'}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Name",
@@ -171,29 +212,46 @@ const RolesPermission = () => {
     },
     {
       title: "Actions",
-      render: (_: any, record: any) => (
-        <div className="action-icon d-inline-flex">
-          <Link to={all_routes.permissionpage} className="me-2" title="Permissions">
-            <i className="ti ti-shield" />
-          </Link>
-          <button
-            className="btn btn-link p-0 me-2"
-            onClick={() => openEditModal(record)}
-            title="Edit Role"
-            disabled={record.type === 'system'}
-          >
-            <i className={`ti ti-edit ${record.type === 'system' ? 'text-muted' : ''}`} />
-          </button>
-          <button
-            className="btn btn-link p-0"
-            onClick={() => handleDeleteRole(record._id)}
-            title="Delete Role"
-            disabled={record.type === 'system'}
-          >
-            <i className={`ti ti-trash ${record.type === 'system' ? 'text-muted' : ''}`} />
-          </button>
-        </div>
-      ),
+      render: (_: any, record: any) => {
+        const canEdit = currentUserRole ?
+          (currentUserRole.level === 1 || record.level >= currentUserRole.level) : true;
+        const isSystemRole = record.type === 'system';
+
+        let editTitle = "Edit Role";
+        let deleteTitle = "Delete Role";
+
+        if (isSystemRole) {
+          editTitle = "System roles cannot be edited";
+          deleteTitle = "System roles cannot be deleted";
+        } else if (!canEdit) {
+          editTitle = `Your level (${currentUserRole?.level}) is too high to edit this role`;
+          deleteTitle = `Your level (${currentUserRole?.level}) is too high to delete this role`;
+        }
+
+        return (
+          <div className="action-icon d-inline-flex">
+            <Link to={all_routes.permissionpage} className="me-2" title="Manage Permissions">
+              <i className="ti ti-shield" />
+            </Link>
+            <button
+              className="btn btn-link p-0 me-2"
+              onClick={() => openEditModal(record)}
+              title={editTitle}
+              disabled={isSystemRole || !canEdit}
+            >
+              <i className={`ti ti-edit ${(isSystemRole || !canEdit) ? 'text-muted' : ''}`} />
+            </button>
+            <button
+              className="btn btn-link p-0"
+              onClick={() => handleDeleteRole(record._id)}
+              title={deleteTitle}
+              disabled={isSystemRole || !canEdit}
+            >
+              <i className={`ti ti-trash ${(isSystemRole || !canEdit) ? 'text-muted' : ''}`} />
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -241,6 +299,167 @@ const RolesPermission = () => {
               </div>
               <div className="head-icons ms-2">
                 <CollapseHeader />
+              </div>
+            </div>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="row">
+            {/* Total Roles */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-dark rounded-circle">
+                        <i className="ti ti-user-shield" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Total Roles
+                      </p>
+                      <h4>{roles.length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Total Roles */}
+            {/* Active Roles */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-success rounded-circle">
+                        <i className="ti ti-check" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Active Roles
+                      </p>
+                      <h4>{roles.filter(r => r.isActive).length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Active Roles */}
+            {/* System Roles */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-info rounded-circle">
+                        <i className="ti ti-lock" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        System Roles
+                      </p>
+                      <h4>{roles.filter(r => r.type === 'system').length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /System Roles */}
+            {/* Custom Roles */}
+            <div className="col-lg-3 col-md-6 d-flex">
+              <div className="card flex-fill">
+                <div className="card-body d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center overflow-hidden">
+                    <div>
+                      <span className="avatar avatar-lg bg-warning rounded-circle">
+                        <i className="ti ti-user-edit" />
+                      </span>
+                    </div>
+                    <div className="ms-2 overflow-hidden">
+                      <p className="fs-12 fw-medium mb-1 text-truncate">
+                        Custom Roles
+                      </p>
+                      <h4>{roles.filter(r => r.type !== 'system').length}</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /Custom Roles */}
+          </div>
+          {/* /Stats Cards */}
+
+          {/* Role Hierarchy Visualization */}
+          <div className="card mb-3">
+            <div className="card-header">
+              <h5 className="mb-0">Role Hierarchy & Creation Rules</h5>
+            </div>
+            <div className="card-body">
+              <div className="alert alert-info mb-3">
+                <i className="ti ti-info me-2"></i>
+                <strong>How it works:</strong> You can only create roles with equal or higher level numbers (lower privilege).
+                <br />
+                <small>Example: Level 50 (HR) can create Level 100 (Employee) but NOT Level 1 (Super Admin)</small>
+              </div>
+              <div className="table-responsive">
+                <table className="table table-bordered table-striped">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Can Create ↓ / Role →</th>
+                      {ROLE_LEVELS.map((level) => (
+                        <th key={level.level} className="text-center">
+                          <div>
+                            <div className="fw-bold">{level.name}</div>
+                            <small className="text-muted">Level {level.level}</small>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ROLE_LEVELS.map((creatorLevel) => {
+                      const canCreateAll = creatorLevel.level === 1; // Super Admin can create all
+                      return (
+                        <tr key={creatorLevel.level}>
+                          <td>
+                            <div className="fw-medium">{creatorLevel.name}</div>
+                            <small className="text-muted">Level {creatorLevel.level}</small>
+                          </td>
+                          {ROLE_LEVELS.map((targetLevel) => {
+                            const canCreate = canCreateAll || targetLevel.level >= creatorLevel.level;
+                            const isSelf = creatorLevel.level === targetLevel.level;
+                            return (
+                              <td key={targetLevel.level} className="text-center">
+                                {canCreate ? (
+                                  <span className="badge bg-light-success text-success">
+                                    {isSelf ? 'Self' : '✓'}
+                                  </span>
+                                ) : (
+                                  <span className="badge bg-light-danger text-danger">
+                                    <i className="ti ti-lock me-1"></i>Blocked
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3">
+                <small className="text-muted">
+                  <i className="ti ti-shield-check me-1"></i>
+                  <strong>Your Current Level:</strong> {currentUserRole?.level || 'Unknown'} ({currentUserRole?.displayName || 'Guest'})
+                  <span className="ms-3">
+                    <i className="ti ti-circle-plus me-1"></i>
+                    <strong>Can Create Up To Level:</strong> {getMaxCreatableLevel()} or higher
+                  </span>
+                </small>
               </div>
             </div>
           </div>
@@ -326,6 +545,35 @@ const RolesPermission = () => {
                         />
                       </div>
                     </div>
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">Privilege Level *</label>
+                        <select
+                          className="form-select"
+                          value={newRole.level}
+                          onChange={(e) => setNewRole({ ...newRole, level: parseInt(e.target.value) })}
+                          required
+                        >
+                          {ROLE_LEVELS.map((roleLevel) => {
+                            const canCreate = canCreateRoleWithLevel(roleLevel.level);
+                            return (
+                              <option
+                                key={roleLevel.level}
+                                value={roleLevel.level}
+                                disabled={!canCreate}
+                                className={!canCreate ? 'text-muted' : ''}
+                              >
+                                {roleLevel.name} (Level: {roleLevel.level})
+                                {!canCreate && ' - 🔒 Not Available'}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <small className="text-muted">
+                          Higher privilege = Lower number (1 = Super Admin, 100 = Basic)
+                        </small>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="modal-footer">
@@ -371,6 +619,13 @@ const RolesPermission = () => {
               </div>
               <form onSubmit={handleUpdateRole}>
                 <div className="modal-body pb-0">
+                  {currentUserRole && (
+                    <div className="alert alert-info mb-3">
+                      <i className="ti ti-info me-2"></i>
+                      <strong>Your Role:</strong> {currentUserRole.displayName} (Level: {currentUserRole.level})
+                      <span className="ms-3">•</span> Can create roles with level <strong className="text-success">≥ {getMaxCreatableLevel()}</strong> or higher
+                    </div>
+                  )}
                   <div className="row">
                     <div className="col-md-12">
                       <div className="mb-3">
@@ -408,6 +663,34 @@ const RolesPermission = () => {
                           value={editingRole.description || ''}
                           onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })}
                         />
+                      </div>
+                    </div>
+                    <div className="col-md-12">
+                      <div className="mb-3">
+                        <label className="form-label">Privilege Level *</label>
+                        <select
+                          className="form-select"
+                          value={editingRole.level}
+                          disabled={editingRole.type === 'system'}
+                          onChange={(e) => setEditingRole({ ...editingRole, level: parseInt(e.target.value) })}
+                        >
+                          {ROLE_LEVELS.map((roleLevel) => {
+                            const canEdit = currentUserRole ? (currentUserRole.level === 1 || editingRole.level >= currentUserRole.level) : true;
+                            return (
+                              <option
+                                key={roleLevel.level}
+                                value={roleLevel.level}
+                                disabled={!canEdit}
+                                className={!canEdit ? 'text-muted' : ''}
+                              >
+                                {roleLevel.name} (Level: {roleLevel.level})
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <small className="text-muted">
+                          Higher privilege = Lower number (1 = Super Admin, 100 = Basic)
+                        </small>
                       </div>
                     </div>
                   </div>

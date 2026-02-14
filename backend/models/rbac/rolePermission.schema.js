@@ -1,6 +1,7 @@
 /**
- * Role Permission Schema (Junction Table)
- * Maps permissions to roles with action-level granularity
+ * Role Permission Schema (Junction Table - PRIMARY)
+ * Maps pages to roles with action-level granularity
+ * This is the PRIMARY storage for role permissions
  */
 
 import mongoose from 'mongoose';
@@ -14,12 +15,46 @@ const rolePermissionSchema = new mongoose.Schema({
     index: true,
   },
 
-  // Reference to Permission
+  // Reference to Page (PRIMARY - for direct page access control)
+  pageId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Page',
+    required: true,
+    index: true,
+  },
+
+  // Reference to Permission (for metadata lookup)
   permissionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Permission',
+    required: false,
+    index: true,
+  },
+
+  // Module identifier (for backward compatibility and quick lookup)
+  module: {
+    type: String,
     required: true,
     index: true,
+  },
+
+  // Display name (denormalized for UI performance)
+  displayName: {
+    type: String,
+    required: true,
+  },
+
+  // Category (denormalized for grouping)
+  category: {
+    type: String,
+    required: true,
+    index: true,
+  },
+
+  // Route path (denormalized from Page)
+  route: {
+    type: String,
+    required: false,
   },
 
   // Permission Actions (checkbox values)
@@ -81,8 +116,18 @@ const rolePermissionSchema = new mongoose.Schema({
   collection: 'role_permissions',
 });
 
-// Indexes
-rolePermissionSchema.index({ roleId: 1, permissionId: 1 }, { unique: true });
+// ============================================
+// COMPOUND INDEXES
+// ============================================
+// Primary index: role + page (unique combination)
+rolePermissionSchema.index({ roleId: 1, pageId: 1 }, { unique: true });
+
+// Secondary index: role + permission (for backward compatibility)
+rolePermissionSchema.index({ roleId: 1, permissionId: 1 }, { unique: true, sparse: true });
+
+// Query optimization indexes
+rolePermissionSchema.index({ roleId: 1, category: 1 });
+rolePermissionSchema.index({ roleId: 1, module: 1 });
 
 // Pre-save middleware
 rolePermissionSchema.pre('save', function(next) {
@@ -108,29 +153,77 @@ rolePermissionSchema.methods.hasAction = function(action) {
   return this.actions[action] === true;
 };
 
-// Static method to get all permissions for a role
-rolePermissionSchema.statics.getRolePermissions = async function(roleId) {
+// ============================================
+// STATIC METHODS - PRIMARY DATA ACCESS
+// ============================================
+
+/**
+ * Get all permissions for a role (grouped by category)
+ * PRIMARY METHOD - Returns from Junction Table
+ */
+rolePermissionSchema.statics.getRolePermissionsGrouped = async function(roleId) {
   const rolePermissions = await this.find({ roleId })
-    .populate('permissionId')
     .lean();
 
-  const result = {};
-  rolePermissions.forEach(rp => {
-    if (rp.permissionId) {
-      result[rp.permissionId.module] = {
-        permissionId: rp.permissionId._id,
-        module: rp.permissionId.module,
-        displayName: rp.permissionId.displayName,
-        category: rp.permissionId.category,
-        actions: rp.actions,
-      };
+  // Group by category
+  const grouped = rolePermissions.reduce((acc, rp) => {
+    if (!acc[rp.category]) {
+      acc[rp.category] = [];
     }
-  });
+    acc[rp.category].push({
+      permissionId: rp.permissionId,
+      pageId: rp.pageId,
+      module: rp.module,
+      displayName: rp.displayName,
+      category: rp.category,
+      route: rp.route,
+      actions: rp.actions,
+    });
+    return acc;
+  }, {});
+
+  // Convert to array format for frontend
+  const result = {
+    flat: rolePermissions.map(rp => ({
+      permissionId: rp.permissionId,
+      pageId: rp.pageId,
+      module: rp.module,
+      displayName: rp.displayName,
+      category: rp.category,
+      route: rp.route,
+      actions: rp.actions,
+    })),
+    grouped: Object.entries(grouped).map(([category, permissions]) => ({
+      category,
+      permissions: permissions.sort((a, b) => a.module.localeCompare(b.module))
+    })).sort((a, b) => a.category.localeCompare(b.category)),
+    source: 'junction',
+  };
 
   return result;
 };
 
-// Static method to set permissions for a role
+/**
+ * Get flat permissions list for a role
+ */
+rolePermissionSchema.statics.getRolePermissionsFlat = async function(roleId) {
+  return await this.find({ roleId }).lean();
+};
+
+/**
+ * Get role permissions with populated page/permission data
+ */
+rolePermissionSchema.statics.getRolePermissionsPopulated = async function(roleId) {
+  return await this.find({ roleId })
+    .populate('pageId')
+    .populate('permissionId')
+    .lean();
+};
+
+/**
+ * Set permissions for a role (replaces all)
+ * PRIMARY METHOD - Updates Junction Table
+ */
 rolePermissionSchema.statics.setRolePermissions = async function(roleId, permissionsData, userId = null) {
   // Delete existing permissions for this role
   await this.deleteMany({ roleId });
@@ -138,8 +231,13 @@ rolePermissionSchema.statics.setRolePermissions = async function(roleId, permiss
   // Create new permission entries
   const docs = permissionsData.map(p => ({
     roleId,
+    pageId: p.pageId,
     permissionId: p.permissionId,
-    actions: p.actions,
+    module: p.module,
+    displayName: p.displayName,
+    category: p.category,
+    route: p.route,
+    actions: p.actions || { all: false },
     updatedBy: userId,
   }));
 
@@ -148,6 +246,74 @@ rolePermissionSchema.statics.setRolePermissions = async function(roleId, permiss
   }
 
   return true;
+};
+
+/**
+ * Update a single permission action
+ */
+rolePermissionSchema.statics.updateRolePermissionAction = async function(roleId, pageId, actions) {
+  const updated = await this.findOneAndUpdate(
+    { roleId, pageId },
+    { $set: { actions, updatedAt: new Date() } },
+    { new: true }
+  );
+  return updated;
+};
+
+/**
+ * Check if role has specific page and action
+ */
+rolePermissionSchema.statics.hasPageAccess = async function(roleId, pageId, action = 'read') {
+  const rp = await this.findOne({ roleId, pageId }).lean();
+  if (!rp) return false;
+
+  if (rp.actions.all) return true;
+  return rp.actions[action] === true;
+};
+
+/**
+ * Check if role has specific module and action
+ */
+rolePermissionSchema.statics.hasModuleAccess = async function(roleId, module, action = 'read') {
+  const rp = await this.findOne({ roleId, module }).lean();
+  if (!rp) return false;
+
+  if (rp.actions.all) return true;
+  return rp.actions[action] === true;
+};
+
+/**
+ * Get all accessible pages for a role
+ */
+rolePermissionSchema.statics.getAccessiblePages = async function(roleId) {
+  const rolePermissions = await this.find({ roleId })
+    .populate('pageId')
+    .lean();
+
+  return rolePermissions
+    .filter(rp => rp.pageId)
+    .map(rp => ({
+      pageId: rp.pageId._id,
+      route: rp.pageId.route,
+      module: rp.module,
+      displayName: rp.displayName,
+      actions: rp.actions,
+    }));
+};
+
+/**
+ * Get permission count summary for a role
+ */
+rolePermissionSchema.statics.getPermissionSummary = async function(roleId) {
+  const rolePermissions = await this.find({ roleId }).lean();
+
+  const categories = [...new Set(rolePermissions.map(rp => rp.category))];
+  const totalPermissions = rolePermissions.length;
+
+  return {
+    totalPermissions,
+    categories,
+  };
 };
 
 export default mongoose.models.RolePermission || mongoose.model('RolePermission', rolePermissionSchema);

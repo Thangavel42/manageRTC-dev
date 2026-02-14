@@ -257,11 +257,11 @@ export const checkRolePermission = async (req, res) => {
 
 /**
  * Update a single permission action for a role
- * @route PATCH /api/rbac/roles/:roleId/permissions/:permissionId
+ * @route PATCH /api/rbac/roles/:roleId/permissions/:pageId
  * @body {Object} actions - Actions object {read: true, write: false, ...}
  */
 export const updateRolePermissionAction = async (req, res) => {
-  const { roleId, permissionId } = req.params;
+  const { roleId, pageId } = req.params;
   const { actions } = req.body;
 
   if (!actions || typeof actions !== 'object') {
@@ -271,9 +271,8 @@ export const updateRolePermissionAction = async (req, res) => {
     });
   }
 
-  // Import role service for this specific method
-  const roleService = await import('../../services/rbac/role.service.js');
-  const result = await roleService.updateRolePermissionAction(roleId, permissionId, actions);
+  // Use permission service for Junction Table approach
+  const result = await permissionService.updateRolePermissionAction(roleId, permissionId, actions);
 
   if (!result.success) {
     return res.status(400).json({
@@ -284,7 +283,7 @@ export const updateRolePermissionAction = async (req, res) => {
 
   return res.json({
     success: true,
-    message: result.message,
+    message: 'Permission updated successfully',
     data: result.data,
   });
 };

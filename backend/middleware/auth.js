@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { clerkClient, verifyToken } from '@clerk/express';
+import { createClerkClient } from '@clerk/clerk-sdk-node';
 
 // ⚠️ SECURITY WARNING: Development mode is hardcoded to true!
 // This is a DEVELOPMENT workaround that MUST be removed before production deployment.
@@ -20,6 +21,10 @@ const authorizedParties = [
   'https://dev.manage-rtc.com',
   'https://apidev.manage-rtc.com',
 ];
+
+// Use JWT key directly - Clerk's verifyToken accepts the raw base64 key
+const CLERK_JWT_KEY = process.env.CLERK_JWT_KEY || '';
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || '';
 
 /**
  * Authenticate - Main authentication middleware
@@ -51,13 +56,42 @@ export const authenticate = async (req, res, next) => {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     // Verify JWT token using Clerk's verifyToken (same as Socket.IO)
-    const verifiedToken = await verifyToken(token, {
-      jwtKey: process.env.CLERK_JWT_KEY,
-      authorizedParties,
+    console.log('[Auth Middleware] Attempting token verification...', {
+      hasSecretKey: !!CLERK_SECRET_KEY,
+      secretKeyPrefix: CLERK_SECRET_KEY?.substring(0, 10) + '...',
+      requestId: req.id,
     });
+
+    let verifiedToken;
+    try {
+      // Use secretKey for most reliable verification
+      // Clerk will fetch the correct JWT key from the API
+      verifiedToken = await verifyToken(token, {
+        secretKey: CLERK_SECRET_KEY,
+      });
+    } catch (verifyError) {
+      console.error('[Auth Middleware] Token verification error:', {
+        name: verifyError.name,
+        message: verifyError.message,
+        code: verifyError.code,
+        stack: verifyError.stack,
+        requestId: req.id,
+      });
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'TOKEN_VERIFICATION_FAILED',
+          message: verifyError.message || 'Token verification failed',
+          debug: process.env.NODE_ENV === 'development' ? verifyError.toString() : undefined,
+          requestId: req.id || 'no-id',
+        },
+      });
+    }
 
     if (!verifiedToken || !verifiedToken.sub) {
       console.error('[Auth Middleware] Token verification failed - no sub claim', {
+        hasVerifiedToken: !!verifiedToken,
+        keys: verifiedToken ? Object.keys(verifiedToken) : [],
         requestId: req.id,
       });
       return res.status(401).json({
@@ -321,8 +355,7 @@ export const optionalAuth = async (req, res, next) => {
       const token = authHeader.substring(7);
 
       const verifiedToken = await verifyToken(token, {
-        jwtKey: process.env.CLERK_JWT_KEY,
-        authorizedParties,
+        secretKey: CLERK_SECRET_KEY,
       });
 
       if (verifiedToken && verifiedToken.sub) {

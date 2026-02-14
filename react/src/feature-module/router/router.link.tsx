@@ -121,6 +121,11 @@ import PayslipReport from '../administration/reports/payslipreport';
 import ProjectReport from '../administration/reports/projectreport';
 import TaskReport from '../administration/reports/taskreport';
 import UserReports from '../administration/reports/userreports';
+import PermissionPage from '../super-admin/permissionpage';
+import RolesPermission from '../super-admin/rolePermission';
+import Users from '../super-admin/users';
+import Modules from '../super-admin/modules';
+import Pages from '../super-admin/pages';
 import IncomingCall from '../application/call/incomingcall';
 import OutgoingCalls from '../application/call/outgingcalls';
 import Videocallss from '../application/call/videocalls';
@@ -1516,6 +1521,11 @@ export const publicRoutes = [
   {
     path: routes.superAdminModules,
     element: <Modules />,
+    roles: ['superadmin'],
+  },
+  {
+    path: routes.superAdminPages,
+    element: <Pages />,
     roles: ['superadmin'],
   },
   {
