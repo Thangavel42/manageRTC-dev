@@ -147,6 +147,28 @@ const AddSuperAdminModal: React.FC<AddSuperAdminModalProps> = ({ show, onClose, 
     if (result.success) {
       onClose();
       if (onSuccess) onSuccess();
+
+      // Show success toast with instructions
+      toast.success(
+        <div>
+          <strong>✅ Super Admin User Created Successfully!</strong>
+          <div className="mt-2" style={{ fontSize: '12px' }}>
+            <div>📧 Email with credentials has been sent to <strong>{submitData.email}</strong></div>
+            <div className="mt-2 p-2" style={{ background: 'rgba(255,255,0,0.1)', borderRadius: '4px' }}>
+              <strong>⚠️ Important Instructions:</strong>
+              <ul className="mb-0 mt-1" style={{ paddingLeft: '18px' }}>
+                <li>User must sign out and sign back in after first login</li>
+                <li>This ensures all Super Admin menu items appear correctly</li>
+                <li>Use "Refresh Metadata" button if menu items are missing</li>
+              </ul>
+            </div>
+          </div>
+        </div>,
+        {
+          autoClose: 8000,
+          closeButton: true,
+        }
+      );
     } else {
       setErrors({ submit: result.error });
     }
@@ -321,7 +343,8 @@ const AddSuperAdminModal: React.FC<AddSuperAdminModalProps> = ({ show, onClose, 
                 <ul className="mb-0 mt-2">
                   <li>A secure password will be auto-generated and sent to the user's email</li>
                   <li>The user will be created with <strong>Super Admin</strong> role</li>
-                  <li>They will have full system access</li>
+                  <li>They will have full system access after signing in</li>
+                  <li className="text-warning"><strong>⚠️ Important:</strong> After the user signs in for the first time, they should <strong>sign out and sign back in</strong> to see all Super Admin menu items</li>
                 </ul>
               </div>
             </div>

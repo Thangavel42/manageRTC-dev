@@ -58,7 +58,7 @@ export async function createSuperAdminUser(userData) {
     // Always auto-generate password (16 characters)
     const generatedPassword = generatePassword(16);
 
-    // Create user in Clerk
+    // Create user in Clerk (only store role in metadata, other data in database)
     const clerkUser = await clerk.users.createUser({
       emailAddress: [email],
       firstName,
@@ -66,41 +66,67 @@ export async function createSuperAdminUser(userData) {
       password: generatedPassword,
       publicMetadata: {
         role: 'superadmin',
-        createdByAdmin: true,
-      },
-      unsafeMetadata: {
-        phone,
-        gender,
-        accountType: 'superadmin',
       },
     });
 
     // Verify metadata was set correctly by fetching the user again
+    // Use retry logic to handle any propagation delays
     let verifiedUser;
-    try {
-      verifiedUser = await clerk.users.getUser(clerkUser.id);
-      const actualRole = verifiedUser.publicMetadata?.role;
+    const maxRetries = 3;
+    let metadataVerified = false;
 
-      console.log('[createSuperAdminUser] Metadata verification:', {
-        clerkUserId: clerkUser.id,
-        expectedRole: 'superadmin',
-        actualRole,
-        roleMatch: actualRole === 'superadmin',
-      });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[createSuperAdminUser] Metadata verification attempt ${attempt}/${maxRetries}...`);
 
-      // If role wasn't set correctly, try to update it
-      if (actualRole !== 'superadmin') {
-        console.warn('[createSuperAdminUser] Role not set correctly, attempting to update...');
-        await clerk.users.updateUser(clerkUser.id, {
-          publicMetadata: {
-            role: 'superadmin',
-            createdByAdmin: true,
-          },
+        // Wait a moment before each retry (except first)
+        if (attempt > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        verifiedUser = await clerk.users.getUser(clerkUser.id);
+        const actualRole = verifiedUser.publicMetadata?.role;
+
+        console.log('[createSuperAdminUser] Metadata verification:', {
+          clerkUserId: clerkUser.id,
+          expectedRole: 'superadmin',
+          actualRole,
+          roleMatch: actualRole === 'superadmin',
+          attempt,
         });
-        console.log('[createSuperAdminUser] Role updated successfully');
+
+        // Check if role is set correctly
+        if (actualRole === 'superadmin') {
+          metadataVerified = true;
+          console.log('[createSuperAdminUser] ✅ Metadata verified successfully!');
+          break;
+        }
+
+        // If this wasn't the last attempt, try to update the role
+        if (attempt < maxRetries) {
+          console.warn('[createSuperAdminUser] Role not set correctly, attempting to update...');
+          await clerk.users.updateUser(clerkUser.id, {
+            publicMetadata: {
+              role: 'superadmin',
+            },
+          });
+          console.log('[createSuperAdminUser] Role update attempted, will verify again...');
+        }
+      } catch (verifyError) {
+        console.error(`[createSuperAdminUser] Metadata verification attempt ${attempt} failed:`, verifyError.message);
+
+        if (attempt === maxRetries) {
+          // Final attempt failed, but we'll still proceed with the user creation
+          console.error('[createSuperAdminUser] ⚠️ All verification attempts failed, proceeding with user creation');
+          break;
+        }
       }
-    } catch (verifyError) {
-      console.error('[createSuperAdminUser] Metadata verification failed:', verifyError);
+    }
+
+    // Log final verification status
+    if (!metadataVerified) {
+      console.error('[createSuperAdminUser] ⚠️ WARNING: Metadata could not be verified after all retries');
+      console.error('[createSuperAdminUser] User may need to use "Refresh Metadata" button after signing in');
     }
 
     // Create record in database
@@ -221,24 +247,16 @@ export async function updateSuperAdminUser(clerkUserId, updateData) {
   try {
     const { firstName, lastName, phone, gender, address, profileImage, status } = updateData;
 
-    // Update in Clerk
+    // Update in Clerk (only basic profile fields, no metadata)
     const clerkUpdateData = {};
     if (firstName) clerkUpdateData.firstName = firstName;
     if (lastName) clerkUpdateData.lastName = lastName;
-
-    // Build unsafe metadata with phone and gender
-    const unsafeMetadata = {};
-    if (phone !== undefined) unsafeMetadata.phone = phone;
-    if (gender !== undefined) unsafeMetadata.gender = gender;
-    if (Object.keys(unsafeMetadata).length > 0) {
-      clerkUpdateData.unsafeMetadata = unsafeMetadata;
-    }
 
     if (Object.keys(clerkUpdateData).length > 0) {
       await clerk.users.updateUser(clerkUserId, clerkUpdateData);
     }
 
-    // Update in database
+    // Update in database (all fields including phone, gender, etc.)
     const dbUpdateData = {};
     if (firstName) dbUpdateData.firstName = firstName;
     if (lastName) dbUpdateData.lastName = lastName;
