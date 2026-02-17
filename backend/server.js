@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
+import { startResignationScheduler } from './jobs/resignationScheduler.js';
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -376,6 +377,15 @@ const initializeServer = async () => {
       console.log('✅ Promotion scheduler initialized');
     } catch (err) {
       console.error('⚠️  Promotion scheduler failed to initialize:', err.message);
+      // Continue server startup even if scheduler fails
+    }
+
+    // Start resignation scheduler for automatic resignation processing
+    try {
+      await startResignationScheduler();
+      console.log('✅ Resignation scheduler initialized');
+    } catch (err) {
+      console.error('⚠️  Resignation scheduler failed to initialize:', err.message);
       // Continue server startup even if scheduler fails
     }
 

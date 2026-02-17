@@ -4,10 +4,9 @@
  */
 
 import express from 'express';
-import { authenticate, requireRole } from '../../middleware/auth.js';
-import { validate, validateBody, validateQuery, validateParams } from '../../middleware/validate.js';
-import { resignationSchemas, commonSchemas } from '../../middleware/validate.js';
 import resignationController from '../../controllers/rest/resignation.controller.js';
+import { authenticate, requireRole } from '../../middleware/auth.js';
+import { commonSchemas, resignationSchemas, validateBody, validateParams, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
 
@@ -37,24 +36,24 @@ router.get('/employees/:departmentId', requireRole('admin', 'hr', 'superadmin'),
 
 /**
  * @route   GET /api/resignations
- * @desc    Get all resignations
- * @access  Private (Admin, HR, Superadmin)
+ * @desc    Get all resignations (role-based: employees see own, managers see team)
+ * @access  Private (Admin, HR, Superadmin, Manager, Employee)
  */
-router.get('/', requireRole('admin', 'hr', 'superadmin'), validateQuery(resignationSchemas.list), resignationController.getAllResignations);
+router.get('/', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), validateQuery(resignationSchemas.list), resignationController.getAllResignations);
 
 /**
  * @route   GET /api/resignations/:id
- * @desc    Get single resignation by ID
- * @access  Private (Admin, HR, Superadmin)
+ * @desc    Get single resignation by ID (role-based)
+ * @access  Private (Admin, HR, Superadmin, Manager, Employee)
  */
-router.get('/:id', requireRole('admin', 'hr', 'superadmin'), validateParams(commonSchemas.objectId), resignationController.getResignationById);
+router.get('/:id', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), validateParams(commonSchemas.objectId), resignationController.getResignationById);
 
 /**
  * @route   POST /api/resignations
  * @desc    Create new resignation
  * @access  Private (Admin, HR, Superadmin)
  */
-router.post('/', requireRole('admin', 'hr', 'superadmin'), validateBody(resignationSchemas.create), resignationController.createResignation);
+router.post('/', requireRole('admin', 'hr', 'employee', 'superadmin'), validateBody(resignationSchemas.create), resignationController.createResignation);
 
 /**
  * @route   PUT /api/resignations/:id
@@ -68,14 +67,14 @@ router.put('/:id', requireRole('admin', 'hr', 'superadmin'), validateParams(comm
  * @desc    Approve resignation
  * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id/approve', requireRole('admin', 'hr', 'superadmin'), validateParams(commonSchemas.objectId), resignationController.approveResignationById);
+router.put('/:id/approve', requireRole('admin', 'hr', 'manager', 'superadmin'), validateParams(commonSchemas.objectId), resignationController.approveResignationById);
 
 /**
  * @route   PUT /api/resignations/:id/reject
  * @desc    Reject resignation
  * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id/reject', requireRole('admin', 'hr', 'superadmin'), validateParams(commonSchemas.objectId), validateBody(resignationSchemas.reject), resignationController.rejectResignationById);
+router.put('/:id/reject', requireRole('admin', 'hr', 'manager', 'superadmin'), validateParams(commonSchemas.objectId), validateBody(resignationSchemas.reject), resignationController.rejectResignationById);
 
 /**
  * @route   PUT /api/resignations/:id/process

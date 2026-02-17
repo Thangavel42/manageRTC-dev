@@ -1661,7 +1661,7 @@ export const broadcastResignationEvents = {
    */
   created: (io, companyId, resignation) => {
     broadcastToCompany(io, companyId, 'resignation:created', {
-      resignationId: resignation._id,
+      resignationId: resignation.resignationId || resignation._id,
       employeeId: resignation.employeeId,
       noticeDate: resignation.noticeDate,
       lastWorkingDate: resignation.lastWorkingDate,
@@ -1676,7 +1676,7 @@ export const broadcastResignationEvents = {
    */
   updated: (io, companyId, resignation) => {
     broadcastToCompany(io, companyId, 'resignation:updated', {
-      resignationId: resignation._id,
+      resignationId: resignation.resignationId || resignation._id,
       employeeId: resignation.employeeId,
       status: resignation.status,
       updatedBy: resignation.updatedBy,
@@ -1689,7 +1689,7 @@ export const broadcastResignationEvents = {
    */
   approved: (io, companyId, resignation, employee) => {
     broadcastToCompany(io, companyId, 'resignation:approved', {
-      resignationId: resignation._id,
+      resignationId: resignation.resignationId || resignation._id,
       employeeId: resignation.employeeId,
       employeeName: employee?.fullName || employee?.name,
       lastWorkingDate: resignation.lastWorkingDate,
@@ -1703,7 +1703,7 @@ export const broadcastResignationEvents = {
    */
   rejected: (io, companyId, resignation, reason) => {
     broadcastToCompany(io, companyId, 'resignation:rejected', {
-      resignationId: resignation._id,
+      resignationId: resignation.resignationId || resignation._id,
       employeeId: resignation.employeeId,
       status: resignation.status,
       reason,
@@ -1716,7 +1716,7 @@ export const broadcastResignationEvents = {
    */
   withdrawn: (io, companyId, resignation) => {
     broadcastToCompany(io, companyId, 'resignation:withdrawn', {
-      resignationId: resignation._id,
+      resignationId: resignation.resignationId || resignation._id,
       employeeId: resignation.employeeId,
       timestamp: new Date().toISOString(),
     });

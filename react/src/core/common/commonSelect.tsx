@@ -12,9 +12,12 @@ export interface SelectProps {
   value?: Option | string | null;
   className?: string;
   onChange?: (selectedOption: Option | null) => void;
+  onInputChange?: (inputValue: string) => void;
   isSearchable?: boolean;
   disabled?: boolean;
   isLoading?: boolean;
+  placeholder?: string;
+  isClearable?: boolean;
 }
 
   const CommonSelect: React.FC<SelectProps> = ({
@@ -23,9 +26,11 @@ export interface SelectProps {
     value,
     className,
     onChange,
+    onInputChange,
     isSearchable = true,
     disabled = false,
     isLoading = false,
+    placeholder = "Select...",
   }) => {
   const findOptionByLabel = (label: string): Option | null => {
     return options.find((opt) => opt.label === label) || null;
@@ -73,7 +78,12 @@ export interface SelectProps {
       className={className}
       isDisabled={disabled}
       isLoading={isLoading}
-      placeholder="Select..."
+      placeholder={placeholder}
+      onInputChange={(inputValue) => {
+        if (onInputChange) {
+          onInputChange(inputValue);
+        }
+      }}
       isClearable
       // Ensure we never render objects as children
       getOptionLabel={(option: Option) => option.label || ""}

@@ -1410,6 +1410,16 @@ const EmployeeDetails = () => {
   const [department, setDepartment] = useState<Option[]>([]);
   const [designation, setDesignation] = useState<Option[]>([]);
 
+  const designationLookup = React.useMemo(() => {
+    const lookup: Record<string, string> = {};
+    designations.forEach((item: any) => {
+      if (item?._id && item?.designation) {
+        lookup[item._id] = item.designation;
+      }
+    });
+    return lookup;
+  }, [designations]);
+
   // Initialize edit form data when employee data is loaded
   useEffect(() => {
     if (employee) {
@@ -1698,6 +1708,18 @@ const EmployeeDetails = () => {
 
     loadDepartments();
   }, [fetchDepartments]);
+
+  useEffect(() => {
+    const loadDesignations = async () => {
+      try {
+        await fetchDesignations();
+      } catch (err) {
+        console.error('Error fetching designations:', err);
+      }
+    };
+
+    loadDesignations();
+  }, [fetchDesignations]);
 
   // Initialize batches and shifts for the edit modal
   useEffect(() => {
@@ -4600,7 +4622,12 @@ const EmployeeDetails = () => {
       {/* /View Policy Modal */}
 
       {/* Promotion Details Modal */}
-      <PromotionDetailsModal promotion={employeePromotion} modalId="view_employee_promotion" />
+      <PromotionDetailsModal
+        promotion={employeePromotion}
+        departments={departments}
+        designationLookup={designationLookup}
+        modalId="view_employee_promotion"
+      />
       {/* /Promotion Details Modal */}
 
       {/* Resignation Details Modal */}

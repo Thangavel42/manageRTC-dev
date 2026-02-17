@@ -3,32 +3,19 @@
  * Handles all Resignation CRUD operations via REST API
  */
 
+import { getTenantCollections } from '../../config/db.js';
 import {
-  buildNotFoundError,
-  buildConflictError,
-  buildValidationError,
-  asyncHandler
+    asyncHandler, buildConflictError, buildNotFoundError, buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-  sendSuccess,
-  sendCreated,
-  extractUser,
-  getRequestId
-} from '../../utils/apiResponse.js';
-import { broadcastResignationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
-import {
-  getResignationStats,
-  getResignations,
-  getSpecificResignation,
-  addResignation,
-  updateResignation,
-  deleteResignation,
-  getDepartments,
-  getEmployeesByDepartment,
-  approveResignation,
-  rejectResignation,
-  processResignationEffectiveDate
+    addResignation, approveResignation, deleteResignation,
+    getDepartments,
+    getEmployeesByDepartment, getResignations, getResignationStats, getSpecificResignation, processResignationEffectiveDate, rejectResignation, updateResignation
 } from '../../services/hr/resignation.services.js';
+import {
+    extractUser, sendCreated, sendSuccess
+} from '../../utils/apiResponse.js';
+import { broadcastDashboardEvents, broadcastResignationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * @desc    Get resignation statistics
@@ -48,9 +35,9 @@ export const getStats = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get all resignations with optional filters
+ * @desc    Get all resignations with optional filters (role-based access)
  * @route   GET /api/resignations
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Manager, Employee)
  */
 export const getAllResignations = asyncHandler(async (req, res) => {
   const { type, startDate, endDate } = req.query;
@@ -62,15 +49,51 @@ export const getAllResignations = asyncHandler(async (req, res) => {
     throw buildConflictError(result.message || 'Failed to fetch resignations');
   }
 
-  return sendSuccess(res, result.data, 'Resignations retrieved successfully', 200, {
-    total: result.count || 0
+  let filteredData = result.data || [];
+  const userRole = user.role?.toLowerCase();
+  const userId = user.userId || user._id?.toString();
+  const employeeId = user.employeeId || '';
+  let employeeRecordId = '';
+
+  if (userRole === 'employee' || userRole === 'manager') {
+    const collections = getTenantCollections(user.companyId);
+    const employeeRecord = await collections.employees.findOne({
+      isDeleted: { $ne: true },
+      $or: [
+        { clerkUserId: userId },
+        { 'account.userId': userId }
+      ]
+    }, { projection: { _id: 1 } });
+    employeeRecordId = employeeRecord?._id?.toString() || '';
+  }
+
+  const allowedIds = new Set([userId, employeeId, employeeRecordId].filter(Boolean));
+
+  if (userRole === 'employee') {
+    filteredData = filteredData.filter(resignation => {
+      const matchesEmployee = allowedIds.has(resignation.employeeId);
+      const matchesCreator = allowedIds.has(resignation.created_by?.userId);
+      const matchesEmpId = allowedIds.has(resignation.employee_id || resignation.employeeId);
+      return matchesEmployee || matchesCreator || matchesEmpId;
+    });
+  } else if (userRole === 'manager') {
+    filteredData = filteredData.filter(resignation => {
+      const isOwn = allowedIds.has(resignation.employeeId) || allowedIds.has(resignation.employee_id);
+      const isTeam = allowedIds.has(resignation.reportingManagerId);
+      const matchesCreator = allowedIds.has(resignation.created_by?.userId);
+      return isOwn || isTeam || matchesCreator;
+    });
+  }
+
+  return sendSuccess(res, filteredData, 'Resignations retrieved successfully', 200, {
+    total: filteredData.length || 0
   });
 });
 
 /**
- * @desc    Get single resignation by ID
+ * @desc    Get single resignation by ID (role-based)
  * @route   GET /api/resignations/:id
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Manager, Employee)
  */
 export const getResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -86,7 +109,42 @@ export const getResignationById = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Resignation', id);
   }
 
-  return sendSuccess(res, result.data, 'Resignation retrieved successfully');
+  const resignation = result.data;
+  const userRole = user.role?.toLowerCase();
+  const userId = user.userId || user._id?.toString();
+  const employeeId = user.employeeId || '';
+  let employeeRecordId = '';
+
+  if (userRole === 'employee' || userRole === 'manager') {
+    const collections = getTenantCollections(user.companyId);
+    const employeeRecord = await collections.employees.findOne({
+      isDeleted: { $ne: true },
+      $or: [
+        { clerkUserId: userId },
+        { 'account.userId': userId }
+      ]
+    }, { projection: { _id: 1 } });
+    employeeRecordId = employeeRecord?._id?.toString() || '';
+  }
+
+  const allowedIds = new Set([userId, employeeId, employeeRecordId].filter(Boolean));
+
+  if (userRole === 'employee') {
+    const matchesEmployee = allowedIds.has(resignation.employeeId) || allowedIds.has(resignation.employee_id);
+    const matchesCreator = allowedIds.has(resignation.created_by?.userId);
+    if (!matchesEmployee && !matchesCreator) {
+      throw buildValidationError('id', 'You do not have permission to view this resignation');
+    }
+  } else if (userRole === 'manager') {
+    const isOwn = allowedIds.has(resignation.employeeId) || allowedIds.has(resignation.employee_id);
+    const isTeam = allowedIds.has(resignation.reportingManagerId);
+    const matchesCreator = allowedIds.has(resignation.created_by?.userId);
+    if (!isOwn && !isTeam && !matchesCreator) {
+      throw buildValidationError('id', 'You do not have permission to view this resignation');
+    }
+  }
+
+  return sendSuccess(res, resignation, 'Resignation retrieved successfully');
 });
 
 /**
@@ -105,7 +163,7 @@ export const createResignation = asyncHandler(async (req, res) => {
     userName: user.userName || user.fullName || user.name || ''
   };
 
-  const result = await addResignation(user.companyId, resignationData);
+  const result = await addResignation(user.companyId, resignationData, user);
 
   if (!result.done) {
     if (result.errors) {
@@ -117,6 +175,12 @@ export const createResignation = asyncHandler(async (req, res) => {
   // Broadcast resignation created event
   if (io && result.data) {
     broadcastResignationEvents.created(io, user.companyId, result.data);
+  }
+
+  if (io && Array.isArray(result.notifications)) {
+    result.notifications.forEach((notification) => {
+      broadcastDashboardEvents.newNotification(io, user.companyId, notification);
+    });
   }
 
   return sendCreated(res, result.data || { message: 'Resignation created' }, 'Resignation created successfully');
@@ -193,7 +257,7 @@ export const approveResignationById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Resignation ID is required');
   }
 
-  const result = await approveResignation(user.companyId, id, user.userId);
+  const result = await approveResignation(user.companyId, id, user);
 
   if (!result.done) {
     if (result.message.includes('not found')) {
@@ -205,6 +269,12 @@ export const approveResignationById = asyncHandler(async (req, res) => {
   // Broadcast resignation approved event
   if (io && result.data) {
     broadcastResignationEvents.approved(io, user.companyId, result.data);
+  }
+
+  if (io && Array.isArray(result.notifications)) {
+    result.notifications.forEach((notification) => {
+      broadcastDashboardEvents.newNotification(io, user.companyId, notification);
+    });
   }
 
   return sendSuccess(res, null, 'Resignation approved successfully');
@@ -225,7 +295,7 @@ export const rejectResignationById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Resignation ID is required');
   }
 
-  const result = await rejectResignation(user.companyId, id, user.userId, reason);
+  const result = await rejectResignation(user.companyId, id, user, reason);
 
   if (!result.done) {
     if (result.message.includes('not found')) {
@@ -237,6 +307,12 @@ export const rejectResignationById = asyncHandler(async (req, res) => {
   // Broadcast resignation rejected event
   if (io && result.data) {
     broadcastResignationEvents.rejected(io, user.companyId, result.data, reason);
+  }
+
+  if (io && Array.isArray(result.notifications)) {
+    result.notifications.forEach((notification) => {
+      broadcastDashboardEvents.newNotification(io, user.companyId, notification);
+    });
   }
 
   return sendSuccess(res, null, 'Resignation rejected successfully');
