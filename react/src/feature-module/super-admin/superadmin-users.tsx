@@ -5,11 +5,13 @@
  */
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { all_routes } from '../router/all_routes';
+import CollapseHeader from '../../core/common/collapse-header/collapse-header';
 import Footer from '../../core/common/footer';
 import AddSuperAdminModal from '../../core/modals/AddSuperAdminModal';
 import EditSuperAdminModal from '../../core/modals/EditSuperAdminModal';
 import { useSuperAdminUsers } from '../../hooks/useSuperAdminUsers';
-import { all_routes } from '../router/all_routes';
 
 const SuperAdminUsers: React.FC = () => {
   const {
@@ -140,90 +142,119 @@ const SuperAdminUsers: React.FC = () => {
   return (
     <>
       <div className="page-wrapper">
-        <div className="content container-fluid">
-          {/* Page Header */}
-          <div className="d-md-flex justify-content-between align-items-center mb-4">
-            <div>
-              <h3 className="page-title mb-1">Super Admin Users</h3>
-              <nav aria-label="breadcrumb">
-                <ol className="breadcrumb">
-                  <li className="breadcrumb-item"><a href={all_routes.superAdminDashboard}>Home</a></li>
-                  <li className="breadcrumb-item active" aria-current="page">Super Admin Users</li>
+        <div className="content">
+          {/* Breadcrumb */}
+          <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+            <div className="my-auto mb-2">
+              <h2 className="mb-1">Super Admin Users</h2>
+              <nav>
+                <ol className="breadcrumb mb-0">
+                  <li className="breadcrumb-item">
+                    <Link to={all_routes.adminDashboard}>
+                      <i className="ti ti-smart-home" />
+                    </Link>
+                  </li>
+                  <li className="breadcrumb-item">Super Admin</li>
+                  <li className="breadcrumb-item active" aria-current="page">
+                    Super Admin Users
+                  </li>
                 </ol>
               </nav>
             </div>
-            <div className="d-flex gap-2">
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowAddModal(true)}
-              >
-                <i className="ti ti-plus me-1"></i>
-                Add Super Admin
-              </button>
+            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+              <div className="mb-2">
+                <button
+                  className="btn btn-primary d-flex align-items-center"
+                  onClick={() => setShowAddModal(true)}
+                >
+                  <i className="ti ti-circle-plus me-2"></i>
+                  Add Super Admin
+                </button>
+              </div>
+              <div className="head-icons ms-2">
+                <CollapseHeader />
+              </div>
             </div>
           </div>
+          {/* /Breadcrumb */}
 
           {/* Statistics Cards */}
           {stats && (
-            <div className="row mb-4">
-              <div className="col-md-3 col-sm-6 mb-3">
-                <div className="card stats-card">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-center">
+            <div className="row">
+              <div className="col-lg-3 col-md-6 d-flex">
+                <div className="card flex-fill">
+                  <div className="card-body d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center overflow-hidden">
                       <div>
-                        <p className="stats-label mb-1">Total Super Admins</p>
-                        <h4 className="stats-value mb-0">{stats.total}</h4>
+                        <span className="avatar avatar-lg bg-primary rounded-circle">
+                          <i className="ti ti-shield" />
+                        </span>
                       </div>
-                      <div className="stats-icon bg-primary">
-                        <i className="ti ti-shield"></i>
+                      <div className="ms-2 overflow-hidden">
+                        <p className="fs-12 fw-medium mb-1 text-truncate">
+                          Total Super Admins
+                        </p>
+                        <h4>{stats.total}</h4>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="col-md-3 col-sm-6 mb-3">
-                <div className="card stats-card">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-center">
+              <div className="col-lg-3 col-md-6 d-flex">
+                <div className="card flex-fill">
+                  <div className="card-body d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center overflow-hidden">
                       <div>
-                        <p className="stats-label mb-1">Active</p>
-                        <h4 className="stats-value mb-0 text-success">{stats.active}</h4>
+                        <span className="avatar avatar-lg bg-success rounded-circle">
+                          <i className="ti ti-check" />
+                        </span>
                       </div>
-                      <div className="stats-icon bg-success">
-                        <i className="ti ti-check"></i>
+                      <div className="ms-2 overflow-hidden">
+                        <p className="fs-12 fw-medium mb-1 text-truncate">
+                          Active
+                        </p>
+                        <h4>{stats.active}</h4>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="col-md-3 col-sm-6 mb-3">
-                <div className="card stats-card">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-center">
+              <div className="col-lg-3 col-md-6 d-flex">
+                <div className="card flex-fill">
+                  <div className="card-body d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center overflow-hidden">
                       <div>
-                        <p className="stats-label mb-1">Inactive</p>
-                        <h4 className="stats-value mb-0 text-danger">{stats.inactive}</h4>
+                        <span className="avatar avatar-lg bg-danger rounded-circle">
+                          <i className="ti ti-x" />
+                        </span>
                       </div>
-                      <div className="stats-icon bg-danger">
-                        <i className="ti ti-x"></i>
+                      <div className="ms-2 overflow-hidden">
+                        <p className="fs-12 fw-medium mb-1 text-truncate">
+                          Inactive
+                        </p>
+                        <h4>{stats.inactive}</h4>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="col-md-3 col-sm-6 mb-3">
-                <div className="card stats-card">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-center">
+              <div className="col-lg-3 col-md-6 d-flex">
+                <div className="card flex-fill">
+                  <div className="card-body d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center overflow-hidden">
                       <div>
-                        <p className="stats-label mb-1">Pending</p>
-                        <h4 className="stats-value mb-0 text-warning">{stats.pending}</h4>
+                        <span className="avatar avatar-lg bg-warning rounded-circle">
+                          <i className="ti ti-clock" />
+                        </span>
                       </div>
-                      <div className="stats-icon bg-warning">
-                        <i className="ti ti-time"></i>
+                      <div className="ms-2 overflow-hidden">
+                        <p className="fs-12 fw-medium mb-1 text-truncate">
+                          Pending
+                        </p>
+                        <h4>{stats.pending}</h4>
                       </div>
                     </div>
                   </div>
@@ -232,11 +263,12 @@ const SuperAdminUsers: React.FC = () => {
             </div>
           )}
 
-          {/* Filters and Search */}
-          <div className="card mb-4">
-            <div className="card-body">
-              <div className="row g-3">
-                <div className="col-md-4">
+          {/* Main Card */}
+          <div className="card">
+            <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+              <h5>Super Admin Users List</h5>
+              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                <div className="me-3">
                   <div className="input-group">
                     <span className="input-group-text">
                       <i className="ti ti-search"></i>
@@ -251,39 +283,76 @@ const SuperAdminUsers: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="col-md-3">
-                  <select
-                    className="form-select"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                <div className="dropdown">
+                  <Link
+                    to="#"
+                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                    data-bs-toggle="dropdown"
                   >
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="suspended">Suspended</option>
-                    <option value="pending">Pending</option>
-                  </select>
+                    Status{statusFilter !== 'all' ? `: ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}` : ': All'}
+                  </Link>
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter('all')}
+                      >
+                        All Status
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter('active')}
+                      >
+                        Active
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter('inactive')}
+                      >
+                        Inactive
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter('suspended')}
+                      >
+                        Suspended
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter('pending')}
+                      >
+                        Pending
+                      </button>
+                    </li>
+                  </ul>
                 </div>
 
-                <div className="col-md-5 text-end">
-                  <button
-                    className="btn btn-outline-secondary me-2"
-                    onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter('all');
-                      fetchUsers();
-                    }}
-                  >
-                    <i className="ti ti-refresh me-1"></i>
-                    Refresh
-                  </button>
-                </div>
+                <button
+                  className="btn btn-white d-inline-flex align-items-center"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                    fetchUsers();
+                  }}
+                >
+                  <i className="ti ti-refresh me-1"></i>
+                  Refresh
+                </button>
               </div>
             </div>
-          </div>
-
-          {/* Users Table */}
-          <div className="card">
             <div className="card-body">
               {error && (
                 <div className="alert alert-danger" role="alert">

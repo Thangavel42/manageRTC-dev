@@ -212,7 +212,14 @@ export async function createSuperAdmin(req, res) {
       message: result.message,
       metadata: {
         clerkUserId: result.clerkUser?.id,
-        note: 'User will have full Super Admin access after signing in',
+        requireReauth: true,
+        note: 'User must sign out and sign back in to see all Super Admin menu items',
+        instructions: [
+          '1. User will receive email with credentials',
+          '2. User signs in for the first time',
+          '3. User should sign out and sign back in to refresh metadata',
+          '4. Use "Refresh Metadata" button if menu items are still missing',
+        ],
       },
     });
   } catch (error) {
@@ -759,8 +766,6 @@ export async function refreshUserMetadata(req, res) {
       await clerk.users.updateUser(user.clerkUserId, {
         publicMetadata: {
           role: 'superadmin',
-          createdByAdmin: true,
-          metadataRefreshedAt: new Date().toISOString(),
         },
       });
 

@@ -1,0 +1,46 @@
+File Path,Status,Notes,Priority,Estimated_Time
+backend/controllers/rest/employee.controller.js,❌,Hardcoded role check at line 758,HIGH,30min
+backend/controllers/rest/userProfile.controller.js,❌,Hardcoded admin checks at lines 861,977,HIGH,20min
+backend/controllers/rest/syncRole.controller.js,❌,Hardcoded admin/superadmin at line 35,HIGH,15min
+backend/controllers/rest/project.controller.js,❌,Superadmin role checks at lines 612,649,752,MEDIUM,30min
+backend/controllers/rest/leave.controller.js,❌,Role context variables (logging only),LOW,10min
+backend/controllers/rest/attendance.controller.js,❌,Role context variables (logging only),LOW,10min
+backend/controllers/rest/overtime.controller.js,❌,Role context variables (logging only),LOW,10min
+backend/middleware/auth.js,🔄,Legacy requireRole function exists,MEDIUM,Keep for compatibility
+react/src/feature-module/router/withRoleCheck.jsx,❌,HOC role checking,HIGH,1hr
+react/src/core/data/json/sidebarMenu.jsx,❌,Hardcoded menu switch statement,CRITICAL,2hrs
+react/src/core/data/json/horizontalSidebar.tsx,❌,Hardcoded roles arrays (100+ items),CRITICAL,2hrs
+react/src/core/common/horizontal-sidebar/index.tsx,❌,hasAccess() uses role comparison,HIGH,1hr
+react/src/core/modals/AddEmployeeModal.tsx,❌,No permission checks on actions,HIGH,30min
+react/src/core/modals/EditEmployeeModal.tsx,❌,No permission checks on actions,HIGH,30min
+react/src/core/modals/AddSuperAdminModal.tsx,❌,Critical - no permissions,CRITICAL,30min
+react/src/core/modals/EditSuperAdminModal.tsx,❌,Critical - no permissions,CRITICAL,30min
+react/src/feature-module/super-admin/superadmin-users.tsx,❌,All buttons unprotected,CRITICAL,1hr
+react/src/feature-module/hrm/employees/employeesList.tsx,❌,CRUD buttons unprotected,HIGH,1hr
+react/src/feature-module/finance-accounts/sales/invoices.tsx,❌,Finance operations unprotected,CRITICAL,1hr
+backend/routes/api/leave.js,❌,15 requireRole calls,HIGH,1hr
+backend/routes/api/admin-dashboard.js,❌,14 requireRole calls,HIGH,1hr
+backend/routes/api/attendance.js,❌,12 requireRole calls,HIGH,45min
+backend/routes/api/employees.js,❌,11 requireRole calls,HIGH,45min
+backend/routes/api/projects.js,❌,9 requireRole calls,MEDIUM,45min
+backend/routes/api/clients.js,❌,8 requireRole calls,MEDIUM,30min
+backend/routes/api/departments.js,❌,6 requireRole calls,MEDIUM,30min
+backend/routes/api/designations.js,❌,6 requireRole calls,MEDIUM,30min
+backend/routes/api/tasks.js,❌,6 requireRole calls,MEDIUM,30min
+backend/routes/api/budgets.js,❌,7 requireRole calls,MEDIUM,30min
+backend/routes/api/holidays.js,❌,5 requireRole calls,LOW,20min
+backend/routes/api/overtime.js,❌,4 requireRole calls,LOW,20min
+backend/routes/api/promotions.js,❌,4 requireRole calls,LOW,20min
+backend/routes/api/resignations.js,❌,4 requireRole calls,LOW,20min
+backend/routes/api/policies.js,❌,5 requireRole calls,LOW,20min
+backend/routes/api/milestones.js,❌,3 requireRole calls,LOW,15min
+backend/routes/api/pipelines.js,❌,5 requireRole calls,MEDIUM,20min
+backend/routes/api/leads.js,❌,6 requireRole calls,MEDIUM,30min
+backend/routes/api/invoices.js,❌,4 requireRole calls,MEDIUM,20min
+react/src/feature-module/router/all_routes.tsx,✅,Route definitions complete,N/A,0min
+backend/seed/completePagesHierarchical.seed.js,➖,Pages seed file,Create missing pages,4hrs
+backend/models/rbac/page.schema.js,✅,Schema ready,N/A,0min
+backend/models/rbac/permission.schema.js,✅,Schema ready,N/A,0min
+backend/models/rbac/role.schema.js,✅,Schema ready,N/A,0min
+backend/middleware/pageAccess.js,✅,requirePageAccess ready,N/A,0min
+react/src/hooks/usePageAccess.tsx,✅,Hook production ready,N/A,0min

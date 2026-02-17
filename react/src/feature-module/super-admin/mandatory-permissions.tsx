@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
 
@@ -477,27 +479,53 @@ const MandatoryPermissionsPage = () => {
   return (
     <div className="page-wrapper">
       <div className="content">
-        <CollapseHeader />
-        <div className="card">
-          <div className="card-header d-flex align-items-center justify-content-between">
-            <h5 className="mb-0">Mandatory Permissions</h5>
-            <div className="d-flex gap-2">
+        {/* Breadcrumb */}
+        <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+          <div className="my-auto mb-2">
+            <h2 className="mb-1">Mandatory Permissions</h2>
+            <nav>
+              <ol className="breadcrumb mb-0">
+                <li className="breadcrumb-item">
+                  <Link to={all_routes.adminDashboard}>
+                    <i className="ti ti-smart-home" />
+                  </Link>
+                </li>
+                <li className="breadcrumb-item">Super Admin</li>
+                <li className="breadcrumb-item active" aria-current="page">
+                  Mandatory Permissions
+                </li>
+              </ol>
+            </nav>
+          </div>
+          <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+            <div className="mb-2">
               <button
-                className="btn btn-primary"
+                className="btn btn-primary d-flex align-items-center"
                 onClick={saveMandatoryPermissions}
                 disabled={saving || !selectedRole}
               >
                 {saving ? (
                   <>
-                    <i className="ti ti-loader me-1"></i>Saving...
+                    <i className="ti ti-loader me-2"></i>Saving...
                   </>
                 ) : (
                   <>
-                    <i className="ti ti-device-floppy me-1"></i>Save Changes
+                    <i className="ti ti-device-floppy me-2"></i>Save Changes
                   </>
                 )}
               </button>
             </div>
+            <div className="head-icons ms-2">
+              <CollapseHeader />
+            </div>
+          </div>
+        </div>
+        {/* /Breadcrumb */}
+
+        {/* Main Card */}
+        <div className="card">
+          <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+            <h5>Mandatory Permissions Configuration</h5>
           </div>
           <div className="card-body">
             <div className="row mb-4">
