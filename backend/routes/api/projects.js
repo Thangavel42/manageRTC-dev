@@ -5,26 +5,28 @@
 
 import express from 'express';
 import {
-  getProjects,
-  getProjectById,
+  createProjectSubContract,
+  deleteProjectSubContract,
+  getProjectSubContracts,
+  updateProjectSubContract,
+} from '../../controllers/project/project.subcontract.controller.js';
+import {
   createProject,
-  updateProject,
   deleteProject,
-  getProjectStats,
   getMyProjects,
-  updateProjectProgress
+  getProjectById,
+  getProjects,
+  getProjectStats,
+  updateProject,
+  updateProjectProgress,
 } from '../../controllers/rest/project.controller.js';
 import {
+  // requireCompany, // Temporarily disabled - Clerk auth not working properly
+  attachRequestId,
   authenticate,
   requireRole,
-  // requireCompany, // Temporarily disabled - Clerk auth not working properly
-  attachRequestId
 } from '../../middleware/auth.js';
-import {
-  validateBody,
-  validateQuery,
-  projectSchemas
-} from '../../middleware/validate.js';
+import { projectSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
 
@@ -113,6 +115,45 @@ router.patch(
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   requireRole('admin', 'hr', 'superadmin'),
   updateProjectProgress
+);
+
+/**
+ * Project Sub-Contract Routes
+ */
+
+// Get all sub-contracts for a project
+router.get(
+  '/:projectId/subcontracts',
+  authenticate,
+  // requireCompany, // Temporarily disabled - Clerk auth not working properly
+  getProjectSubContracts
+);
+
+// Create new sub-contract for a project
+router.post(
+  '/:projectId/subcontracts',
+  authenticate,
+  // requireCompany, // Temporarily disabled - Clerk auth not working properly
+  requireRole('admin', 'hr', 'superadmin'),
+  createProjectSubContract
+);
+
+// Update sub-contract in a project
+router.put(
+  '/:projectId/subcontracts/:subContractId',
+  authenticate,
+  // requireCompany, // Temporarily disabled - Clerk auth not working properly
+  requireRole('admin', 'hr', 'superadmin'),
+  updateProjectSubContract
+);
+
+// Delete sub-contract from a project
+router.delete(
+  '/:projectId/subcontracts/:subContractId',
+  authenticate,
+  // requireCompany, // Temporarily disabled - Clerk auth not working properly
+  requireRole('admin', 'hr', 'superadmin'),
+  deleteProjectSubContract
 );
 
 export default router;

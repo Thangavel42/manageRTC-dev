@@ -121,13 +121,6 @@ import PayslipReport from '../administration/reports/payslipreport';
 import ProjectReport from '../administration/reports/projectreport';
 import TaskReport from '../administration/reports/taskreport';
 import UserReports from '../administration/reports/userreports';
-import PermissionPage from '../super-admin/permissionpage';
-import RolesPermission from '../super-admin/rolePermission';
-import Users from '../super-admin/users';
-import Modules from '../super-admin/modules';
-import Pages from '../super-admin/pages';
-import MandatoryPermissionsPage from '../super-admin/mandatory-permissions';
-import SuperAdminUsers from '../super-admin/superadmin-users';
 import IncomingCall from '../application/call/incomingcall';
 import OutgoingCalls from '../application/call/outgingcalls';
 import Videocallss from '../application/call/videocalls';
@@ -208,6 +201,7 @@ import ClientDetails from '../projects/client/clientdetails';
 import ClientList from '../projects/client/clientlist';
 import Project from '../projects/project/project';
 import ProjectDetails from '../projects/project/projectdetails';
+import SubContractList from '../projects/subcontract/subcontractlist';
 import Task from '../projects/task/task';
 import TaskBoard from '../projects/task/task-board';
 import TaskDetails from '../projects/task/taskdetails';
@@ -258,6 +252,13 @@ import Preference from '../settings/websiteSettings/preferences';
 import Prefixes from '../settings/websiteSettings/prefixes';
 import Seosettings from '../settings/websiteSettings/seo-settings';
 import SuperAdminDashboard from '../super-admin/dashboard';
+import MandatoryPermissionsPage from '../super-admin/mandatory-permissions';
+import Modules from '../super-admin/modules';
+import Pages from '../super-admin/pages';
+import PermissionPage from '../super-admin/permissionpage';
+import RolesPermission from '../super-admin/rolePermission';
+import SuperAdminUsers from '../super-admin/superadmin-users';
+import Users from '../super-admin/users';
 import TicketDetails from '../tickets/ticket-details';
 import Tickets from '../tickets/tickets';
 import TicketGrid from '../tickets/tickets-grid';
@@ -1638,6 +1639,12 @@ export const publicRoutes = [
     element: <ClientDetails />,
     route: Route,
     roles: ['admin', 'hr', 'manager', 'leads', 'superadmin'],
+  },
+  {
+    path: routes.subcontractlist,
+    element: <SubContractList />,
+    route: Route,
+    roles: ['admin', 'hr', 'superadmin'],
   },
   {
     path: routes.project,
