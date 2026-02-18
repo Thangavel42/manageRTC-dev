@@ -21,10 +21,23 @@ const leaveSchema = new mongoose.Schema({
     index: true
   },
 
+  // Employee identifier (string) for direct lookups
+  employeeId: {
+    type: String,
+    required: true,
+    index: true
+  },
+
   // Company for multi-tenant isolation
   companyId: {
     type: String,
     required: true,
+    index: true
+  },
+
+  // Department ownership for HR scoping
+  departmentId: {
+    type: String,
     index: true
   },
 
@@ -43,10 +56,28 @@ const leaveSchema = new mongoose.Schema({
     index: true
   },
 
+  // Alias for startDate for consistency with consumers
+  fromDate: {
+    type: Date,
+    index: true,
+    default: function() {
+      return this.startDate;
+    }
+  },
+
   endDate: {
     type: Date,
     required: [true, 'End date is required'],
     index: true
+  },
+
+  // Alias for endDate for consistency with consumers
+  toDate: {
+    type: Date,
+    index: true,
+    default: function() {
+      return this.endDate;
+    }
   },
 
   // Duration calculation
@@ -341,6 +372,7 @@ leaveSchema.index({ employee: 1, status: 1 });
 leaveSchema.index({ companyId: 1, status: 1 });
 leaveSchema.index({ companyId: 1, leaveType: 1 });
 leaveSchema.index({ startDate: 1, endDate: 1 });
+leaveSchema.index({ companyId: 1, departmentId: 1 });
 leaveSchema.index({ employee: 1, isDeleted: 1 });
 leaveSchema.index({ companyId: 1, startDate: -1 });
 
@@ -348,6 +380,14 @@ leaveSchema.index({ companyId: 1, startDate: -1 });
 leaveSchema.pre('save', function(next) {
   // Calculate duration in days
   if (this.startDate && this.endDate) {
+    // Keep alias fields in sync for consumers using fromDate/toDate
+    if (!this.fromDate) {
+      this.fromDate = this.startDate;
+    }
+    if (!this.toDate) {
+      this.toDate = this.endDate;
+    }
+
     const start = new Date(this.startDate);
     const end = new Date(this.endDate);
 

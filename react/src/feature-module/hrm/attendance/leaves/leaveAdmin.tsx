@@ -239,10 +239,6 @@ const LeaveAdmin = () => {
       message.error('Missing leave identifier');
       return;
     }
-    if (role === 'hr') {
-      message.error('HR cannot approve leave requests');
-      return;
-    }
 
     const success = role === 'manager'
       ? await managerActionLeave(id, 'approved', undefined, 'Approved')
@@ -267,11 +263,6 @@ const LeaveAdmin = () => {
 
   const handleRejectConfirm = async () => {
     if (rejectModal.leaveId && rejectModal.reason.trim()) {
-      if (role === 'hr') {
-        message.error('HR cannot reject leave requests');
-        return;
-      }
-
       const success = role === 'manager'
         ? await managerActionLeave(rejectModal.leaveId, 'rejected', rejectModal.reason)
         : await rejectLeave(rejectModal.leaveId, rejectModal.reason);
@@ -600,6 +591,16 @@ const LeaveAdmin = () => {
               </Link>
             </>
           )}
+          <Link
+            to="#"
+            className="me-2"
+            data-bs-toggle="modal"
+            data-bs-target="#leave_details"
+            title="View details"
+            onClick={() => setSelectedLeave(record.rawLeave)}
+          >
+            <i className="ti ti-eye" style={{ fontSize: '18px' }} />
+          </Link>
           {role !== 'hr' && (
             <>
               <Link
@@ -1383,67 +1384,71 @@ const LeaveAdmin = () => {
               </button>
             </div>
             <div className="modal-body">
-              <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Employee</label>
-                  <div className="fw-medium">
-                    {selectedLeave
-                      ? employeeNameById.get(selectedLeave.employeeId) || selectedLeave.employeeName || "Unknown"
-                      : "-"}
+              <div className="p-3 rounded border bg-light">
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Employee</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave
+                        ? employeeNameById.get(selectedLeave.employeeId) || selectedLeave.employeeName || "Unknown"
+                        : "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Reporting Manager</label>
-                  <div className="fw-medium">
-                    {selectedLeave?.reportingManagerName || "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Reporting Manager</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave?.reportingManagerName || "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Leave Type</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? (leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType) : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Leave Type</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave ? (leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType) : "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">From</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? formatDate(selectedLeave.startDate) : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">No. of Days</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave ? `${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}` : "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">To</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? formatDate(selectedLeave.endDate) : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">From</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave ? formatDate(selectedLeave.startDate) : "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">No. of Days</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? `${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}` : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">To</p>
+                    <div className="fw-semibold text-dark">
+                      {selectedLeave ? formatDate(selectedLeave.endDate) : "-"}
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Status</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? (statusDisplayMap[selectedLeave.finalStatus || selectedLeave.status]?.label || selectedLeave.finalStatus || selectedLeave.status) : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Status</p>
+                    <div className="d-inline-flex align-items-center gap-2">
+                      <StatusBadge status={(selectedLeave?.finalStatus || selectedLeave?.status || 'pending') as LeaveStatus} />
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Manager Status</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? (statusDisplayMap[selectedLeave.managerStatus || 'pending']?.label || selectedLeave.managerStatus) : "-"}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Manager Status</p>
+                    <div className="d-inline-flex align-items-center gap-2">
+                      <StatusBadge status={(selectedLeave?.managerStatus || 'pending') as LeaveStatus} />
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-12 mb-3">
-                  <label className="form-label">Reason</label>
-                  <div className="fw-medium">{selectedLeave?.reason || "-"}</div>
+                  <div className="col-12">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Reason</p>
+                    <div className="fw-semibold text-dark bg-white rounded p-2 border">
+                      {selectedLeave?.reason || "-"}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer d-flex justify-content-end gap-3 flex-wrap">
               <button
                 type="button"
-                className="btn btn-light"
+                className="btn btn-light px-4"
                 data-bs-dismiss="modal"
                 onClick={closeLeaveDetailsModal}
               >
@@ -1453,7 +1458,7 @@ const LeaveAdmin = () => {
                 <>
                   <button
                     type="button"
-                    className="btn btn-danger"
+                    className="btn btn-danger px-4"
                     onClick={() => {
                       closeLeaveDetailsModal();
                       handleRejectClick(selectedLeave);
@@ -1463,7 +1468,7 @@ const LeaveAdmin = () => {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-success"
+                    className="btn btn-success px-4"
                     onClick={async () => {
                       await handleApprove(selectedLeave);
                       closeLeaveDetailsModal();

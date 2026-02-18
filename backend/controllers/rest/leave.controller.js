@@ -7,16 +7,16 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-    asyncHandler,
-    buildConflictError, buildForbiddenError, buildNotFoundError,
-    buildValidationError,
-    ConflictError
+  asyncHandler,
+  buildConflictError, buildForbiddenError, buildNotFoundError,
+  buildValidationError,
+  ConflictError
 } from '../../middleware/errorHandler.js';
 import {
-    buildPagination,
-    extractUser,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import { generateId } from '../../utils/idGenerator.js';
 import logger, { logLeaveEvent } from '../../utils/logger.js';
@@ -116,62 +116,103 @@ async function getEmployeeByClerkId(collections, clerkUserId) {
 /**
  * @desc    Get all leave requests with pagination and filtering
  * @route   GET /api/leaves
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Employee, Manager, HR, Admin, Superadmin)
  */
 export const getLeaves = asyncHandler(async (req, res) => {
   const { page, limit, search, status, leaveType, employee, startDate, endDate, sortBy, order } = req.query;
   const user = extractUser(req);
+  const userRole = user.role?.toLowerCase();
 
   logger.debug('[Leave Controller] getLeaves', { companyId: user.companyId });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
-  // Build filter
-  const filter = {
+  // Resolve current employee for scoped roles
+  const scopedRoles = ['employee', 'manager', 'hr'];
+  const needsEmployeeLookup = scopedRoles.includes(userRole || '');
+  const currentEmployee = needsEmployeeLookup
+    ? await getEmployeeByClerkId(collections, user.userId)
+    : null;
+
+  if (needsEmployeeLookup && !currentEmployee) {
+    throw buildForbiddenError('Employee record not found for current user');
+  }
+
+  // Base filter with tenant isolation
+  const baseFilter = {
+    companyId: user.companyId,
     isDeleted: { $ne: true }
   };
 
-  // Apply status filter
-  if (status) {
-    filter.status = status;
-  }
-
-  // Apply leave type filter
-  if (leaveType) {
-    filter.leaveType = leaveType;
-  }
-
-  // Apply employee filter
-  if (employee) {
-    filter.employeeId = employee;
-  }
-
-  // Apply date range filter
-  if (startDate || endDate) {
-    filter.$or = [
-      {
-        startDate: {
-          $gte: new Date(startDate || '1900-01-01'),
-          $lte: new Date(endDate || '2100-12-31')
-        }
-      },
-      {
-        endDate: {
-          $gte: new Date(startDate || '1900-01-01'),
-          $lte: new Date(endDate || '2100-12-31')
-        }
+  // Role-based visibility
+  switch (userRole) {
+    case 'employee':
+      baseFilter.employeeId = currentEmployee?.employeeId;
+      break;
+    case 'manager':
+      baseFilter.reportingManagerId = currentEmployee?.employeeId;
+      break;
+    case 'hr': {
+      const deptId = currentEmployee?.departmentId || user.departmentId;
+      if (!deptId) {
+        throw buildForbiddenError('Department is required to view leaves');
       }
-    ];
+      baseFilter.departmentId = deptId;
+      break;
+    }
+    case 'admin':
+    case 'superadmin':
+      // Full visibility within company
+      break;
+    default:
+      throw buildForbiddenError('Unauthorized to view leave requests');
   }
 
-  // Apply search filter
-  if (search && search.trim()) {
-    filter.$or = [
-      { reason: { $regex: search, $options: 'i' } },
-      { detailedReason: { $regex: search, $options: 'i' } }
-    ];
+  // Optional filters
+  if (status) {
+    baseFilter.status = status;
   }
+
+  if (leaveType) {
+    baseFilter.leaveType = leaveType;
+  }
+
+  if (employee) {
+    baseFilter.employeeId = employee;
+  }
+
+  const andClauses = [];
+
+  if (startDate || endDate) {
+    andClauses.push({
+      $or: [
+        {
+          startDate: {
+            $gte: new Date(startDate || '1900-01-01'),
+            $lte: new Date(endDate || '2100-12-31')
+          }
+        },
+        {
+          endDate: {
+            $gte: new Date(startDate || '1900-01-01'),
+            $lte: new Date(endDate || '2100-12-31')
+          }
+        }
+      ]
+    });
+  }
+
+  if (search && search.trim()) {
+    andClauses.push({
+      $or: [
+        { reason: { $regex: search, $options: 'i' } },
+        { detailedReason: { $regex: search, $options: 'i' } }
+      ]
+    });
+  }
+
+  const filter = andClauses.length > 0 ? { ...baseFilter, $and: andClauses } : baseFilter;
 
   // Get total count
   const total = await collections.leaves.countDocuments(filter);
@@ -392,11 +433,15 @@ export const createLeave = asyncHandler(async (req, res) => {
   // Prepare leave data
   const leaveToInsert = {
     leaveId: `leave_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    companyId: user.companyId,
     employeeId: employee.employeeId,
     employeeName: `${employee.firstName} ${employee.lastName}`,
+    departmentId: leaveData.departmentId || employee.departmentId || employee.department || null,
     leaveType: leaveData.leaveType,
     startDate: new Date(leaveData.startDate),
     endDate: new Date(leaveData.endDate),
+    fromDate: new Date(leaveData.startDate),
+    toDate: new Date(leaveData.endDate),
     duration: duration,
     reason: leaveData.reason || '',
     detailedReason: leaveData.detailedReason || '',
@@ -497,6 +542,13 @@ export const updateLeave = asyncHandler(async (req, res) => {
     updatedBy: user.userId,
     updatedAt: new Date()
   };
+
+  if (updateData.startDate) {
+    updateObj.fromDate = new Date(updateData.startDate);
+  }
+  if (updateData.endDate) {
+    updateObj.toDate = new Date(updateData.endDate);
+  }
 
   const result = await collections.leaves.updateOne(
     { _id: new ObjectId(id) },
@@ -671,12 +723,13 @@ export const getMyLeaves = asyncHandler(async (req, res) => {
 /**
  * @desc    Get leaves by status
  * @route   GET /api/leaves/status/:status
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Employee, Manager, HR, Admin, Superadmin)
  */
 export const getLeavesByStatus = asyncHandler(async (req, res) => {
   const { status } = req.params;
   const { page, limit } = req.query;
   const user = extractUser(req);
+  const userRole = user.role?.toLowerCase();
 
   // Validate status
   const validStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'on-hold'];
@@ -689,10 +742,43 @@ export const getLeavesByStatus = asyncHandler(async (req, res) => {
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
+  const scopedRoles = ['employee', 'manager', 'hr'];
+  const needsEmployeeLookup = scopedRoles.includes(userRole || '');
+  const currentEmployee = needsEmployeeLookup
+    ? await getEmployeeByClerkId(collections, user.userId)
+    : null;
+
+  if (needsEmployeeLookup && !currentEmployee) {
+    throw buildForbiddenError('Employee record not found for current user');
+  }
+
   const filter = {
+    companyId: user.companyId,
     status,
     isDeleted: { $ne: true }
   };
+
+  switch (userRole) {
+    case 'employee':
+      filter.employeeId = currentEmployee?.employeeId;
+      break;
+    case 'manager':
+      filter.reportingManagerId = currentEmployee?.employeeId;
+      break;
+    case 'hr': {
+      const deptId = currentEmployee?.departmentId || user.departmentId;
+      if (!deptId) {
+        throw buildForbiddenError('Department is required to view leaves');
+      }
+      filter.departmentId = deptId;
+      break;
+    }
+    case 'admin':
+    case 'superadmin':
+      break;
+    default:
+      throw buildForbiddenError('Unauthorized to view leave requests');
+  }
 
   const total = await collections.leaves.countDocuments(filter);
 
@@ -722,10 +808,9 @@ export const approveLeave = asyncHandler(async (req, res) => {
   const { comments } = req.body;
   const user = extractUser(req);
   const userRole = user.role?.toLowerCase();
-
-  if (userRole === 'hr') {
-    throw buildForbiddenError('HR cannot approve leave requests');
-  }
+  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isManager = userRole === 'manager';
+  const isHR = userRole === 'hr';
 
   if (!id) {
     throw buildValidationError('id', 'Leave ID is required');
@@ -746,19 +831,27 @@ export const approveLeave = asyncHandler(async (req, res) => {
     }
 
     const currentEmployee = await getEmployeeByClerkId(collections, user.userId);
-    if (!currentEmployee) {
+
+    if (!isAdmin && !currentEmployee) {
       throw buildForbiddenError('Not authorized to approve this leave request');
     }
 
-    if (!leave.reportingManagerId) {
-      throw buildForbiddenError('No reporting manager assigned for this leave request');
+    const approverEmployeeId = currentEmployee?.employeeId;
+    const approverDeptId = currentEmployee?.departmentId || user.departmentId;
+
+    if (isManager) {
+      if (!leave.reportingManagerId || leave.reportingManagerId !== approverEmployeeId) {
+        throw buildForbiddenError('Only the assigned reporting manager can approve this leave request');
+      }
+    } else if (isHR) {
+      if (!approverDeptId || !leave.departmentId || leave.departmentId !== approverDeptId) {
+        throw buildForbiddenError('Department mismatch for HR approval');
+      }
+    } else if (!isAdmin) {
+      throw buildForbiddenError('Not authorized to approve this leave request');
     }
 
-    if (leave.reportingManagerId !== currentEmployee.employeeId) {
-      throw buildForbiddenError('Only the selected reporting manager can approve this leave request');
-    }
-
-    if (leave.employeeId === currentEmployee.employeeId) {
+    if (!isAdmin && leave.employeeId === approverEmployeeId) {
       throw buildForbiddenError('Employees cannot approve their own leave requests');
     }
 
@@ -850,10 +943,9 @@ export const rejectLeave = asyncHandler(async (req, res) => {
   const { reason } = req.body;
   const user = extractUser(req);
   const userRole = user.role?.toLowerCase();
-
-  if (userRole === 'hr') {
-    throw buildForbiddenError('HR cannot reject leave requests');
-  }
+  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isManager = userRole === 'manager';
+  const isHR = userRole === 'hr';
 
   if (!reason || !reason.trim()) {
     throw buildValidationError('reason', 'Rejection reason is required');
@@ -878,19 +970,27 @@ export const rejectLeave = asyncHandler(async (req, res) => {
     }
 
     const currentEmployee = await getEmployeeByClerkId(collections, user.userId);
-    if (!currentEmployee) {
+
+    if (!isAdmin && !currentEmployee) {
       throw buildForbiddenError('Not authorized to reject this leave request');
     }
 
-    if (!leave.reportingManagerId) {
-      throw buildForbiddenError('No reporting manager assigned for this leave request');
+    const rejectorEmployeeId = currentEmployee?.employeeId;
+    const rejectorDeptId = currentEmployee?.departmentId || user.departmentId;
+
+    if (isManager) {
+      if (!leave.reportingManagerId || leave.reportingManagerId !== rejectorEmployeeId) {
+        throw buildForbiddenError('Only the assigned reporting manager can reject this leave request');
+      }
+    } else if (isHR) {
+      if (!rejectorDeptId || !leave.departmentId || leave.departmentId !== rejectorDeptId) {
+        throw buildForbiddenError('Department mismatch for HR rejection');
+      }
+    } else if (!isAdmin) {
+      throw buildForbiddenError('Not authorized to reject this leave request');
     }
 
-    if (leave.reportingManagerId !== currentEmployee.employeeId) {
-      throw buildForbiddenError('Only the selected reporting manager can reject this leave request');
-    }
-
-    if (leave.employeeId === currentEmployee.employeeId) {
+    if (!isAdmin && leave.employeeId === rejectorEmployeeId) {
       throw buildForbiddenError('Employees cannot reject their own leave requests');
     }
 

@@ -20,12 +20,28 @@ const LoadingSpinner = () => (
 
 // Status badge component
 const StatusBadge = ({ status }: { status: LeaveStatus }) => {
-  const config = statusDisplayMap[status] || statusDisplayMap.pending;
+  const normalizedStatus = String(status || 'pending').toLowerCase() as LeaveStatus;
+  const validStatus = statusDisplayMap[normalizedStatus] ? normalizedStatus : 'pending';
+  const config = statusDisplayMap[validStatus] || statusDisplayMap.pending;
+  const statusColors: Record<LeaveStatus, { backgroundColor: string; color: string }> = {
+    approved: { backgroundColor: '#03c95a', color: '#ffffff' },
+    rejected: { backgroundColor: '#f8220a', color: '#ffffff' },
+    pending: { backgroundColor: '#fed24e', color: '#ffffff' },
+    cancelled: { backgroundColor: '#6c757d', color: '#ffffff' },
+    'on-hold': { backgroundColor: '#17a2b8', color: '#ffffff' },
+  };
+
+  const colors = statusColors[validStatus] || statusColors.pending;
   return (
     <span
-      className={`rounded-circle ${config.badgeClass} d-flex justify-content-center align-items-center me-2`}
+      className="badge d-flex justify-content-center align-items-center"
+      style={{
+        minWidth: '80px',
+        backgroundColor: colors.backgroundColor,
+        color: colors.color
+      }}
     >
-      <i className={`ti ti-point-filled ${config.color}`} />
+      {config.label}
     </span>
   );
 };
@@ -178,8 +194,8 @@ const LeaveEmployee = () => {
     To: formatDate(leave.endDate),
     NoOfDays: `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
     ReportingManager: leave.reportingManagerName || "-",
-    ManagerStatus: leave.managerStatus || 'pending',
-    Status: leave.finalStatus || leave.status,
+    ManagerStatus: (leave.managerStatus || 'pending').toLowerCase() as LeaveStatus,
+    Status: (leave.finalStatus || leave.status || 'pending').toLowerCase() as LeaveStatus,
     Roll: "Employee", // Should come from employee data
     Image: "user-32.jpg", // Default image
     rawLeave: leave,
@@ -461,6 +477,8 @@ const LeaveEmployee = () => {
     const modalElement = document.getElementById("modal-datepicker");
     return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
+
+  const selectedManagerStatus = (selectedLeave?.managerStatus || 'pending').toLowerCase() as LeaveStatus;
 
   return (
     <>
@@ -1189,52 +1207,52 @@ const LeaveEmployee = () => {
               </button>
             </div>
             <div className="modal-body">
-              <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Leave Type</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? (leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType) : "-"}
+              {selectedLeave ? (
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <div className="border rounded p-3 h-100">
+                      <p className="text-muted text-uppercase fs-12 mb-1">Leave Type</p>
+                      <div className="fw-semibold mb-3">
+                        {leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType}
+                      </div>
+                      <div className="row g-3">
+                        <div className="col-6">
+                          <p className="text-muted text-uppercase fs-12 mb-1">From</p>
+                          <div className="fw-medium">{formatDate(selectedLeave.startDate)}</div>
+                        </div>
+                        <div className="col-6">
+                          <p className="text-muted text-uppercase fs-12 mb-1">To</p>
+                          <div className="fw-medium">{formatDate(selectedLeave.endDate)}</div>
+                        </div>
+                        <div className="col-12">
+                          <p className="text-muted text-uppercase fs-12 mb-1">No. of Days</p>
+                          <div className="fw-medium">
+                            {`${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}`}
+                          </div>
+                        </div>
+                        <div className="col-12">
+                          <p className="text-muted text-uppercase fs-12 mb-1">Reason</p>
+                          <div className="fw-medium text-break" style={{ minHeight: '48px' }}>
+                            {selectedLeave.reason || '—'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="border rounded p-3 h-100">
+                      <p className="text-muted text-uppercase fs-12 mb-1">Reporting Manager</p>
+                      <div className="fw-semibold mb-2">{selectedLeave.reportingManagerName || '-'}</div>
+                      <div className="d-flex align-items-center">
+                        <span className="text-muted me-2">Status:</span>
+                        <StatusBadge status={selectedManagerStatus} />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Status</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? (statusDisplayMap[selectedLeave.finalStatus || selectedLeave.status]?.label || selectedLeave.finalStatus || selectedLeave.status) : "-"}
-                  </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">From</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? formatDate(selectedLeave.startDate) : "-"}
-                  </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">To</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? formatDate(selectedLeave.endDate) : "-"}
-                  </div>
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">No. of Days</label>
-                  <div className="fw-medium">
-                    {selectedLeave ? `${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}` : "-"}
-                  </div>
-                </div>
-                <div className="col-md-12 mb-3">
-                  <label className="form-label">Reason</label>
-                  <div className="fw-medium">{selectedLeave?.reason || "-"}</div>
-                </div>
-                <div className="col-md-12">
-                  <div className="leave-info-card">
-                    <h4>Reporting Manager</h4>
-                    <p><strong>Name:</strong> {selectedLeave?.reportingManagerName || '-'}</p>
-                    <p>
-                      <strong>Status:</strong>{' '}
-                      <StatusBadge status={selectedLeave?.managerStatus || 'pending'} />
-                    </p>
-                  </div>
-                </div>
-              </div>
+              ) : (
+                <div className="text-muted">No leave selected.</div>
+              )}
             </div>
             <div className="modal-footer">
               <button
