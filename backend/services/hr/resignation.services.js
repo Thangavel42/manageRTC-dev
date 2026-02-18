@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
 import { validateEmployeeLifecycle } from "../../utils/employeeLifecycleValidator.js";
@@ -9,12 +10,33 @@ const normalizeStatus = (status) => {
 };
 
 
+const parseDateInput = (input) => {
+  if (!input) return null;
+  if (input instanceof Date) {
+    return DateTime.fromJSDate(input, { zone: "utc" });
+  }
+
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    const ddmmyyyy = DateTime.fromFormat(trimmed, "dd-MM-yyyy", { zone: "utc" });
+    if (ddmmyyyy.isValid) return ddmmyyyy;
+
+    const iso = DateTime.fromISO(trimmed, { zone: "utc" });
+    if (iso.isValid) return iso;
+
+    const fallback = new Date(trimmed);
+    if (!Number.isNaN(fallback.getTime())) {
+      return DateTime.fromJSDate(fallback, { zone: "utc" });
+    }
+  }
+
+  return null;
+};
+
 const toYMDStr = (input) => {
-  const d = new Date(input);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  const dt = parseDateInput(input);
+  if (!dt || !dt.isValid) return null;
+  return dt.toUTC().toFormat("yyyy-MM-dd");
 };
 
 const addDaysStr = (ymdStr, days) => {
@@ -50,6 +72,16 @@ const cancelPendingPromotionsForResignation = async (collections, employeeId, ac
   return result?.modifiedCount || 0;
 };
 
+const createNotification = async (collections, payload) => {
+  const notification = {
+    ...payload,
+    createdAt: new Date(),
+  };
+
+  await collections.notifications.insertOne(notification);
+  return notification;
+};
+
 // 1. Stats - total, recent
 const getResignationStats = async (companyId) => {
   try {
@@ -59,35 +91,29 @@ const getResignationStats = async (companyId) => {
     const last30 = addDaysStr(today, -30);
     const tomorrow = addDaysStr(today, 1);
 
-    const pipeline = [
-      {
-        $facet: {
-          totalResignations: [{ $count: "count" }],
-          last30days: [
-            { $match: { noticeDate: { $gte: last30, $lt: tomorrow } } },
-            { $count: "count" },
-          ],
-        },
-      },
-      {
-        $project: {
-          totalResignations: { $ifNull: [{ $arrayElemAt: ["$totalResignations.count", 0] }, 0] },
-          last30days: { $ifNull: [{ $arrayElemAt: ["$last30days.count", 0] }, 0] },
-        },
-      },
-    ];
-
-
-
-    const [result = { totalResignations: 0, last30days: 0 }] = await collection.resignation.aggregate(pipeline).toArray();
-    console.log(result);
+    const [
+      totalResignations,
+      pending,
+      onNotice,
+      resigned,
+      last30days
+    ] = await Promise.all([
+      collection.resignation.countDocuments().catch(() => 0),
+      collection.resignation.countDocuments({ resignationStatus: "pending" }).catch(() => 0),
+      collection.resignation.countDocuments({ resignationStatus: { $in: ["on_notice", "approved"] } }).catch(() => 0),
+      collection.resignation.countDocuments({ resignationStatus: "resigned" }).catch(() => 0),
+      collection.resignation.countDocuments({ noticeDate: { $gte: last30, $lt: tomorrow } }).catch(() => 0)
+    ]);
 
     return {
       done: true,
       message: "success",
       data: {
-        totalResignations: String(result.totalResignations || 0),
-        recentResignations: String(result.last30days || 0),
+        totalResignations: String(totalResignations || 0),
+        recentResignations: String(last30days || 0),
+        pending: Number(pending || 0),
+        onNotice: Number(onNotice || 0),
+        resigned: Number(resigned || 0),
       },
     };
   } catch (error) {
@@ -155,6 +181,28 @@ const getResignations = async (companyId,{ type, startDate, endDate } = {}) => {
     }
     const pipeline = [
       { $match: dateFilter },
+
+      {
+        $addFields: {
+          reportingManagerObjId: {
+            $cond: {
+              if: {
+                $and: [
+                  { $eq: [{ $type: "$reportingManagerId" }, "string"] },
+                  {
+                    $regexMatch: {
+                      input: "$reportingManagerId",
+                      regex: "^[0-9a-fA-F]{24}$",
+                    },
+                  },
+                ],
+              },
+              then: { $toObjectId: "$reportingManagerId" },
+              else: null,
+            },
+          },
+        },
+      },
 
       // Filter: Only process resignations with valid ObjectId format (24 hex chars)
       // This excludes old records with employeeId like "EMP-8984"
@@ -229,6 +277,20 @@ const getResignations = async (companyId,{ type, startDate, endDate } = {}) => {
       },
       { $unwind: { path: "$designationData", preserveNullAndEmptyArrays: true } },
 
+      // Lookup reporting manager (if provided)
+      {
+        $lookup: {
+          from: "employees",
+          let: { rmId: "$reportingManagerObjId" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$_id", "$$rmId"] } } },
+            { $project: { _id: 1, firstName: 1, lastName: 1, employeeId: 1 } },
+          ],
+          as: "reportingManagerData",
+        },
+      },
+      { $unwind: { path: "$reportingManagerData", preserveNullAndEmptyArrays: true } },
+
       // Project final structure with null safety
       {
         $project: {
@@ -296,6 +358,27 @@ const getResignations = async (companyId,{ type, startDate, endDate } = {}) => {
           designation: {
             $ifNull: ["$designationData.name", "$designationData.designation"],
           },
+
+          reportingManagerId: {
+            $cond: {
+              if: { $ne: ["$reportingManagerData._id", null] },
+              then: { $toString: "$reportingManagerData._id" },
+              else: "$reportingManagerId",
+            },
+          },
+          reportingManagerName: {
+            $cond: {
+              if: { $ne: ["$reportingManagerData.firstName", null] },
+              then: {
+                $concat: [
+                  "$reportingManagerData.firstName",
+                  " ",
+                  { $ifNull: ["$reportingManagerData.lastName", ""] },
+                ],
+              },
+              else: "$reportingManagerName",
+            },
+          },
         },
       },
 
@@ -343,6 +426,10 @@ const getSpecificResignation = async (companyId,resignationId) => {
           resignationDate: 1,
           noticeDate: 1,
           resignationId: 1,
+          reportingManagerId: 1,
+          reportingManagerName: 1,
+          resignationStatus: 1,
+          status: 1,
         },
       }
     );
@@ -355,14 +442,52 @@ const getSpecificResignation = async (companyId,resignationId) => {
 };
 
 // 4. Add a resignation (single-arg signature: form)
-const addResignation = async (companyId, form) => {
+const addResignation = async (companyId, form, actor) => {
   try {
     const collection = getTenantCollections(companyId);
 
     // Validate required fields (ONLY employeeId and resignation-specific data)
-    const required = ["employeeId", "reason", "resignationDate", "noticeDate"];
+    const required = [
+      "employeeId",
+      "departmentId",
+      "reportingManagerId",
+      "reason",
+      "resignationDate",
+      "noticeDate"
+    ];
     for (const k of required) {
       if (!form[k]) throw new Error(`Missing field: ${k}`);
+    }
+
+    if (!form.reason || !String(form.reason).trim()) {
+      throw new Error("Reason is required");
+    }
+
+    if (String(form.reason).trim().length > 500) {
+      throw new Error("Reason cannot exceed 500 characters");
+    }
+
+    const resignationDateYmd = toYMDStr(form.resignationDate);
+    const noticeDateYmd = toYMDStr(form.noticeDate);
+
+    if (!resignationDateYmd) {
+      throw new Error("Invalid resignation date format");
+    }
+
+    if (!noticeDateYmd) {
+      throw new Error("Invalid notice date format");
+    }
+
+    const resignationDate = DateTime.fromFormat(resignationDateYmd, "yyyy-MM-dd", { zone: "utc" });
+    const noticeDate = DateTime.fromFormat(noticeDateYmd, "yyyy-MM-dd", { zone: "utc" });
+
+    if (resignationDate < noticeDate) {
+      throw new Error("Resignation date must be on or after notice date");
+    }
+
+    const today = DateTime.utc().startOf("day");
+    if (resignationDate < today) {
+      throw new Error("Resignation date cannot be before today");
     }
 
     // Validate that employeeId is a valid ObjectId string
@@ -370,13 +495,59 @@ const addResignation = async (companyId, form) => {
       throw new Error("Invalid employee ID format");
     }
 
+    if (!ObjectId.isValid(form.departmentId)) {
+      throw new Error("Invalid department ID format");
+    }
+
+    if (!ObjectId.isValid(form.reportingManagerId)) {
+      throw new Error("Invalid reporting manager ID format");
+    }
+
+    if (actor?.role?.toLowerCase() === "employee") {
+      const currentEmployee = await collection.employees.findOne({
+        isDeleted: { $ne: true },
+        $or: [
+          { clerkUserId: actor.userId },
+          { "account.userId": actor.userId }
+        ]
+      });
+
+      if (!currentEmployee) {
+        throw new Error("Employee profile not found for current user");
+      }
+
+      if (currentEmployee._id.toString() !== form.employeeId) {
+        throw new Error("Employees can only submit their own resignation");
+      }
+    }
+
     // Verify employee exists
     const employee = await collection.employees.findOne({
       _id: new ObjectId(form.employeeId),
+      isDeleted: { $ne: true }
     });
 
     if (!employee) {
       throw new Error("Employee not found");
+    }
+
+    const employeeDepartmentId = employee.departmentId?.toString?.() || String(employee.departmentId || "");
+    if (!employeeDepartmentId || employeeDepartmentId !== form.departmentId) {
+      throw new Error("Employee does not belong to selected department");
+    }
+
+    if (form.reportingManagerId === form.employeeId) {
+      throw new Error("Reporting manager cannot be the same as the resigning employee");
+    }
+
+    const reportingManager = await collection.employees.findOne({
+      _id: new ObjectId(form.reportingManagerId),
+      isDeleted: { $ne: true },
+      status: "Active"
+    });
+
+    if (!reportingManager) {
+      throw new Error("Reporting manager not found");
     }
 
     const cancelledPromotions = await cancelPendingPromotionsForResignation(
@@ -413,12 +584,15 @@ const addResignation = async (companyId, form) => {
     const newResignation = {
       companyId: companyId,
       employeeId: form.employeeId, // Store as ObjectId string
-      resignationDate: toYMDStr(form.resignationDate),
-      noticeDate: toYMDStr(form.noticeDate),
-      reason: form.reason,
+      departmentId: form.departmentId,
+      reportingManagerId: form.reportingManagerId,
+      reportingManagerName: `${reportingManager.firstName || ""} ${reportingManager.lastName || ""}`.trim(),
+      resignationDate: resignationDateYmd,
+      noticeDate: noticeDateYmd,
+      reason: String(form.reason).trim(),
       status: "pending",
-      resignationStatus: "pending", // Workflow status: pending, approved, rejected, withdrawn
-      effectiveDate: toYMDStr(form.noticeDate), // Last working day
+      resignationStatus: "pending", // Workflow status: pending, on_notice, rejected, resigned
+      effectiveDate: resignationDateYmd,
       approvedBy: null,
       approvedAt: null,
       resignationId: new ObjectId().toHexString(),
@@ -430,10 +604,32 @@ const addResignation = async (companyId, form) => {
 
     await collection.resignation.insertOne(newResignation);
 
+    const employeeName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || employee.employeeId;
+    const notifications = [];
+
+    notifications.push(await createNotification(collection, {
+      title: "Resignation Submitted",
+      message: `${employeeName} submitted a resignation request.`,
+      type: "resignation_submitted",
+      createdBy: new ObjectId(form.employeeId),
+      targetEmployeeId: form.reportingManagerId,
+      targetRoles: ["manager"],
+      metadata: { resignationId: newResignation.resignationId }
+    }));
+
+    notifications.push(await createNotification(collection, {
+      title: "Resignation Submitted",
+      message: `${employeeName} submitted a resignation request.`,
+      type: "resignation_submitted",
+      createdBy: new ObjectId(form.employeeId),
+      targetRoles: ["hr", "admin", "superadmin"],
+      metadata: { resignationId: newResignation.resignationId }
+    }));
+
     // Note: Employee status is NOT automatically updated to "Resigned"
     // Status should be manually updated by HR when resignation is approved/processed
 
-    return { done: true, message: "Resignation added successfully" };
+    return { done: true, message: "Resignation added successfully", data: newResignation, notifications };
   } catch (error) {
     console.error("Error adding Resignation:", error);
     return { done: false, message: error.message || "Error adding Resignation" };
@@ -450,13 +646,67 @@ const updateResignation = async (companyId, form) => {
     const existing = await collection.resignation.findOne({ resignationId: form.resignationId });
     if (!existing) throw new Error("Resignation not found");
 
+    if (existing.resignationStatus && existing.resignationStatus !== "pending") {
+      throw new Error("Resignation cannot be updated after approval");
+    }
+
+    if (form.reason && String(form.reason).trim().length > 500) {
+      throw new Error("Reason cannot exceed 500 characters");
+    }
+
+    const nextNoticeDate = form.noticeDate ? toYMDStr(form.noticeDate) : existing.noticeDate;
+    const nextResignationDate = form.resignationDate ? toYMDStr(form.resignationDate) : existing.resignationDate;
+
+    if (form.noticeDate && !nextNoticeDate) {
+      throw new Error("Invalid notice date format");
+    }
+
+    if (form.resignationDate && !nextResignationDate) {
+      throw new Error("Invalid resignation date format");
+    }
+
+    if (nextNoticeDate && nextResignationDate) {
+      const noticeDate = DateTime.fromFormat(nextNoticeDate, "yyyy-MM-dd", { zone: "utc" });
+      const resignationDate = DateTime.fromFormat(nextResignationDate, "yyyy-MM-dd", { zone: "utc" });
+
+      if (resignationDate < noticeDate) {
+        throw new Error("Resignation date must be on or after notice date");
+      }
+
+      const today = DateTime.utc().startOf("day");
+      if (resignationDate < today) {
+        throw new Error("Resignation date cannot be before today");
+      }
+    }
+
     // Build update data (ONLY resignation-specific fields)
     const updateData = {
-      resignationDate: form.resignationDate ? toYMDStr(form.resignationDate) : existing.resignationDate,
-      noticeDate: form.noticeDate ? toYMDStr(form.noticeDate) : existing.noticeDate,
-      reason: form.reason ?? existing.reason,
+      resignationDate: nextResignationDate,
+      noticeDate: nextNoticeDate,
+      reason: form.reason ? String(form.reason).trim() : existing.reason,
       status: form.status ?? existing.status,
     };
+
+    if (form.reportingManagerId) {
+      if (!ObjectId.isValid(form.reportingManagerId)) {
+        throw new Error("Invalid reporting manager ID format");
+      }
+      if (form.reportingManagerId === existing.employeeId) {
+        throw new Error("Reporting manager cannot be the same as the resigning employee");
+      }
+
+      const reportingManager = await collection.employees.findOne({
+        _id: new ObjectId(form.reportingManagerId),
+        isDeleted: { $ne: true },
+        status: "Active"
+      });
+      if (!reportingManager) {
+        throw new Error("Reporting manager not found");
+      }
+
+      updateData.reportingManagerId = form.reportingManagerId;
+      updateData.reportingManagerName = `${reportingManager.firstName || ""} ${reportingManager.lastName || ""}`.trim();
+    }
 
     // If employeeId is being changed, validate it
     if (form.employeeId && form.employeeId !== existing.employeeId) {
@@ -503,6 +753,15 @@ const deleteResignation = async (companyId,resignationIds) => {
     const resignationsToDelete = await collection.resignation
       .find({ resignationId: { $in: resignationIds } })
       .toArray();
+
+    const nonPending = resignationsToDelete.filter(r => r.resignationStatus && r.resignationStatus !== "pending");
+    if (nonPending.length > 0) {
+      return {
+        done: false,
+        message: "Only pending resignations can be deleted",
+        data: null,
+      };
+    }
 
     // Extract employee IDs from resignations and convert to ObjectId
     const employeeIds = resignationsToDelete
@@ -636,7 +895,7 @@ const getEmployeesByDepartment = async (companyId, departmentId) => {
 };
 
 // 9. Approve Resignation
-const approveResignation = async (companyId, resignationId, userId) => {
+const approveResignation = async (companyId, resignationId, actor) => {
   try {
     const collection = getTenantCollections(companyId);
 
@@ -646,8 +905,33 @@ const approveResignation = async (companyId, resignationId, userId) => {
       return { done: false, message: "Resignation not found" };
     }
 
-    if (resignation.resignationStatus === "approved") {
-      return { done: false, message: "Resignation already approved" };
+    if (resignation.resignationStatus && resignation.resignationStatus !== "pending") {
+      return { done: false, message: "Only pending resignations can be approved" };
+    }
+
+    if (actor?.role?.toLowerCase() === "manager") {
+      const manager = await collection.employees.findOne({
+        isDeleted: { $ne: true },
+        $or: [
+          { clerkUserId: actor.userId },
+          { "account.userId": actor.userId }
+        ]
+      });
+
+      if (!manager) {
+        return { done: false, message: "Reporting manager profile not found" };
+      }
+
+      if (resignation.reportingManagerId) {
+        if (manager._id.toString() !== resignation.reportingManagerId) {
+          return { done: false, message: "Only the assigned reporting manager can approve" };
+        }
+      } else {
+        const employee = await collection.employees.findOne({ _id: new ObjectId(resignation.employeeId) });
+        if (!employee?.reportingTo || employee.reportingTo.toString() !== manager._id.toString()) {
+          return { done: false, message: "Only the assigned reporting manager can approve" };
+        }
+      }
     }
 
     // Update resignation status to approved
@@ -655,8 +939,9 @@ const approveResignation = async (companyId, resignationId, userId) => {
       { resignationId },
       {
         $set: {
-          resignationStatus: "approved",
-          approvedBy: userId,
+          resignationStatus: "on_notice",
+          status: "on_notice",
+          approvedBy: actor?.userId || null,
           approvedAt: new Date()
         }
       }
@@ -670,7 +955,32 @@ const approveResignation = async (companyId, resignationId, userId) => {
 
     console.log(`[Resignation Service] Approved resignation ${resignationId}, employee status updated to 'On Notice'`);
 
-    return { done: true, message: "Resignation approved successfully" };
+    const updated = await collection.resignation.findOne({ resignationId });
+    const employee = await collection.employees.findOne({ _id: new ObjectId(resignation.employeeId) });
+    const employeeName = employee
+      ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || employee.employeeId
+      : "Employee";
+
+    const notifications = [];
+    notifications.push(await createNotification(collection, {
+      title: "Resignation Approved",
+      message: `Your resignation has been approved.`,
+      type: "resignation_approved",
+      createdBy: employee?._id || new ObjectId(resignation.employeeId),
+      targetEmployeeId: resignation.employeeId,
+      metadata: { resignationId: resignation.resignationId || resignationId }
+    }));
+
+    notifications.push(await createNotification(collection, {
+      title: "Resignation Approved",
+      message: `${employeeName}'s resignation has been approved.`,
+      type: "resignation_approved",
+      createdBy: employee?._id || new ObjectId(resignation.employeeId),
+      targetRoles: ["hr", "admin", "superadmin"],
+      metadata: { resignationId: resignation.resignationId || resignationId }
+    }));
+
+    return { done: true, message: "Resignation approved successfully", data: updated, notifications };
   } catch (error) {
     console.error("Error approving resignation:", error);
     return { done: false, message: error.message || "Error approving resignation" };
@@ -678,7 +988,7 @@ const approveResignation = async (companyId, resignationId, userId) => {
 };
 
 // 10. Reject Resignation
-const rejectResignation = async (companyId, resignationId, userId, reason) => {
+const rejectResignation = async (companyId, resignationId, actor, reason) => {
   try {
     const collection = getTenantCollections(companyId);
 
@@ -688,8 +998,33 @@ const rejectResignation = async (companyId, resignationId, userId, reason) => {
       return { done: false, message: "Resignation not found" };
     }
 
-    if (resignation.resignationStatus === "rejected") {
-      return { done: false, message: "Resignation already rejected" };
+    if (resignation.resignationStatus && resignation.resignationStatus !== "pending") {
+      return { done: false, message: "Only pending resignations can be rejected" };
+    }
+
+    if (actor?.role?.toLowerCase() === "manager") {
+      const manager = await collection.employees.findOne({
+        isDeleted: { $ne: true },
+        $or: [
+          { clerkUserId: actor.userId },
+          { "account.userId": actor.userId }
+        ]
+      });
+
+      if (!manager) {
+        return { done: false, message: "Reporting manager profile not found" };
+      }
+
+      if (resignation.reportingManagerId) {
+        if (manager._id.toString() !== resignation.reportingManagerId) {
+          return { done: false, message: "Only the assigned reporting manager can reject" };
+        }
+      } else {
+        const employee = await collection.employees.findOne({ _id: new ObjectId(resignation.employeeId) });
+        if (!employee?.reportingTo || employee.reportingTo.toString() !== manager._id.toString()) {
+          return { done: false, message: "Only the assigned reporting manager can reject" };
+        }
+      }
     }
 
     // Update resignation status to rejected
@@ -698,7 +1033,8 @@ const rejectResignation = async (companyId, resignationId, userId, reason) => {
       {
         $set: {
           resignationStatus: "rejected",
-          rejectedBy: userId,
+          status: "rejected",
+          rejectedBy: actor?.userId || null,
           rejectedAt: new Date(),
           rejectionReason: reason || "Not specified"
         }
@@ -707,7 +1043,20 @@ const rejectResignation = async (companyId, resignationId, userId, reason) => {
 
     console.log(`[Resignation Service] Rejected resignation ${resignationId}`);
 
-    return { done: true, message: "Resignation rejected successfully" };
+    const updated = await collection.resignation.findOne({ resignationId });
+    const employee = await collection.employees.findOne({ _id: new ObjectId(resignation.employeeId) });
+    const notifications = [];
+
+    notifications.push(await createNotification(collection, {
+      title: "Resignation Rejected",
+      message: reason ? `Your resignation was rejected: ${reason}` : "Your resignation was rejected.",
+      type: "resignation_rejected",
+      createdBy: employee?._id || new ObjectId(resignation.employeeId),
+      targetEmployeeId: resignation.employeeId,
+      metadata: { resignationId: resignation.resignationId || resignationId }
+    }));
+
+    return { done: true, message: "Resignation rejected successfully", data: updated, notifications };
   } catch (error) {
     console.error("Error rejecting resignation:", error);
     return { done: false, message: error.message || "Error rejecting resignation" };
@@ -724,17 +1073,18 @@ const processResignationEffectiveDate = async (companyId, resignationId) => {
       return { done: false, message: "Resignation not found" };
     }
 
-    if (resignation.resignationStatus !== "approved") {
-      return { done: false, message: "Only approved resignations can be processed" };
+    if (!resignation.resignationStatus || !["on_notice", "approved"].includes(resignation.resignationStatus)) {
+      return { done: false, message: "Only on-notice resignations can be processed" };
     }
 
-    const effectiveDate = new Date(resignation.effectiveDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    effectiveDate.setHours(0, 0, 0, 0);
+    const effectiveDate = DateTime.fromFormat(resignation.resignationDate, "yyyy-MM-dd", { zone: "utc" });
+    if (!effectiveDate.isValid) {
+      return { done: false, message: "Invalid resignation date" };
+    }
 
+    const today = DateTime.utc().startOf("day");
     if (effectiveDate > today) {
-      return { done: false, message: "Effective date has not been reached yet" };
+      return { done: false, message: "Resignation date has not been reached yet" };
     }
 
     // Update employee status to "Resigned"
@@ -743,7 +1093,7 @@ const processResignationEffectiveDate = async (companyId, resignationId) => {
       {
         $set: {
           status: "Resigned",
-          lastWorkingDate: effectiveDate
+          lastWorkingDate: effectiveDate.toJSDate()
         }
       }
     );
@@ -751,7 +1101,7 @@ const processResignationEffectiveDate = async (companyId, resignationId) => {
     // Update resignation status to processed
     await collection.resignation.updateOne(
       { resignationId },
-      { $set: { processedAt: new Date() } }
+      { $set: { processedAt: new Date(), resignationStatus: "resigned", status: "resigned" } }
     );
 
     console.log(`[Resignation Service] Processed resignation ${resignationId}, employee status updated to 'Resigned'`);
@@ -760,6 +1110,44 @@ const processResignationEffectiveDate = async (companyId, resignationId) => {
   } catch (error) {
     console.error("Error processing resignation:", error);
     return { done: false, message: error.message || "Error processing resignation" };
+  }
+};
+
+// 12. Process all due resignations for a company (used by scheduler)
+const processDueResignations = async (companyId) => {
+  try {
+    const collection = getTenantCollections(companyId);
+    const todayYmd = toYMDStr(new Date());
+
+    const dueResignations = await collection.resignation
+      .find({ resignationStatus: { $in: ["on_notice", "approved"] }, resignationDate: { $lte: todayYmd } })
+      .toArray();
+
+    let processed = 0;
+
+    for (const resignation of dueResignations) {
+      await collection.employees.updateOne(
+        { _id: new ObjectId(resignation.employeeId) },
+        {
+          $set: {
+            status: "Resigned",
+            lastWorkingDate: new Date(resignation.resignationDate)
+          }
+        }
+      );
+
+      await collection.resignation.updateOne(
+        { resignationId: resignation.resignationId },
+        { $set: { processedAt: new Date(), resignationStatus: "resigned", status: "resigned" } }
+      );
+
+      processed += 1;
+    }
+
+    return { done: true, processed };
+  } catch (error) {
+    console.error("Error processing due resignations:", error);
+    return { done: false, processed: 0, message: error.message || "Error processing due resignations" };
   }
 };
 
@@ -775,5 +1163,6 @@ export {
     approveResignation,
     rejectResignation,
     processResignationEffectiveDate,
+    processDueResignations,
 };
 

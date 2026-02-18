@@ -1,7 +1,7 @@
-import React from "react";
 import dayjs from "dayjs";
-import ImageWithBasePath from "../common/imageWithBasePath";
+import React from "react";
 import type { Resignation } from "../../hooks/useResignationsREST";
+import ImageWithBasePath from "../common/imageWithBasePath";
 
 interface ResignationDetailsModalProps {
   resignation: Resignation | null;
@@ -147,13 +147,23 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                         </p>
                       </div>
 
+                      {/* Reporting Manager if available */}
+                      {resignation.reportingManagerName && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Reporting Manager</label>
+                          <p className="fw-medium mb-0">{resignation.reportingManagerName}</p>
+                        </div>
+                      )}
+
                       {/* Status if available */}
-                      {resignation.status && (
+                      {(resignation.resignationStatus || resignation.status) && (
                         <div className="col-md-6 mb-3">
                           <label className="form-label text-muted mb-1">Status</label>
                           <p className="mb-0">
-                            <span className={`badge badge-soft-${resignation.status === 'approved' ? 'success' : resignation.status === 'pending' ? 'warning' : resignation.status === 'rejected' ? 'danger' : 'secondary'}`}>
-                              {resignation.status.charAt(0).toUpperCase() + resignation.status.slice(1)}
+                            <span className={`badge badge-soft-${resignation.resignationStatus === 'on_notice' ? 'info' : resignation.resignationStatus === 'pending' ? 'warning' : resignation.resignationStatus === 'rejected' ? 'danger' : resignation.resignationStatus === 'resigned' ? 'secondary' : 'secondary'}`}>
+                              {resignation.resignationStatus
+                                ? resignation.resignationStatus.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                                : resignation.status}
                             </span>
                           </p>
                         </div>

@@ -9,21 +9,21 @@ import { ObjectId } from 'mongodb';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-  asyncHandler,
-  buildNotFoundError,
-  buildValidationError
+    asyncHandler,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-  buildPagination,
-  extractUser,
-  getRequestId,
-  sendCreated,
-  sendSuccess
+    buildPagination,
+    extractUser,
+    getRequestId,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import {
-  canUserDeleteAvatar,
-  getSystemDefaultAvatarUrl
+    canUserDeleteAvatar,
+    getSystemDefaultAvatarUrl
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
@@ -194,13 +194,101 @@ const formatEmployeeDates = (employee) => {
 export const getEmployees = asyncHandler(async (req, res) => {
   // Use validated query if available, otherwise use original query (for non-validated routes)
   const query = req.validatedQuery || req.query;
-  const { page, limit, search, department, designation, status, role, sortBy, order } = query;
+  const {
+    page,
+    limit,
+    search,
+    department,
+    designation,
+    status,
+    role,
+    sortBy,
+    order,
+    reportingManagerList,
+    excludeEmployeeId
+  } = query;
   const user = extractUser(req);
 
   devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status, role });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
+
+  const isReportingManagerList = String(reportingManagerList).toLowerCase() === 'true';
+  if (isReportingManagerList) {
+    const limitNum = parseInt(limit) || 10;
+    const filter = {
+      isDeleted: { $ne: true },
+      status: 'Active'
+    };
+
+    if (department) {
+      filter.departmentId = department;
+    }
+
+    if (excludeEmployeeId && ObjectId.isValid(excludeEmployeeId)) {
+      filter._id = { $ne: new ObjectId(excludeEmployeeId) };
+    }
+
+    if (search && search.trim()) {
+      filter.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: search, $options: 'i' } },
+        { employeeId: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const pipeline = [
+      { $match: filter },
+      {
+        $addFields: {
+          departmentObjId: {
+            $cond: {
+              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+              then: { $toObjectId: '$departmentId' },
+              else: null
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'departments',
+          localField: 'departmentObjId',
+          foreignField: '_id',
+          as: 'departmentInfo'
+        }
+      },
+      {
+        $addFields: {
+          departmentName: { $ifNull: [{ $arrayElemAt: ['$departmentInfo.department', 0] }, null] }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          employeeId: 1,
+          firstName: 1,
+          lastName: 1,
+          fullName: 1,
+          departmentName: 1
+        }
+      },
+      { $sort: { firstName: 1, lastName: 1 } },
+      { $limit: limitNum }
+    ];
+
+    const employees = await collections.employees.aggregate(pipeline).toArray();
+    const results = employees.map((emp) => ({
+      id: emp._id?.toString(),
+      employeeId: emp.employeeId,
+      name: emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
+      department: emp.departmentName || ''
+    }));
+
+    return sendSuccess(res, results, 'Employees retrieved successfully');
+  }
 
   // Build filter - always exclude soft-deleted records
   let filter = { isDeleted: { $ne: true } };

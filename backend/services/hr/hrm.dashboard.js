@@ -217,10 +217,9 @@ export const getDashboardStats = async (companyId, year = null) => {
         },
       }).catch(() => 0),
 
-      // Resignation Statistics (only approved resignations)
-      resignation.countDocuments({ resignationStatus: "approved" }).catch(() => 0),
+      // Resignation Statistics
+      resignation.countDocuments().catch(() => 0),
       resignation.countDocuments({
-        resignationStatus: "approved",
         noticeDate: { $gte: thirtyDaysAgo.toISOString().split('T')[0] },
       }).catch(() => 0),
 
@@ -651,9 +650,9 @@ export const getDashboardStats = async (companyId, year = null) => {
 
     // Fetch resignation, termination, and promotion data for Dynamic Events
     const [resignationData, terminationData, promotionData] = await Promise.all([
-      // Approved Resignations with notice period info
+      // On Notice Resignations with notice period info
       resignation
-        .find({ resignationStatus: "approved" })
+        .find({ resignationStatus: { $in: ["on_notice", "approved"] } })
         .project({
           _id: 1,
           employeeId: 1,
