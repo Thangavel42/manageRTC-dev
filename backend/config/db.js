@@ -170,6 +170,8 @@ export const getTenantCollections = (tenantDbName) => {
     trainers: db.collection('trainers'),
     trainingtypes: db.collection('trainingtypes'),
     trainings: db.collection('trainings'),
+    // Sub-contracts
+    subcontracts: db.collection('subcontracts'),
   };
 };
 

@@ -94,9 +94,9 @@ const useSidebarData = () => {
                   base2: 'packages-grid',
                 },
                 {
-                  label: "Modules",
+                  label: 'Modules',
                   link: routes.superAdminModules,
-                  base: "modules",
+                  base: 'modules',
                 },
                 // {
                 //   label: "Purchase Transaction",
@@ -708,6 +708,16 @@ const useSidebarData = () => {
               icon: 'users-group',
               base: 'client',
               materialicons: 'person',
+              submenuItems: [],
+            },
+            {
+              label: 'Sub-Contracts',
+              link: routes.subcontractlist,
+              submenu: false,
+              showSubRoute: false,
+              icon: 'file-text',
+              base: 'sub-contracts',
+              materialicons: 'description',
               submenuItems: [],
             },
             {
@@ -2681,6 +2691,16 @@ const useSidebarData = () => {
               submenuItems: [],
             },
             {
+              label: 'Sub-Contracts',
+              link: routes.subcontractlist,
+              submenu: false,
+              showSubRoute: false,
+              icon: 'file-text',
+              base: 'sub-contracts',
+              materialicons: 'description',
+              submenuItems: [],
+            },
+            {
               label: 'Projects',
               link: routes.project,
               submenu: true,
@@ -3440,6 +3460,16 @@ const useSidebarData = () => {
               icon: 'users-group',
               base: 'client',
               materialicons: 'person',
+              submenuItems: [],
+            },
+            {
+              label: 'Sub-Contracts',
+              link: routes.subcontractlist,
+              submenu: false,
+              showSubRoute: false,
+              icon: 'file-text',
+              base: 'sub-contracts',
+              materialicons: 'description',
               submenuItems: [],
             },
             {
@@ -4460,12 +4490,12 @@ const useSidebarData = () => {
                 },
                 {
                   label: 'Domain',
-                  label: "Modules",
+                  label: 'Modules',
                   link: routes.superAdminModules,
-                  base: "modules",
+                  base: 'modules',
                 },
                 {
-                  label: "Domain",
+                  label: 'Domain',
                   link: routes.superAdminDomain,
                   base: 'domain',
                 },

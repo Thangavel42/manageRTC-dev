@@ -69,6 +69,8 @@ const ProjectDetails = () => {
   const [project, setProject] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
+  const [subContracts, setSubContracts] = useState<any[]>([]);
+  const [availableSubContracts, setAvailableSubContracts] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +141,30 @@ const ProjectDetails = () => {
   const [editTeamLeaders, setEditTeamLeaders] = useState<string[]>([]);
   const [editProjectManagers, setEditProjectManagers] = useState<string[]>([]);
   const [editTags, setEditTags] = useState<string[]>([]);
+
+  // Sub-Contract state
+  const [subContractName, setSubContractName] = useState('');
+  const [subContractDate, setSubContractDate] = useState<Dayjs | null>(null);
+  const [subContractMembers, setSubContractMembers] = useState('');
+  const [subContractAmount, setSubContractAmount] = useState('');
+  const [subContractDescription, setSubContractDescription] = useState('');
+  const [isSavingSubContract, setIsSavingSubContract] = useState(false);
+  const [subContractModalError, setSubContractModalError] = useState<string | null>(null);
+  const [subContractFieldErrors, setSubContractFieldErrors] = useState<Record<string, string>>({});
+  const [editingSubContract, setEditingSubContract] = useState<any>(null);
+  const [editSubContractName, setEditSubContractName] = useState('');
+  const [editSubContractDate, setEditSubContractDate] = useState<Dayjs | null>(null);
+  const [editSubContractMembers, setEditSubContractMembers] = useState('');
+  const [editSubContractAmount, setEditSubContractAmount] = useState('');
+  const [editSubContractDescription, setEditSubContractDescription] = useState('');
+  const [isSavingEditSubContract, setIsSavingEditSubContract] = useState(false);
+  const [editSubContractModalError, setEditSubContractModalError] = useState<string | null>(null);
+  const [editSubContractFieldErrors, setEditSubContractFieldErrors] = useState<
+    Record<string, string>
+  >({});
+  const [deletingSubContract, setDeletingSubContract] = useState<any>(null);
+  const [isDeletingSubContract, setIsDeletingSubContract] = useState(false);
+  const [confirmSubContractName, setConfirmSubContractName] = useState('');
 
   // Helper function to match status with various formats
   const findMatchingStatus = useCallback((taskStatus: string, statuses: any[]) => {
@@ -290,6 +316,31 @@ const ProjectDetails = () => {
     }
   }, [project?._id]);
 
+  const loadProjectSubContracts = useCallback(async () => {
+    if (!project?._id) return;
+    try {
+      const response = await apiGet(`/projects/${project._id}/subcontracts`);
+      if (response.success && response.data) {
+        console.log('[ProjectDetails] Loaded sub-contracts:', response.data);
+        setSubContracts(response.data || []);
+      }
+    } catch (err) {
+      console.error('[ProjectDetails] Failed to load sub-contracts via REST:', err);
+    }
+  }, [project?._id]);
+
+  const loadAvailableSubContracts = useCallback(async () => {
+    try {
+      const response = await apiGet('/subcontracts');
+      if (response.success && response.data) {
+        console.log('[ProjectDetails] Loaded available sub-contracts:', response.data);
+        setAvailableSubContracts(response.data || []);
+      }
+    } catch (err) {
+      console.error('[ProjectDetails] Failed to load available sub-contracts:', err);
+    }
+  }, []);
+
   const loadTaskStatuses = useCallback(async () => {
     try {
       await fetchTaskStatusesAPI();
@@ -328,6 +379,18 @@ const ProjectDetails = () => {
       loadProjectInvoices();
     }
   }, [project?._id, loadProjectInvoices]);
+
+  // Load available sub-contracts on mount
+  useEffect(() => {
+    loadAvailableSubContracts();
+  }, [loadAvailableSubContracts]);
+
+  // Load sub-contracts after project data is set
+  useEffect(() => {
+    if (project?._id) {
+      loadProjectSubContracts();
+    }
+  }, [project?._id, loadProjectSubContracts]);
 
   const loadEmployeesAndClients = useCallback(async () => {
     try {
@@ -1195,6 +1258,268 @@ const ProjectDetails = () => {
     }
   }, [deletingNote, project?._id, loadProjectNotes, closeModalById]);
 
+  // Sub-Contract Handlers
+  const validateSubContractField = (fieldName: string, value: any): string => {
+    switch (fieldName) {
+      case 'subContractName':
+        if (!value || !value.trim()) return 'Contract name is required';
+        if (value.trim().length < 3) return 'Contract name must be at least 3 characters';
+        break;
+      case 'subContractDate':
+        if (!value) return 'Contract date is required';
+        break;
+      case 'subContractMembers':
+        if (!value || !value.toString().trim()) return 'Number of members is required';
+        const numMembers = parseInt(value, 10);
+        if (isNaN(numMembers) || numMembers < 1) return 'Number of members must be at least 1';
+        break;
+      case 'subContractAmount':
+        if (!value || !value.toString().trim()) return 'Total amount is required';
+        const numAmount = parseFloat(value);
+        if (isNaN(numAmount) || numAmount < 0) return 'Total amount cannot be negative';
+        break;
+    }
+    return '';
+  };
+
+  const clearSubContractFieldError = (fieldName: string) => {
+    setSubContractFieldErrors((prev) => {
+      const newErrors = { ...prev };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
+  };
+
+  const clearEditSubContractFieldError = (fieldName: string) => {
+    setEditSubContractFieldErrors((prev) => {
+      const newErrors = { ...prev };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
+  };
+
+  const validateSubContractForm = useCallback((): boolean => {
+    const errors: Record<string, string> = {};
+
+    const nameError = validateSubContractField('subContractName', subContractName);
+    if (nameError) errors.subContractName = nameError;
+
+    const dateError = validateSubContractField('subContractDate', subContractDate);
+    if (dateError) errors.subContractDate = dateError;
+
+    const membersError = validateSubContractField('subContractMembers', subContractMembers);
+    if (membersError) errors.subContractMembers = membersError;
+
+    const amountError = validateSubContractField('subContractAmount', subContractAmount);
+    if (amountError) errors.subContractAmount = amountError;
+
+    setSubContractFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [subContractName, subContractDate, subContractMembers, subContractAmount]);
+
+  const validateEditSubContractForm = useCallback((): boolean => {
+    const errors: Record<string, string> = {};
+
+    // Contract name is readonly, no need to validate
+
+    const dateError = validateSubContractField('subContractDate', editSubContractDate);
+    if (dateError) errors.subContractDate = dateError;
+
+    const membersError = validateSubContractField('subContractMembers', editSubContractMembers);
+    if (membersError) errors.subContractMembers = membersError;
+
+    const amountError = validateSubContractField('subContractAmount', editSubContractAmount);
+    if (amountError) errors.subContractAmount = amountError;
+
+    setEditSubContractFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [editSubContractDate, editSubContractMembers, editSubContractAmount]);
+
+  const closeAddSubContractModal = useCallback(() => {
+    setSubContractName('');
+    setSubContractDate(null);
+    setSubContractMembers('');
+    setSubContractAmount('');
+    setSubContractDescription('');
+    setSubContractModalError(null);
+    setSubContractFieldErrors({});
+    closeModalById('add_subcontract_modal');
+  }, [closeModalById]);
+
+  const handleSaveSubContract = useCallback(async () => {
+    if (!project?._id) return;
+
+    if (!validateSubContractForm()) {
+      return;
+    }
+
+    setIsSavingSubContract(true);
+    setSubContractModalError(null);
+    setSubContractFieldErrors({});
+
+    try {
+      const response = await apiPost(`/projects/${project._id}/subcontracts`, {
+        contractName: subContractName.trim(),
+        contractDate: subContractDate?.format('YYYY-MM-DD'),
+        numberOfMembers: parseInt(subContractMembers, 10),
+        totalAmount: parseFloat(subContractAmount),
+        description: subContractDescription.trim(),
+      });
+
+      if (response.success) {
+        closeAddSubContractModal();
+        loadProjectSubContracts();
+        message.success('Sub-contract created successfully');
+      } else {
+        setSubContractModalError(response.error?.message || 'Failed to create sub-contract');
+      }
+    } catch (error: any) {
+      console.error('[ProjectDetails] Error creating sub-contract:', error);
+      setSubContractModalError(
+        error.response?.data?.error?.message || 'An error occurred while creating sub-contract'
+      );
+    } finally {
+      setIsSavingSubContract(false);
+    }
+  }, [
+    project?._id,
+    subContractName,
+    subContractDate,
+    subContractMembers,
+    subContractAmount,
+    subContractDescription,
+    validateSubContractForm,
+    loadProjectSubContracts,
+    closeAddSubContractModal,
+  ]);
+
+  const handleOpenEditSubContract = useCallback((subContract: any) => {
+    setEditingSubContract(subContract);
+    setEditSubContractName(subContract.contractName || '');
+    setEditSubContractDate(subContract.contractDate ? dayjs(subContract.contractDate) : null);
+    setEditSubContractMembers(subContract.numberOfMembers?.toString() || '');
+    setEditSubContractAmount(subContract.totalAmount?.toString() || '');
+    setEditSubContractDescription(subContract.description || '');
+    setEditSubContractModalError(null);
+    setEditSubContractFieldErrors({});
+
+    setTimeout(() => {
+      const modalElement = document.getElementById('edit_subcontract_modal');
+      if (modalElement) {
+        const modalInstance = (window as any)?.bootstrap?.Modal?.getOrCreateInstance?.(
+          modalElement
+        );
+        modalInstance?.show();
+      }
+    }, 100);
+  }, []);
+
+  const closeEditSubContractModal = useCallback(() => {
+    setEditingSubContract(null);
+    setEditSubContractName('');
+    setEditSubContractDate(null);
+    setEditSubContractMembers('');
+    setEditSubContractAmount('');
+    setEditSubContractDescription('');
+    setEditSubContractModalError(null);
+    setEditSubContractFieldErrors({});
+    closeModalById('edit_subcontract_modal');
+  }, [closeModalById]);
+
+  const handleSaveEditSubContract = useCallback(async () => {
+    if (!editingSubContract?._id || !project?._id) return;
+
+    if (!validateEditSubContractForm()) {
+      return;
+    }
+
+    setIsSavingEditSubContract(true);
+    setEditSubContractModalError(null);
+    setEditSubContractFieldErrors({});
+
+    try {
+      const response = await apiPut(
+        `/projects/${project._id}/subcontracts/${editingSubContract._id}`,
+        {
+          // contractName is readonly and linked to SubContract record
+          contractDate: editSubContractDate?.format('YYYY-MM-DD'),
+          numberOfMembers: parseInt(editSubContractMembers, 10),
+          totalAmount: parseFloat(editSubContractAmount),
+          description: editSubContractDescription.trim(),
+        }
+      );
+
+      if (response.success) {
+        closeEditSubContractModal();
+        loadProjectSubContracts();
+        message.success('Sub-contract updated successfully');
+      } else {
+        setEditSubContractModalError(response.error?.message || 'Failed to update sub-contract');
+      }
+    } catch (error: any) {
+      console.error('[ProjectDetails] Error updating sub-contract:', error);
+      setEditSubContractModalError(
+        error.response?.data?.error?.message || 'An error occurred while updating sub-contract'
+      );
+    } finally {
+      setIsSavingEditSubContract(false);
+    }
+  }, [
+    editingSubContract,
+    project?._id,
+    editSubContractName,
+    editSubContractDate,
+    editSubContractMembers,
+    editSubContractAmount,
+    editSubContractDescription,
+    validateEditSubContractForm,
+    loadProjectSubContracts,
+    closeEditSubContractModal,
+  ]);
+
+  const handleOpenDeleteSubContract = useCallback((subContract: any) => {
+    setDeletingSubContract(subContract);
+
+    setTimeout(() => {
+      const modalElement = document.getElementById('delete_subcontract_modal');
+      if (modalElement) {
+        const modalInstance = (window as any)?.bootstrap?.Modal?.getOrCreateInstance?.(
+          modalElement
+        );
+        modalInstance?.show();
+      }
+    }, 100);
+  }, []);
+
+  const handleDeleteSubContract = useCallback(async () => {
+    if (!deletingSubContract?._id || !project?._id) return;
+
+    setIsDeletingSubContract(true);
+
+    try {
+      const response = await apiDel(
+        `/projects/${project._id}/subcontracts/${deletingSubContract._id}`
+      );
+
+      if (response.success) {
+        setDeletingSubContract(null);
+        setConfirmSubContractName('');
+        loadProjectSubContracts();
+        closeModalById('delete_subcontract_modal');
+        message.success('Sub-contract deleted successfully');
+      } else {
+        message.error(response.error?.message || 'Failed to delete sub-contract');
+      }
+    } catch (error: any) {
+      console.error('[ProjectDetails] Error deleting sub-contract:', error);
+      message.error(
+        error.response?.data?.error?.message || 'An error occurred while deleting sub-contract'
+      );
+    } finally {
+      setIsDeletingSubContract(false);
+    }
+  }, [deletingSubContract, project?._id, loadProjectSubContracts, closeModalById]);
+
   const closeAddTaskModal = useCallback(() => {
     setTaskTitle('');
     setTaskDescription('');
@@ -1857,6 +2182,45 @@ const ProjectDetails = () => {
                         <p className="text-gray-9">${project.projectValue || '0'}</p>
                       </div>
                     </div>
+                  </div>
+                  <h5 className="mb-3">Sub-Contract Details</h5>
+                  <div className="list-group details-list-group mb-4">
+                    <div className="list-group-item">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>Total Sub-Contracts</span>
+                        <p className="text-gray-9">{subContracts.length}</p>
+                      </div>
+                    </div>
+                    <div className="list-group-item">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>Total Amount</span>
+                        <p className="text-gray-9">
+                          $
+                          {subContracts
+                            .reduce((sum, sc) => sum + (sc.totalAmount || 0), 0)
+                            .toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="list-group-item">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>Total Members</span>
+                        <p className="text-gray-9">
+                          {subContracts.reduce((sum, sc) => sum + (sc.numberOfMembers || 0), 0)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="list-group-item">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>Active Contracts</span>
+                        <p className="text-gray-9">
+                          {subContracts.filter((sc) => sc.status === 'Active').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <h5 className="mb-3">Work Details</h5>
+                  <div className="list-group details-list-group mb-4">
                     <div className="list-group-item">
                       <div className="d-flex align-items-center justify-content-between">
                         <span>Hours of Work</span>
@@ -2593,6 +2957,161 @@ const ProjectDetails = () => {
                     </div>
                   </div>
                   <div className="accordion-item">
+                    <div className="accordion-header" id="headingSubContracts">
+                      <div className="accordion-button">
+                        <h5>Sub-Contracts</h5>
+                        <div className="ms-auto d-flex align-items-center">
+                          {(isAdmin || isHR) && (
+                            <Link
+                              to="#"
+                              className="btn btn-primary btn-xs d-inline-flex align-items-center me-3"
+                              data-bs-toggle="modal"
+                              data-bs-target="#add_subcontract_modal"
+                            >
+                              <i className="ti ti-square-rounded-plus-filled me-1" />
+                              Add New
+                            </Link>
+                          )}
+                          <Link
+                            to="#"
+                            className="d-flex align-items-center collapsed collapse-arrow"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#primaryBorderSubContracts"
+                            aria-expanded="false"
+                            aria-controls="primaryBorderSubContracts"
+                          >
+                            <i className="ti ti-chevron-down fs-18" />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      id="primaryBorderSubContracts"
+                      className="accordion-collapse collapse show border-top"
+                      aria-labelledby="headingSubContracts"
+                      data-bs-parent="#accordionExample"
+                    >
+                      <div
+                        className="accordion-body"
+                        style={{ minHeight: '210px', overflow: 'visible' }}
+                      >
+                        <div className="list-group list-group-flush">
+                          {subContracts.length === 0 ? (
+                            <div className="text-center py-4">
+                              <i className="ti ti-file-off fs-1 text-muted mb-3"></i>
+                              <h6 className="text-muted">No sub-contracts found</h6>
+                              <p className="text-muted small">
+                                Click "Add New" to create your first sub-contract
+                              </p>
+                            </div>
+                          ) : (
+                            subContracts.map((subContract: any, index: number) => {
+                              // For old sub-contracts without subContractId, try to match with available sub-contracts
+                              const matchedSubContract =
+                                !subContract.contractName && availableSubContracts[index]
+                                  ? availableSubContracts[index]
+                                  : null;
+
+                              const displayName =
+                                subContract.contractName ||
+                                matchedSubContract?.name ||
+                                'Unnamed Contract';
+                              const displayContractId =
+                                subContract.contractId || matchedSubContract?.contractId || '';
+
+                              return (
+                                <div
+                                  key={subContract._id}
+                                  className="list-group-item border-0 px-0"
+                                >
+                                  <div className="d-flex align-items-start">
+                                    <div className="flex-fill">
+                                      <div className="d-flex align-items-center mb-1">
+                                        <h6 className="mb-0 me-2">{displayName}</h6>
+                                        {displayContractId && (
+                                          <span className="badge badge-soft-info">
+                                            {displayContractId.toUpperCase()}
+                                          </span>
+                                        )}
+                                        {!subContract.contractName && matchedSubContract && (
+                                          <span
+                                            className="badge badge-soft-warning ms-1"
+                                            title="This sub-contract is not linked. Please edit to link it properly."
+                                          >
+                                            Not Linked
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-muted mb-1">
+                                        <i className="ti ti-calendar me-1"></i>
+                                        Date: {dayjs(subContract.contractDate).format('DD-MM-YYYY')}
+                                      </p>
+                                      <p className="text-muted mb-1">
+                                        <i className="ti ti-users me-1"></i>
+                                        Members: {subContract.numberOfMembers}
+                                      </p>
+                                      <p className="text-muted mb-1">
+                                        <span className="badge badge-success">
+                                          {subContract.currency}{' '}
+                                          {subContract.totalAmount.toLocaleString()}
+                                        </span>
+                                      </p>
+                                      {subContract.description && (
+                                        <p className="text-muted small mb-0">
+                                          {subContract.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {(isAdmin || isHR) && (
+                                      <div className="dropdown ms-auto">
+                                        <Link
+                                          to="#"
+                                          className="link-dark"
+                                          data-bs-toggle="dropdown"
+                                          aria-expanded="false"
+                                        >
+                                          <i className="ti ti-dots-vertical"></i>
+                                        </Link>
+                                        <ul className="dropdown-menu dropdown-menu-end p-2">
+                                          <li>
+                                            <Link
+                                              to="#"
+                                              className="dropdown-item rounded-1"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                handleOpenEditSubContract(subContract);
+                                              }}
+                                            >
+                                              <i className="ti ti-edit me-2" />
+                                              Edit
+                                            </Link>
+                                          </li>
+                                          <li>
+                                            <Link
+                                              to="#"
+                                              className="dropdown-item rounded-1"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                handleOpenDeleteSubContract(subContract);
+                                              }}
+                                            >
+                                              <i className="ti ti-trash me-2" />
+                                              Delete
+                                            </Link>
+                                          </li>
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="accordion-item">
                     <div className="accordion-header" id="headingSix">
                       <div className="accordion-button">
                         <h5>Activity</h5>
@@ -3269,6 +3788,430 @@ const ProjectDetails = () => {
         </div>
       </div>
       {/* /Delete Note Modal */}
+      {/* Add Sub-Contract */}
+      <div className="modal fade" id="add_subcontract_modal" role="dialog">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header header-border align-items-center">
+              <h5 className="modal-title">Add Sub-Contract</h5>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={closeAddSubContractModal}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {subContractModalError && (
+                <div className="alert alert-danger alert-dismissible fade show" role="alert">
+                  <i className="ti ti-alert-circle me-2"></i>
+                  {subContractModalError}
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setSubContractModalError(null)}
+                  ></button>
+                </div>
+              )}
+              <div className="row">
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Contract Name <span className="text-danger">*</span>
+                    </label>
+                    <CommonSelect
+                      className={`select ${subContractFieldErrors.subContractName ? 'is-invalid' : ''}`}
+                      options={[
+                        { value: '', label: 'Select Sub-Contract' },
+                        ...availableSubContracts.map((sc) => ({
+                          value: sc.name,
+                          label: sc.contractId
+                            ? `${sc.name} (${sc.contractId.toUpperCase()})`
+                            : sc.name,
+                        })),
+                      ]}
+                      value={
+                        subContractName
+                          ? {
+                              value: subContractName,
+                              label: availableSubContracts.find((sc) => sc.name === subContractName)
+                                ?.contractId
+                                ? `${subContractName} (${availableSubContracts.find((sc) => sc.name === subContractName)?.contractId.toUpperCase()})`
+                                : subContractName,
+                            }
+                          : { value: '', label: 'Select Sub-Contract' }
+                      }
+                      onChange={(option) => {
+                        setSubContractName(option?.value || '');
+                        clearSubContractFieldError('subContractName');
+                      }}
+                    />
+                    {subContractFieldErrors.subContractName && (
+                      <div className="invalid-feedback d-block">
+                        {subContractFieldErrors.subContractName}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Contract Date <span className="text-danger">*</span>
+                    </label>
+                    <div className="input-icon position-relative">
+                      <DatePicker
+                        className={`form-control datetimepicker ${subContractFieldErrors.subContractDate ? 'is-invalid' : ''}`}
+                        format="DD-MM-YYYY"
+                        value={subContractDate}
+                        onChange={(date) => {
+                          setSubContractDate(date);
+                          clearSubContractFieldError('subContractDate');
+                        }}
+                        getPopupContainer={() =>
+                          document.getElementById('add_subcontract_modal') || document.body
+                        }
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-calendar" />
+                      </span>
+                    </div>
+                    {subContractFieldErrors.subContractDate && (
+                      <div className="invalid-feedback d-block">
+                        {subContractFieldErrors.subContractDate}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Number of Members <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className={`form-control ${subContractFieldErrors.subContractMembers ? 'is-invalid' : ''}`}
+                      placeholder="Enter number of members"
+                      min="1"
+                      value={subContractMembers}
+                      onChange={(e) => {
+                        setSubContractMembers(e.target.value);
+                        clearSubContractFieldError('subContractMembers');
+                      }}
+                    />
+                    {subContractFieldErrors.subContractMembers && (
+                      <div className="invalid-feedback">
+                        {subContractFieldErrors.subContractMembers}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Total Amount <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className={`form-control ${subContractFieldErrors.subContractAmount ? 'is-invalid' : ''}`}
+                      placeholder="Enter total amount"
+                      min="0"
+                      step="0.01"
+                      value={subContractAmount}
+                      onChange={(e) => {
+                        setSubContractAmount(e.target.value);
+                        clearSubContractFieldError('subContractAmount');
+                      }}
+                    />
+                    {subContractFieldErrors.subContractAmount && (
+                      <div className="invalid-feedback">
+                        {subContractFieldErrors.subContractAmount}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">Description (Optional)</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      placeholder="Enter description"
+                      value={subContractDescription}
+                      onChange={(e) => setSubContractDescription(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light me-2"
+                data-bs-dismiss="modal"
+                onClick={closeAddSubContractModal}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveSubContract}
+                disabled={isSavingSubContract}
+              >
+                {isSavingSubContract ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Sub-Contract'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Add Sub-Contract */}
+      {/* Edit Sub-Contract */}
+      <div className="modal fade" id="edit_subcontract_modal" role="dialog">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header header-border align-items-center">
+              <h5 className="modal-title">Edit Sub-Contract</h5>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={closeEditSubContractModal}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {editSubContractModalError && (
+                <div className="alert alert-danger alert-dismissible fade show" role="alert">
+                  <i className="ti ti-alert-circle me-2"></i>
+                  {editSubContractModalError}
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setEditSubContractModalError(null)}
+                  ></button>
+                </div>
+              )}
+              <div className="row">
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">Sub-Contract</label>
+                    <div className="input-group">
+                      <input
+                        type="text"
+                        className="form-control bg-light"
+                        value={editingSubContract?.contractName || 'Not Linked'}
+                        readOnly
+                      />
+                      {editingSubContract?.contractId && (
+                        <span className="input-group-text bg-info text-white">
+                          {editingSubContract.contractId.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    {!editingSubContract?.contractName && (
+                      <small className="text-warning d-block mt-1">
+                        <i className="ti ti-alert-circle me-1"></i>
+                        This sub-contract is not linked to a SubContract record. Please delete and
+                        create a new one with proper linking.
+                      </small>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Contract Date <span className="text-danger">*</span>
+                    </label>
+                    <div className="input-icon position-relative">
+                      <DatePicker
+                        className={`form-control datetimepicker ${editSubContractFieldErrors.subContractDate ? 'is-invalid' : ''}`}
+                        format="DD-MM-YYYY"
+                        value={editSubContractDate}
+                        onChange={(date) => {
+                          setEditSubContractDate(date);
+                          clearEditSubContractFieldError('subContractDate');
+                        }}
+                        getPopupContainer={() =>
+                          document.getElementById('edit_subcontract_modal') || document.body
+                        }
+                      />
+                      <span className="input-icon-addon">
+                        <i className="ti ti-calendar" />
+                      </span>
+                    </div>
+                    {editSubContractFieldErrors.subContractDate && (
+                      <div className="invalid-feedback d-block">
+                        {editSubContractFieldErrors.subContractDate}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Number of Members <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className={`form-control ${editSubContractFieldErrors.subContractMembers ? 'is-invalid' : ''}`}
+                      placeholder="Enter number of members"
+                      min="1"
+                      value={editSubContractMembers}
+                      onChange={(e) => {
+                        setEditSubContractMembers(e.target.value);
+                        clearEditSubContractFieldError('subContractMembers');
+                      }}
+                    />
+                    {editSubContractFieldErrors.subContractMembers && (
+                      <div className="invalid-feedback">
+                        {editSubContractFieldErrors.subContractMembers}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-3">
+                    <label className="form-label">
+                      Total Amount <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className={`form-control ${editSubContractFieldErrors.subContractAmount ? 'is-invalid' : ''}`}
+                      placeholder="Enter total amount"
+                      min="0"
+                      step="0.01"
+                      value={editSubContractAmount}
+                      onChange={(e) => {
+                        setEditSubContractAmount(e.target.value);
+                        clearEditSubContractFieldError('subContractAmount');
+                      }}
+                    />
+                    {editSubContractFieldErrors.subContractAmount && (
+                      <div className="invalid-feedback">
+                        {editSubContractFieldErrors.subContractAmount}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="col-md-12">
+                  <div className="mb-3">
+                    <label className="form-label">Description (Optional)</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      placeholder="Enter description"
+                      value={editSubContractDescription}
+                      onChange={(e) => setEditSubContractDescription(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light me-2"
+                data-bs-dismiss="modal"
+                onClick={closeEditSubContractModal}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveEditSubContract}
+                disabled={isSavingEditSubContract}
+              >
+                {isSavingEditSubContract ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Sub-Contract'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Edit Sub-Contract */}
+      {/* Delete Sub-Contract Modal */}
+      <div className="modal fade" id="delete_subcontract_modal">
+        <div className="modal-dialog modal-dialog-centered modal-sm">
+          <div className="modal-content">
+            <div className="modal-header border-0 justify-content-center pb-0">
+              <div className="avatar avatar-xl bg-danger-light rounded-circle">
+                <i className="ti ti-trash-x text-danger fs-20" />
+              </div>
+            </div>
+            <div className="modal-body text-center pt-3 pb-0">
+              <h4 className="mb-2">Delete Sub-Contract?</h4>
+              <p className="mb-3">
+                Are you sure you want to delete <strong>{deletingSubContract?.contractName}</strong>
+                ? This action cannot be undone.
+              </p>
+              <div className="mb-3">
+                <label className="form-label">
+                  Type contract name to confirm:{' '}
+                  <strong>{deletingSubContract?.contractName}</strong>
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Enter contract name"
+                  value={confirmSubContractName}
+                  onChange={(e) => setConfirmSubContractName(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer border-0 justify-content-center">
+              <button
+                type="button"
+                className="btn btn-light me-2"
+                data-bs-dismiss="modal"
+                onClick={() => {
+                  setDeletingSubContract(null);
+                  setConfirmSubContractName('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleDeleteSubContract}
+                disabled={
+                  isDeletingSubContract ||
+                  confirmSubContractName !== deletingSubContract?.contractName
+                }
+              >
+                {isDeletingSubContract ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* /Delete Sub-Contract Modal */}
       {/* Edit Project */}
       <div className="modal fade" id="edit_project" role="dialog">
         <div className="modal-dialog modal-dialog-centered modal-lg">

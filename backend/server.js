@@ -55,6 +55,7 @@ import promotionRoutes from './routes/api/promotions.js';
 import resignationRoutes from './routes/api/resignations.js';
 import scheduleRoutes from './routes/api/schedule.js';
 import shiftRoutes from './routes/api/shifts.js';
+import subcontractRoutes from './routes/api/subcontracts.js';
 import syncRoleRoutes from './routes/api/syncRole.routes.js';
 import taskRoutes from './routes/api/tasks.js';
 import terminationRoutes from './routes/api/terminations.js';
@@ -65,16 +66,16 @@ import healthRoutes from './routes/health.js';
 import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
 // RBAC Routes
-import adminUsersRoutes from "./routes/api/admin.users.js";
-import rbacModulesRoutes from "./routes/api/rbac/modules.js";
-import rbacPageCategoriesRoutes from "./routes/api/rbac/pageCategories.routes.js";
-import rbacPagesRoutes from "./routes/api/rbac/pages.js";
-import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
-import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
-import rbacRolesRoutes from "./routes/api/rbac/roles.js";
-import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
-import superadminRoutes from "./routes/api/superadmin.routes.js";
-import debugRoutes from "./routes/debug/auth-debug.js";
+import adminUsersRoutes from './routes/api/admin.users.js';
+import rbacModulesRoutes from './routes/api/rbac/modules.js';
+import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';
+import rbacPagesRoutes from './routes/api/rbac/pages.js';
+import rbacPagesHierarchyRoutes from './routes/api/rbac/pagesHierarchy.js';
+import rbacPermissionsRoutes from './routes/api/rbac/permissions.js';
+import rbacRolesRoutes from './routes/api/rbac/roles.js';
+import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
+import superadminRoutes from './routes/api/superadmin.routes.js';
+import debugRoutes from './routes/debug/auth-debug.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,6 +204,7 @@ const initializeServer = async () => {
     // REST API Routes (Socket.IO to REST Migration)
     app.use('/api/employees', employeeRoutes);
     app.use('/api/projects', projectRoutes);
+    app.use('/api/subcontracts', subcontractRoutes);
     app.use('/api/tasks', taskRoutes);
     app.use('/api/leads', leadRoutes);
     app.use('/api/clients', clientRoutes);
@@ -234,24 +236,24 @@ const initializeServer = async () => {
     app.use('/api/sync-role', syncRoleRoutes);
 
     // RBAC Routes
-    app.use("/api/rbac/categories", rbacPageCategoriesRoutes);
-    app.use("/api/rbac/roles", rbacRolesRoutes);
-    app.use("/api/rbac/permissions", rbacPermissionsRoutes);
-    app.use("/api/rbac/modules", rbacModulesRoutes);
-    app.use("/api/rbac/pages", rbacPagesRoutes);
-    app.use("/api/rbac/pages-hierarchy", rbacPagesHierarchyRoutes);
-    app.use("/api/admin/users", adminUsersRoutes);
+    app.use('/api/rbac/categories', rbacPageCategoriesRoutes);
+    app.use('/api/rbac/roles', rbacRolesRoutes);
+    app.use('/api/rbac/permissions', rbacPermissionsRoutes);
+    app.use('/api/rbac/modules', rbacModulesRoutes);
+    app.use('/api/rbac/pages', rbacPagesRoutes);
+    app.use('/api/rbac/pages-hierarchy', rbacPagesHierarchyRoutes);
+    app.use('/api/admin/users', adminUsersRoutes);
 
     // Superadmin Routes
-    app.use("/api/superadmin", superadminCompaniesRoutes);
-    app.use("/api/superadmin/users", superadminRoutes);
+    app.use('/api/superadmin', superadminCompaniesRoutes);
+    app.use('/api/superadmin/users', superadminRoutes);
 
     // Clerk Webhooks
     app.use('/api/webhooks', clerkWebhookRoutes);
 
     // Debug Routes (Development only)
     if (process.env.NODE_ENV !== 'production') {
-      app.use("/api/debug", debugRoutes);
+      app.use('/api/debug', debugRoutes);
     }
 
     // Health Check Routes
