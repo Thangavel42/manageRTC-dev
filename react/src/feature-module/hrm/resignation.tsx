@@ -1,7 +1,7 @@
 import { DatePicker } from "antd";
 import { format, parse } from "date-fns";
 import dayjs from "dayjs";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Socket } from "socket.io-client";
@@ -15,6 +15,7 @@ import { all_routes } from "../router/all_routes";
 // REST API Hooks
 import { useDepartmentsREST } from "../../hooks/useDepartmentsREST";
 import { useEmployeesREST } from "../../hooks/useEmployeesREST";
+import { useProfileRest } from "../../hooks/useProfileRest";
 import { useResignationsREST, type Resignation as APIResignation } from "../../hooks/useResignationsREST";
 
 type ResignationRow = {
@@ -30,7 +31,9 @@ type ResignationRow = {
   resignationDate: string; // already formatted by backend like "12 Sep 2025"
   resignationId: string;
   status: string; // Required for Resignation type compatibility
-  resignationStatus?: 'pending' | 'approved' | 'rejected' | 'withdrawn'; // Workflow status: pending, approved, rejected, withdrawn
+  resignationStatus?: 'pending' | 'on_notice' | 'rejected' | 'resigned' | 'withdrawn'; // Workflow status
+  reportingManagerId?: string;
+  reportingManagerName?: string;
   effectiveDate?: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -51,69 +54,107 @@ const Resignation = () => {
   const {
     resignations: apiResignations,
     stats: apiStats,
-    loading: apiLoading,
     fetchResignations,
     fetchResignationStats,
     createResignation,
     updateResignation,
     deleteResignations,
     approveResignation,
-    rejectResignation,
-    processResignation
+    rejectResignation
   } = useResignationsREST();
 
   // REST API Hooks for Departments and Employees
   const { departments: apiDepartments, fetchDepartments } = useDepartmentsREST();
-  const { employees: apiEmployees, fetchEmployees } = useEmployeesREST();
+  const { employees: apiEmployees, fetchEmployees, getEmployeeById, fetchReportingManagerOptions } = useEmployeesREST();
+  const { currentUserProfile, fetchCurrentUserProfile } = useProfileRest();
 
   const [rows, setRows] = useState<ResignationRow[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<{ value: string; label: string }[]>([]);
-    const [employeeOptions, setEmployeeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [reportingManagerOptions, setReportingManagerOptions] = useState<{ value: string; label: string }[]>([]);
+  const [currentEmployee, setCurrentEmployee] = useState<any>(null);
+  const [reportingManagerLoading, setReportingManagerLoading] = useState<boolean>(false);
+  const reportingManagerSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [stats, setStats] = useState<ResignationStats>({
     total: 0,
     pending: 0,
     onNotice: 0,
     resigned: 0,
   });
-  const [loading, setLoading] = useState<boolean>(true);
   const [deletingResignationId, setDeletingResignationId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string>("thisyear");
   const [customRange, setCustomRange] = useState<{
     startDate?: string;
     endDate?: string;
   }>({});
-  const [editing, setEditing] = useState<any>(null);
+  const [filterDepartmentId, setFilterDepartmentId] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterEmployeeQuery, setFilterEmployeeQuery] = useState<string>("");
+  const [filterDateRange, setFilterDateRange] = useState<{ start?: string; end?: string }>({});
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const userRole = currentUserProfile?.role?.toLowerCase();
+  const isEmployeeRole = userRole === "employee";
+  const isManagerRole = userRole === "manager";
+  const isHrRole = userRole === "hr";
+  const isAdminRole = userRole === "admin" || userRole === "superadmin";
+  const canAddResignation = isEmployeeRole || isHrRole || isAdminRole;
 
   // State for viewing resignation details - use API type
   const [viewingResignation, setViewingResignation] = useState<APIResignation | null>(null);
+
+  // Add Resignation form state - declare early before useCallbacks
+  const [addForm, setAddForm] = useState({
+    employeeId: "",
+    departmentId: "",
+    reportingManagerId: "",
+    reason: "",
+    noticeDate: "", // YYYY-MM-DD from DatePicker
+    resignationDate: "",
+  });
+
+  // Validation errors for Add Resignation
+  const [addErrors, setAddErrors] = useState({
+    departmentId: "",
+    employeeId: "",
+    reportingManagerId: "",
+    reason: "",
+    noticeDate: "",
+    resignationDate: "",
+  });
 
   // Controlled edit form data
   const [editForm, setEditForm] = useState({
     employeeId: "",
     departmentId: "",
+    reportingManagerId: "",
     noticeDate: "", // "DD-MM-YYYY" shown in modal
     reason: "",
     resignationDate: "", // "DD-MM-YYYY" shown in modal
     resignationId: "",
   });
 
-  const ddmmyyyyToYMD = (s?: string) => {
-    if (!s) return "";
-    const d = parse(s, "dd-MM-yyyy", new Date());
-    return isNaN(d.getTime()) ? "" : format(d, "yyyy-MM-dd");
-  };
-
-  // Define fetchers early so they can be used in openEditModal (using REST API)
-  const loadResignationStats = useCallback(async () => {
-    await fetchResignationStats();
-  }, [fetchResignationStats]);
-
   const loadDepartmentList = useCallback(async () => {
     console.log('[Resignation] Loading departments');
     await fetchDepartments();
   }, [fetchDepartments]);
+
+  useEffect(() => {
+    fetchCurrentUserProfile();
+  }, [fetchCurrentUserProfile]);
+
+  useEffect(() => {
+    const loadCurrentEmployee = async () => {
+      if (!currentUserProfile?._id) return;
+      const employee = await getEmployeeById(currentUserProfile._id);
+      if (employee) {
+        setCurrentEmployee(employee as any);
+      }
+    };
+
+    loadCurrentEmployee();
+  }, [currentUserProfile?._id, getEmployeeById]);
 
   const loadEmployeesByDepartment = useCallback(async (departmentId: string) => {
     if (!departmentId) {
@@ -125,11 +166,32 @@ const Resignation = () => {
     await fetchEmployees({ departmentId });
   }, [fetchEmployees]);
 
+  const loadReportingManagers = useCallback(async (params?: { search?: string; departmentId?: string; employeeId?: string }) => {
+    setReportingManagerLoading(true);
+    const excludeEmployeeId = params?.employeeId || addForm.employeeId || currentEmployee?._id || "";
+    const departmentId = params?.departmentId || addForm.departmentId || currentEmployee?.departmentId || "";
+    const results = await fetchReportingManagerOptions({
+      search: params?.search || "",
+      limit: 10,
+      department: departmentId || undefined,
+      excludeEmployeeId: excludeEmployeeId || undefined,
+    });
+
+    const options = results.map((emp) => ({
+      value: emp.id,
+      label: `${emp.employeeId} - ${emp.name}`
+    }));
+
+    setReportingManagerOptions(options);
+    setReportingManagerLoading(false);
+  }, [addForm.employeeId, addForm.departmentId, currentEmployee?._id, currentEmployee?.departmentId, fetchReportingManagerOptions]);
+
   const openEditModal = (row: any) => {
     console.log("[Resignation] openEditModal - row:", row);
     setEditForm({
       employeeId: row.employee_id || "", // Use employee_id (ObjectId), not employeeId string
       departmentId: row.departmentId || "",
+      reportingManagerId: row.reportingManagerId || "",
       noticeDate: row.noticeDate
         ? format(parse(row.noticeDate, "yyyy-MM-dd", new Date()), "dd-MM-yyyy")
         : "",
@@ -145,6 +207,7 @@ const Resignation = () => {
     // Fetch employees for the selected department
     if (row.departmentId) {
       loadEmployeesByDepartment(row.departmentId);
+      loadReportingManagers({ departmentId: row.departmentId, employeeId: row.employee_id || row.employeeId });
     }
   };
 
@@ -153,36 +216,11 @@ const Resignation = () => {
     return modalElement ? modalElement : document.body;
   };
 
-  const parseYMD = (s?: string) =>
-    s ? parse(s, "yyyy-MM-dd", new Date()) : null; // string -> Date
-  const toYMD = (d: any) => {
-    if (!d) return "";
-    const dt = "toDate" in d ? d.toDate() : d; // support dayjs or Date
-    return format(dt, "yyyy-MM-dd");
-  };
-
-  // state near top of component
-  const [addForm, setAddForm] = useState({
-    employeeId: "",
-    departmentId: "",
-    reason: "",
-    noticeDate: "", // YYYY-MM-DD from DatePicker
-    resignationDate: "",
-  });
-
-  // Validation errors for Add Resignation
-  const [addErrors, setAddErrors] = useState({
-    departmentId: "",
-    employeeId: "",
-    reason: "",
-    noticeDate: "",
-    resignationDate: "",
-  });
-
   // Validation errors for Edit Resignation
   const [editErrors, setEditErrors] = useState({
     departmentId: "",
     employeeId: "",
+    reportingManagerId: "",
     reason: "",
     noticeDate: "",
     resignationDate: "",
@@ -192,21 +230,46 @@ const Resignation = () => {
   // Handle opening Add modal - reset form
   const handleAddModalOpen = () => {
     console.log("[Resignation] handleAddModalOpen - Resetting Add form");
-    setAddForm({
+    const baseForm = {
       employeeId: "",
       departmentId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
-    });
+    };
+
+    if (isEmployeeRole && currentEmployee) {
+      baseForm.employeeId = currentEmployee._id || "";
+      baseForm.departmentId = currentEmployee.departmentId || "";
+      baseForm.reportingManagerId = currentEmployee.reportingTo || currentUserProfile?.reportingManager?._id || "";
+      setEmployeeOptions([
+        {
+          value: currentEmployee._id,
+          label: `${currentEmployee.employeeId || ""} - ${currentEmployee.firstName || ""} ${currentEmployee.lastName || ""}`.trim(),
+        },
+      ]);
+      if (currentEmployee.departmentId) {
+        loadEmployeesByDepartment(currentEmployee.departmentId);
+      }
+      if (baseForm.departmentId) {
+        loadReportingManagers({ departmentId: baseForm.departmentId, employeeId: baseForm.employeeId });
+      }
+    }
+
+    setAddForm(baseForm);
     setAddErrors({
       departmentId: "",
       employeeId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
     });
-    setEmployeeOptions([]);
+    if (!isEmployeeRole) {
+      setEmployeeOptions([]);
+      setReportingManagerOptions([]);
+    }
     setIsSubmitting(false); // Reset loading state
   };
 
@@ -216,6 +279,7 @@ const Resignation = () => {
     setAddForm({
       employeeId: "",
       departmentId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
@@ -223,11 +287,13 @@ const Resignation = () => {
     setAddErrors({
       departmentId: "",
       employeeId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
     });
     setEmployeeOptions([]);
+    setReportingManagerOptions([]);
     setIsSubmitting(false);
   };
 
@@ -237,6 +303,7 @@ const Resignation = () => {
     setEditForm({
       employeeId: "",
       departmentId: "",
+      reportingManagerId: "",
       noticeDate: "",
       reason: "",
       resignationDate: "",
@@ -245,11 +312,13 @@ const Resignation = () => {
     setEditErrors({
       departmentId: "",
       employeeId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
     });
     setEmployeeOptions([]);
+    setReportingManagerOptions([]);
     setIsSubmitting(false);
   };
 
@@ -265,6 +334,12 @@ const Resignation = () => {
       return;
     }
 
+    const record = rows.find(r => r.resignationId === deletingResignationId);
+    if (record?.resignationStatus && record.resignationStatus !== "pending") {
+      toast.error("Only pending resignations can be deleted");
+      return;
+    }
+
     console.log("[Resignation] Deleting resignation via REST API:", deletingResignationId);
     await deleteResignations([deletingResignationId]);
   };
@@ -275,65 +350,14 @@ const Resignation = () => {
     return isNaN(d.getTime()) ? s : format(d, "dd MMM yyyy");
   };
 
-  // event handlers
-  const onListResponse = useCallback((res: any) => {
-    if (res?.done) {
-      setRows(res.data || []);
-    } else {
-      setRows([]);
-      console.error("Failed to fetch resignations:", res?.message);
-      if (res?.message) {
-        toast.error(res.message);
-      }
-    }
-    setLoading(false);
-  }, []);
-
-  const onDepartmentsListResponse = useCallback((res: any) => {
-    console.log("departments list response", res?.data);
-    if (res?.done) {
-      const opts = (res.data || []).map((dept: any) => ({
-        value: dept._id,
-        label: dept.department,
-      }));
-      setDepartmentOptions(opts);
-    } else {
-      setDepartmentOptions([]);
-    }
-  }, []);
-
-  const onEmployeesByDepartmentResponse = useCallback((res: any) => {
-    console.log("employees-by-dept response:", res?.data, "done:", res?.done, "message:", res?.message);
-    if (res?.done) {
-      const opts = (res.data || []).map((emp: any) => {
-        console.log("Employee _id:", emp._id, "employeeId:", emp.employeeId, "employeeName:", emp.employeeName);
-        return {
-          value: emp._id, // Store employee ObjectId, not employeeId string
-          label: `${emp.employeeId} - ${emp.employeeName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()}`,
-        };
-      });
-      console.log("Mapped employee options:", opts);
-      setEmployeeOptions(opts);
-    } else {
-      console.log("Response not done or empty data");
-      setEmployeeOptions([]);
-    }
-  }, []);
-
-  const onStatsResponse = useCallback((res: any) => {
-    if (res?.done && res.data) {
-      setStats(res.data);
-    }
-  }, []);
-
   // Calculate stats from current resignation data
   const calculateStats = useCallback(() => {
     if (rows.length > 0) {
       const calculatedStats: ResignationStats = {
         total: rows.length,
         pending: rows.filter(r => r.resignationStatus === 'pending').length,
-        onNotice: rows.filter(r => r.resignationStatus === 'approved' && new Date(r.resignationDate) > new Date()).length,
-        resigned: rows.filter(r => r.resignationStatus === 'approved' && new Date(r.resignationDate) <= new Date()).length,
+        onNotice: rows.filter(r => r.resignationStatus === 'on_notice').length,
+        resigned: rows.filter(r => r.resignationStatus === 'resigned').length,
       };
       setStats(calculatedStats);
     }
@@ -342,7 +366,6 @@ const Resignation = () => {
   // fetchers (using REST API)
   const fetchList = useCallback(
     async (type: string, range?: { startDate?: string; endDate?: string }) => {
-      setLoading(true);
       const filters: any = {};
       if (type === "thismonth") {
         filters.period = "thismonth";
@@ -369,28 +392,6 @@ const Resignation = () => {
       console.error('[Resignation] Failed to fetch stats:', error);
     }
   }, [fetchResignationStats]);
-
-  // Approval response handler (defined after fetchList)
-  const onApproveResponse = useCallback((res: any) => {
-    if (res?.done) {
-      toast.success(res.message || "Resignation approved successfully");
-      fetchList(filterType, customRange);
-      fetchStats();
-    } else {
-      toast.error(res?.message || "Failed to approve resignation");
-    }
-  }, [fetchList, fetchStats, filterType, customRange]);
-
-  // Rejection response handler (defined after fetchList)
-  const onRejectResponse = useCallback((res: any) => {
-    if (res?.done) {
-      toast.success(res.message || "Resignation rejected successfully");
-      fetchList(filterType, customRange);
-      fetchStats();
-    } else {
-      toast.error(res?.message || "Failed to reject resignation");
-    }
-  }, [fetchList, fetchStats, filterType, customRange]);
 
   // register socket listeners and join room (using REST API + Socket.IO for broadcasts)
   useEffect(() => {
@@ -434,7 +435,10 @@ const Resignation = () => {
 
   // Sync local state with REST API state
   useEffect(() => {
-    const transformedResignations: ResignationRow[] = apiResignations.map(resignation => ({
+    const transformedResignations: ResignationRow[] = apiResignations.map(resignation => {
+      const statusValue = resignation.resignationStatus as string | undefined;
+      const normalizedStatus = (statusValue === 'approved' ? 'on_notice' : statusValue) as ResignationRow['resignationStatus'];
+      return {
       ...resignation,
       employeeName: resignation.employeeName || 'Unknown',
       department: resignation.department || '',
@@ -444,16 +448,24 @@ const Resignation = () => {
       reason: resignation.reason || '',
       noticeDate: resignation.noticeDate || '',
       resignationDate: resignation.resignationDate || '',
-      status: resignation.status || resignation.resignationStatus || 'pending',
-    }));
+      status: resignation.status || normalizedStatus || 'pending',
+      resignationStatus: normalizedStatus,
+      reportingManagerId: resignation.reportingManagerId || '',
+      reportingManagerName: resignation.reportingManagerName || '',
+    };
+    });
 
     setRows(transformedResignations);
     // Only update stats if apiStats is not null, otherwise keep default values
     if (apiStats) {
-      setStats(apiStats as any);
+      setStats({
+        total: Number(apiStats.totalResignations || 0),
+        pending: Number(apiStats.pending || 0),
+        onNotice: Number(apiStats.onNotice || 0),
+        resigned: Number(apiStats.resigned || 0),
+      });
     }
-    setLoading(apiLoading);
-  }, [apiResignations, apiStats, apiLoading]);
+  }, [apiResignations, apiStats]);
 
   // Sync departments to dropdown options
   useEffect(() => {
@@ -475,17 +487,21 @@ const Resignation = () => {
         label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
       }));
       setEmployeeOptions(options);
+      setReportingManagerOptions(options);
       console.log('[Resignation] Employee options updated:', options.length);
     }
   }, [apiEmployees]);
 
-  const toIsoFromDDMMYYYY = (s: string) => {
-    // s like "13-09-2025"
-    const [dd, mm, yyyy] = s.split("-").map(Number);
-    if (!dd || !mm || !yyyy) return null;
-    // Construct UTC date to avoid TZ shifts
-    const d = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0));
-    return isNaN(d.getTime()) ? null : d.toISOString();
+  const parseDDMMYYYY = (value?: string) => {
+    if (!value) return null;
+    const parsed = parse(value, "dd-MM-yyyy", new Date());
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const resolveReportingManagerId = (employeeId?: string) => {
+    if (!employeeId) return "";
+    const match = apiEmployees.find(emp => emp._id === employeeId);
+    return match?.reportingTo || currentUserProfile?.reportingManager?._id || "";
   };
 
   const handleAddSave = async () => {
@@ -499,29 +515,34 @@ const Resignation = () => {
 
     if (isSubmitting) return;
 
-    const noticeIso = toIsoFromDDMMYYYY(addForm.noticeDate);
-    if (!noticeIso) {
-      setAddErrors(prev => ({ ...prev, noticeDate: "Invalid notice date format" }));
-      return;
-    }
-
-    const resIso = toIsoFromDDMMYYYY(addForm.resignationDate);
-    if (!resIso) {
-      setAddErrors(prev => ({ ...prev, resignationDate: "Invalid resignation date format" }));
-      return;
-    }
-
     const payload = {
-      employeeId: addForm.employeeId,
-      noticeDate: noticeIso,
+      employeeId: addForm.employeeId || currentEmployee?._id || "",
+      departmentId: addForm.departmentId || currentEmployee?.departmentId || "",
+      reportingManagerId: addForm.reportingManagerId || currentEmployee?.reportingTo || currentUserProfile?.reportingManager?._id || "",
+      noticeDate: addForm.noticeDate,
       reason: addForm.reason,
-      resignationDate: resIso,
+      resignationDate: addForm.resignationDate,
     };
 
     console.log("[Resignation] Creating resignation via REST API:", payload);
     setIsSubmitting(true);
-    const result = await createResignation(payload);
+    const success = await createResignation(payload);
     setIsSubmitting(false);
+
+    if (success) {
+      console.log("[Resignation] Creation successful - closing modal and refreshing list");
+      // Close the modal
+      const modalElement = document.getElementById("new_resignation");
+      if (modalElement) {
+        const modal = (window as any).bootstrap?.Modal?.getInstance(modalElement) || new (window as any).bootstrap.Modal(modalElement);
+        modal.hide();
+      }
+      // Refresh the resignation list
+      await fetchList(filterType, customRange);
+      await fetchStats();
+      // Reset the form
+      handleAddModalClose();
+    }
   };
 
   const handleEditSave = async () => {
@@ -535,29 +556,34 @@ const Resignation = () => {
 
     if (isSubmitting) return;
 
-    const noticeIso = toIsoFromDDMMYYYY(editForm.noticeDate);
-    if (!noticeIso) {
-      setEditErrors(prev => ({ ...prev, noticeDate: "Invalid notice date format" }));
-      return;
-    }
-
-    const resIso = toIsoFromDDMMYYYY(editForm.resignationDate);
-    if (!resIso) {
-      setEditErrors(prev => ({ ...prev, resignationDate: "Invalid resignation date format" }));
-      return;
-    }
-
     const updateData = {
       employeeId: editForm.employeeId,
-      noticeDate: noticeIso,
+      departmentId: editForm.departmentId,
+      reportingManagerId: editForm.reportingManagerId,
+      noticeDate: editForm.noticeDate,
       reason: editForm.reason,
-      resignationDate: resIso,
+      resignationDate: editForm.resignationDate,
     };
 
     console.log("[Resignation] Updating resignation via REST API:", editForm.resignationId, updateData);
     setIsSubmitting(true);
-    const result = await updateResignation(editForm.resignationId, updateData);
+    const success = await updateResignation(editForm.resignationId, updateData);
     setIsSubmitting(false);
+
+    if (success) {
+      console.log("[Resignation] Update successful - closing modal and refreshing list");
+      // Close the modal
+      const modalElement = document.getElementById("edit_resignation");
+      if (modalElement) {
+        const modal = (window as any).bootstrap?.Modal?.getInstance(modalElement) || new (window as any).bootstrap.Modal(modalElement);
+        modal.hide();
+      }
+      // Refresh the resignation list
+      await fetchList(filterType, customRange);
+      await fetchStats();
+      // Reset the form
+      handleEditModalClose();
+    }
   };
 
   // initial + reactive fetch
@@ -632,27 +658,28 @@ const Resignation = () => {
     }
   };
 
-  const handleCustomRange = (_: any, dateStrings: [string, string]) => {
+  const handleDepartmentFilterChange = (opt: any) => {
+    setFilterDepartmentId(opt?.value || "");
+  };
+
+  const handleStatusFilterChange = (opt: any) => {
+    setFilterStatus(opt?.value || "");
+  };
+
+  const handleEmployeeFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilterEmployeeQuery(e.target.value);
+  };
+
+  const handleDateRangeFilterChange = (_: any, dateStrings: [string, string]) => {
     if (dateStrings && dateStrings[0] && dateStrings[1]) {
-      const range = { startDate: dateStrings[0], endDate: dateStrings[1] };
-      setCustomRange(range);
-      fetchList("custom", range);
+      setFilterDateRange({ start: dateStrings[0], end: dateStrings[1] });
+    } else {
+      setFilterDateRange({});
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedKeys.length === 0) return;
-    if (
-      window.confirm(
-        `Delete ${selectedKeys.length} record(s)? This cannot be undone.`
-      )
-    ) {
-      await deleteResignations(selectedKeys);
-    }
-  };
-
-  const handleSelectionChange = (keys: React.Key[]) => {
-    setSelectedKeys(keys as string[]);
+  const handleSortOrderChange = (opt: any) => {
+    setSortOrder((opt?.value as "asc" | "desc") || "desc");
   };
 
   const handleAddDepartmentChange = (opt: any) => {
@@ -661,22 +688,33 @@ const Resignation = () => {
       ...addForm,
       departmentId: opt?.value || "",
       employeeId: "",
+      reportingManagerId: "",
     });
     // Clear department and dependent field errors
-    setAddErrors(prev => ({ ...prev, departmentId: "", employeeId: "" }));
+    setAddErrors(prev => ({ ...prev, departmentId: "", employeeId: "", reportingManagerId: "" }));
     if (opt?.value) {
       loadEmployeesByDepartment(opt.value);
+      loadReportingManagers({ departmentId: opt.value });
     }
   };
 
   const handleAddEmployeeChange = (opt: any) => {
     console.log("[Resignation] Add employee selected - id:", opt?.value);
+    const reportingManagerId = resolveReportingManagerId(opt?.value);
+    if (reportingManagerId && !reportingManagerOptions.find(item => item.value === reportingManagerId)) {
+      setReportingManagerOptions(prev => [
+        ...prev,
+        { value: reportingManagerId, label: "Assigned Manager" }
+      ]);
+    }
     setAddForm({
       ...addForm,
       employeeId: opt?.value || "",
+      reportingManagerId,
     });
     // Clear employee error initially
-    setAddErrors(prev => ({ ...prev, employeeId: "" }));
+    setAddErrors(prev => ({ ...prev, employeeId: "", reportingManagerId: "" }));
+    loadReportingManagers({ departmentId: addForm.departmentId, employeeId: opt?.value || "" });
   };
 
   const handleEditDepartmentChange = (opt: any) => {
@@ -685,22 +723,42 @@ const Resignation = () => {
       ...editForm,
       departmentId: opt?.value || "",
       employeeId: "",
+      reportingManagerId: "",
     });
     // Clear department and dependent field errors
-    setEditErrors(prev => ({ ...prev, departmentId: "", employeeId: "" }));
+    setEditErrors(prev => ({ ...prev, departmentId: "", employeeId: "", reportingManagerId: "" }));
     if (opt?.value) {
       loadEmployeesByDepartment(opt.value);
+      loadReportingManagers({ departmentId: opt.value });
     }
   };
 
   const handleEditEmployeeChange = (opt: any) => {
     console.log("[Resignation] Edit employee selected - id:", opt?.value);
+    const reportingManagerId = resolveReportingManagerId(opt?.value);
+    if (reportingManagerId && !reportingManagerOptions.find(item => item.value === reportingManagerId)) {
+      setReportingManagerOptions(prev => [
+        ...prev,
+        { value: reportingManagerId, label: "Assigned Manager" }
+      ]);
+    }
     setEditForm({
       ...editForm,
       employeeId: opt?.value || "",
+      reportingManagerId,
     });
     // Clear employee error initially
-    setEditErrors(prev => ({ ...prev, employeeId: "" }));
+    setEditErrors(prev => ({ ...prev, employeeId: "", reportingManagerId: "" }));
+    loadReportingManagers({ departmentId: editForm.departmentId, employeeId: opt?.value || "" });
+  };
+
+  const handleReportingManagerSearch = (inputValue: string) => {
+    if (reportingManagerSearchTimeout.current) {
+      clearTimeout(reportingManagerSearchTimeout.current);
+    }
+    reportingManagerSearchTimeout.current = setTimeout(() => {
+      loadReportingManagers({ search: inputValue });
+    }, 300);
   };
 
   // Validate Add Resignation form
@@ -708,6 +766,7 @@ const Resignation = () => {
     const errors = {
       departmentId: "",
       employeeId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
@@ -725,32 +784,53 @@ const Resignation = () => {
       isValid = false;
     }
 
+    if (!addForm.reportingManagerId || addForm.reportingManagerId === "") {
+      errors.reportingManagerId = "Please select a reporting manager";
+      isValid = false;
+    } else if (addForm.employeeId && addForm.reportingManagerId === addForm.employeeId) {
+      errors.reportingManagerId = "Reporting manager cannot be the same employee";
+      isValid = false;
+    }
+
     if (!addForm.reason || addForm.reason.trim() === "") {
       errors.reason = "Please enter a reason for resignation";
+      isValid = false;
+    } else if (addForm.reason.trim().length > 500) {
+      errors.reason = "Reason cannot exceed 500 characters";
       isValid = false;
     }
 
     if (!addForm.noticeDate || addForm.noticeDate === "") {
       errors.noticeDate = "Please select a notice date";
       isValid = false;
+    } else if (!parseDDMMYYYY(addForm.noticeDate)) {
+      errors.noticeDate = "Notice date must be in DD-MM-YYYY format";
+      isValid = false;
     }
 
     if (!addForm.resignationDate || addForm.resignationDate === "") {
       errors.resignationDate = "Please select a resignation date";
       isValid = false;
+    } else if (!parseDDMMYYYY(addForm.resignationDate)) {
+      errors.resignationDate = "Resignation date must be in DD-MM-YYYY format";
+      isValid = false;
     }
 
     // Date validation: resignation date should be after or equal to notice date
     if (addForm.noticeDate && addForm.resignationDate) {
-      const noticeIso = toIsoFromDDMMYYYY(addForm.noticeDate);
-      const resignationIso = toIsoFromDDMMYYYY(addForm.resignationDate);
+      const noticeDate = parseDDMMYYYY(addForm.noticeDate);
+      const resignationDate = parseDDMMYYYY(addForm.resignationDate);
 
-      if (noticeIso && resignationIso) {
-        const noticeDate = new Date(noticeIso);
-        const resignationDate = new Date(resignationIso);
+      if (noticeDate && resignationDate && resignationDate < noticeDate) {
+        errors.resignationDate = "Resignation date cannot be earlier than notice date";
+        isValid = false;
+      }
 
-        if (resignationDate < noticeDate) {
-          errors.resignationDate = "Resignation date cannot be earlier than notice date";
+      if (resignationDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (resignationDate < today) {
+          errors.resignationDate = "Resignation date cannot be before today";
           isValid = false;
         }
       }
@@ -765,6 +845,7 @@ const Resignation = () => {
     const errors = {
       departmentId: "",
       employeeId: "",
+      reportingManagerId: "",
       reason: "",
       noticeDate: "",
       resignationDate: "",
@@ -782,32 +863,53 @@ const Resignation = () => {
       isValid = false;
     }
 
+    if (!editForm.reportingManagerId || editForm.reportingManagerId === "") {
+      errors.reportingManagerId = "Please select a reporting manager";
+      isValid = false;
+    } else if (editForm.employeeId && editForm.reportingManagerId === editForm.employeeId) {
+      errors.reportingManagerId = "Reporting manager cannot be the same employee";
+      isValid = false;
+    }
+
     if (!editForm.reason || editForm.reason.trim() === "") {
       errors.reason = "Please enter a reason for resignation";
+      isValid = false;
+    } else if (editForm.reason.trim().length > 500) {
+      errors.reason = "Reason cannot exceed 500 characters";
       isValid = false;
     }
 
     if (!editForm.noticeDate || editForm.noticeDate === "") {
       errors.noticeDate = "Please select a notice date";
       isValid = false;
+    } else if (!parseDDMMYYYY(editForm.noticeDate)) {
+      errors.noticeDate = "Notice date must be in DD-MM-YYYY format";
+      isValid = false;
     }
 
     if (!editForm.resignationDate || editForm.resignationDate === "") {
       errors.resignationDate = "Please select a resignation date";
       isValid = false;
+    } else if (!parseDDMMYYYY(editForm.resignationDate)) {
+      errors.resignationDate = "Resignation date must be in DD-MM-YYYY format";
+      isValid = false;
     }
 
     // Date validation: resignation date should be after or equal to notice date
     if (editForm.noticeDate && editForm.resignationDate) {
-      const noticeIso = toIsoFromDDMMYYYY(editForm.noticeDate);
-      const resignationIso = toIsoFromDDMMYYYY(editForm.resignationDate);
+      const noticeDate = parseDDMMYYYY(editForm.noticeDate);
+      const resignationDate = parseDDMMYYYY(editForm.resignationDate);
 
-      if (noticeIso && resignationIso) {
-        const noticeDate = new Date(noticeIso);
-        const resignationDate = new Date(resignationIso);
+      if (noticeDate && resignationDate && resignationDate < noticeDate) {
+        errors.resignationDate = "Resignation date cannot be earlier than notice date";
+        isValid = false;
+      }
 
-        if (resignationDate < noticeDate) {
-          errors.resignationDate = "Resignation date cannot be earlier than notice date";
+      if (resignationDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (resignationDate < today) {
+          errors.resignationDate = "Resignation date cannot be before today";
           isValid = false;
         }
       }
@@ -832,6 +934,10 @@ const Resignation = () => {
 
   // Handle approve resignation (using REST API)
   const handleApproveResignation = async (resignationId: string) => {
+    if (!isHrRole && !isAdminRole && !isManagerRole) {
+      toast.error("You do not have permission to approve resignations");
+      return;
+    }
     if (window.confirm("Are you sure you want to approve this resignation? Employee status will be updated to 'On Notice'.")) {
       console.log("[Resignation] Approving resignation via REST API:", resignationId);
       await approveResignation(resignationId);
@@ -840,12 +946,46 @@ const Resignation = () => {
 
   // Handle reject resignation (using REST API)
   const handleRejectResignation = async (resignationId: string) => {
+    if (!isHrRole && !isAdminRole && !isManagerRole) {
+      toast.error("You do not have permission to reject resignations");
+      return;
+    }
     const reason = window.prompt("Please enter reason for rejection (optional):");
     if (reason !== null) { // User clicked OK (even if empty string)
       console.log("[Resignation] Rejecting resignation via REST API:", resignationId);
       await rejectResignation(resignationId, reason);
     }
   };
+
+  const filteredRows = rows
+    .filter((row) => {
+      if (filterDepartmentId && row.departmentId !== filterDepartmentId) return false;
+      if (filterStatus && row.resignationStatus?.toLowerCase() !== filterStatus) return false;
+      if (filterEmployeeQuery) {
+        const query = filterEmployeeQuery.toLowerCase();
+        const nameMatch = row.employeeName?.toLowerCase().includes(query);
+        const idMatch = row.employeeId?.toLowerCase().includes(query);
+        if (!nameMatch && !idMatch) return false;
+      }
+
+      if (filterDateRange.start && filterDateRange.end) {
+        const startDate = parseDDMMYYYY(filterDateRange.start);
+        const endDate = parseDDMMYYYY(filterDateRange.end);
+        const rowDate = parse(row.resignationDate, "yyyy-MM-dd", new Date());
+        if (startDate && endDate && !isNaN(rowDate.getTime())) {
+          if (rowDate < startDate || rowDate > endDate) return false;
+        }
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = parse(a.resignationDate, "yyyy-MM-dd", new Date());
+      const dateB = parse(b.resignationDate, "yyyy-MM-dd", new Date());
+      const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
+      const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
+      return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+    });
 
   // table columns (preserved look, wired to backend fields)
   const columns: any[] = [
@@ -902,9 +1042,11 @@ const Resignation = () => {
       dataIndex: "reason",
       render: (text: string) => {
         if (!text) return '-';
+        const trimmed = text.trim();
+        const display = trimmed.length > 50 ? `${trimmed.slice(0, 50)}...` : trimmed;
         return (
-          <div className="text-truncate" title={text}>
-            {text}
+          <div className="text-truncate" title={trimmed}>
+            {display}
           </div>
         );
       },
@@ -930,8 +1072,9 @@ const Resignation = () => {
       render: (status: string) => {
         const statusMap: Record<string, { className: string; text: string }> = {
           pending: { className: "badge badge-soft-warning", text: "Pending" },
-          approved: { className: "badge badge-soft-success", text: "Approved" },
+          on_notice: { className: "badge badge-soft-info", text: "On Notice" },
           rejected: { className: "badge badge-soft-danger", text: "Rejected" },
+          resigned: { className: "badge badge-soft-secondary", text: "Resigned" },
           withdrawn: { className: "badge badge-soft-secondary", text: "Withdrawn" },
         };
         const statusInfo = statusMap[status?.toLowerCase()] || { className: "badge badge-soft-secondary", text: status || "Unknown" };
@@ -939,8 +1082,9 @@ const Resignation = () => {
       },
       filters: [
         { text: "Pending", value: "pending" },
-        { text: "Approved", value: "approved" },
+        { text: "On Notice", value: "on_notice" },
         { text: "Rejected", value: "rejected" },
+        { text: "Resigned", value: "resigned" },
       ],
       onFilter: (val: any, rec: any) => rec.resignationStatus?.toLowerCase() === val,
     },
@@ -949,6 +1093,10 @@ const Resignation = () => {
       dataIndex: "actions",
       render: (_: any, record: ResignationRow) => {
         const isPending = record.resignationStatus?.toLowerCase() === "pending" || !record.resignationStatus;
+        const isManagerAssignee = isManagerRole && currentEmployee?._id === record.reportingManagerId;
+        const canApproveReject = isPending && (isHrRole || isAdminRole || isManagerAssignee);
+        const canEdit = isPending && (isHrRole || isAdminRole);
+        const canDelete = isPending && (isHrRole || isAdminRole);
         return (
           <div className="action-icon d-inline-flex">
             <Link
@@ -964,7 +1112,7 @@ const Resignation = () => {
             >
               <i className="ti ti-eye" />
             </Link>
-            {isPending && (
+            {canApproveReject && (
               <>
                 <Link
                   to="#"
@@ -990,40 +1138,39 @@ const Resignation = () => {
                 </Link>
               </>
             )}
-            <a
-              href="#"
-              className="me-2"
-              data-bs-toggle="modal"
-              data-bs-target="#edit_resignation"
-              onClick={(e) => {
-                openEditModal(record);
-              }}
-              title="Edit"
-            >
-              <i className="ti ti-edit" />
-            </a>
-            <Link
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handleDeleteClick(record.resignationId);
-              }}
-              data-bs-toggle="modal"
-              data-bs-target="#delete_modal"
-              title="Delete"
-            >
-              <i className="ti ti-trash" />
-            </Link>
+            {canEdit && (
+              <button
+                type="button"
+                className="btn btn-link p-0 me-2"
+                data-bs-toggle="modal"
+                data-bs-target="#edit_resignation"
+                onClick={() => {
+                  openEditModal(record);
+                }}
+                title="Edit"
+              >
+                <i className="ti ti-edit" />
+              </button>
+            )}
+            {canDelete && (
+              <Link
+                to="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDeleteClick(record.resignationId);
+                }}
+                data-bs-toggle="modal"
+                data-bs-target="#delete_modal"
+                title="Delete"
+              >
+                <i className="ti ti-trash" />
+              </Link>
+            )}
           </div>
         );
       },
     },
   ];
-
-  const rowSelection = {
-    selectedRowKeys: selectedKeys,
-    onChange: (keys: React.Key[]) => setSelectedKeys(keys as string[]),
-  };
 
   return (
     <>
@@ -1049,18 +1196,20 @@ const Resignation = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  className="btn btn-primary d-flex align-items-center"
-                  data-bs-toggle="modal"
-                  data-bs-target="#new_resignation"
-                  onClick={handleAddModalOpen}
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Resignation
-                </Link>
-              </div>
+              {canAddResignation && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    className="btn btn-primary d-flex align-items-center"
+                    data-bs-toggle="modal"
+                    data-bs-target="#new_resignation"
+                    onClick={handleAddModalOpen}
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Resignation
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2">
                 <CollapseHeader />
               </div>
@@ -1175,10 +1324,70 @@ const Resignation = () => {
                         />
                       </Link>
                     </div>
+                    <div className="ms-2">
+                      <CommonSelect
+                        className="select"
+                        options={departmentOptions}
+                        value={departmentOptions.find(opt => opt.value === filterDepartmentId) || null}
+                        onChange={handleDepartmentFilterChange}
+                      />
+                    </div>
+                    <div className="ms-2">
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "pending", label: "Pending" },
+                          { value: "on_notice", label: "On Notice" },
+                          { value: "rejected", label: "Rejected" },
+                          { value: "resigned", label: "Resigned" },
+                        ]}
+                        value={
+                          [
+                            { value: "pending", label: "Pending" },
+                            { value: "on_notice", label: "On Notice" },
+                            { value: "rejected", label: "Rejected" },
+                            { value: "resigned", label: "Resigned" },
+                          ].find(opt => opt.value === filterStatus) || null
+                        }
+                        onChange={handleStatusFilterChange}
+                      />
+                    </div>
+                    <div className="ms-2">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Employee Name"
+                        value={filterEmployeeQuery}
+                        onChange={handleEmployeeFilterChange}
+                      />
+                    </div>
+                    <div className="ms-2">
+                      <DatePicker.RangePicker
+                        format={{ format: "DD-MM-YYYY", type: "mask" }}
+                        onChange={handleDateRangeFilterChange}
+                        className="form-control"
+                      />
+                    </div>
+                    <div className="ms-2">
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "desc", label: "Date: Newest" },
+                          { value: "asc", label: "Date: Oldest" },
+                        ]}
+                        value={
+                          [
+                            { value: "desc", label: "Date: Newest" },
+                            { value: "asc", label: "Date: Oldest" },
+                          ].find(opt => opt.value === sortOrder) || null
+                        }
+                        onChange={handleSortOrderChange}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="card-body p-0">
-                  <Table dataSource={rows} columns={columns} Selection={true} />
+                  <Table dataSource={filteredRows} columns={columns} Selection={true} />
                 </div>
               </div>
             </div>
@@ -1223,6 +1432,7 @@ const Resignation = () => {
                         options={departmentOptions}
                         value={departmentOptions.find(opt => opt.value === addForm.departmentId) || null}
                         onChange={handleAddDepartmentChange}
+                        disabled={isEmployeeRole}
                       />
                       {addErrors.departmentId && <div className="text-danger">{addErrors.departmentId}</div>}
                     </div>
@@ -1237,8 +1447,29 @@ const Resignation = () => {
                         options={employeeOptions}
                         value={employeeOptions.find(opt => opt.value === addForm.employeeId) || null}
                         onChange={handleAddEmployeeChange}
+                        disabled={isEmployeeRole}
                       />
                       {addErrors.employeeId && <div className="text-danger">{addErrors.employeeId}</div>}
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Reporting Manager <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className="select"
+                        options={reportingManagerOptions}
+                        value={reportingManagerOptions.find(opt => opt.value === addForm.reportingManagerId) || null}
+                        onChange={(opt) => {
+                          setAddForm({ ...addForm, reportingManagerId: opt?.value || "" });
+                          setAddErrors(prev => ({ ...prev, reportingManagerId: "" }));
+                        }}
+                        onInputChange={handleReportingManagerSearch}
+                        isLoading={reportingManagerLoading}
+                        placeholder="Select Reporting Manager"
+                      />
+                      {addErrors.reportingManagerId && <div className="text-danger">{addErrors.reportingManagerId}</div>}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -1410,6 +1641,27 @@ const Resignation = () => {
                         disabled={true}
                       />
                       {editErrors.employeeId && <div className="text-danger">{editErrors.employeeId}</div>}
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Reporting Manager <span className="text-danger">*</span>
+                      </label>
+                      <CommonSelect
+                        className="select"
+                        options={reportingManagerOptions}
+                        value={reportingManagerOptions.find(opt => opt.value === editForm.reportingManagerId) || null}
+                        onChange={(opt) => {
+                          setEditForm({ ...editForm, reportingManagerId: opt?.value || "" });
+                          setEditErrors(prev => ({ ...prev, reportingManagerId: "" }));
+                        }}
+                        onInputChange={handleReportingManagerSearch}
+                        isLoading={reportingManagerLoading}
+                        placeholder="Select Reporting Manager"
+                        disabled={isEmployeeRole}
+                      />
+                      {editErrors.reportingManagerId && <div className="text-danger">{editErrors.reportingManagerId}</div>}
                     </div>
                   </div>
                   <div className="col-md-12">

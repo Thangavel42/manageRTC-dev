@@ -77,7 +77,8 @@ router.get(
   requireCompany,
   (req, res, next) => {
     const roleFilter = (req.query?.role || '').toString().toLowerCase();
-    if (roleFilter === 'manager') {
+    const reportingManagerList = (req.query?.reportingManagerList || '').toString().toLowerCase() === 'true';
+    if (roleFilter === 'manager' || reportingManagerList) {
       return next();
     }
     return requireRole('admin', 'hr', 'superadmin')(req, res, next);

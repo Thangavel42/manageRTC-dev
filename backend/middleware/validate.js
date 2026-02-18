@@ -412,6 +412,8 @@ export const employeeSchemas = {
     role: Joi.string()
       .valid('employee', 'manager', 'hr', 'admin', 'superadmin')
       .optional(),
+    reportingManagerList: Joi.boolean().optional(),
+    excludeEmployeeId: commonSchemas.objectId.optional(),
     sortBy: Joi.string()
       .valid('firstName', 'lastName', 'email', 'employeeCode', 'joiningDate', 'createdAt')
       .default('createdAt'),
@@ -1615,19 +1617,24 @@ export const resignationSchemas = {
     employeeId: commonSchemas.objectId.required().messages({
       'any.required': 'Employee ID is required',
     }),
-    resignationDate: commonSchemas.isoDate.required().messages({
+    departmentId: commonSchemas.objectId.required().messages({
+      'any.required': 'Department is required',
+    }),
+    reportingManagerId: commonSchemas.objectId.required().messages({
+      'any.required': 'Reporting manager is required',
+    }),
+    resignationDate: commonSchemas.ddmmyyyy.required().messages({
       'any.required': 'Resignation date is required',
     }),
-    noticeDate: commonSchemas.isoDate.required().messages({
+    noticeDate: commonSchemas.ddmmyyyy.required().messages({
       'any.required': 'Notice date is required',
     }),
     noticePeriodDays: Joi.number().integer().min(0).max(180).default(30).optional().messages({
       'number.min': 'Notice period cannot be negative',
       'number.max': 'Notice period cannot exceed 180 days',
     }),
-    reason: Joi.string().min(10).max(1000).trim().required().messages({
-      'string.min': 'Reason must be at least 10 characters',
-      'string.max': 'Reason cannot exceed 1000 characters',
+    reason: Joi.string().max(500).trim().required().messages({
+      'string.max': 'Reason cannot exceed 500 characters',
       'any.required': 'Reason is required',
     }),
     notes: Joi.string().max(2000).allow('').optional(),
@@ -1636,20 +1643,35 @@ export const resignationSchemas = {
       'any.invalid': 'Last working date must be after resignation date',
     }),
   }).custom((value, helpers) => {
+    const notice = DateTime.fromFormat(value.noticeDate, 'dd-MM-yyyy', { zone: 'utc' });
+    const resignation = DateTime.fromFormat(value.resignationDate, 'dd-MM-yyyy', { zone: 'utc' });
+
+    if (!notice.isValid || !resignation.isValid) {
+      return helpers.message('Date must be in DD-MM-YYYY format');
+    }
+
+    if (resignation < notice) {
+      return helpers.message('Resignation date must be on or after notice date');
+    }
+
+    const today = DateTime.utc().startOf('day');
+    if (resignation < today) {
+      return helpers.message('Resignation date cannot be before today');
+    }
+
     // Validate lastWorkingDate is after resignationDate
     if (value.lastWorkingDate) {
-      const resignationDate = new Date(value.resignationDate);
       const lastWorkingDate = new Date(value.lastWorkingDate);
-      if (lastWorkingDate <= resignationDate) {
+      if (lastWorkingDate <= resignation.toJSDate()) {
         return helpers.message('Last working date must be after resignation date');
       }
 
       // Validate against notice period
       const noticePeriodDays = value.noticePeriodDays || 30;
-      const expectedLastWorkingDate = new Date(resignationDate);
+      const expectedLastWorkingDate = resignation.toJSDate();
       expectedLastWorkingDate.setDate(expectedLastWorkingDate.getDate() + noticePeriodDays);
 
-      const daysDiff = Math.ceil((lastWorkingDate - resignationDate) / (1000 * 60 * 60 * 24));
+      const daysDiff = Math.ceil((lastWorkingDate - resignation.toJSDate()) / (1000 * 60 * 60 * 24));
       if (value.isNoticePeriodServed && daysDiff < noticePeriodDays) {
         return helpers.message(`Last working date must be at least ${noticePeriodDays} days after resignation date when notice period is served`);
       }
@@ -1659,9 +1681,12 @@ export const resignationSchemas = {
   }),
 
   update: Joi.object({
-    resignationDate: commonSchemas.isoDate.optional(),
+    resignationDate: commonSchemas.ddmmyyyy.optional(),
+    noticeDate: commonSchemas.ddmmyyyy.optional(),
+    departmentId: commonSchemas.objectId.optional(),
+    reportingManagerId: commonSchemas.objectId.optional(),
     noticePeriodDays: Joi.number().integer().min(0).max(180).optional(),
-    reason: Joi.string().min(10).max(1000).trim().optional(),
+    reason: Joi.string().max(500).trim().optional(),
     notes: Joi.string().max(2000).allow('').optional(),
     isNoticePeriodServed: Joi.boolean().optional(),
     lastWorkingDate: commonSchemas.isoDate.optional(),
@@ -1685,7 +1710,7 @@ export const resignationSchemas = {
 
   list: Joi.object({
     ...commonSchemas.pagination,
-    status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+    status: Joi.string().valid('pending', 'on_notice', 'rejected', 'resigned').optional(),
     dateFrom: commonSchemas.isoDate.optional(),
     dateTo: commonSchemas.isoDate.optional(),
     sortBy: Joi.string().valid('resignationDate', 'createdAt', 'lastWorkingDate').default('resignationDate'),

@@ -442,6 +442,43 @@ export const useEmployeesREST = () => {
   }, []);
 
   /**
+   * Fetch reporting manager options for dropdown selection
+   * REST API: GET /api/employees?reportingManagerList=true&...
+   * Returns minimal manager list for resignation/leave workflows
+   */
+  const fetchReportingManagerOptions = useCallback(async (params: {
+    search?: string;
+    limit?: number;
+    department?: string;
+    excludeEmployeeId?: string;
+  }): Promise<Array<{ id: string; employeeId: string; name: string; department: string }>> => {
+    try {
+      const queryParams = {
+        reportingManagerList: 'true',
+        search: params.search || '',
+        limit: params.limit || 10,
+        ...(params.department && { department: params.department }),
+        ...(params.excludeEmployeeId && { excludeEmployeeId: params.excludeEmployeeId })
+      };
+
+      const response: ApiResponse<any[]> = await get('/employees', { params: queryParams });
+
+      if (response.success && Array.isArray(response.data)) {
+        return response.data.map((emp: any) => ({
+          id: emp.id,
+          employeeId: emp.employeeId,
+          name: emp.name,
+          department: emp.department
+        }));
+      }
+      return [];
+    } catch (err: any) {
+      console.error('[useEmployeesREST] Failed to fetch reporting manager options:', err);
+      return [];
+    }
+  }, []);
+
+  /**
    * Get single employee by ID
    * REST API: GET /api/employees/:id
    */
@@ -1170,6 +1207,7 @@ export const useEmployeesREST = () => {
     fetchActiveEmployeesList,
     fetchEmployeesWithStats,
     fetchStats,
+    fetchReportingManagerOptions,
     getEmployeeById,
     getEmployeeDetails,
     createEmployee,

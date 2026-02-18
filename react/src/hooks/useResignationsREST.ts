@@ -22,7 +22,9 @@ export interface Resignation {
   noticeDate: string;
   reason: string;
   status: string;
-  resignationStatus?: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  resignationStatus?: 'pending' | 'on_notice' | 'rejected' | 'resigned' | 'withdrawn';
+  reportingManagerId?: string;
+  reportingManagerName?: string;
   effectiveDate?: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -37,6 +39,9 @@ export interface Resignation {
 export interface ResignationStats {
   totalResignations: string;
   recentResignations: string;
+  pending?: number;
+  onNotice?: number;
+  resigned?: number;
 }
 
 export interface ResignationFilters {
@@ -199,7 +204,7 @@ export const useResignationsREST = () => {
         setResignations(prev =>
           prev.map(resignation =>
             resignation.resignationId === resignationId
-              ? { ...resignation, resignationStatus: 'approved' }
+              ? { ...resignation, resignationStatus: 'on_notice', status: 'on_notice' }
               : resignation
           )
         );
@@ -226,7 +231,7 @@ export const useResignationsREST = () => {
         setResignations(prev =>
           prev.map(resignation =>
             resignation.resignationId === resignationId
-              ? { ...resignation, resignationStatus: 'rejected', rejectionReason: reason }
+              ? { ...resignation, resignationStatus: 'rejected', status: 'rejected', rejectionReason: reason }
               : resignation
           )
         );
@@ -253,7 +258,7 @@ export const useResignationsREST = () => {
         setResignations(prev =>
           prev.map(resignation =>
             resignation.resignationId === resignationId
-              ? { ...resignation, processedAt: new Date().toISOString() }
+              ? { ...resignation, processedAt: new Date().toISOString(), resignationStatus: 'resigned', status: 'resigned' }
               : resignation
           )
         );
