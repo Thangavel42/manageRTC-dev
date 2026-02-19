@@ -494,10 +494,19 @@ const Holidays = () => {
 
       // Reset form after successful submission
       resetAddForm();
-      // Close modal
-      const modalElement = document.getElementById("add_holiday");
-      const modal = window.bootstrap?.Modal.getInstance(modalElement);
-      modal?.hide();
+
+      // Close modal using utility
+      closeModal('add_holiday');
+
+      // Additional cleanup to ensure backdrop is removed (fail-safe)
+      setTimeout(() => {
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        if (backdrops.length > 0) {
+          console.warn('[Add Holiday] Backdrop still exists after modal close, force removing');
+          backdrops.forEach(b => b.remove());
+          document.body.classList.remove('modal-open');
+        }
+      }, 400);
     } catch (error) {
       console.error("[Holidays] Error submitting holidays:", error);
       toast.error("Failed to add holidays. Please try again.");
@@ -581,10 +590,20 @@ const Holidays = () => {
 
       if (result) {
         await fetchHolidays();
-        // Close modal
-        const modalElement = document.getElementById("edit_holiday");
-        const modal = window.bootstrap?.Modal.getInstance(modalElement);
-        modal?.hide();
+
+        // Close modal using utility
+        closeModal('edit_holiday');
+
+        // Additional cleanup to ensure backdrop is removed (fail-safe)
+        setTimeout(() => {
+          const backdrops = document.querySelectorAll('.modal-backdrop');
+          if (backdrops.length > 0) {
+            console.warn('[Edit Holiday] Backdrop still exists after modal close, force removing');
+            backdrops.forEach(b => b.remove());
+            document.body.classList.remove('modal-open');
+          }
+        }, 400);
+
         setEditingHoliday(null);
       }
     } catch (error) {

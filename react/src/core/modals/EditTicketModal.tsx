@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
-import CommonSelect from "../common/commonSelect";
 import { useSocket } from "../../SocketContext";
+import CommonSelect from "../common/commonSelect";
+import ImageWithBasePath from "../common/imageWithBasePath";
 
 interface Category {
   _id: string;
@@ -14,11 +14,16 @@ interface Category {
   }>;
 }
 
-const TicketListModal = () => {
+interface EditTicketModalProps {
+  onTicketUpdated?: () => void;
+}
+
+const EditTicketModal: React.FC<EditTicketModalProps> = ({ onTicketUpdated }) => {
   const socket = useSocket();
 
   // Form state
   const [formData, setFormData] = useState({
+    ticketId: '',
     title: '',
     category: '',
     subCategory: '',
@@ -29,7 +34,6 @@ const TicketListModal = () => {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
-  const [currentEmployee, setCurrentEmployee] = useState<any>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Get subcategories based on selected category
@@ -37,7 +41,6 @@ const TicketListModal = () => {
   const subCategories = selectedCategoryData?.subCategories || [];
 
   const priority = [
-    { value: "Select", label: "Select" },
     { value: "Low", label: "Low" },
     { value: "Medium", label: "Medium" },
     { value: "High", label: "High" },
@@ -46,7 +49,7 @@ const TicketListModal = () => {
 
   // Category options
   const categoryOptions = [
-    { value: "Select", label: "Select Category" },
+    { value: formData.category || "", label: formData.category || "Select Category" },
     ...categories.map(cat => ({
       value: cat.name,
       label: cat.name,
@@ -55,11 +58,17 @@ const TicketListModal = () => {
 
   // Subcategory options (dynamic)
   const subCategoryOptions = [
-    { value: "Select", label: formData.category ? "Select Subcategory" : "Select Category First" },
+    { value: formData.subCategory || "", label: formData.subCategory || "Select Subcategory" },
     ...subCategories.map(sub => ({
       value: sub.name,
       label: sub.name,
     }))
+  ];
+
+  // Priority options
+  const priorityOptions = [
+    { value: formData.priority || "", label: formData.priority || "Select Priority" },
+    ...priority.map(p => ({ value: p.value, label: p.label }))
   ];
 
   // Handle form input changes
@@ -131,12 +140,9 @@ const TicketListModal = () => {
       socket.emit('tickets/categories/get-main-categories');
 
       const handleCategoriesResponse = (response: any) => {
-        console.log('Categories response:', response);
         setCategoriesLoading(false);
         if (response.done && response.data) {
           setCategories(response.data);
-        } else {
-          setMessage({type: 'error', text: 'Failed to load categories'});
         }
       };
 
@@ -148,134 +154,33 @@ const TicketListModal = () => {
     }
   }, [socket]);
 
-  // Fetch current employee data on component mount
-  useEffect(() => {
-    if (socket) {
-      socket.emit('tickets/get-current-employee');
-
-      const handleEmployeeResponse = (response: any) => {
-        console.log('Current employee response:', response);
-        if (response.done && response.data) {
-          setCurrentEmployee(response.data);
-        } else {
-          console.error('Failed to load current employee:', response.error);
-          setMessage({ type: 'error', text: 'Failed to load employee information. Please refresh the page.' });
-        }
-      };
-
-      socket.on('tickets/get-current-employee-response', handleEmployeeResponse);
-
-      return () => {
-        socket.off('tickets/get-current-employee-response', handleEmployeeResponse);
-      };
-    }
-  }, [socket]);
-
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    console.log('Form submitted with data:', formData);
-
-    // Validate form
-    if (!formData.title || !formData.category || !formData.subCategory || !formData.description) {
-      setMessage({type: 'error', text: 'Please fill in all required fields'});
-      return;
-    }
-
-    if (formData.category === 'Select' || formData.subCategory === 'Select' || formData.priority === 'Select') {
-      setMessage({type: 'error', text: 'Please select valid options for all fields'});
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      // Check if we have current employee data
-      if (!currentEmployee || !currentEmployee._id) {
-        setMessage({type: 'error', text: 'Employee information not available. Please try again.'});
-        setLoading(false);
-        return;
-      }
-
-      const ticketData = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        priority: formData.priority,
-        status: 'Open', // Default status
-        createdBy: currentEmployee._id, // Store only employee ObjectId
-      };
-
-      console.log('Sending ticket data:', ticketData);
-
-      // Emit create ticket event
-      socket?.emit('tickets/create-ticket', ticketData);
-
-      const timeout = setTimeout(() => {
-        if (loading) {
-          setMessage({type: 'error', text: 'Request timeout. Please try again.'});
-          setLoading(false);
-        }
-      }, 10000);
-
-      (window as any).ticketCreateTimeout = timeout;
-
-    } catch (error) {
-      console.error('Error creating ticket:', error);
-      setMessage({type: 'error', text: 'Error creating ticket. Please try again.'});
-      setLoading(false);
-    }
-  };
-
-  // Set up socket listener for create ticket response
-  useEffect(() => {
-    if (socket) {
-      const handleCreateTicketResponse = (response: any) => {
-        console.log('Create ticket response:', response);
-
-        if ((window as any).ticketCreateTimeout) {
-          clearTimeout((window as any).ticketCreateTimeout);
-          (window as any).ticketCreateTimeout = null;
-        }
-
-        if (response.done) {
-          setMessage({type: 'success', text: 'Ticket created successfully!'});
-          // Reset form
-          setFormData({
-            title: '',
-            category: '',
-            subCategory: '',
-            description: '',
-            priority: '',
-          });
-          // Close modal after a short delay
-          setTimeout(() => {
-            closeModal();
-            setMessage(null);
-          }, 1500);
-        } else {
-          setMessage({type: 'error', text: 'Error creating ticket: ' + response.error});
-        }
-        setLoading(false);
-      };
-
-      socket.on('tickets/create-ticket-response', handleCreateTicketResponse);
-
-      return () => {
-        socket.off('tickets/create-ticket-response', handleCreateTicketResponse);
-      };
-    }
-  }, [socket]);
-
-  // Reset form when modal is closed
+  // Listen for modal show event to fetch ticket details
   useEffect(() => {
     const modal = modalRef.current;
     if (modal) {
+      const handleModalShow = (e: any) => {
+        const button = e.relatedTarget as HTMLElement;
+        const ticketIdValue = button?.getAttribute('data-ticket-id');
+        const titleValue = button?.getAttribute('data-ticket-title');
+        const descriptionValue = button?.getAttribute('data-ticket-description');
+        const categoryValue = button?.getAttribute('data-ticket-category');
+        const subcategoryValue = button?.getAttribute('data-ticket-subcategory');
+        const priorityValue = button?.getAttribute('data-ticket-priority');
+
+        setFormData({
+          ticketId: ticketIdValue || '',
+          title: titleValue || '',
+          category: categoryValue || '',
+          subCategory: subcategoryValue || '',
+          description: descriptionValue || '',
+          priority: priorityValue || '',
+        });
+        setMessage(null);
+      };
+
       const handleModalClose = () => {
         setFormData({
+          ticketId: '',
           title: '',
           category: '',
           subCategory: '',
@@ -286,24 +191,76 @@ const TicketListModal = () => {
         setMessage(null);
       };
 
+      modal.addEventListener('show.bs.modal', handleModalShow);
       modal.addEventListener('hidden.bs.modal', handleModalClose);
-      modal.addEventListener('hide.bs.modal', handleModalClose);
 
       return () => {
+        modal.removeEventListener('show.bs.modal', handleModalShow);
         modal.removeEventListener('hidden.bs.modal', handleModalClose);
-        modal.removeEventListener('hide.bs.modal', handleModalClose);
       };
     }
   }, []);
 
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate form
+    if (!formData.title || !formData.category || !formData.subCategory || !formData.description) {
+      setMessage({type: 'error', text: 'Please fill in all required fields'});
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    const updateData = {
+      title: formData.title,
+      description: formData.description,
+      category: formData.category,
+      subCategory: formData.subCategory,
+      priority: formData.priority,
+    };
+
+    // Emit update ticket event
+    socket?.emit('tickets/update-ticket', {
+      ticketId: formData.ticketId,
+      updateData
+    });
+
+    const handleUpdateResponse = (response: any) => {
+      if (response.done) {
+        setMessage({type: 'success', text: 'Ticket updated successfully!'});
+        // Close modal after a short delay
+        setTimeout(() => {
+          closeModal();
+          onTicketUpdated?.();
+        }, 1500);
+      } else {
+        setMessage({type: 'error', text: 'Error updating ticket: ' + response.error});
+      }
+      setLoading(false);
+    };
+
+    socket.on('tickets/update-ticket-response', handleUpdateResponse);
+
+    setTimeout(() => {
+      socket.off('tickets/update-ticket-response', handleUpdateResponse);
+      if (loading) {
+        setLoading(false);
+        setMessage({type: 'error', text: 'Request timeout. Please try again.'});
+      }
+    }, 10000);
+  };
+
   return (
     <>
-      {/* Add Ticket */}
-      <div className="modal fade" id="add_ticket" ref={modalRef}>
+      {/* Edit Ticket */}
+      <div className="modal fade" id="edit_ticket" ref={modalRef} tabIndex={-1} aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
-              <h4 className="modal-title">Add Ticket</h4>
+              <h4 className="modal-title">Edit Ticket</h4>
               <button
                 type="button"
                 className="btn-close custom-btn-close"
@@ -391,8 +348,8 @@ const TicketListModal = () => {
                       <label className="form-label">Priority <span className="text-danger">*</span></label>
                       <CommonSelect
                         className="select"
-                        options={priority}
-                        value={priority.find(opt => opt.value === formData.priority) || priority[0]}
+                        options={priorityOptions}
+                        value={priorityOptions.find(opt => opt.value === formData.priority) || priorityOptions[0]}
                         onChange={(option: any) => handleInputChange('priority', option?.value || '')}
                       />
                     </div>
@@ -416,10 +373,10 @@ const TicketListModal = () => {
                   {loading ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Creating...
+                      Updating...
                     </>
                   ) : (
-                    'Create Ticket'
+                    'Update Ticket'
                   )}
                 </button>
               </div>
@@ -427,9 +384,9 @@ const TicketListModal = () => {
           </div>
         </div>
       </div>
-      {/* /Add Ticket */}
+      {/* /Edit Ticket */}
     </>
   );
 };
 
-export default TicketListModal;
+export default EditTicketModal;

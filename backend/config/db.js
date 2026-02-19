@@ -189,5 +189,6 @@ export const getsuperadminCollections = () => {
     trainingtypes: db.collection('trainingtypes'),
     trainers: db.collection('trainers'),
     trainings: db.collection('trainings'),
+    ticketCategories: db.collection('ticketCategories'),
   };
 };

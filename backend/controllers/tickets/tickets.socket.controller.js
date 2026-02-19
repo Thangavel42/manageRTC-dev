@@ -1,8 +1,53 @@
 import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { getTenantCollections } from '../../config/db.js';
 import * as ticketsService from '../../services/tickets/tickets.services.js';
+import * as ticketCategoriesService from '../../services/tickets/ticketCategories.service.js';
 
 const ticketsSocketController = (socket, io) => {
+  // Get current employee data (for ticket creation)
+  socket.on('tickets/get-current-employee', async () => {
+    try {
+      const collections = getTenantCollections(socket.companyId);
+      const clerkUserId = socket.userId;
+
+      devLog('Fetching current employee for clerkUserId:', clerkUserId);
+      devLog('Socket companyId:', socket.companyId);
+
+      // Find employee by clerkUserId
+      const employee = await collections.employees.findOne(
+        { clerkUserId: clerkUserId },
+        { projection: { _id: 1, employeeId: 1, firstName: 1, lastName: 1, email: 1, avatarUrl: 1, avatar: 1, department: 1 } }
+      );
+
+      devLog('Found employee:', employee);
+
+      if (employee) {
+        // Convert _id to string for JSON serialization
+        const employeeData = {
+          ...employee,
+          _id: employee._id.toString()
+        };
+        devLog('Sending employee data:', employeeData);
+        socket.emit('tickets/get-current-employee-response', {
+          done: true,
+          data: employeeData
+        });
+      } else {
+        devError('Employee not found for clerkUserId:', clerkUserId);
+        socket.emit('tickets/get-current-employee-response', {
+          done: false,
+          error: 'Employee not found'
+        });
+      }
+    } catch (error) {
+      devError('Error getting current employee:', error);
+      socket.emit('tickets/get-current-employee-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
   // Get tickets dashboard statistics
   socket.on('tickets/dashboard/get-stats', async (data) => {
     try {
@@ -181,6 +226,7 @@ const ticketsSocketController = (socket, io) => {
   // Get ticket categories
   socket.on('tickets/categories/get-categories', async (data) => {
     try {
+      // Note: Categories from superadmin DB, but need tenantDbName to get ticket counts
       const result = await ticketsService.getTicketCategories(socket.companyId);
       socket.emit('tickets/categories/get-categories-response', result);
     } catch (error) {
@@ -242,7 +288,7 @@ const ticketsSocketController = (socket, io) => {
           },
           {
             $group: {
-              _id: '$assignedTo._id',
+              _id: '$assignedTo',
               count: { $sum: 1 },
             },
           },
@@ -277,6 +323,62 @@ const ticketsSocketController = (socket, io) => {
     }
   });
 
+  // Get all employees for assignment (HR/Admin)
+  socket.on('tickets/employees/get-all-list', async () => {
+    try {
+      const collections = getTenantCollections(socket.companyId);
+
+      const employees = await collections.employees
+        .find({ status: { $in: ['Active', 'active'] } })
+        .project({ firstName: 1, lastName: 1, email: 1, avatar: 1, employeeId: 1, departmentId: 1 })
+        .sort({ firstName: 1, lastName: 1 })
+        .toArray();
+
+      // Get ticket counts per agent (exclude Closed and Solved tickets)
+      const ticketCounts = await collections.tickets
+        .aggregate([
+          {
+            $match: {
+              status: { $nin: ['Closed', 'Solved'] },
+            },
+          },
+          {
+            $group: {
+              _id: '$assignedTo',
+              count: { $sum: 1 },
+            },
+          },
+        ])
+        .toArray();
+
+      const ticketCountMap = {};
+      ticketCounts.forEach((tc) => {
+        if (tc._id) {
+          ticketCountMap[String(tc._id)] = tc.count;
+        }
+      });
+
+      const list = employees.map((e) => ({
+        _id: String(e._id),
+        employeeId: e.employeeId || '',
+        firstName: e.firstName || '',
+        lastName: e.lastName || '',
+        email: e.email || '',
+        avatar: e.avatar || null,
+        departmentId: e.departmentId ? String(e.departmentId) : '',
+        ticketCount: ticketCountMap[String(e._id)] || 0,
+      }));
+
+      socket.emit('tickets/employees/get-all-list-response', { done: true, data: list });
+    } catch (error) {
+      devError('Error fetching all employees:', error);
+      socket.emit('tickets/employees/get-all-list-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
   // Add ticket category
   socket.on('tickets/categories/add-category', async (data) => {
     try {
@@ -291,7 +393,8 @@ const ticketsSocketController = (socket, io) => {
       );
 
       const createdBy = employee?.employeeId || userId;
-      const result = await ticketsService.addTicketCategory(socket.companyId, data, createdBy);
+      // Note: Categories stored in superadmin DB, no tenantDbName needed
+      const result = await ticketsService.addTicketCategory(data, createdBy);
 
       if (result.done) {
         // Broadcast to all connected clients in the company room
@@ -313,8 +416,8 @@ const ticketsSocketController = (socket, io) => {
   socket.on('tickets/categories/update-category', async (data) => {
     try {
       const { categoryId, updateData } = data;
+      // Note: Categories stored in superadmin DB, no tenantDbName needed
       const result = await ticketsService.updateTicketCategory(
-        socket.companyId,
         categoryId,
         updateData
       );
@@ -338,6 +441,7 @@ const ticketsSocketController = (socket, io) => {
   socket.on('tickets/categories/delete-category', async (data) => {
     try {
       const { categoryId } = data;
+      // Note: Categories from superadmin DB, but need tenantDbName to check for tickets using category
       const result = await ticketsService.deleteTicketCategory(socket.companyId, categoryId);
 
       if (result.done) {
@@ -352,6 +456,167 @@ const ticketsSocketController = (socket, io) => {
     } catch (error) {
       devError('Error deleting ticket category:', error);
       socket.emit('tickets/categories/delete-category-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // ===== NEW: Category/Subcategory Events =====
+
+  // Get all main categories with subcategories
+  // Note: Categories are stored in the superadmin database as system-wide configuration
+  socket.on('tickets/categories/get-main-categories', async () => {
+    try {
+      const result = await ticketCategoriesService.getMainCategories();
+      socket.emit('tickets/categories/get-main-categories-response', result);
+    } catch (error) {
+      devError('Error getting main categories:', error);
+      socket.emit('tickets/categories/get-main-categories-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get subcategories for a specific category
+  socket.on('tickets/categories/get-subcategories', async (data) => {
+    try {
+      const { categoryName } = data;
+      const result = await ticketCategoriesService.getSubCategories(categoryName);
+      socket.emit('tickets/categories/get-subcategories-response', result);
+    } catch (error) {
+      devError('Error getting subcategories:', error);
+      socket.emit('tickets/categories/get-subcategories-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // ===== NEW: HR Assignment Events =====
+
+  // Assign ticket to employee (HR/Admin only)
+  socket.on('tickets/assign-ticket', async (data) => {
+    try {
+      const { ticketId, assigneeId } = data;
+
+      // Get current employee _id from clerkUserId
+      const collections = getTenantCollections(socket.companyId);
+      const currentEmployee = await collections.employees.findOne(
+        { clerkUserId: socket.userId },
+        { projection: { _id: 1 } }
+      );
+
+      if (!currentEmployee) {
+        socket.emit('tickets/assign-ticket-response', {
+          done: false,
+          error: 'Current employee not found',
+        });
+        return;
+      }
+
+      const assignedBy = currentEmployee._id.toString();
+
+      const result = await ticketsService.assignTicket(
+        socket.companyId,
+        ticketId,
+        assigneeId,
+        assignedBy
+      );
+
+      if (result.done) {
+        // Broadcast to company room
+        const companyRoom = `company_${socket.companyId}`;
+        io.to(companyRoom).emit('tickets/ticket-assigned', result);
+      }
+
+      socket.emit('tickets/assign-ticket-response', result);
+    } catch (error) {
+      devError('Error assigning ticket:', error);
+      socket.emit('tickets/assign-ticket-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // ===== NEW: Role-Based Ticket List =====
+
+  // Get tickets for current user (based on role)
+  socket.on('tickets/get-my-tickets', async (data) => {
+    try {
+      const userRole = socket.role || 'employee';
+      const userId = socket.userId;
+
+      devLog('Getting tickets for user:', { userId, userRole, data });
+
+      const result = await ticketsService.getTicketsByUser(
+        socket.companyId,
+        userRole,
+        userId,
+        data
+      );
+
+      socket.emit('tickets/get-my-tickets-response', result);
+    } catch (error) {
+      devError('Error getting my tickets:', error);
+      socket.emit('tickets/get-my-tickets-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // ===== NEW: Get Tab Counts =====
+
+  // Get ticket counts for each tab
+  socket.on('tickets/get-tab-counts', async () => {
+    try {
+      const userRole = socket.role || 'employee';
+      const userId = socket.userId;
+
+      const result = await ticketsService.getTicketTabCounts(
+        socket.companyId,
+        userRole,
+        userId
+      );
+
+      socket.emit('tickets/get-tab-counts-response', result);
+    } catch (error) {
+      devError('Error getting tab counts:', error);
+      socket.emit('tickets/get-tab-counts-response', {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // ===== NEW: Update Ticket Status =====
+
+  // Update ticket status with validation
+  socket.on('tickets/update-status', async (data) => {
+    try {
+      const { ticketId, status } = data;
+      const userId = socket.userId;
+
+      const result = await ticketsService.updateTicketStatus(
+        socket.companyId,
+        ticketId,
+        status,
+        userId
+      );
+
+      if (result.done) {
+        // Broadcast to company room
+        const companyRoom = `company_${socket.companyId}`;
+        io.to(companyRoom).emit('tickets/ticket-status-updated', result);
+      }
+
+      socket.emit('tickets/update-status-response', result);
+    } catch (error) {
+      devError('Error updating ticket status:', error);
+      socket.emit('tickets/update-status-response', {
         done: false,
         error: error.message,
       });

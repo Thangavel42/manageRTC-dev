@@ -595,12 +595,13 @@ const TicketGrid = () => {
               <div>
                 <Link
                   to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
-                  className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
+                  className={`avatar avatar-xl avatar-rounded border p-1 rounded-circle ${ticket.assignedTo ? 'online border-primary' : ''}`}
+                  style={!ticket.assignedTo ? { opacity: 0.5, borderColor: '#dee2e6' } : {}}
                 >
                   <ImageWithBasePath
-                    src={ticket.assignedTo?.avatar || "assets/img/profiles/avatar-01.jpg"}
+                    src={ticket.assignedTo?.avatarUrl || ticket.assignedTo?.avatar || "assets/img/profiles/avatar-01.jpg"}
                     className="img-fluid h-auto w-auto"
-                    alt="img"
+                    alt={ticket.assignedTo ? "Assigned" : "Unassigned"}
                   />
                 </Link>
               </div>
@@ -674,13 +675,21 @@ const TicketGrid = () => {
                 <p className="mb-1 fs-12">Assigned To</p>
                 <div className="d-flex align-items-center">
                   <span className="avatar avatar-xs avatar-rounded me-2">
-                    <ImageWithBasePath
-                      src={ticket.assignedTo?.avatar || "assets/img/profiles/avatar-01.jpg"}
-                      alt="Img"
-                    />
+                    {ticket.assignedTo ? (
+                      <ImageWithBasePath
+                        src={ticket.assignedTo.avatarUrl || ticket.assignedTo.avatar || "assets/img/profiles/avatar-01.jpg"}
+                        alt="Assigned"
+                      />
+                    ) : (
+                      <ImageWithBasePath
+                        src="assets/img/profiles/avatar-01.jpg"
+                        alt="Unassigned"
+                        style={{ opacity: 0.5 }}
+                      />
+                    )}
                   </span>
                   <h6 className="fw-normal">
-                    {ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
+                    {ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
                       ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
                       : 'Unassigned'
                     }

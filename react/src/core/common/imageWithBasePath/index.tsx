@@ -8,12 +8,31 @@ interface Image {
   height?: number;
   width?: number;
   id?: string;
-  isLink?: boolean; // New optional prop
+  isLink?: boolean;
+  style?: React.CSSProperties;
 }
 
 const ImageWithBasePath = (props: Image) => {
-  // Use full path only if isLink is false or undefined
-  const fullSrc = props.isLink ? props.src : `${img_path}${props.src}`;
+  // Determine if we should use the source as-is or prepend img_path
+  let fullSrc = props.src;
+
+  // Handle undefined or null src - use a default placeholder
+  if (!fullSrc) {
+    fullSrc = 'assets/img/profiles/avatar-01.jpg';
+  }
+
+  if (!props.isLink) {
+    // Check if src is already a full URL (http/https) or data URL
+    const isFullUrl = /^(https?:\/\/|data:)/i.test(fullSrc);
+
+    // Check if src already starts with img_path (to avoid double prepending)
+    const alreadyHasBasePath = fullSrc?.startsWith(img_path);
+
+    // Only prepend img_path if it's not a full URL and doesn't already have the base path
+    if (!isFullUrl && !alreadyHasBasePath) {
+      fullSrc = `${img_path}${fullSrc}`;
+    }
+  }
 
   return (
     <img
@@ -23,6 +42,7 @@ const ImageWithBasePath = (props: Image) => {
       alt={props.alt}
       width={props.width}
       id={props.id}
+      style={props.style}
     />
   );
 };

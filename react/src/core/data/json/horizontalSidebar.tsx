@@ -409,6 +409,7 @@ export const HorizontalSidebarData = [
                 route: routes.taskboard,
                 base: 'task-board',
               },
+              { menuValue: 'Sub-Contracts', route: routes.subcontractlist, base: 'sub-contracts' },
             ],
           },
           {

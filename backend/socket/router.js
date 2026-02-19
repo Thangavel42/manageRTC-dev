@@ -144,6 +144,7 @@ const router = (socket, io, role) => {
       employeeController(socket, io);
       projectController(socket, io);
       profileController(socket, io);
+      ticketsSocketController(socket, io);
       break;
 
     default:

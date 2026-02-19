@@ -1,19 +1,55 @@
-import React, { useState, useEffect } from "react";
+import jsPDF from "jspdf";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import ReactApexChart from "react-apexcharts";
-import TicketListModal from "../../core/modals/ticketListModal";
+import * as XLSX from "xlsx";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import AssignTicketModal from "../../core/modals/AssignTicketModal";
+import EditTicketModal from "../../core/modals/EditTicketModal";
+import TicketListModal from "../../core/modals/ticketListModal";
+import { useAuth } from "../../hooks/useAuth";
 import { useSocket } from "../../SocketContext";
-import jsPDF from "jspdf";
-import * as XLSX from "xlsx";
+import { all_routes } from "../router/all_routes";
 
 const Tickets = () => {
   const routes = all_routes;
   const socket = useSocket();
-  
+  const { role, userId } = useAuth();
+
+  // Tab configuration
+  const isAdmin = ['superadmin', 'admin', 'hr'].includes(role);
+
+  const normalUserTabs = [
+    { id: 'my-tickets', label: 'My Tickets' },
+    { id: 'closed', label: 'Closed' }
+  ];
+
+  const adminTabs = [
+    { id: 'new', label: 'New' },
+    { id: 'active', label: 'Active' },
+    { id: 'resolved', label: 'Resolved' },
+    { id: 'closed', label: 'Closed' },
+    { id: 'my-tickets', label: 'My Tickets' }
+  ];
+
+  const tabs = isAdmin ? adminTabs : normalUserTabs;
+
+  // Get current tab from URL hash or default to first tab
+  const getCurrentTabFromHash = () => {
+    const hash = window.location.hash.replace('#', '');
+    return tabs.find(tab => tab.id === hash)?.id || tabs[0].id;
+  };
+
+  // State for current tab
+  const [currentTab, setCurrentTab] = useState(getCurrentTabFromHash());
+
+  // State for "My Tickets" sub-tabs
+  const [myTicketsSubTab, setMyTicketsSubTab] = useState<'assigned-to-me' | 'created-by-me'>('assigned-to-me');
+
+  // State for view mode (list or grid)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
   // State for dynamic data
   const [ticketsStats, setTicketsStats] = useState({
     newTickets: 0,
@@ -30,9 +66,9 @@ const Tickets = () => {
   // State for ticket list
   const [ticketsList, setTicketsList] = useState([]);
   const [filteredTickets, setFilteredTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
   const [filters, setFilters] = useState({
     priority: '',
-    status: '',
     sortBy: 'recently'
   });
   const [exportLoading, setExportLoading] = useState(false);
@@ -45,11 +81,14 @@ const Tickets = () => {
   const [supportAgents, setSupportAgents] = useState([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
 
+  // Tab counts
+  const [tabCounts, setTabCounts] = useState({});
+
   // Fetch tickets statistics
   useEffect(() => {
     if (socket) {
       socket.emit('tickets/dashboard/get-stats');
-      
+
       socket.on('tickets/dashboard/get-stats-response', (response) => {
         if (response.done) {
           setTicketsStats(response.data);
@@ -68,7 +107,7 @@ const Tickets = () => {
     if (socket) {
       setLoadingCategories(true);
       socket.emit('tickets/categories/get-categories');
-      
+
       socket.on('tickets/categories/get-categories-response', (response) => {
         if (response.done) {
           setCategories(response.data);
@@ -107,7 +146,7 @@ const Tickets = () => {
   useEffect(() => {
     if (socket) {
       console.log('🎧 TICKETS: Setting up real-time event listeners...');
-      
+
       socket.on('tickets/ticket-created', (data) => {
         console.log('🔄 TICKETS: Ticket created event received:', data);
         socket.emit('tickets/dashboard/get-stats');
@@ -155,17 +194,50 @@ const Tickets = () => {
     }
   }, [socket]);
 
-  // Fetch tickets list
+  // Fetch tickets list (role-based with tab support)
   const fetchTicketsList = () => {
     if (socket) {
-      socket.emit('tickets/list/get-tickets', {
+      console.log(`📋 Fetching tickets for tab: ${currentTab}, sub-tab: ${myTicketsSubTab}, role: ${role}`);
+      setTicketsLoading(true);
+
+      // For 'my-tickets' tab, include sub-tab filter
+      const emitData: any = {
+        tab: currentTab,
         page: 1,
         limit: 50,
         sortBy: 'createdAt',
         sortOrder: 'desc'
-      });
+      };
+
+      if (currentTab === 'my-tickets') {
+        emitData.subTab = myTicketsSubTab;
+      }
+
+      socket.emit('tickets/get-my-tickets', emitData);
     }
   };
+
+  // Handle tab change
+  const handleTabChange = (tabId: string) => {
+    setCurrentTab(tabId);
+    window.location.hash = tabId;
+  };
+
+  // Update current tab when URL hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const tabFromHash = getCurrentTabFromHash();
+      if (tabFromHash !== currentTab) {
+        setCurrentTab(tabFromHash);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [currentTab]);
 
   // Set up socket listener for tickets list response
   useEffect(() => {
@@ -176,15 +248,57 @@ const Tickets = () => {
           setTicketsList(response.data);
           setFilteredTickets(response.data);
         }
+        setTicketsLoading(false);
       };
 
-      socket.on('tickets/list/get-tickets-response', handleTicketsListResponse);
+      socket.on('tickets/get-my-tickets-response', handleTicketsListResponse);
 
       // Initial fetch
       fetchTicketsList();
 
       return () => {
-        socket.off('tickets/list/get-tickets-response', handleTicketsListResponse);
+        socket.off('tickets/get-my-tickets-response', handleTicketsListResponse);
+      };
+    }
+  }, [socket, currentTab, myTicketsSubTab]); // Re-fetch when currentTab or myTicketsSubTab changes
+
+  // Fetch tab counts
+  useEffect(() => {
+    if (socket) {
+      const handleTabCountsResponse = (response: any) => {
+        if (response.done) {
+          console.log('📊 Tab counts:', response.data);
+          setTabCounts(response.data);
+        }
+      };
+
+      socket.on('tickets/get-tab-counts-response', handleTabCountsResponse);
+
+      // Fetch tab counts
+      socket.emit('tickets/get-tab-counts');
+
+      return () => {
+        socket.off('tickets/get-tab-counts-response', handleTabCountsResponse);
+      };
+    }
+  }, [socket]);
+
+  // Listen for real-time updates and refresh tab counts
+  useEffect(() => {
+    if (socket) {
+      const handleUpdate = () => {
+        // Refresh tab counts when tickets are updated
+        socket.emit('tickets/get-tab-counts');
+      };
+
+      socket.on('tickets/ticket-created', handleUpdate);
+      socket.on('tickets/ticket-updated', handleUpdate);
+      socket.on('tickets/ticket-deleted', handleUpdate);
+
+      return () => {
+        socket.off('tickets/ticket-created', handleUpdate);
+        socket.off('tickets/ticket-updated', handleUpdate);
+        socket.off('tickets/ticket-deleted', handleUpdate);
       };
     }
   }, [socket]);
@@ -193,14 +307,9 @@ const Tickets = () => {
   useEffect(() => {
     let filtered = [...ticketsList];
 
-    // Apply priority filter
+    // Apply priority filter only (status is handled by tabs)
     if (filters.priority) {
       filtered = filtered.filter(ticket => ticket.priority === filters.priority);
-    }
-
-    // Apply status filter
-    if (filters.status) {
-      filtered = filtered.filter(ticket => ticket.status === filters.status);
     }
 
     // Apply sorting
@@ -253,11 +362,13 @@ const Tickets = () => {
   // Helper function to get status badge class
   const getStatusBadgeClass = (status) => {
     switch (status) {
-      case 'New': return 'bg-outline-primary';
-      case 'Open': return 'bg-outline-pink';
+      case 'Open': return 'bg-outline-primary';
+      case 'Assigned': return 'bg-outline-info';
+      case 'In Progress': return 'bg-outline-pink';
       case 'On Hold': return 'bg-outline-warning';
-      case 'Solved': return 'bg-outline-success';
+      case 'Resolved': return 'bg-outline-success';
       case 'Closed': return 'bg-outline-secondary';
+      case 'Reopened': return 'bg-outline-danger';
       default: return 'bg-outline-info';
     }
   };
@@ -267,7 +378,7 @@ const Tickets = () => {
     const now = new Date();
     const ticketDate = new Date(date);
     const diffInHours = Math.floor((now.getTime() - ticketDate.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours} hours ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -294,18 +405,18 @@ const Tickets = () => {
       // Add company logo with multiple fallback options
       const addCompanyLogo = async () => {
         console.log('🎯 Starting logo loading process...');
-        
+
         // Try to load the new manage RTC logo first
         const logoPaths = [
           '/assets/img/logo.svg',           // New manage RTC logo (priority)
           '/assets/img/logo-white.svg',     // White version of manage RTC logo
           '/assets/img/logo-small.svg',     // Small version of manage RTC logo
         ];
-        
+
         for (const logoPath of logoPaths) {
           try {
             console.log(`🔄 Loading NEW logo: ${logoPath}`);
-            
+
             // Try multiple approaches to load the logo
             const approaches = [
               // Approach 1: Direct fetch with cache busting
@@ -315,7 +426,7 @@ const Tickets = () => {
               // Approach 3: No cache busting
               logoPath
             ];
-            
+
             for (const url of approaches) {
               try {
                 console.log(`🔄 Trying URL: ${url}`);
@@ -328,14 +439,14 @@ const Tickets = () => {
                     'Expires': '0'
                   }
                 });
-                
+
                 if (response.ok) {
                   console.log(`✅ Logo response OK: ${response.status}`);
-                  
+
                   // Get the SVG content as text
                   const svgText = await response.text();
                   console.log(`📄 SVG content length: ${svgText.length} characters`);
-                  
+
                   // Check if this is a valid SVG
                   if (svgText.includes('<svg') && svgText.length > 100) {
                     console.log('🎉 Found valid SVG logo!');
@@ -343,24 +454,24 @@ const Tickets = () => {
                     console.log('⚠️ Invalid SVG content, trying next approach...');
                     continue;
                   }
-                  
+
                   // Try to convert SVG to canvas for better PDF compatibility
                   try {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     const img = new Image();
-                    
+
                     // Set canvas size to maintain aspect ratio (logo.svg is 115x40)
                     canvas.width = 115;
                     canvas.height = 40;
-                    
+
                     // Create a promise to handle image loading
                     const imagePromise = new Promise((resolve, reject) => {
                       img.onload = () => {
                         try {
                           // Draw the SVG image to canvas maintaining aspect ratio
                           ctx?.drawImage(img, 0, 0, 115, 40);
-                          
+
                           // Convert canvas to PNG data URL
                           const pngDataUrl = canvas.toDataURL('image/png');
                           console.log(`✅ Successfully converted SVG to PNG: ${logoPath}`);
@@ -370,23 +481,23 @@ const Tickets = () => {
                         }
                       };
                       img.onerror = reject;
-                      
+
                       // Set the SVG as image source
                       const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
                       img.src = svgDataUrl;
                     });
-                    
+
                     // Wait for image conversion
                     const pngDataUrl = await imagePromise;
-                    
+
                     // Add PNG to PDF with proper dimensions (maintain aspect ratio)
                     doc.addImage(pngDataUrl as string, 'PNG', 20, 15, 30, 10.4);
                     console.log(`✅ Successfully added logo to PDF: ${logoPath}`);
                     return true;
-                    
+
                   } catch (canvasError) {
                     console.log(`❌ Canvas conversion failed:`, canvasError);
-                    
+
                     // Fallback: Try direct SVG
                     try {
                       const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
@@ -408,7 +519,7 @@ const Tickets = () => {
             console.log(`❌ Error loading ${logoPath}:`, error);
           }
         }
-        
+
         console.log('❌ All logo loading attempts failed');
         return false;
       };
@@ -449,11 +560,11 @@ const Tickets = () => {
       let yPosition = 60;
       doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
       doc.rect(20, yPosition, 170, 8, 'F');
-      
+
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      
+
       doc.text('Ticket ID', 22, yPosition + 6);
       doc.text('Title', 45, yPosition + 6);
       doc.text('Status', 90, yPosition + 6);
@@ -466,12 +577,12 @@ const Tickets = () => {
       // Table data
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      
+
       filteredTickets.forEach((ticket, index) => {
         if (yPosition > 270) {
           doc.addPage();
           yPosition = 20;
-          
+
           // Add header to new page
           doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
           doc.rect(20, yPosition, 170, 8, 'F');
@@ -499,16 +610,16 @@ const Tickets = () => {
         doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        
+
         doc.text(ticket.ticketId || 'N/A', 22, yPosition + 4);
         doc.text((ticket.title || 'Untitled').substring(0, 20), 45, yPosition + 4);
         doc.text(ticket.status || 'New', 90, yPosition + 4);
         doc.text(ticket.priority || 'Medium', 110, yPosition + 4);
         doc.text(
-          ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
+          ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
             ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`.substring(0, 15)
-            : 'Unassigned', 
-          130, 
+            : 'Unassigned',
+          130,
           yPosition + 4
         );
         doc.text(new Date(ticket.createdAt).toLocaleDateString(), 160, yPosition + 4);
@@ -552,10 +663,10 @@ const Tickets = () => {
         "Category": ticket.category || "",
         "Status": ticket.status || "",
         "Priority": ticket.priority || "",
-        "Assigned To": ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
+        "Assigned To": ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
           ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
           : "Unassigned",
-        "Created By": ticket.createdBy?.firstName && ticket.createdBy?.lastName 
+        "Created By": ticket.createdBy?.firstName && ticket.createdBy?.lastName
           ? `${ticket.createdBy.firstName} ${ticket.createdBy.lastName}`
           : "Unknown",
         "Created Date": ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : "",
@@ -566,7 +677,7 @@ const Tickets = () => {
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(ticketsDataForExcel);
-      
+
       // Set column widths
       const colWidths = [
         { wch: 15 }, // Ticket ID
@@ -596,6 +707,139 @@ const Tickets = () => {
       console.error("Error exporting Excel:", error);
       alert("Failed to export Excel");
     }
+  };
+
+  // Render ticket card for grid view
+  const renderTicketCard = (ticket) => {
+    return (
+      <div key={ticket.ticketId} className="col-xl-3 col-lg-4 col-md-6">
+        <div className="card">
+          <div className="card-body">
+            <div className="d-flex justify-content-between align-items-start mb-2">
+              <div className="form-check form-check-md">
+                <input className="form-check-input" type="checkbox" />
+              </div>
+              <div>
+                <Link
+                  to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
+                  className={`avatar avatar-xl avatar-rounded border p-1 rounded-circle ${ticket.createdBy ? 'online border-primary' : ''}`}
+                  style={!ticket.createdBy ? { opacity: 0.5, borderColor: '#dee2e6' } : {}}
+                >
+                  <ImageWithBasePath
+                    src={ticket.createdBy?.avatarUrl || ticket.createdBy?.avatar || "assets/img/profiles/avatar-01.jpg"}
+                    className="img-fluid h-auto w-auto"
+                    alt={ticket.createdBy ? `${ticket.createdBy.firstName || ''} ${ticket.createdBy.lastName || ''}`.trim() : "Unknown"}
+                  />
+                </Link>
+              </div>
+              <div className="dropdown">
+                <button
+                  className="btn btn-icon btn-sm rounded-circle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <i className="ti ti-dots-vertical" />
+                </button>
+                <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <li>
+                    <Link
+                      className="dropdown-item rounded-1"
+                      to="#"
+                      data-bs-toggle="modal"
+                      data-bs-target="#edit_ticket"
+                    >
+                      <i className="ti ti-edit me-1" />
+                      Edit
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      className="dropdown-item rounded-1"
+                      to="#"
+                      data-bs-toggle="modal"
+                      data-bs-target="#delete_modal"
+                    >
+                      <i className="ti ti-trash me-1" />
+                      Delete
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="text-center mb-3">
+              <h6 className="mb-1">
+                <Link to={`${routes.ticketDetails}?id=${ticket.ticketId}`}>{ticket.title || 'Untitled'}</Link>
+              </h6>
+              <span className="badge bg-info-transparent fs-10 fw-medium">
+                {ticket.ticketId || 'N/A'}
+              </span>
+            </div>
+            <div className="d-flex flex-column">
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <span>Category</span>
+                <h6 className="fw-medium">{ticket.category || 'N/A'}</h6>
+              </div>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <span>Status</span>
+                <span className={`badge ${getStatusBadgeClass(ticket.status)} d-inline-flex align-items-center fs-10 fw-medium`}>
+                  <i className="ti ti-circle-filled fs-5 me-1" />
+                  {ticket.status || 'N/A'}
+                </span>
+              </div>
+              <div className="d-flex align-items-center justify-content-between">
+                <span>Priority</span>
+                <span className={`badge ${getPriorityBadgeClass(ticket.priority)} d-inline-flex align-items-center fs-10 fw-medium`}>
+                  <i className="ti ti-circle-filled fs-5 me-1" />
+                  {ticket.priority || 'N/A'}
+                </span>
+              </div>
+            </div>
+            <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+              <div>
+                <p className="mb-1 fs-12">Assigned To</p>
+                <div className="d-flex align-items-center">
+                  <span className="avatar avatar-xs avatar-rounded me-2">
+                    {ticket.assignedTo ? (
+                      <ImageWithBasePath
+                        src={ticket.assignedTo.avatarUrl || ticket.assignedTo.avatar || "assets/img/profiles/avatar-01.jpg"}
+                        alt="Assigned"
+                      />
+                    ) : (
+                      <ImageWithBasePath
+                        src="assets/img/profiles/avatar-01.jpg"
+                        alt="Unassigned"
+                        style={{ opacity: 0.5 }}
+                      />
+                    )}
+                  </span>
+                  <h6 className="fw-normal">
+                    {ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
+                      ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
+                      : 'Unassigned'
+                    }
+                  </h6>
+                </div>
+              </div>
+              <div className="icons-social d-flex align-items-center">
+                <Link
+                  to="#"
+                  className="avatar avatar-rounded avatar-sm bg-primary-transparent me-2"
+                >
+                  <i className="ti ti-message text-primary" />
+                </Link>
+                <Link
+                  to="#"
+                  className="avatar avatar-rounded avatar-sm bg-light"
+                >
+                  <i className="ti ti-phone" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Dynamic chart data that updates with ticketsStats
@@ -970,15 +1214,18 @@ const Tickets = () => {
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={routes.tickets}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`btn btn-icon btn-sm me-1 ${viewMode === 'list' ? 'active bg-primary text-white' : ''}`}
                   >
                     <i className="ti ti-list-tree" />
-                  </Link>
-                  <Link to={routes.ticketGrid} className="btn btn-icon btn-sm">
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`btn btn-icon btn-sm ${viewMode === 'grid' ? 'active bg-primary text-white' : ''}`}
+                  >
                     <i className="ti ti-layout-grid" />
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="me-2 mb-2">
@@ -993,8 +1240,8 @@ const Tickets = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1006,8 +1253,8 @@ const Tickets = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1208,6 +1455,58 @@ const Tickets = () => {
               </div>
             </div>
           </div>
+
+          {/* Ticket Tabs Navigation */}
+          <ul className="nav nav-tabs nav-tabs-bottom mb-3">
+            {tabs.map((tab) => (
+              <li className="nav-item" key={tab.id}>
+                <Link
+                  to={`#${tab.id}`}
+                  className={`nav-link ${currentTab === tab.id ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleTabChange(tab.id);
+                  }}
+                >
+                  {tab.label}
+                  {tabCounts[tab.id] !== undefined && (
+                    <span className="badge bg-primary ms-1">{tabCounts[tab.id] || 0}</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          {/* Sub-tabs for "My Tickets" - Assigned to Me / Created by Me */}
+          {currentTab === 'my-tickets' && (
+            <ul className="nav nav-tabs nav-tabs-bottom-sub mb-3">
+              <li className="nav-item">
+                <Link
+                  to="#assigned-to-me"
+                  className={`nav-link ${myTicketsSubTab === 'assigned-to-me' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMyTicketsSubTab('assigned-to-me');
+                  }}
+                >
+                  Assigned to Me
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  to="#created-by-me"
+                  className={`nav-link ${myTicketsSubTab === 'created-by-me' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMyTicketsSubTab('created-by-me');
+                  }}
+                >
+                  Created by Me
+                </Link>
+              </li>
+            </ul>
+          )}
+
           <div className="card">
             <div className="card-body p-3">
               <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3">
@@ -1223,8 +1522,8 @@ const Tickets = () => {
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1235,8 +1534,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1247,8 +1546,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1259,8 +1558,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1272,96 +1571,13 @@ const Tickets = () => {
                       </li>
                     </ul>
                   </div>
-                  <div className="dropdown me-2">
-                    <Link
-                      to="#"
-                      className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      {filters.status || 'Select Status'}
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', '');
-                          }}
-                        >
-                          All Status
-                        </Link>
-                      </li>
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', 'New');
-                          }}
-                        >
-                          New
-                        </Link>
-                      </li>
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', 'Open');
-                          }}
-                        >
-                          Open
-                        </Link>
-                      </li>
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', 'On Hold');
-                          }}
-                        >
-                          On Hold
-                        </Link>
-                      </li>
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', 'Solved');
-                          }}
-                        >
-                          Solved
-                        </Link>
-                      </li>
-                      <li>
-                        <Link 
-                          to="#" 
-                          className="dropdown-item rounded-1"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('status', 'Closed');
-                          }}
-                        >
-                          Closed
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
                   <div className="dropdown">
                     <Link
                       to="#"
                       className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
                       data-bs-toggle="dropdown"
                     >
-                      Sort By: {filters.sortBy === 'recently' ? 'Recently Added' : 
+                      Sort By: {filters.sortBy === 'recently' ? 'Recently Added' :
                                filters.sortBy === 'ascending' ? 'Ascending' :
                                filters.sortBy === 'descending' ? 'Descending' :
                                filters.sortBy === 'lastMonth' ? 'Last Month' :
@@ -1369,8 +1585,8 @@ const Tickets = () => {
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1381,8 +1597,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1393,8 +1609,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1405,8 +1621,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1417,8 +1633,8 @@ const Tickets = () => {
                         </Link>
                       </li>
                       <li>
-                        <Link 
-                          to="#" 
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1436,71 +1652,268 @@ const Tickets = () => {
           </div>
           <div className="row">
             <div className="col-xl-9 col-md-8">
-              {filteredTickets.length > 0 ? (
-                filteredTickets.map((ticket, index) => (
-                  <div key={ticket.ticketId || index} className="card mb-3">
-                <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-                      <h5 className="text-info fw-medium">{ticket.category || 'IT Support'}</h5>
-                  <div className="d-flex align-items-center">
-                        <span className={`badge ${getPriorityBadgeClass(ticket.priority)} d-inline-flex align-items-center`}>
-                      <i className="ti ti-circle-filled fs-5 me-1" />
-                          {ticket.priority || 'Medium'}
-                    </span>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div>
-                    <span className="badge badge-info rounded-pill mb-2">
-                          {ticket.ticketId || 'N/A'}
-                    </span>
-                    <div className="d-flex align-items-center mb-2">
-                      <h5 className="fw-semibold me-2">
-                            <Link to={`${routes.ticketDetails}?id=${ticket.ticketId}`}>
-                              {ticket.title || 'Untitled'}
-                            </Link>
-                      </h5>
-                          <span className={`badge ${getStatusBadgeClass(ticket.status)} d-flex align-items-center ms-1`}>
-                        <i className="ti ti-circle-filled fs-5 me-1" />
-                            {ticket.status || 'New'}
-                      </span>
+              {/* Loading State */}
+              {ticketsLoading && (
+                <div className="row">
+                  {[1, 2, 3, 4].map((item) => (
+                    <div key={item} className="col-xl-3 col-lg-4 col-md-6">
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="d-flex justify-content-between mb-3">
+                            <div className="bg-light rounded" style={{ height: '20px', width: '20px' }}></div>
+                            <div className="bg-light rounded-circle" style={{ height: '60px', width: '60px' }}></div>
+                            <div className="bg-light rounded" style={{ height: '20px', width: '20px' }}></div>
+                          </div>
+                          <div className="text-center mb-3">
+                            <div className="bg-light rounded mx-auto mb-2" style={{ height: '20px', width: '70%' }}></div>
+                            <div className="bg-light rounded mx-auto" style={{ height: '16px', width: '40%' }}></div>
+                          </div>
+                          <div className="bg-light rounded mb-2" style={{ height: '16px', width: '100%' }}></div>
+                          <div className="bg-light rounded mb-2" style={{ height: '16px', width: '100%' }}></div>
+                          <div className="bg-light rounded mb-3" style={{ height: '16px', width: '100%' }}></div>
+                          <div className="d-flex justify-content-between border-top pt-3">
+                            <div className="bg-light rounded" style={{ height: '30px', width: '45%' }}></div>
+                            <div className="bg-light rounded" style={{ height: '30px', width: '45%' }}></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="d-flex align-items-center flex-wrap row-gap-2">
-                      <p className="d-flex align-items-center mb-0 me-2">
-                        <ImageWithBasePath
-                              src={ticket.assignedTo?.avatar || "assets/img/profiles/avatar-01.jpg"}
-                          className="avatar avatar-xs rounded-circle me-2"
-                          alt="img"
-                        />{" "}
-                        Assigned to{" "}
-                            <span className="text-dark ms-1">
-                              {ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
-                                ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
-                                : 'Unassigned'
-                              }
-                    </span>
-                      </p>
-                      <p className="d-flex align-items-center mb-0 me-2">
-                        <i className="ti ti-calendar-bolt me-1" />
-                            Updated {getTimeAgo(ticket.updatedAt)}
-                      </p>
-                      <p className="d-flex align-items-center mb-0">
-                            <i className="ti ti-message-share me-1" />
-                            {ticket.comments?.length || 0} Comments
-                      </p>
+                  ))}
+                  <div className="col-12 text-center mt-3">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading tickets...</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-                ))
-              ) : (
-              <div className="card">
-                  <div className="card-body text-center py-5">
-                    <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
-                    <h5 className="text-muted">No tickets found</h5>
-                    <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
+                    <p className="mt-2 text-muted">Loading tickets...</p>
                   </div>
                 </div>
               )}
+
+              {/* Grid View */}
+              {!ticketsLoading && viewMode === 'grid' && (
+                <div className="row">
+                  {filteredTickets.length > 0 ? (
+                    filteredTickets.map((ticket) => renderTicketCard(ticket))
+                  ) : (
+                    <div className="col-12">
+                      <div className="card">
+                        <div className="card-body text-center py-5">
+                          <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
+                          <h5 className="text-muted">No tickets found</h5>
+                          <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* List View */}
+              {!ticketsLoading && viewMode === 'list' && (
+                <>
+                  {filteredTickets.length > 0 ? (
+                    <div className="card">
+                      <div className="card-body p-0">
+                        <div className="table-responsive">
+                          <table className="table table-hover table-striped mb-0">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '5%' }}>
+                                  <div className="form-check form-check-md">
+                                    <input className="form-check-input" type="checkbox" />
+                                  </div>
+                                </th>
+                                <th style={{ width: '10%' }}>Ticket ID</th>
+                                <th style={{ width: '25%' }}>Title</th>
+                                <th style={{ width: '12%' }}>Category</th>
+                                <th style={{ width: '12%' }}>Status</th>
+                                <th style={{ width: '10%' }}>Priority</th>
+                                <th style={{ width: '12%' }}>Assigned To</th>
+                                <th style={{ width: '10%' }}>Updated</th>
+                                <th style={{ width: '4%' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredTickets.map((ticket, index) => (
+                                <tr key={ticket.ticketId || index}>
+                                  <td>
+                                    <div className="form-check form-check-md">
+                                      <input className="form-check-input" type="checkbox" />
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className="badge bg-info-transparent fw-medium">
+                                      {ticket.ticketId || 'N/A'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="d-flex flex-column">
+                                      <Link
+                                        to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
+                                        className="text-dark fw-semibold mb-1"
+                                      >
+                                        {ticket.title || 'Untitled'}
+                                      </Link>
+                                      <div className="d-flex align-items-center">
+                                        <ImageWithBasePath
+                                          src={ticket.createdBy?.avatarUrl || ticket.createdBy?.avatar || "assets/img/profiles/avatar-01.jpg"}
+                                          className="avatar avatar-xs rounded-circle me-2"
+                                          alt="Creator"
+                                        />
+                                        <small className="text-muted">
+                                          {ticket.createdBy?.firstName && ticket.createdBy?.lastName
+                                            ? `${ticket.createdBy.firstName} ${ticket.createdBy.lastName}`
+                                            : 'Unknown'
+                                          }
+                                        </small>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="d-flex flex-column">
+                                      <span className="fw-medium mb-1">{ticket.category || 'N/A'}</span>
+                                      {ticket.subCategory && (
+                                        <small className="text-muted">
+                                          <i className="ti ti-arrow-right me-1" />
+                                          {ticket.subCategory}
+                                        </small>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className={`badge ${getStatusBadgeClass(ticket.status)} d-inline-flex align-items-center`}>
+                                      <i className="ti ti-circle-filled fs-5 me-1" />
+                                      {ticket.status || 'New'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span className={`badge ${getPriorityBadgeClass(ticket.priority)} d-inline-flex align-items-center`}>
+                                      <i className="ti ti-circle-filled fs-5 me-1" />
+                                      {ticket.priority || 'Medium'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="d-flex align-items-center">
+                                      {ticket.assignedTo ? (
+                                        <>
+                                          <ImageWithBasePath
+                                            src={ticket.assignedTo.avatarUrl || ticket.assignedTo.avatar || "assets/img/profiles/avatar-01.jpg"}
+                                            className="avatar avatar-xs rounded-circle me-2"
+                                            alt="Assigned"
+                                          />
+                                          <span className="text-truncate" style={{ maxWidth: '120px' }}>
+                                            {ticket.assignedTo.firstName && ticket.assignedTo.lastName
+                                              ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
+                                              : 'Assigned'
+                                            }
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ImageWithBasePath
+                                            src="assets/img/profiles/avatar-01.jpg"
+                                            className="avatar avatar-xs rounded-circle me-2"
+                                            alt="Unassigned"
+                                            style={{ opacity: 0.5 }}
+                                          />
+                                          <span className="text-muted">Unassigned</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="d-flex flex-column">
+                                      <small className="text-muted mb-1">
+                                        <i className="ti ti-calendar me-1" />
+                                        {getTimeAgo(ticket.updatedAt)}
+                                      </small>
+                                      <small className="text-muted">
+                                        <i className="ti ti-message me-1" />
+                                        {ticket.comments?.length || 0} Comments
+                                      </small>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="dropdown">
+                                      <button
+                                        className="btn btn-icon btn-sm rounded-circle"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                      >
+                                        <i className="ti ti-dots-vertical" />
+                                      </button>
+                                      <ul className="dropdown-menu dropdown-menu-end p-3">
+                                        <li>
+                                          <Link
+                                            className="dropdown-item rounded-1"
+                                            to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
+                                          >
+                                            <i className="ti ti-eye me-2" />
+                                            View Details
+                                          </Link>
+                                        </li>
+                                        {ticket.status === 'Open' && ticket.createdBy?._id === userId && (
+                                          <li>
+                                            <button
+                                              type="button"
+                                              className="dropdown-item rounded-1"
+                                              data-bs-toggle="modal"
+                                              data-bs-target="#edit_ticket"
+                                              data-ticket-id={ticket.ticketId}
+                                              data-ticket-title={ticket.title}
+                                              data-ticket-description={ticket.description}
+                                              data-ticket-category={ticket.category}
+                                              data-ticket-subcategory={ticket.subCategory}
+                                              data-ticket-priority={ticket.priority}
+                                            >
+                                              <i className="ti ti-edit me-2" />
+                                              Edit
+                                            </button>
+                                          </li>
+                                        )}
+                                        {(role === 'hr' || role === 'admin' || role === 'superadmin') && (
+                                          <li>
+                                            <button
+                                              type="button"
+                                              className="dropdown-item rounded-1"
+                                              data-bs-toggle="modal"
+                                              data-bs-target="#assign_ticket"
+                                              data-ticket-id={ticket.ticketId}
+                                              data-ticket-title={ticket.title}
+                                              data-current-assignee={
+                                                ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
+                                                  ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
+                                                  : 'Unassigned'
+                                              }
+                                              data-current-assignee-id={ticket.assignedTo?._id || ''}
+                                            >
+                                              <i className="ti ti-user-check me-2" />
+                                              {ticket.assignedTo?._id ? 'Reassign' : 'Assign'}
+                                            </button>
+                                          </li>
+                                        )}
+                                      </ul>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="card">
+                      <div className="card-body text-center py-5">
+                        <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
+                        <h5 className="text-muted">No tickets found</h5>
+                        <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
               {filteredTickets.length > 10 && (
               <div className="text-center mb-4">
                 <Link to="#" className="btn btn-primary">
@@ -1514,15 +1927,17 @@ const Tickets = () => {
               <div className="card">
                 <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                   <h4>Ticket Categories</h4>
-                  <Link
-                    to="#"
-                    data-bs-toggle="modal"
-                    data-bs-target="#add_category"
-                    className="btn btn-primary d-flex align-items-center"
-                  >
-                    <i className="ti ti-circle-plus me-2" />
-                    Add
-                  </Link>
+                  {role === 'superadmin' && (
+                    <Link
+                      to="#"
+                      data-bs-toggle="modal"
+                      data-bs-target="#add_category"
+                      className="btn btn-primary d-flex align-items-center"
+                    >
+                      <i className="ti ti-circle-plus me-2" />
+                      Add
+                    </Link>
+                  )}
                 </div>
                 <div className="card-body p-0">
                   {loadingCategories ? (
@@ -1607,6 +2022,8 @@ const Tickets = () => {
       {/* /Page Wrapper */}
 
       <TicketListModal />
+      <EditTicketModal onTicketUpdated={fetchTicketsList} />
+      <AssignTicketModal onTicketAssigned={fetchTicketsList} />
     </>
   );
 };

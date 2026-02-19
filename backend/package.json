@@ -57,6 +57,7 @@
     "seed": "node seed/run-seed.js",
     "seed:pages": "node seed/run-seed.js",
     "seed:full": "node seed/run-full-seed.js",
+    "seed:categories": "node seed/ticketCategories.seed.js amc_user_001",
     "migrate:rbac": "node seed/migrate-rbac-refs.js",
     "sync:pages": "node seed/syncPagesWithAllCollections.js",
     "test:pages": "node seed/test-pages-api.js",

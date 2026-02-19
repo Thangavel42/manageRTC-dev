@@ -76,6 +76,17 @@ const TrainingList = () => {
     const [empPopupList, setEmpPopupList] = useState<EmpLite[]>([]);
     const [empPopupQuery, setEmpPopupQuery] = useState("");
 
+    // Validation errors for Add Training form
+    const [addFormErrors, setAddFormErrors] = useState<{
+      trainingType?: string;
+      trainer?: string;
+      employee?: string;
+      startDate?: string;
+      endDate?: string;
+      desc?: string;
+      status?: string;
+    }>({});
+
     const [editForm, setEditForm] = useState({
       trainingType: "",
       trainer: "",
@@ -139,6 +150,7 @@ const TrainingList = () => {
         cost: "",
         status: "Active",
       });
+      setAddFormErrors({});
     };
 
     const resetEditForm = () => {
@@ -365,16 +377,71 @@ const TrainingList = () => {
       return `${get('day')} ${get('month')} ${get('year')}`;
     };
 
+    // Validate Add Training form
+    const validateAddForm = () => {
+      const errors: typeof addFormErrors = {};
+
+      if (!addForm.trainingType || !addForm.trainingType.trim()) {
+        errors.trainingType = "Training type is required";
+      }
+
+      if (!addForm.trainer || !addForm.trainer.trim()) {
+        errors.trainer = "Trainer is required";
+      }
+
+      if (!addForm.employee || addForm.employee.length === 0) {
+        errors.employee = "At least one employee is required";
+      }
+
+      if (!addForm.startDate || !addForm.startDate.trim()) {
+        errors.startDate = "Start date is required";
+      } else if (!/^\d{2}-\d{2}-\d{4}$/.test(addForm.startDate)) {
+        errors.startDate = "Invalid date format. Use DD-MM-YYYY";
+      }
+
+      if (!addForm.endDate || !addForm.endDate.trim()) {
+        errors.endDate = "End date is required";
+      } else if (!/^\d{2}-\d{2}-\d{4}$/.test(addForm.endDate)) {
+        errors.endDate = "Invalid date format. Use DD-MM-YYYY";
+      } else if (addForm.startDate && addForm.endDate) {
+        // Check if end date is before start date
+        const startIso = toIsoFromDDMMYYYY(addForm.startDate);
+        const endIso = toIsoFromDDMMYYYY(addForm.endDate);
+        if (startIso && endIso && new Date(endIso) < new Date(startIso)) {
+          errors.endDate = "End date must be after start date";
+        }
+      }
+
+      if (!addForm.desc || !addForm.desc.trim()) {
+        errors.desc = "Description is required";
+      }
+
+      if (!addForm.status || !addForm.status.trim()) {
+        errors.status = "Status is required";
+      }
+
+      setAddFormErrors(errors);
+      return Object.keys(errors).length === 0;
+    };
+
+    // Clear individual field error
+    const clearAddFormError = (fieldName: string) => {
+      if (addFormErrors[fieldName as keyof typeof addFormErrors]) {
+        setAddFormErrors({
+          ...addFormErrors,
+          [fieldName]: undefined
+        });
+      }
+    };
 
     const handleAddSave = () => {
         if (!socket) return;
 
-        // basic validation
-        if (!addForm.trainingType || !addForm.trainer || !addForm.employee || !addForm.startDate || !addForm.endDate || !addForm.desc || !addForm.cost || !addForm.status) {
-          console.warn("⚠️ Validation failed: Missing required fields");
-          // toast.warn("Please fill required fields");
+        // Validate form
+        if (!validateAddForm()) {
+          console.warn("⚠️ Validation failed: Please check all required fields");
           return;
-      }
+        }
 
       console.log("📤 Submitting training data:", addForm);
 
@@ -843,33 +910,49 @@ const TrainingList = () => {
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              Training Type
+                              Training Type <span className="text-danger">*</span>
                             </label>
                             <CommonSelect
                               className="select"
                               defaultValue={toOption(addForm.trainingType)}
-                              onChange={(opt: OptionTypes | null) =>setAddForm({ ...addForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              onChange={(opt: OptionTypes | null) => {
+                                setAddForm({ ...addForm, trainingType: typeof opt === "string" ? opt : (opt?.value ?? "") });
+                                clearAddFormError('trainingType');
+                              }}
                               options={trainingTypeOptions}
                             />
+                            {addFormErrors.trainingType && (
+                              <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                                {addFormErrors.trainingType}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              Trainer
+                              Trainer <span className="text-danger">*</span>
                             </label>
                             <CommonSelect
                               className="select"
                               defaultValue={toOptionTrainer(addForm.trainer)}
-                              onChange={(opt: OptionTrainer | null) =>setAddForm({ ...addForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") })}
+                              onChange={(opt: OptionTrainer | null) => {
+                                setAddForm({ ...addForm, trainer: typeof opt === "string" ? opt : (opt?.value ?? "") });
+                                clearAddFormError('trainer');
+                              }}
                               options={trainingTrainerOptions}
                             />
+                            {addFormErrors.trainer && (
+                              <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                                {addFormErrors.trainer}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              Employee
+                              Employee <span className="text-danger">*</span>
                             </label>
                             <Select
                               className="select"
@@ -880,17 +963,25 @@ const TrainingList = () => {
                               listHeight={256}
                               defaultValue={addForm.employee} // string[]
                               options={trainingEmployeeOptions} // OptionEmployee[]
-                              onChange={(vals: string[]) => setAddForm({ ...addForm, employee: vals })}
+                              onChange={(vals: string[]) => {
+                                setAddForm({ ...addForm, employee: vals });
+                                clearAddFormError('employee');
+                              }}
                               getPopupContainer={getModalContainerEmp}  // render dropdown inside modal
                               dropdownStyle={{ zIndex: 2000 }}
                               placeholder="Select employees"
                             />
+                            {addFormErrors.employee && (
+                              <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                                {addFormErrors.employee}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              Training Cost
+                              Training Cost <span className="text-muted">(Optional)</span>
                             </label>
                             <textarea
                               className="form-control"
@@ -901,7 +992,7 @@ const TrainingList = () => {
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              Start Date
+                              Start Date <span className="text-danger">*</span>
                             </label>
                             <div className="input-icon-end position-relative">
                               <DatePicker
@@ -911,18 +1002,27 @@ const TrainingList = () => {
                                   type: "mask",
                                 }}
                                 getPopupContainer={getModalContainer}
-                                placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, startDate: dateString as string })}
+                                placeholder="DD-MM-YYYY"
+                                onChange={(_, dateString) => {
+                                  setAddForm({ ...addForm, startDate: dateString as string });
+                                  clearAddFormError('startDate');
+                                }}
                               />
                               <span className="input-icon-addon">
                                 <i className="ti ti-calendar text-gray-7" />
                               </span>
                             </div>
+                            {addFormErrors.startDate && (
+                              <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                                {addFormErrors.startDate}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-0">
                             <label className="form-label">
-                              End Date
+                              End Date <span className="text-danger">*</span>
                             </label>
                             <div className="input-icon-end position-relative">
                               <DatePicker
@@ -932,37 +1032,65 @@ const TrainingList = () => {
                                   type: "mask",
                                 }}
                                 getPopupContainer={getModalContainer}
-                                placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, endDate: dateString as string })}
+                                placeholder="DD-MM-YYYY"
+                                onChange={(_, dateString) => {
+                                  setAddForm({ ...addForm, endDate: dateString as string });
+                                  clearAddFormError('endDate');
+                                }}
                               />
                               <span className="input-icon-addon">
                                 <i className="ti ti-calendar text-gray-7" />
                               </span>
                             </div>
+                            {addFormErrors.endDate && (
+                              <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                                {addFormErrors.endDate}
+                              </div>
+                            )}
                           </div>
                       </div>
 
                     <div className="col-md-12">
                       <div className="mb-3">
                         <label className="form-label">
-                          Description
+                          Description <span className="text-danger">*</span>
                         </label>
                         <textarea
                           className="form-control"
-                          rows={2} value={addForm.desc} onChange ={(e) => setAddForm({ ...addForm, desc: e.target.value})}
+                          rows={2}
+                          value={addForm.desc}
+                          onChange={(e) => {
+                            setAddForm({ ...addForm, desc: e.target.value});
+                            clearAddFormError('desc');
+                          }}
                         />
+                        {addFormErrors.desc && (
+                          <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                            {addFormErrors.desc}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Status</label>
+                        <label className="form-label">Status <span className="text-danger">*</span></label>
                         <CommonSelect
                           className="select"
                           options={[
                             { value: "Active", label: "Active" },
                             { value: "Inactive", label: "Inactive" },
                             ]}
-                          defaultValue={addForm.status} onChange={(opt: { value: string } | null) => setAddForm({ ...addForm, status: opt?.value ?? "Active" })}
+                          defaultValue={addForm.status}
+                          onChange={(opt: { value: string } | null) => {
+                            setAddForm({ ...addForm, status: opt?.value ?? "Active" });
+                            clearAddFormError('status');
+                          }}
                         />
+                        {addFormErrors.status && (
+                          <div className="text-danger mt-1" style={{ fontSize: '12px' }}>
+                            {addFormErrors.status}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
