@@ -12,10 +12,10 @@ import {
     buildValidationError,
     ConflictError
 } from '../../middleware/errorHandler.js';
+import auditLogService from '../../services/audit/auditLog.service.js';
 import customLeavePolicyService from '../../services/leaves/customLeavePolicy.service.js';
 import leaveAttendanceSyncService from '../../services/leaves/leaveAttendanceSync.service.js';
 import leaveLedgerService from '../../services/leaves/leaveLedger.service.js';
-import auditLogService from '../../services/audit/auditLog.service.js';
 import {
     buildPagination,
     extractUser,
@@ -2411,13 +2411,13 @@ export const getLeaveStats = asyncHandler(async (req, res) => {
   const plannedTypeIds = new Set(
     leaveTypesList
       .filter(lt => ['casual', 'earned', 'maternity', 'paternity', 'bereavement', 'special'].includes(lt.code.toLowerCase()))
-      .map(lt => l._id.toString())
+      .map(lt => lt._id.toString())
   );
 
   const unplannedTypeIds = new Set(
     leaveTypesList
       .filter(lt => ['sick', 'compensatory', 'unpaid'].includes(lt.code.toLowerCase()))
-      .map(lt => l._id.toString())
+      .map(lt => lt._id.toString())
   );
 
   // Count planned and unplanned leaves for today using leaveTypeId

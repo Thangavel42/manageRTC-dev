@@ -150,6 +150,7 @@ export interface TodoItem {
 
 export interface ProjectData {
   id: string;
+  projectId?: string;
   name: string;
   hours: number;
   totalHours: number;

@@ -619,6 +619,17 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     if (!formData.dateOfBirth) errors.birthday = "Date of birth is required";
     if (!formData.personal?.nationality?.trim()) errors.nationality = "Nationality is required";
 
+    // Address fields validation
+    if (!formData.address?.street?.trim()) errors.street = "Street address is required";
+    if (!formData.address?.city?.trim()) errors.city = "City is required";
+    if (!formData.address?.country?.trim()) errors.country = "Country is required";
+    if (!formData.address?.state?.trim()) errors.state = "State is required";
+    if (!formData.address?.postalCode?.trim()) {
+      errors.postalCode = "Postal code is required";
+    } else if (!/^[a-zA-Z0-9\s-]{3,10}$/.test(formData.address.postalCode.trim())) {
+      errors.postalCode = "Please enter a valid postal code";
+    }
+
     // Passport expiry date is required only if passport number is filled
     if (formData.personal?.passport?.number?.trim() && !formData.personal?.passport?.expiryDate) {
       errors.passportExpiryDate = "Passport expiry date is required when passport number is provided";
@@ -698,6 +709,19 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
       // Remove fields not allowed in backend validation schema
       // Note: shiftId and batchId are now saved with the employee
+
+      // Clean personal object to only include fields managed in this modal
+      // This prevents validation errors for fields not present in the UI
+      if (payload.personal) {
+        payload.personal = {
+          nationality: payload.personal.nationality || "",
+          passport: {
+            number: payload.personal.passport?.number || "",
+            expiryDate: payload.personal.passport?.expiryDate || null,
+            country: payload.personal.passport?.country || ""
+          }
+        };
+      }
 
       // Handle Self Reporting - set special flag for backend to handle
       // The backend will set reportingTo to the employee's own _id after creation
@@ -1053,46 +1077,50 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Address</label>
                       <div className="mb-3">
-                        <label className="form-label">Street</label>
+                        <label className="form-label">Street <span className="text-danger"> *</span></label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${fieldErrors.street ? "is-invalid" : ""}`}
                           placeholder="Enter street address"
                           name="street"
                           value={formData.address?.street || ""}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData((prev) => ({
                               ...prev,
                               address: { ...prev.address, street: e.target.value },
-                            }))
-                          }
+                            }));
+                            clearFieldError("street");
+                          }}
                         />
+                        {fieldErrors.street && <div className="invalid-feedback d-block">{fieldErrors.street}</div>}
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">City</label>
+                            <label className="form-label">City <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.city ? "is-invalid" : ""}`}
                               placeholder="Enter city"
                               name="city"
                               value={formData.address?.city || ""}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setFormData((prev) => ({
                                   ...prev,
                                   address: { ...prev.address, city: e.target.value },
-                                }))
-                              }
+                                }));
+                                clearFieldError("city");
+                              }}
                             />
+                            {fieldErrors.city && <div className="invalid-feedback d-block">{fieldErrors.city}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Country</label>
+                            <label className="form-label">Country <span className="text-danger"> *</span></label>
                             <div className="input-icon-end position-relative">
                               <select
-                                className="form-select"
+                                className={`form-select ${fieldErrors.country ? "is-invalid" : ""}`}
                                 value={selectedCountryId || ""}
                                 onChange={(e) => {
                                   const countryId = e.target.value ? parseInt(e.target.value) : null;
@@ -1102,6 +1130,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                     ...prev,
                                     address: { ...prev.address, country: selectedCountry?.name || "", state: "" },
                                   }));
+                                  clearFieldError("country");
                                   // Load states for selected country
                                   if (countryId) {
                                     GetState(countryId).then((result: any) => {
@@ -1123,24 +1152,26 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                 <i className="ti ti-chevron-down text-gray-7" />
                               </span>
                             </div>
+                            {fieldErrors.country && <div className="invalid-feedback d-block">{fieldErrors.country}</div>}
                           </div>
                         </div>
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">State</label>
+                            <label className="form-label">State <span className="text-danger"> *</span></label>
                             <div className="input-icon-end position-relative">
                               <select
-                                className="form-select"
+                                className={`form-select ${fieldErrors.state ? "is-invalid" : ""}`}
                                 value={formData.address?.state || ""}
                                 disabled={!selectedCountryId}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData((prev) => ({
                                     ...prev,
                                     address: { ...prev.address, state: e.target.value },
-                                  }))
-                                }
+                                  }));
+                                  clearFieldError("state");
+                                }}
                               >
                                 <option value="">Select State</option>
                                 {states.map((state) => (
@@ -1153,24 +1184,27 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                 <i className="ti ti-chevron-down text-gray-7" />
                               </span>
                             </div>
+                            {fieldErrors.state && <div className="invalid-feedback d-block">{fieldErrors.state}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Postal Code</label>
+                            <label className="form-label">Postal Code <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.postalCode ? "is-invalid" : ""}`}
                               placeholder="Enter postal code"
                               name="postalCode"
                               value={formData.address?.postalCode || ""}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setFormData((prev) => ({
                                   ...prev,
                                   address: { ...prev.address, postalCode: e.target.value },
-                                }))
-                              }
+                                }));
+                                clearFieldError("postalCode");
+                              }}
                             />
+                            {fieldErrors.postalCode && <div className="invalid-feedback d-block">{fieldErrors.postalCode}</div>}
                           </div>
                         </div>
                       </div>

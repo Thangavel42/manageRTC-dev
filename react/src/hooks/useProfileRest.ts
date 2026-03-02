@@ -10,6 +10,7 @@ export interface Profile {
   firstName: string;
   lastName: string;
   email: string;
+  phoneCode?: string;
   phone?: string;
   dateOfBirth?: string | null;
   gender?: string;

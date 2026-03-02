@@ -15,8 +15,8 @@ import { all_routes } from "../../router/all_routes";
 const AttendanceEmployee = () => {
   // Role-based access control
   const { role } = useAuth();
-  // Show switch only if user has access to both attendance pages
-  const canAccessAdminAttendance = ['admin', 'hr', 'superadmin'].includes(role);
+  // Show switch only if user has access to both attendance pages (hr and superadmin have access to both)
+  const canAccessAdminAttendance = ['hr', 'superadmin'].includes(role);
 
   // API Hook
   const {

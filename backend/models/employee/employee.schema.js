@@ -230,6 +230,11 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  phoneCode: {
+    type: String,
+    trim: true,
+    default: '+1'
+  },
   dateOfBirth: {
     type: Date
   },

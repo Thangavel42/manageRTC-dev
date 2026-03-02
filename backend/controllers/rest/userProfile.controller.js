@@ -10,15 +10,15 @@ import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
 import { getsuperadminCollections, getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildForbiddenError,
-  buildNotFoundError,
-  buildValidationError,
+    asyncHandler,
+    buildForbiddenError,
+    buildNotFoundError,
+    buildValidationError,
 } from '../../middleware/errorHandler.js';
 import otpService from '../../services/otp/otp.service.js';
 import {
-  extractUser,
-  sendSuccess
+    extractUser,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import { getSystemDefaultAvatarUrl, isValidAvatar } from '../../utils/avatarUtils.js';
 import { sendPasswordChangedEmail } from '../../utils/emailer.js';
@@ -311,6 +311,8 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       email: employee.email || employee.contact?.email || user.email,
       // Use canonical phone field (with fallback to contact for backward compatibility)
       phone: employee.phone || employee.contact?.phone || null,
+      // Phone country code
+      phoneCode: employee.phoneCode || employee.contact?.phoneCode || null,
       designation: employee.designationTitle || null,
       department: employee.departmentName || null,
       // For header profile image - validated avatar URL

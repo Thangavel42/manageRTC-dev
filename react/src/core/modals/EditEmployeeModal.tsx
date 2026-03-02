@@ -650,6 +650,17 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     if (!editingEmployee.dateOfBirth) errors.birthday = "Date of birth is required";
     if (!editingEmployee.personal?.nationality?.trim()) errors.nationality = "Nationality is required";
 
+    // Address fields validation
+    if (!editingEmployee.address?.street?.trim()) errors.street = "Street address is required";
+    if (!editingEmployee.address?.city?.trim()) errors.city = "City is required";
+    if (!editingEmployee.address?.country?.trim()) errors.country = "Country is required";
+    if (!editingEmployee.address?.state?.trim()) errors.state = "State is required";
+    if (!editingEmployee.address?.postalCode?.trim()) {
+      errors.postalCode = "Postal code is required";
+    } else if (!/^[a-zA-Z0-9\s-]{3,10}$/.test(editingEmployee.address.postalCode.trim())) {
+      errors.postalCode = "Please enter a valid postal code";
+    }
+
     // Passport expiry date is required only if passport number is filled
     if (editingEmployee.personal?.passport?.number?.trim() && !editingEmployee.personal?.passport?.expiryDate) {
       errors.passportExpiryDate = "Passport expiry date is required when passport number is provided";
@@ -700,6 +711,40 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       // Remove populated objects that shouldn't be sent back to backend
       delete payload.department;
       delete payload.designation;
+
+      // Remove fields that are not editable in this modal but may exist in the employee record
+      // These fields are managed separately (e.g., in Employee Details page)
+      delete payload.bankDetails;
+      delete payload.bank;
+      delete payload.emergencyContact;
+      delete payload.emergencyContacts;
+      delete payload.family;
+      delete payload.education;
+      delete payload.experience;
+      delete payload.assets;
+      delete payload.statutory;
+
+      // Remove root-level personal fields that backend returns flattened
+      // These should only be sent inside the personal object
+      delete payload.nationality;
+      delete payload.religion;
+      delete payload.maritalStatus;
+      delete payload.employmentOfSpouse;
+      delete payload.noOfChildren;
+      delete payload.passport;
+
+      // Clean personal object to only include fields managed in this modal
+      // This prevents validation errors for fields not present in the UI
+      if (payload.personal) {
+        payload.personal = {
+          nationality: payload.personal.nationality || "",
+          passport: {
+            number: payload.personal.passport?.number || "",
+            expiryDate: payload.personal.passport?.expiryDate || null,
+            country: payload.personal.passport?.country || ""
+          }
+        };
+      }
 
       // Handle Self Reporting - set reportingTo to the employee's own _id
       if (payload.reportingTo === 'SELF_REPORTING') {
@@ -1038,10 +1083,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Address</label>
                       <div className="mb-3">
-                        <label className="form-label">Street</label>
+                        <label className="form-label">Street <span className="text-danger"> *</span></label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${fieldErrors.street ? "is-invalid" : ""}`}
                           placeholder="Enter street address"
                           value={editingEmployee?.address?.street || ""}
                           onChange={(e) => {
@@ -1054,16 +1099,18 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                 },
                               } : prev
                             );
+                            clearFieldError("street");
                           }}
                         />
+                        {fieldErrors.street && <div className="invalid-feedback d-block">{fieldErrors.street}</div>}
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">City</label>
+                            <label className="form-label">City <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.city ? "is-invalid" : ""}`}
                               placeholder="Enter city"
                               value={editingEmployee?.address?.city || ""}
                               onChange={(e) => {
@@ -1076,15 +1123,17 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                     },
                                   } : prev
                                 );
+                                clearFieldError("city");
                               }}
                             />
+                            {fieldErrors.city && <div className="invalid-feedback d-block">{fieldErrors.city}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Country</label>
+                            <label className="form-label">Country <span className="text-danger"> *</span></label>
                             <select
-                              className="form-control"
+                              className={`form-control ${fieldErrors.country ? "is-invalid" : ""}`}
                               value={selectedCountryId || ""}
                               onChange={(e) => {
                                 const countryId = e.target.value ? parseInt(e.target.value) : null;
@@ -1100,6 +1149,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                     },
                                   } : prev
                                 );
+                                clearFieldError("country");
                                 // Load states for selected country
                                 if (countryId) {
                                   GetState(countryId).then((result: any) => {
@@ -1117,15 +1167,16 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                 </option>
                               ))}
                             </select>
+                            {fieldErrors.country && <div className="invalid-feedback d-block">{fieldErrors.country}</div>}
                           </div>
                         </div>
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">State</label>
+                            <label className="form-label">State <span className="text-danger"> *</span></label>
                             <select
-                              className="form-control"
+                              className={`form-control ${fieldErrors.state ? "is-invalid" : ""}`}
                               value={editingEmployee?.address?.state || ""}
                               onChange={(e) => {
                                 setEditingEmployee((prev) =>
@@ -1137,6 +1188,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                     },
                                   } : prev
                                 );
+                                clearFieldError("state");
                               }}
                               disabled={!selectedCountryId}
                             >
@@ -1147,14 +1199,15 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                 </option>
                               ))}
                             </select>
+                            {fieldErrors.state && <div className="invalid-feedback d-block">{fieldErrors.state}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Postal Code</label>
+                            <label className="form-label">Postal Code <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.postalCode ? "is-invalid" : ""}`}
                               placeholder="Enter postal code"
                               value={editingEmployee?.address?.postalCode || ""}
                               onChange={(e) => {
@@ -1167,8 +1220,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                                     },
                                   } : prev
                                 );
+                                clearFieldError("postalCode");
                               }}
                             />
+                            {fieldErrors.postalCode && <div className="invalid-feedback d-block">{fieldErrors.postalCode}</div>}
                           </div>
                         </div>
                       </div>

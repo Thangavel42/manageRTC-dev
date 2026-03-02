@@ -1133,7 +1133,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const { permissionsData, ...restEmployeeData } = employeeData;
 
   // Normalize data - use canonical schema structure (root level fields only)
-  // Canonical schema: email, phone, dateOfBirth, gender, address at root level
+  // Canonical schema: email, phone, phoneCode, dateOfBirth, gender, address at root level
   // personal object contains: passport, nationality, religion, maritalStatus, employmentOfSpouse, noOfChildren only
   const normalizedData = {
     ...restEmployeeData,
@@ -1142,6 +1142,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
     email: restEmployeeData.email ?? restEmployeeData.contact?.email,
     // Extract phone from root level or contact object (for backward compatibility)
     phone: restEmployeeData.phone ?? restEmployeeData.contact?.phone,
+    // Extract phoneCode from request (country code for phone)
+    phoneCode: restEmployeeData.phoneCode ?? restEmployeeData.contact?.phoneCode ?? '+1',
     // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
     dateOfBirth: restEmployeeData.dateOfBirth ?? restEmployeeData.personal?.birthday,
     // Extract gender from root level or personal.gender (for backward compatibility)
@@ -1550,6 +1552,11 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   // Extract phone from root level or contact object (for backward compatibility)
   if (updateData.phone || updateData.contact?.phone) {
     normalizedData.phone = updateData.phone ?? updateData.contact?.phone;
+  }
+
+  // Extract phoneCode from root level or contact object (for backward compatibility)
+  if (updateData.phoneCode !== undefined || updateData.contact?.phoneCode !== undefined) {
+    normalizedData.phoneCode = updateData.phoneCode ?? updateData.contact?.phoneCode;
   }
 
   // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)

@@ -297,6 +297,7 @@ export interface Employee {
   avatar: string;
   yearsOfExperience?: number;
   email: string;
+  phoneCode?: string;
   phone: string;
   gender?: string;
   dateOfBirth?: string;
@@ -2735,7 +2736,7 @@ const EmployeeDetails = () => {
                         <i className="ti ti-phone me-2" />
                         Phone
                       </span>
-                      <p className="text-dark">{employee?.phone || '-'}</p>
+                      <p className="text-dark">{employee?.phone ? `${employee?.phoneCode || ''} ${employee?.phone}`.trim() : '-'}</p>
                     </div>
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <span className="d-inline-flex align-items-center">

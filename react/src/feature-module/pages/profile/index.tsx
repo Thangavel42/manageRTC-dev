@@ -544,7 +544,7 @@ const BasicInfoSection: React.FC<{
                 {profile.phone && (
                   <span className="text-muted">
                     <i className="ti ti-phone me-1" />
-                    {profile.phone}
+                    {profile.phoneCode ? `${profile.phoneCode} ${profile.phone}` : profile.phone}
                   </span>
                 )}
               </div>
