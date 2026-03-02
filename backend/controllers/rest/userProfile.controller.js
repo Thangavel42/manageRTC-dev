@@ -5,9 +5,9 @@
  * - All roles: Full profile with address, emergency contact, social links, skills, bio
  */
 
+import { clerkClient } from '@clerk/clerk-sdk-node';
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
-import { clerkClient } from '@clerk/clerk-sdk-node';
 import { getsuperadminCollections, getTenantCollections } from '../../config/db.js';
 import {
   asyncHandler,
@@ -15,14 +15,14 @@ import {
   buildNotFoundError,
   buildValidationError,
 } from '../../middleware/errorHandler.js';
+import otpService from '../../services/otp/otp.service.js';
 import {
   extractUser,
   sendSuccess
 } from '../../utils/apiResponse.js';
 import { getSystemDefaultAvatarUrl, isValidAvatar } from '../../utils/avatarUtils.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { sendPasswordChangedEmail } from '../../utils/emailer.js';
-import otpService from '../../services/otp/otp.service.js';
+import { devError, devLog } from '../../utils/logger.js';
 
 /**
  * Helper function to get valid avatar URL with proper validation
@@ -134,25 +134,70 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       {
         $addFields: {
+          // Handle both departmentId (string) and department (ObjectId) field names
           departmentObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-              then: { $toObjectId: '$departmentId' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: departmentId is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$departmentId', null] },
+                    { $ne: ['$departmentId', ''] },
+                    { $eq: [{ $type: '$departmentId' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$departmentId' }
+                },
+                // Case 2: department is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                  then: '$department'
+                }
+              ],
+              default: null
             }
           },
+          // Handle both designationId (string) and designation (ObjectId) field names
           designationObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
-              then: { $toObjectId: '$designationId' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: designationId is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$designationId', null] },
+                    { $ne: ['$designationId', ''] },
+                    { $eq: [{ $type: '$designationId' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$designationId' }
+                },
+                // Case 2: designation is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$designation' }, 'objectId'] },
+                  then: '$designation'
+                }
+              ],
+              default: null
             }
           },
+          // Handle reportingTo as both string and ObjectId
           reportingToObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
-              then: { $toObjectId: '$reportingTo' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: reportingTo is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$reportingTo', null] },
+                    { $ne: ['$reportingTo', ''] },
+                    { $eq: [{ $type: '$reportingTo' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$reportingTo' }
+                },
+                // Case 2: reportingTo is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$reportingTo' }, 'objectId'] },
+                  then: '$reportingTo'
+                }
+              ],
+              default: null
             }
           }
         }
@@ -201,8 +246,20 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       {
         $addFields: {
-          departmentName: { $arrayElemAt: ['$departmentInfo.department', 0] },
-          designationTitle: { $arrayElemAt: ['$designationInfo.title', 0] },
+          departmentName: {
+            $ifNull: [
+              { $arrayElemAt: ['$departmentInfo.department', 0] },
+              { $arrayElemAt: ['$departmentInfo.name', 0] }
+            ]
+          },
+          // Try title first, then name, then designation field for backwards compatibility
+          designationTitle: {
+            $ifNull: [
+              { $arrayElemAt: ['$designationInfo.title', 0] },
+              { $arrayElemAt: ['$designationInfo.name', 0] },
+              { $arrayElemAt: ['$designationInfo.designation', 0] }
+            ]
+          },
           reportingTo: { $arrayElemAt: ['$reportingToInfo', 0] }
         }
       },
@@ -224,6 +281,19 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
     if (!employee) {
       throw buildNotFoundError('Employee profile');
     }
+
+    // Debug log to check fetched employee data
+    devLog('[User Profile Controller] Employee data fetched:', {
+      employeeId: employee.employeeId,
+      designationId: employee.designationId,
+      designation: employee.designation,
+      designationObjId: employee.designationObjId,
+      designationTitle: employee.designationTitle,
+      departmentId: employee.departmentId,
+      department: employee.department,
+      departmentName: employee.departmentName,
+      reportingTo: employee.reportingTo
+    });
 
     // Get valid avatar URL using helper function
     const validAvatarUrl = getValidAvatarUrl(employee);
@@ -334,14 +404,14 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
         accountNumber: employee.bankDetails.accountNumber || '',
         ifscCode: employee.bankDetails.ifscCode || '',
         branch: employee.bankDetails.branch || '',
-        accountType: employee.bankDetails.accountType || 'Savings'
+        accountType: employee.bankDetails.accountType || 'Savings Account'
       } : {
         accountHolderName: '',
         bankName: '',
         accountNumber: '',
         ifscCode: '',
         branch: '',
-        accountType: 'Savings'
+        accountType: 'Savings Account'
       },
       createdAt: employee.createdAt || new Date(),
       updatedAt: employee.updatedAt || new Date()
@@ -813,13 +883,13 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
         accountNumber: updatedEmployee.bankDetails.accountNumber || '',
         ifscCode: updatedEmployee.bankDetails.ifscCode || '',
         branch: updatedEmployee.bankDetails.branch || '',
-        accountType: updatedEmployee.bankDetails.accountType || 'Savings'
+        accountType: updatedEmployee.bankDetails.accountType || 'Savings Account'
       } : {
         bankName: '',
         accountNumber: '',
         ifscCode: '',
         branch: '',
-        accountType: 'Savings'
+        accountType: 'Savings Account'
       },
       createdAt: updatedEmployee.createdAt || new Date(),
       updatedAt: updatedEmployee.updatedAt || new Date()
@@ -1245,20 +1315,28 @@ export const getWorkInfo = asyncHandler(async (req, res) => {
 
   const collections = getTenantCollections(user.companyId);
 
-  // Find employee
+  // Find employee - get both field naming conventions
   const employee = await collections.employees.findOne(
     { clerkUserId: user.userId, isDeleted: { $ne: true } },
-    { projection: { _id: 1, employeeId: 1, shiftId: 1, batchId: 1, employmentType: 1, timezone: 1 } }
+    { projection: { _id: 1, employeeId: 1, shiftId: 1, shift: 1, batchId: 1, batch: 1, employmentType: 1, timezone: 1 } }
   );
 
   if (!employee) {
     throw buildNotFoundError('Employee', user.userId);
   }
 
+  // Handle both field naming conventions (shiftId/shift, batchId/batch)
+  const employeeShiftId = employee.shiftId || employee.shift;
+  const employeeBatchId = employee.batchId || employee.batch;
+
   // Fetch shift details if assigned
   let shiftDetails = null;
-  if (employee.shiftId) {
-    const shift = await collections.shifts.findOne({ _id: employee.shiftId });
+  if (employeeShiftId) {
+    // Convert shiftId to ObjectId if it's a string
+    const shiftObjId = typeof employeeShiftId === 'string' && ObjectId.isValid(employeeShiftId)
+      ? new ObjectId(employeeShiftId)
+      : employeeShiftId;
+    const shift = await collections.shifts.findOne({ _id: shiftObjId });
     if (shift) {
       shiftDetails = {
         _id: shift._id.toString(),
@@ -1276,13 +1354,21 @@ export const getWorkInfo = asyncHandler(async (req, res) => {
 
   // Fetch batch details if assigned
   let batchDetails = null;
-  if (employee.batchId) {
-    const batch = await collections.batches.findOne({ _id: employee.batchId });
+  if (employeeBatchId) {
+    // Convert batchId to ObjectId if it's a string
+    const batchObjId = typeof employeeBatchId === 'string' && ObjectId.isValid(employeeBatchId)
+      ? new ObjectId(employeeBatchId)
+      : employeeBatchId;
+    const batch = await collections.batches.findOne({ _id: batchObjId });
     if (batch) {
       // Fetch batch's shift for timing
       let batchShift = null;
       if (batch.shiftId) {
-        const shift = await collections.shifts.findOne({ _id: batch.shiftId });
+        // Convert batch's shiftId to ObjectId if it's a string
+        const batchShiftObjId = typeof batch.shiftId === 'string' && ObjectId.isValid(batch.shiftId)
+          ? new ObjectId(batch.shiftId)
+          : batch.shiftId;
+        const shift = await collections.shifts.findOne({ _id: batchShiftObjId });
         if (shift) {
           batchShift = {
             _id: shift._id.toString(),
@@ -1484,15 +1570,19 @@ export const getCareerHistory = asyncHandler(async (req, res) => {
 
   const collections = getTenantCollections(user.companyId);
 
-  // Find employee
+  // Find employee - get both field naming conventions
   const employee = await collections.employees.findOne(
     { clerkUserId: user.userId, isDeleted: { $ne: true } },
-    { projection: { _id: 1, employeeId: 1, departmentId: 1, designationId: 1 } }
+    { projection: { _id: 1, employeeId: 1, departmentId: 1, designationId: 1, department: 1, designation: 1 } }
   );
 
   if (!employee) {
     throw buildNotFoundError('Employee', user.userId);
   }
+
+  // Handle both field naming conventions for department and designation
+  const employeeDepartmentId = employee.departmentId || (employee.department ? employee.department.toString() : null);
+  const employeeDesignationId = employee.designationId || (employee.designation ? employee.designation.toString() : null);
 
   // Fetch promotions
   const promotions = await collections.promotions
@@ -1520,8 +1610,8 @@ export const getCareerHistory = asyncHandler(async (req, res) => {
       { applyToAll: true },
       {
         $and: [
-          { 'assignTo.departmentId': employee.departmentId },
-          { 'assignTo.designationIds': employee.designationId },
+          { 'assignTo.departmentId': employeeDepartmentId },
+          { 'assignTo.designationIds': employeeDesignationId },
         ],
       },
     ],

@@ -389,7 +389,7 @@ const employeeSchema = new mongoose.Schema({
     branch: String,
     accountType: {
       type: String,
-      enum: ['Savings', 'Current']
+      enum: ['Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current']
     }
   },
 

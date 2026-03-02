@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { get, post, put, handleApiError } from '../services/api';
 import { message } from 'antd';
+import { useCallback, useState } from 'react';
+import { get, handleApiError, post, put } from '../services/api';
 
 export interface Profile {
   _id: string;
@@ -84,7 +84,7 @@ export interface Profile {
     accountNumber?: string;
     ifscCode?: string;
     branch?: string;
-    accountType?: 'Savings' | 'Current';
+    accountType?: 'Savings Account' | 'Salary Account' | 'NRI Account';
   };
 
   // Contact information

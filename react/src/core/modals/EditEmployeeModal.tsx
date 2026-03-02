@@ -259,8 +259,14 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     return `${name}${id}${departmentText}`;
   };
 
+  // Special constant for self-reporting
+  const SELF_REPORTING = 'SELF_REPORTING';
+
   // Sync managers from employees (all active employees)
   useEffect(() => {
+    // Always include "Self Reporting" option
+    const selfReportingOption = { value: SELF_REPORTING, label: 'Self Reporting (Reports to themselves)' };
+
     if (employees && employees.length > 0) {
       const managersList = employees
         .filter((emp: any) => (emp.status || '').toLowerCase() === 'active')
@@ -268,7 +274,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
           value: emp._id,
           label: getEmployeeOptionLabel(emp),
         }));
-      setManagers([{ value: '', label: 'Select Reporting Manager' }, ...managersList]);
+      setManagers([{ value: '', label: 'Select Reporting Manager' }, selfReportingOption, ...managersList]);
+    } else {
+      // When no employees exist, only show Self Reporting option
+      setManagers([{ value: '', label: 'Select Reporting Manager' }, selfReportingOption]);
     }
   }, [employees, department]);
 
@@ -277,7 +286,9 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     if (allShifts || batches) {
       const directShifts = allShifts?.map((shift: any) => ({
         value: shift._id,
-        label: shift.name || shift.shiftName || shift.shiftId || 'Unnamed Shift',
+        label: shift.isDefault
+          ? `${shift.name || shift.shiftName || shift.shiftId || 'Unnamed Shift'} (Default)`
+          : (shift.name || shift.shiftName || shift.shiftId || 'Unnamed Shift'),
         type: 'shift' as const,
         data: shift
       })) || [];
@@ -633,6 +644,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     if (!editingEmployee.account?.role) errors.role = "Role is required";
     if (!editingEmployee.departmentId) errors.departmentId = "Department is required";
     if (!editingEmployee.designationId) errors.designationId = "Designation is required";
+    if (!editingEmployee.reportingTo) errors.reportingTo = "Reporting Manager is required";
     if (!editingEmployee.dateOfJoining) errors.dateOfJoining = "Date of joining is required";
     if (!editingEmployee.gender) errors.gender = "Gender is required";
     if (!editingEmployee.dateOfBirth) errors.birthday = "Date of birth is required";
@@ -689,9 +701,9 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       delete payload.department;
       delete payload.designation;
 
-      // Remove reportingTo if it's empty (optional field)
-      if (!payload.reportingTo || payload.reportingTo.trim() === '') {
-        delete payload.reportingTo;
+      // Handle Self Reporting - set reportingTo to the employee's own _id
+      if (payload.reportingTo === 'SELF_REPORTING') {
+        payload.reportingTo = editingEmployee._id;
       }
 
       // Ensure avatarUrl is valid or remove default
@@ -1354,19 +1366,22 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Reporting Manager <span className="text-muted">(Optional)</span></label>
+                      <label className="form-label">Reporting Manager <span className="text-danger">*</span></label>
                       <CommonSelect
-                        className="select"
+                        className={`select ${fieldErrors.reportingTo ? 'is-invalid' : ''}`}
                         options={managers}
-                        defaultValue={managers.find((opt) => opt.value === editingEmployee?.reportingTo)}
+                        defaultValue={managers.find((opt) => opt.value === editingEmployee?.reportingTo) ||
+                          (editingEmployee?.reportingTo === editingEmployee?._id ? managers.find((opt) => opt.value === 'SELF_REPORTING') : undefined)}
                         onChange={(option: any) => {
                           if (option) {
                             setEditingEmployee((prev) =>
                               prev ? { ...prev, reportingTo: option.value } : prev
                             );
+                            clearFieldError('reportingTo');
                           }
                         }}
                       />
+                      {fieldErrors.reportingTo && <div className="invalid-feedback d-block">{fieldErrors.reportingTo}</div>}
                     </div>
                   </div>
                   <div className="col-md-6">
