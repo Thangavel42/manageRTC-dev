@@ -5,6 +5,7 @@ react-org
 .claudes
 # Private deployment guides (contain secrets)
 /deployment_guide
+old_db
 # Build outputs
 dist/
 build/

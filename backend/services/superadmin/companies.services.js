@@ -57,6 +57,22 @@ const addCompany = async (data, user) => {
   try {
     const { companiesCollection } = getsuperadminCollections();
 
+    // Validate input data
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid request data: data object is required');
+    }
+
+    // Validate required fields
+    const requiredFields = ['name', 'email', 'domain', 'phone'];
+    const missingFields = requiredFields.filter(field => !data[field]);
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    console.log('[addCompany] Received data:', data);
+    console.log('[addCompany] plan_id:', data.plan_id);
+
     // Step 1: Prepare initial company document
     const newCompany = {
       ...data,
