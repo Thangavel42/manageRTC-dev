@@ -2147,11 +2147,6 @@ const useSidebarData = () => {
               submenuItems: [
                 { label: 'Admin Dashboard', link: routes.adminDashboard, roles: ['admin'] },
                 {
-                  label: 'Employee Dashboard',
-                  link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
-                },
-                {
                   label: 'Deals Dashboard',
                   link: routes.dealsDashboard,
                   roles: ['admin', 'hr', 'manager', 'leads'],
@@ -2546,12 +2541,6 @@ const useSidebarData = () => {
                       showSubRoute: false,
                     },
                     {
-                      label: 'Leaves (Employee)',
-                      link: routes.leaveemployee,
-                      submenu: false,
-                      showSubRoute: false,
-                    },
-                    {
                       label: 'Team Leaves',
                       link: routes.leavemanager,
                       submenu: false,
@@ -2582,12 +2571,6 @@ const useSidebarData = () => {
                   label: 'Attendance (Admin)',
                   link: routes.attendanceadmin,
                   base: 'attendance-admin',
-                  customSubmenuTwo: false,
-                },
-                {
-                  label: 'My Attendance',
-                  link: routes.attendanceemployee,
-                  base: 'attendance-employee',
                   customSubmenuTwo: false,
                 },
                 {
@@ -3116,7 +3099,7 @@ const useSidebarData = () => {
                 {
                   label: 'Employee Dashboard',
                   link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+                  roles: ['employee', 'hr', 'manager', 'leads'],
                 },
                 {
                   label: 'Deals Dashboard',
@@ -4800,7 +4783,7 @@ const useSidebarData = () => {
                 {
                   label: 'Employee Dashboard',
                   link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+                  roles: ['employee', 'hr', 'manager', 'leads'],
                 },
                 {
                   label: 'Deals Dashboard',

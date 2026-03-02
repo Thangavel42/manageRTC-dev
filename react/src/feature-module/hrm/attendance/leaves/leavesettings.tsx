@@ -1,11 +1,3 @@
-/**
- * Leave Settings Page
- *
- * Allows administrators to:
- * 1. Configure leave types (name, days, paid/unpaid, etc.)
- * 2. Create custom policies for specific employees
- */
-
 import { message } from "antd";
 import jsPDF from "jspdf";
 import { useEffect, useMemo, useState } from "react";
@@ -235,6 +227,30 @@ const LeaveSettings = () => {
     setCodeError(null);
   };
 
+  // Helper function to safely close Bootstrap modal and clean up backdrop
+  const closeModal = (modalSelector: string) => {
+    const modalEl = document.querySelector(modalSelector);
+    if (modalEl && window.bootstrap) {
+      const modal = window.bootstrap.Modal.getInstance(modalEl);
+      if (modal) {
+        modal.hide();
+      } else {
+        // Fallback: manually remove modal classes and backdrop
+        modalEl.classList.remove('show');
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.removeAttribute('aria-modal');
+        (modalEl as HTMLElement).style.display = 'none';
+      }
+    }
+    // Always clean up backdrop and body classes as fallback
+    setTimeout(() => {
+      document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    }, 100);
+  };
+
   // Open Edit Leave Type Modal
   const openEditLeaveTypeModal = (leaveType: LeaveType) => {
     setSelectedLeaveType(leaveType);
@@ -268,7 +284,7 @@ const LeaveSettings = () => {
     // Show modal using Bootstrap API
     const modalEl = document.querySelector("#edit_leave_type_modal");
     if (modalEl && window.bootstrap) {
-      const modal = new window.bootstrap.Modal(modalEl);
+      const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
     }
   };
@@ -305,11 +321,7 @@ const LeaveSettings = () => {
       await createLeaveType({ ...leaveTypeForm, code } as Partial<LeaveType>);
 
       // Close modal
-      const modalEl = document.querySelector("#add_leave_type_modal");
-      if (modalEl && window.bootstrap) {
-        const modal = window.bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-      }
+      closeModal("#add_leave_type_modal");
 
       resetAddLeaveTypeForm();
       message.success("Leave type created successfully");
@@ -351,11 +363,7 @@ const LeaveSettings = () => {
       await updateLeaveType(selectedLeaveType._id!, leaveTypeForm as Partial<LeaveType>);
 
       // Close modal
-      const modalEl = document.querySelector("#edit_leave_type_modal");
-      if (modalEl && window.bootstrap) {
-        const modal = window.bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-      }
+      closeModal("#edit_leave_type_modal");
 
       setSelectedLeaveType(null);
       setLeaveTypeErrors({});
@@ -393,7 +401,7 @@ const LeaveSettings = () => {
     // Show modal
     const modalEl = document.querySelector("#add_custom_policy_modal");
     if (modalEl && window.bootstrap) {
-      const modal = new window.bootstrap.Modal(modalEl);
+      const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
     }
   };
@@ -429,7 +437,7 @@ const LeaveSettings = () => {
     // Show modal
     const modalEl = document.querySelector("#edit_custom_policy_modal");
     if (modalEl && window.bootstrap) {
-      const modal = new window.bootstrap.Modal(modalEl);
+      const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
     }
   };
@@ -441,7 +449,7 @@ const LeaveSettings = () => {
     // Show modal
     const modalEl = document.querySelector("#view_custom_policy_modal");
     if (modalEl && window.bootstrap) {
-      const modal = new window.bootstrap.Modal(modalEl);
+      const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
     }
   };
@@ -485,11 +493,7 @@ const LeaveSettings = () => {
       await createPolicy(policyData);
 
       // Close modal
-      const modalEl = document.querySelector("#add_custom_policy_modal");
-      if (modalEl && window.bootstrap) {
-        const modal = window.bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-      }
+      closeModal("#add_custom_policy_modal");
 
       // Reset form
       setPolicyForm({
@@ -552,11 +556,7 @@ const LeaveSettings = () => {
       await updatePolicy(editingPolicy._id, policyData);
 
       // Close modal
-      const modalEl = document.querySelector("#edit_custom_policy_modal");
-      if (modalEl && window.bootstrap) {
-        const modal = window.bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-      }
+      closeModal("#edit_custom_policy_modal");
 
       setEditingPolicy(null);
       setPolicyErrors({});

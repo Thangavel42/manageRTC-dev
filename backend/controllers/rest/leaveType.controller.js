@@ -8,18 +8,18 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildConflictError,
-  buildNotFoundError,
-  buildValidationError
+    asyncHandler,
+    buildConflictError,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-  buildPagination,
-  extractUser,
-  sendCreated,
-  sendSuccess
+    buildPagination,
+    extractUser,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+import { devLog } from '../../utils/logger.js';
 
 /** Escape special regex characters to prevent ReDoS via user-supplied search strings */
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -105,14 +105,25 @@ export const getLeaveTypeById = asyncHandler(async (req, res) => {
   const collections = getTenantCollections(user.companyId);
   const { leaveTypes } = collections;
 
-  const leaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
+  // Build query to support both _id (ObjectId) and leaveTypeId lookup
+  let query = {
     companyId: user.companyId,
     isDeleted: { $ne: true }
-  });
+  };
+
+  if (ObjectId.isValid(id)) {
+    query.$or = [
+      { _id: new ObjectId(id) },
+      { leaveTypeId: id }
+    ];
+  } else {
+    query.leaveTypeId = id;
+  }
+
+  const leaveType = await leaveTypes.findOne(query);
 
   if (!leaveType) {
-    throw buildNotFoundError('Leave type not found');
+    throw buildNotFoundError('Leave type', id);
   }
 
   return sendSuccess(res, leaveType, 'Leave type retrieved successfully');
@@ -261,15 +272,27 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
   const collections = getTenantCollections(user.companyId);
   const { leaveTypes } = collections;
 
-  // Find leave type
-  const leaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
+  // Build query to support both _id (ObjectId) and leaveTypeId lookup
+  let query = {
     companyId: user.companyId,
     isDeleted: { $ne: true }
-  });
+  };
+
+  // Check if id is a valid ObjectId, if so search by _id first
+  if (ObjectId.isValid(id)) {
+    query.$or = [
+      { _id: new ObjectId(id) },
+      { leaveTypeId: id }
+    ];
+  } else {
+    query.leaveTypeId = id;
+  }
+
+  // Find leave type
+  const leaveType = await leaveTypes.findOne(query);
 
   if (!leaveType) {
-    throw buildNotFoundError('Leave type not found');
+    throw buildNotFoundError('Leave type', id);
   }
 
   // Check for duplicate code if code is being changed
@@ -278,7 +301,7 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
       companyId: user.companyId,
       code: updateData.code.toUpperCase(),
       isDeleted: { $ne: true },
-      leaveTypeId: { $ne: id }
+      _id: { $ne: leaveType._id }
     });
 
     if (existingByCode) {
@@ -292,7 +315,7 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
       companyId: user.companyId,
       name: updateData.name.trim(),
       isDeleted: { $ne: true },
-      leaveTypeId: { $ne: id }
+      _id: { $ne: leaveType._id }
     });
 
     if (existingByName) {
@@ -327,14 +350,13 @@ export const updateLeaveType = asyncHandler(async (req, res) => {
   if (updateData.isActive !== undefined) updateDoc.$set.isActive = updateData.isActive;
 
   await leaveTypes.updateOne(
-    { leaveTypeId: id, companyId: user.companyId },
+    { _id: leaveType._id },
     updateDoc
   );
 
   // Fetch the updated document
   const updatedLeaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
-    companyId: user.companyId
+    _id: leaveType._id
   });
 
   devLog('[LeaveType Controller] Leave type updated:', updatedLeaveType.leaveTypeId);
@@ -356,20 +378,32 @@ export const toggleLeaveTypeStatus = asyncHandler(async (req, res) => {
   const collections = getTenantCollections(user.companyId);
   const { leaveTypes } = collections;
 
-  const leaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
+  // Build query to support both _id (ObjectId) and leaveTypeId lookup
+  let query = {
     companyId: user.companyId,
     isDeleted: { $ne: true }
-  });
+  };
+
+  // Check if id is a valid ObjectId, if so search by _id first
+  if (ObjectId.isValid(id)) {
+    query.$or = [
+      { _id: new ObjectId(id) },
+      { leaveTypeId: id }
+    ];
+  } else {
+    query.leaveTypeId = id;
+  }
+
+  const leaveType = await leaveTypes.findOne(query);
 
   if (!leaveType) {
-    throw buildNotFoundError('Leave type not found');
+    throw buildNotFoundError('Leave type', id);
   }
 
   // Toggle status
   const newStatus = !leaveType.isActive;
   await leaveTypes.updateOne(
-    { leaveTypeId: id, companyId: user.companyId },
+    { _id: leaveType._id },
     {
       $set: {
         isActive: newStatus,
@@ -380,8 +414,7 @@ export const toggleLeaveTypeStatus = asyncHandler(async (req, res) => {
 
   // Fetch updated document
   const updatedLeaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
-    companyId: user.companyId
+    _id: leaveType._id
   });
 
   devLog('[LeaveType Controller] Leave type status toggled:', updatedLeaveType.leaveTypeId, 'isActive:', newStatus);
@@ -403,19 +436,30 @@ export const deleteLeaveType = asyncHandler(async (req, res) => {
   const collections = getTenantCollections(user.companyId);
   const { leaveTypes } = collections;
 
-  const leaveType = await leaveTypes.findOne({
-    leaveTypeId: id,
+  // Build query to support both _id (ObjectId) and leaveTypeId lookup
+  let query = {
     companyId: user.companyId,
     isDeleted: { $ne: true }
-  });
+  };
+
+  if (ObjectId.isValid(id)) {
+    query.$or = [
+      { _id: new ObjectId(id) },
+      { leaveTypeId: id }
+    ];
+  } else {
+    query.leaveTypeId = id;
+  }
+
+  const leaveType = await leaveTypes.findOne(query);
 
   if (!leaveType) {
-    throw buildNotFoundError('Leave type not found');
+    throw buildNotFoundError('Leave type', id);
   }
 
   // Soft delete
   await leaveTypes.updateOne(
-    { leaveTypeId: id, companyId: user.companyId },
+    { _id: leaveType._id },
     {
       $set: {
         isDeleted: true,
@@ -425,7 +469,7 @@ export const deleteLeaveType = asyncHandler(async (req, res) => {
     }
   );
 
-  devLog('[LeaveType Controller] Leave type soft deleted:', id);
+  devLog('[LeaveType Controller] Leave type soft deleted:', leaveType.leaveTypeId);
 
   return sendSuccess(res, { leaveTypeId: id, isDeleted: true }, 'Leave type deleted successfully');
 });

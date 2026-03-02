@@ -9,11 +9,11 @@ import { Link } from "react-router-dom";
 import "slick-carousel/slick/slick-theme.css";
 import "slick-carousel/slick/slick.css";
 import * as XLSX from "xlsx";
-import { useEmployeeDashboardREST } from "../../../hooks/useEmployeeDashboardREST";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import RequestModals from "../../../core/modals/requestModal";
+import { useEmployeeDashboardREST } from "../../../hooks/useEmployeeDashboardREST";
 import { resolveDesignation } from "../../../utils/designationUtils";
 import { all_routes } from "../../router/all_routes";
 import CircleProgress from "./circleProgress";
@@ -790,7 +790,7 @@ const EmployeeDashboard = () => {
       try {
         const enc = localStorage.getItem("encryptedBreakDetails");
         if (enc) currentBreaks = JSON.parse(decryptValue(enc) || "[]");
-      } catch (_) {}
+      } catch (_) { }
       const updated = [...currentBreaks, newBreak];
       setBreakDetails(updated);
       localStorage.setItem("encryptedBreakDetails", encryptValue(JSON.stringify(updated)));
@@ -805,7 +805,7 @@ const EmployeeDashboard = () => {
       try {
         const enc = localStorage.getItem("encryptedBreakDetails");
         if (enc) bds = JSON.parse(decryptValue(enc) || "[]");
-      } catch (_) {}
+      } catch (_) { }
       const last = bds[bds.length - 1];
       if (last && !last.breakEndTime) {
         last.breakEndTime = new Date().toISOString();
@@ -1166,7 +1166,7 @@ const EmployeeDashboard = () => {
                       <ImageWithBasePath
                         src={
                           dashboardData?.employeeDetails?.avatar ||
-                          "/assets/img/users/user-01.jpg"
+                          "/assets/img/profiles/profile.png"
                         }
                         alt="Img"
                         isLink={Boolean(dashboardData?.employeeDetails?.avatar)}
@@ -1815,7 +1815,7 @@ const EmployeeDashboard = () => {
                                   <img
                                     src={
                                       project.leadDetails?.avatarUrl ||
-                                      "assets/img/users/user-placeholder.jpg"
+                                      "/assets/img/profiles/profile.png"
                                     }
                                     className="img-fluid rounded-circle"
                                     alt="lead"
@@ -1880,7 +1880,7 @@ const EmployeeDashboard = () => {
                                           className="border border-white"
                                           src={
                                             avatarUrl ||
-                                            "assets/img/profiles/avatar-31.jpg"
+                                            "/assets/img/profiles/profile.png"
                                           }
                                           alt="member"
                                         />
@@ -2232,7 +2232,7 @@ const EmployeeDashboard = () => {
                               <ImageWithBasePath
                                 src={
                                   birthday.avatarUrl ||
-                                  "assets/img/users/default-avatar.jpg"
+                                  "/assets/img/profiles/profile.png"
                                 }
                                 alt={birthday.name}
                               />
@@ -2322,7 +2322,7 @@ const EmployeeDashboard = () => {
                           <img
                             src={
                               member.avatar ||
-                              "assets/img/profiles/avatar-31.jpg"
+                              "/assets/img/profiles/profile.png"
                             }
                             className="rounded-circle border border-2"
                             alt={`${member.firstName}'s avatar`}
@@ -2392,7 +2392,7 @@ const EmployeeDashboard = () => {
                         <ImageWithBasePath
                           src={
                             notification.avatar ||
-                            "assets/img/profiles/avatar-31.jpg"
+                            "/assets/img/profiles/profile.png"
                           }
                           className="rounded-circle border border-2"
                           alt="Avatar"

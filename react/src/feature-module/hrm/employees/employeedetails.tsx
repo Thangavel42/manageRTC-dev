@@ -213,7 +213,7 @@ interface BankInfo {
   bankName: string;
   branch: string;
   ifscCode: string;
-  accountType?: 'Savings' | 'Current'; // Optional, defaults to 'Savings'
+  accountType?: 'Savings Account' | 'Salary Account' | 'NRI Account'; // Optional, defaults to 'Savings Account'
 }
 
 interface FamilyInfo {
@@ -297,6 +297,7 @@ export interface Employee {
   avatar: string;
   yearsOfExperience?: number;
   email: string;
+  phoneCode?: string;
   phone: string;
   gender?: string;
   dateOfBirth?: string;
@@ -354,8 +355,112 @@ const EmployeeDetails = () => {
     accountNumber: '',
     ifscCode: '',
     branch: '',
-    accountType: 'Savings' as 'Savings' | 'Current',
+    accountType: 'Savings Account' as 'Savings Account' | 'Salary Account' | 'NRI Account',
   });
+  // Bank form validation state
+  const [bankFormErrors, setBankFormErrors] = useState<{
+    accountHolderName?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    branch?: string;
+  }>({});
+
+  // Bank field validation functions (aligned with Profile page)
+  const validateBankName = (value: string) => {
+    if (!value || value.trim() === '') {
+      return 'Bank name is required';
+    }
+    if (value.trim().length < 3) {
+      return 'Bank name must be at least 3 characters';
+    }
+    return '';
+  };
+
+  const validateAccountNumber = (value: string) => {
+    if (!value || value.trim() === '') {
+      return 'Account number is required';
+    }
+    const cleanValue = value.replace(/[\s-]/g, '');
+    if (!/^\d+$/.test(cleanValue)) {
+      return 'Account number must contain only digits';
+    }
+    if (cleanValue.length < 8 || cleanValue.length > 18) {
+      return 'Account number must be 8-18 digits';
+    }
+    return '';
+  };
+
+  const validateIFSCCode = (value: string) => {
+    if (!value || value.trim() === '') {
+      return 'IFSC code is required';
+    }
+    const upperValue = value.toUpperCase().trim();
+    const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscPattern.test(upperValue)) {
+      return 'Invalid IFSC format (e.g., SBIN0001234)';
+    }
+    return '';
+  };
+
+  const validateBranch = (value: string) => {
+    if (!value || value.trim() === '') {
+      return 'Branch is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Branch name must be at least 2 characters';
+    }
+    return '';
+  };
+
+  const validateAccountHolderName = (value: string) => {
+    if (!value || value.trim() === '') {
+      return 'Account holder name is required';
+    }
+    return '';
+  };
+
+  // Handle bank field change with real-time validation
+  const handleBankFieldChange = (fieldName: string, value: string) => {
+    // Update the form data
+    setBankFormData((prev) => ({ ...prev, [fieldName]: value }));
+
+    // Perform validation
+    let error = '';
+    switch (fieldName) {
+      case 'accountHolderName':
+        error = validateAccountHolderName(value);
+        break;
+      case 'bankName':
+        error = validateBankName(value);
+        break;
+      case 'accountNumber':
+        error = validateAccountNumber(value);
+        break;
+      case 'ifscCode':
+        error = validateIFSCCode(value);
+        break;
+      case 'branch':
+        error = validateBranch(value);
+        break;
+    }
+
+    setBankFormErrors((prev) => ({ ...prev, [fieldName]: error || undefined }));
+  };
+
+  // Validate all bank fields and return true if all valid
+  const validateAllBankFields = (): boolean => {
+    const errors = {
+      accountHolderName: validateAccountHolderName(bankFormData.accountHolderName) || undefined,
+      bankName: validateBankName(bankFormData.bankName) || undefined,
+      accountNumber: validateAccountNumber(bankFormData.accountNumber) || undefined,
+      ifscCode: validateIFSCCode(bankFormData.ifscCode) || undefined,
+      branch: validateBranch(bankFormData.branch) || undefined,
+    };
+    setBankFormErrors(errors);
+    return !Object.values(errors).some((error) => error);
+  };
+
   const [familyFormData, setFamilyFormData] = useState({
     familyMemberName: '',
     relationship: '',
@@ -589,15 +694,9 @@ const EmployeeDetails = () => {
     // Prevent duplicate submissions
     if (bankFormLoading) return;
 
-    // Validate all fields are filled
-    if (
-      !bankFormData.accountHolderName ||
-      !bankFormData.bankName ||
-      !bankFormData.accountNumber ||
-      !bankFormData.ifscCode ||
-      !bankFormData.branch
-    ) {
-      toast.error('All bank details fields are required!', {
+    // Validate all fields with the detailed validation
+    if (!validateAllBankFields()) {
+      toast.error('Please correct the errors in the form before submitting.', {
         position: 'top-right',
         autoClose: 3000,
       });
@@ -660,8 +759,10 @@ const EmployeeDetails = () => {
       accountNumber: employee.bankDetails?.accountNumber || '',
       ifscCode: employee.bankDetails?.ifscCode || '',
       branch: employee.bankDetails?.branch || '',
-      accountType: employee.bankDetails?.accountType || 'Savings',
+      accountType: employee.bankDetails?.accountType || 'Savings Account',
     });
+    // Clear validation errors
+    setBankFormErrors({});
   };
 
   // handle education form validation and submission
@@ -1606,7 +1707,7 @@ const EmployeeDetails = () => {
         accountNumber: employee.bankDetails?.accountNumber || '',
         ifscCode: employee.bankDetails?.ifscCode || '',
         branch: employee.bankDetails?.branch || '',
-        accountType: employee.bankDetails?.accountType || 'Savings',
+        accountType: employee.bankDetails?.accountType || 'Savings Account',
       });
 
       // Initialize personal form data
@@ -2635,7 +2736,7 @@ const EmployeeDetails = () => {
                         <i className="ti ti-phone me-2" />
                         Phone
                       </span>
-                      <p className="text-dark">{employee?.phone || '-'}</p>
+                      <p className="text-dark">{employee?.phone ? `${employee?.phoneCode || ''} ${employee?.phone}`.trim() : '-'}</p>
                     </div>
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <span className="d-inline-flex align-items-center">
@@ -2964,6 +3065,15 @@ const EmployeeDetails = () => {
                                   ? (employee?.bankDetails?.branch || '-')
                                   : maskBankValue(employee?.bankDetails?.branch)
                                 }
+                              </p>
+                            </div>
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="d-inline-flex align-items-center">
+                                <i className="ti ti-wallet me-2" />
+                                Account Type
+                              </span>
+                              <p className="text-dark">
+                                {employee?.bankDetails?.accountType || 'Savings Account'}
                               </p>
                             </div>
                           </div>
@@ -4037,17 +4147,16 @@ const EmployeeDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${bankFormErrors.accountHolderName ? 'is-invalid' : ''}`}
                         placeholder="Enter account holder name"
                         value={bankFormData.accountHolderName}
-                        onChange={(e) =>
-                          setBankFormData((prev) => ({
-                            ...prev,
-                            accountHolderName: e.target.value,
-                          }))
-                        }
-                        required
+                        onChange={(e) => handleBankFieldChange('accountHolderName', e.target.value)}
                       />
+                      {bankFormErrors.accountHolderName && (
+                        <div className="invalid-feedback d-block">
+                          {bankFormErrors.accountHolderName}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -4057,14 +4166,16 @@ const EmployeeDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${bankFormErrors.bankName ? 'is-invalid' : ''}`}
                         placeholder="Enter bank name"
                         value={bankFormData.bankName}
-                        onChange={(e) =>
-                          setBankFormData((prev) => ({ ...prev, bankName: e.target.value }))
-                        }
-                        required
+                        onChange={(e) => handleBankFieldChange('bankName', e.target.value)}
                       />
+                      {bankFormErrors.bankName && (
+                        <div className="invalid-feedback d-block">
+                          {bankFormErrors.bankName}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -4074,13 +4185,20 @@ const EmployeeDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${bankFormErrors.accountNumber ? 'is-invalid' : ''}`}
+                        placeholder="Enter account number (8-18 digits)"
                         value={bankFormData.accountNumber}
-                        onChange={(e) =>
-                          setBankFormData((prev) => ({ ...prev, accountNumber: e.target.value }))
-                        }
-                        required
+                        onChange={(e) => handleBankFieldChange('accountNumber', e.target.value)}
+                        maxLength={18}
                       />
+                      {bankFormErrors.accountNumber && (
+                        <div className="invalid-feedback d-block">
+                          {bankFormErrors.accountNumber}
+                        </div>
+                      )}
+                      <small className="text-muted">
+                        Only numbers allowed, 8-18 digits
+                      </small>
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -4090,13 +4208,21 @@ const EmployeeDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control text-uppercase ${bankFormErrors.ifscCode ? 'is-invalid' : ''}`}
+                        placeholder="e.g., SBIN0001234"
                         value={bankFormData.ifscCode}
-                        onChange={(e) =>
-                          setBankFormData((prev) => ({ ...prev, ifscCode: e.target.value }))
-                        }
-                        required
+                        onChange={(e) => handleBankFieldChange('ifscCode', e.target.value.toUpperCase())}
+                        maxLength={11}
+                        style={{ fontFamily: 'monospace' }}
                       />
+                      {bankFormErrors.ifscCode && (
+                        <div className="invalid-feedback d-block">
+                          {bankFormErrors.ifscCode}
+                        </div>
+                      )}
+                      <small className="text-muted">
+                        11 characters: 4 letters + 0 + 6 alphanumeric
+                      </small>
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -4106,13 +4232,35 @@ const EmployeeDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className={`form-control ${bankFormErrors.branch ? 'is-invalid' : ''}`}
+                        placeholder="Enter branch name"
                         value={bankFormData.branch}
-                        onChange={(e) =>
-                          setBankFormData((prev) => ({ ...prev, branch: e.target.value }))
-                        }
-                        required
+                        onChange={(e) => handleBankFieldChange('branch', e.target.value)}
                       />
+                      {bankFormErrors.branch && (
+                        <div className="invalid-feedback d-block">
+                          {bankFormErrors.branch}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">Account Type</label>
+                      <select
+                        className="form-control"
+                        value={bankFormData.accountType}
+                        onChange={(e) =>
+                          setBankFormData((prev) => ({
+                            ...prev,
+                            accountType: e.target.value as 'Savings Account' | 'Salary Account' | 'NRI Account',
+                          }))
+                        }
+                      >
+                        <option value="Savings Account">Savings Account</option>
+                        <option value="Salary Account">Salary Account</option>
+                        <option value="NRI Account">NRI Account</option>
+                      </select>
                     </div>
                   </div>
                 </div>

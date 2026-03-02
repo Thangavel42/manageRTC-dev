@@ -9,22 +9,22 @@ import { ObjectId } from 'mongodb';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-    asyncHandler,
-    buildNotFoundError,
-    buildValidationError
+  asyncHandler,
+  buildNotFoundError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
-import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
+import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-    buildPagination,
-    extractUser,
-    getRequestId,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  getRequestId,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import {
-    canUserDeleteAvatar,
-    getSystemDefaultAvatarUrl
+  canUserDeleteAvatar,
+  getSystemDefaultAvatarUrl
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail, sendPasswordChangedEmail } from '../../utils/emailer.js';
@@ -244,11 +244,24 @@ export const getEmployees = asyncHandler(async (req, res) => {
       { $match: filter },
       {
         $addFields: {
+          // Handle both departmentId (string) and department (ObjectId) field names
           departmentObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-              then: { $toObjectId: '$departmentId' },
-              else: null
+            $switch: {
+              branches: [
+                {
+                  case: { $and: [
+                    { $ne: ['$departmentId', null] },
+                    { $ne: ['$departmentId', ''] },
+                    { $eq: [{ $type: '$departmentId' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$departmentId' }
+                },
+                {
+                  case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                  then: '$department'
+                }
+              ],
+              default: null
             }
           }
         }
@@ -354,39 +367,112 @@ export const getEmployees = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-            then: { $toObjectId: '$departmentId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$departmentId', null] },
+                  { $ne: ['$departmentId', ''] },
+                  { $eq: [{ $type: '$departmentId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$departmentId' }
+              },
+              {
+                case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                then: '$department'
+              }
+            ],
+            default: null
           }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
-            then: { $toObjectId: '$designationId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$designationId', null] },
+                  { $ne: ['$designationId', ''] },
+                  { $eq: [{ $type: '$designationId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$designationId' }
+              },
+              {
+                case: { $eq: [{ $type: '$designation' }, 'objectId'] },
+                then: '$designation'
+              }
+            ],
+            default: null
           }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
-            then: { $toObjectId: '$reportingTo' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$reportingTo', null] },
+                  { $ne: ['$reportingTo', ''] },
+                  { $eq: [{ $type: '$reportingTo' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$reportingTo' }
+              },
+              {
+                case: { $eq: [{ $type: '$reportingTo' }, 'objectId'] },
+                then: '$reportingTo'
+              }
+            ],
+            default: null
           }
         },
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
-            then: { $toObjectId: '$shiftId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$shiftId', null] },
+                  { $ne: ['$shiftId', ''] },
+                  { $eq: [{ $type: '$shiftId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$shiftId' }
+              },
+              {
+                case: { $eq: [{ $type: '$shift' }, 'objectId'] },
+                then: '$shift'
+              },
+              {
+                case: { $eq: [{ $type: '$shiftId' }, 'objectId'] },
+                then: '$shiftId'
+              }
+            ],
+            default: null
           }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
-            then: { $toObjectId: '$batchId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$batchId', null] },
+                  { $ne: ['$batchId', ''] },
+                  { $eq: [{ $type: '$batchId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$batchId' }
+              },
+              {
+                case: { $eq: [{ $type: '$batch' }, 'objectId'] },
+                then: '$batch'
+              },
+              {
+                case: { $eq: [{ $type: '$batchId' }, 'objectId'] },
+                then: '$batchId'
+              }
+            ],
+            default: null
           }
         }
       }
@@ -609,11 +695,24 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-            then: { $toObjectId: '$departmentId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$departmentId', null] },
+                  { $ne: ['$departmentId', ''] },
+                  { $eq: [{ $type: '$departmentId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$departmentId' }
+              },
+              {
+                case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                then: '$department'
+              }
+            ],
+            default: null
           }
         }
       }
@@ -693,25 +792,70 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     { $match: { _id: new ObjectId(id) } },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-            then: { $toObjectId: '$departmentId' },
-            else: null
+          $switch: {
+            branches: [
+              // Case 1: departmentId is a non-empty string - convert to ObjectId
+              {
+                case: { $and: [
+                  { $ne: ['$departmentId', null] },
+                  { $ne: ['$departmentId', ''] },
+                  { $eq: [{ $type: '$departmentId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$departmentId' }
+              },
+              // Case 2: department is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                then: '$department'
+              }
+            ],
+            default: null
           }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
-            then: { $toObjectId: '$designationId' },
-            else: null
+          $switch: {
+            branches: [
+              // Case 1: designationId is a non-empty string - convert to ObjectId
+              {
+                case: { $and: [
+                  { $ne: ['$designationId', null] },
+                  { $ne: ['$designationId', ''] },
+                  { $eq: [{ $type: '$designationId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$designationId' }
+              },
+              // Case 2: designation is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$designation' }, 'objectId'] },
+                then: '$designation'
+              }
+            ],
+            default: null
           }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
-            then: { $toObjectId: '$reportingTo' },
-            else: null
+          $switch: {
+            branches: [
+              // Case 1: reportingTo is a non-empty string - convert to ObjectId
+              {
+                case: { $and: [
+                  { $ne: ['$reportingTo', null] },
+                  { $ne: ['$reportingTo', ''] },
+                  { $eq: [{ $type: '$reportingTo' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$reportingTo' }
+              },
+              // Case 2: reportingTo is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$reportingTo' }, 'objectId'] },
+                then: '$reportingTo'
+              }
+            ],
+            default: null
           }
         }
       }
@@ -749,18 +893,58 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
-            then: { $toObjectId: '$shiftId' },
-            else: null
+          $switch: {
+            branches: [
+              // Case 1: shiftId is a non-empty string - convert to ObjectId
+              {
+                case: { $and: [
+                  { $ne: ['$shiftId', null] },
+                  { $ne: ['$shiftId', ''] },
+                  { $eq: [{ $type: '$shiftId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$shiftId' }
+              },
+              // Case 2: shift is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$shift' }, 'objectId'] },
+                then: '$shift'
+              },
+              // Case 3: shiftId is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$shiftId' }, 'objectId'] },
+                then: '$shiftId'
+              }
+            ],
+            default: null
           }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
-            then: { $toObjectId: '$batchId' },
-            else: null
+          $switch: {
+            branches: [
+              // Case 1: batchId is a non-empty string - convert to ObjectId
+              {
+                case: { $and: [
+                  { $ne: ['$batchId', null] },
+                  { $ne: ['$batchId', ''] },
+                  { $eq: [{ $type: '$batchId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$batchId' }
+              },
+              // Case 2: batch is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$batch' }, 'objectId'] },
+                then: '$batch'
+              },
+              // Case 3: batchId is already an ObjectId - use it directly
+              {
+                case: { $eq: [{ $type: '$batchId' }, 'objectId'] },
+                then: '$batchId'
+              }
+            ],
+            default: null
           }
         }
       }
@@ -949,7 +1133,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const { permissionsData, ...restEmployeeData } = employeeData;
 
   // Normalize data - use canonical schema structure (root level fields only)
-  // Canonical schema: email, phone, dateOfBirth, gender, address at root level
+  // Canonical schema: email, phone, phoneCode, dateOfBirth, gender, address at root level
   // personal object contains: passport, nationality, religion, maritalStatus, employmentOfSpouse, noOfChildren only
   const normalizedData = {
     ...restEmployeeData,
@@ -958,6 +1142,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
     email: restEmployeeData.email ?? restEmployeeData.contact?.email,
     // Extract phone from root level or contact object (for backward compatibility)
     phone: restEmployeeData.phone ?? restEmployeeData.contact?.phone,
+    // Extract phoneCode from request (country code for phone)
+    phoneCode: restEmployeeData.phoneCode ?? restEmployeeData.contact?.phoneCode ?? '+1',
     // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
     dateOfBirth: restEmployeeData.dateOfBirth ?? restEmployeeData.personal?.birthday,
     // Extract gender from root level or personal.gender (for backward compatibility)
@@ -1243,6 +1429,20 @@ export const createEmployee = asyncHandler(async (req, res) => {
     throw new Error('Failed to create employee');
   }
 
+  // Handle Self Reporting: Update reportingTo to the employee's own _id
+  if (restEmployeeData.selfReporting) {
+    try {
+      await collections.employees.updateOne(
+        { _id: result.insertedId },
+        { $set: { reportingTo: result.insertedId.toString() } }
+      );
+      devLog('[Employee Controller] Set self-reporting for employee:', result.insertedId);
+    } catch (selfReportingError) {
+      devError('[Employee Controller] Failed to set self-reporting:', selfReportingError);
+      // Continue anyway - can be fixed later
+    }
+  }
+
   // Create permissions record if provided
   if (permissionsData && (permissionsData.permissions || permissionsData.enabledModules)) {
     try {
@@ -1352,6 +1552,11 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   // Extract phone from root level or contact object (for backward compatibility)
   if (updateData.phone || updateData.contact?.phone) {
     normalizedData.phone = updateData.phone ?? updateData.contact?.phone;
+  }
+
+  // Extract phoneCode from root level or contact object (for backward compatibility)
+  if (updateData.phoneCode !== undefined || updateData.contact?.phoneCode !== undefined) {
+    normalizedData.phoneCode = updateData.phoneCode ?? updateData.contact?.phoneCode;
   }
 
   // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
@@ -1978,11 +2183,24 @@ export const getEmployeeStatsByDepartment = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
-          $cond: {
-            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-            then: { $toObjectId: '$departmentId' },
-            else: null
+          $switch: {
+            branches: [
+              {
+                case: { $and: [
+                  { $ne: ['$departmentId', null] },
+                  { $ne: ['$departmentId', ''] },
+                  { $eq: [{ $type: '$departmentId' }, 'string'] }
+                ]},
+                then: { $toObjectId: '$departmentId' }
+              },
+              {
+                case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                then: '$department'
+              }
+            ],
+            default: null
           }
         }
       }
