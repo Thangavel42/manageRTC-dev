@@ -39,6 +39,7 @@ import assetUserRoutes from './routes/api/assetUsers.js';
 import attendanceRoutes from './routes/api/attendance.js';
 import auditRoutes from './routes/api/audit.js';
 import batchRoutes from './routes/api/batches.js';
+import candidatesRoutes from './routes/api/candidates.js';
 import changeRequestRoutes from './routes/api/changeRequest.js';
 import clientRoutes from './routes/api/clients.js';
 import departmentRoutes from './routes/api/departments.js';
@@ -73,6 +74,17 @@ import healthRoutes from './routes/health.js';
 import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
 // RBAC Routes
+import adminUsersRoutes from './routes/api/admin.users.js';
+import companyPagesRoutes from './routes/api/companyPages.routes.js';
+import rbacModulesRoutes from './routes/api/rbac/modules.js';
+import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';
+import rbacPagesRoutes from './routes/api/rbac/pages.js';
+import rbacPagesHierarchyRoutes from './routes/api/rbac/pagesHierarchy.js';
+import rbacPermissionsRoutes from './routes/api/rbac/permissions.js';
+import rbacRolesRoutes from './routes/api/rbac/roles.js';
+import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
+import superadminRoutes from './routes/api/superadmin.routes.js';
+import debugRoutes from './routes/debug/auth-debug.js';
 import adminUsersRoutes from "./routes/api/admin.users.js";
 import companyPagesRoutes from "./routes/api/companyPages.routes.js";
 import rbacModulesRoutes from "./routes/api/rbac/modules.js";
@@ -251,6 +263,7 @@ const initializeServer = async () => {
     app.use('/api/resignations', resignationRoutes);
     app.use('/api/shifts', shiftRoutes);
     app.use('/api/batches', batchRoutes);
+    app.use('/api/candidates', candidatesRoutes);
     app.use('/api/terminations', terminationRoutes);
     app.use('/api/holidays', holidayRoutes);
     app.use('/api/hr-dashboard', hrDashboardRoutes);
@@ -281,7 +294,7 @@ const initializeServer = async () => {
     app.use('/api/company-change-requests', companyChangeRequestRoutes);
 
     // Company Pages Routes (module-based sidebar filtering)
-    app.use("/api/company", companyPagesRoutes);
+    app.use('/api/company', companyPagesRoutes);
 
     // Clerk Webhooks
     app.use('/api/webhooks', clerkWebhookRoutes);

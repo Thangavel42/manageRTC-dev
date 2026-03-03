@@ -370,9 +370,7 @@ export const all_routes = {
   jobgrid: '/job-grid',
   joblist: '/job-list',
   jobdetails: '/jobs/:jobId',
-  candidatesGrid: '/candidates-grid',
-  candidateslist: '/candidates',
-  candidateskanban: '/candidates-kanban',
+  candidates: '/candidates',
   refferal: '/refferals',
   //FINANCE & ACCOUNTS
   estimate: '/estimates',
