@@ -8,21 +8,21 @@
  *  - employee / manager / leads  → own entries only (via /user/:userId)
  */
 
+import { ObjectId } from 'mongodb';
 import mongoose from 'mongoose';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  buildNotFoundError,
-  buildValidationError,
-  asyncHandler
+    asyncHandler,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
-import {
-  sendSuccess,
-  sendCreated,
-  extractUser
-} from '../../utils/apiResponse.js';
-import { getSocketIO, broadcastTimeTrackingEvents } from '../../utils/socketBroadcaster.js';
 import * as timeTrackingService from '../../services/timeTracking/timeTracking.service.js';
-import { ObjectId } from 'mongodb';
+import {
+    extractUser,
+    sendCreated,
+    sendSuccess
+} from '../../utils/apiResponse.js';
+import { broadcastTimeTrackingEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * Determine whether the requesting user is admin/HR/superadmin,
@@ -58,16 +58,15 @@ const getUserProjectScope = async (user, collections) => {
   const empIdStr = empId.toString();
 
   // Find all projects where this employee is PM or TL
+  // NOTE: projectManager and teamLeader are ARRAYS, so we use $in to check membership
   const managedProjects = await collections.projects.find(
     {
       $and: [
         { $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] },
         {
           $or: [
-            { projectManager: empId },
-            { projectManager: empIdStr },
-            { teamLeader: empId },
-            { teamLeader: empIdStr }
+            { projectManager: { $in: [empId, empIdStr] } },
+            { teamLeader: { $in: [empId, empIdStr] } }
           ]
         }
       ]
