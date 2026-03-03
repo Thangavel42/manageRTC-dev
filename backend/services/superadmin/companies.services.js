@@ -105,6 +105,7 @@ const addCompany = async (data, user) => {
         company: companyId,
         subdomain: data.domain,
         flag: flag,
+        isAdminVerified: true,
       },
     });
 
