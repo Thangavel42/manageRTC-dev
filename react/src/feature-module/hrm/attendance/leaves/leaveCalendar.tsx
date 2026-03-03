@@ -28,13 +28,13 @@ const LeaveCalendar = () => {
   const { leaves, loading, fetchLeaves, fetchMyLeaves, leaveTypeDisplayMap } = useLeaveREST();
   const { role, userId } = useAuth();
   const { activeOptions, fetchActiveLeaveTypes, loading: leaveTypesLoading } = useLeaveTypesREST();
-  const { employees, fetchEmployees, loading: employeesLoading } = useEmployeesREST();
+  const { employees, fetchEmployees, fetchActiveEmployeesList, loading: employeesLoading } = useEmployeesREST({ autoFetch: false });
 
   // Auto-reload hook for refetching data
   const { refetchAfterAction } = useAutoReloadActions({
     fetchFn: () => {
-      // Fetch based on role - managers see team leaves, employees see their own
-      if (role === 'manager' || role === 'hr' || role === 'admin' || role === 'superadmin') {
+      // Only admin/HR/superadmin can use the admin leaves endpoint; others use their own list to avoid 403s
+      if (role === 'hr' || role === 'admin' || role === 'superadmin') {
         fetchLeaves({ limit: 1000 });
       } else {
         fetchMyLeaves({ limit: 1000 });
@@ -52,16 +52,20 @@ const LeaveCalendar = () => {
 
   // Fetch leaves on mount
   useEffect(() => {
-    // Fetch based on role - managers see team leaves, employees see their own
-    if (role === 'manager' || role === 'hr' || role === 'admin' || role === 'superadmin') {
+    // Only admin/HR/superadmin can call the admin leaves endpoint; others fetch their own
+    if (role === 'hr' || role === 'admin' || role === 'superadmin') {
       fetchLeaves({ limit: 1000 });
     } else {
       fetchMyLeaves({ limit: 1000 });
     }
     fetchActiveLeaveTypes();
     // Fetch employees for avatar and role data
-    fetchEmployees({ status: 'Active' });
-  }, []);
+    if (role === 'hr' || role === 'admin' || role === 'superadmin') {
+      fetchEmployees({ status: 'Active' });
+    } else {
+      fetchActiveEmployeesList();
+    }
+  }, [role, fetchLeaves, fetchMyLeaves, fetchActiveLeaveTypes, fetchEmployees, fetchActiveEmployeesList]);
 
   // Employee data map for avatar, role, etc.
   const employeeDataMap = useMemo(() => {

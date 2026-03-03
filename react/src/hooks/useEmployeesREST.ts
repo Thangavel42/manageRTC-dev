@@ -38,6 +38,13 @@ export interface PermissionSet {
   export: boolean;
 }
 
+export interface UseEmployeesRESTOptions {
+  // Auto-fetch employees on mount (useful to disable on self-service pages to avoid 403s)
+  autoFetch?: boolean;
+  // Data set to load when auto-fetching
+  initialFetchMode?: 'full' | 'active-list';
+}
+
 export interface Employee {
   _id: string;
   employeeId: string;
@@ -315,7 +322,8 @@ const normalizeEmergencyContactPayload = (input: any): { name: string; phone: st
 /**
  * Employees REST API Hook
  */
-export const useEmployeesREST = () => {
+export const useEmployeesREST = (options: UseEmployeesRESTOptions = {}) => {
+  const { autoFetch = true, initialFetchMode = 'full' } = options;
   const socket = useSocket();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stats, setStats] = useState<EmployeeStats | null>(null);
@@ -1215,8 +1223,13 @@ export const useEmployeesREST = () => {
   // Company ID is extracted server-side from the token's public metadata
   // The API interceptor handles token refresh automatically
   useEffect(() => {
+    if (!autoFetch) return;
+    if (initialFetchMode === 'active-list') {
+      fetchActiveEmployeesList();
+      return;
+    }
     fetchEmployeesWithStats();
-  }, []);
+  }, [autoFetch, initialFetchMode, fetchActiveEmployeesList, fetchEmployeesWithStats]);
 
   // Send credentials email to employee (generates new password)
   const sendCredentials = useCallback(async (employeeId: string): Promise<boolean> => {
