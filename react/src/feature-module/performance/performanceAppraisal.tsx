@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Table from "../../core/common/dataTable/index";
-import PerformanceAppraisalModal from "../../core/modals/performanceAppraisalModal";
 import Footer from "../../core/common/footer";
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import PerformanceAppraisalModal from "../../core/modals/performanceAppraisalModal";
 import performanceAppraisalService from "../../core/services/performance/performanceAppraisal.service";
+import { resolveDesignation } from "../../utils/designationUtils";
+import { all_routes } from "../router/all_routes";
 
 const PerformanceAppraisal = () => {
   const routes = all_routes;
@@ -77,7 +78,8 @@ const PerformanceAppraisal = () => {
     {
       title: "Designation",
       dataIndex: "designation",
-      sorter: (a: any, b: any) => a.designation.localeCompare(b.designation),
+      render: (text: any) => resolveDesignation(text) || 'N/A',
+      sorter: (a: any, b: any) => resolveDesignation(a.designation).localeCompare(resolveDesignation(b.designation)),
     },
     {
       title: "Department",

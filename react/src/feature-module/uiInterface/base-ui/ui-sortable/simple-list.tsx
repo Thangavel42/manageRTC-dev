@@ -1,10 +1,7 @@
-import React, { useState } from "react";
 import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  DropResult,
+  DragDropContext, Draggable, Droppable
 } from "@hello-pangea/dnd";
+import { useState } from "react";
 
 const SimpleList = () => {
   const [tasks, setTasks] = useState([

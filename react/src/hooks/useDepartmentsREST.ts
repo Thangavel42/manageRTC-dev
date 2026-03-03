@@ -4,10 +4,10 @@
  * Real-time updates still use Socket.IO listeners
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from '../SocketContext';
 import { message } from 'antd';
-import { get, post, put, del, buildParams, ApiResponse, getAuthToken } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, post, put } from '../services/api';
+import { useSocket } from '../SocketContext';
 
 export interface Department {
   _id: string;

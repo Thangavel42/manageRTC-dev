@@ -1,18 +1,23 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { ReloadOutlined } from "@ant-design/icons";
+import { message, Spin } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import Table from "../../../core/common/dataTable/index";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Table from "../../../core/common/dataTable/index";
+import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
-import { useAttendanceREST, toTableFormat, formatAttendanceDate, formatAttendanceTime } from "../../../hooks/useAttendanceREST";
-import { ReloadOutlined, UserOutlined } from "@ant-design/icons";
-import { Spin, Button, message } from "antd";
-import { useSocketAttendance, AttendanceYouClockedInEvent, AttendanceYouClockedOutEvent } from "../../../hooks/useSocket";
-import { getAuthToken } from "../../../services/api";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { formatAttendanceDate, formatAttendanceTime, toTableFormat, useAttendanceREST } from "../../../hooks/useAttendanceREST";
+import { useAuth } from "../../../hooks/useAuth";
+import { useAutoReloadActions } from "../../../hooks/useAutoReload";
+import { all_routes } from "../../router/all_routes";
 
 const AttendanceEmployee = () => {
+  // Role-based access control
+  const { role } = useAuth();
+  // Show switch only if user has access to both attendance pages (hr and superadmin have access to both)
+  const canAccessAdminAttendance = ['hr', 'superadmin'].includes(role);
+
   // API Hook
   const {
     myAttendance,
@@ -26,29 +31,10 @@ const AttendanceEmployee = () => {
     syncEmployeeRecord
   } = useAttendanceREST();
 
-  // Socket.IO Hook - Real-time updates for personal attendance
-  const { isConnected: socketConnected } = useSocketAttendance(getAuthToken() || undefined, {
-    // Handle own clock in confirmation
-    onYouClockedIn: (data: AttendanceYouClockedInEvent) => {
-      console.log('[AttendanceEmployee] You clocked in event received:', data);
-      // Refresh attendance to show the new clock in
-      fetchMyAttendance(filters);
-      message.success('Successfully clocked in!');
-    },
-
-    // Handle own clock out confirmation
-    onYouClockedOut: (data: AttendanceYouClockedOutEvent) => {
-      console.log('[AttendanceEmployee] You clocked out event received:', data);
-      // Refresh attendance to show the clock out
-      fetchMyAttendance(filters);
-      message.success(`Successfully clocked out! Hours worked: ${data.hoursWorked?.toFixed(2) || '0.00'} hrs`);
-    },
-
-    // Handle attendance updates (e.g., status changes by admin)
-    onUpdated: (data) => {
-      console.log('[AttendanceEmployee] Attendance updated event received:', data);
-      fetchMyAttendance(filters);
-    },
+  // Auto-reload hook for refetching after actions
+  const { refetchAfterAction } = useAutoReloadActions({
+    fetchFn: () => fetchMyAttendance(filters),
+    debug: true,
   });
 
   // State
@@ -81,10 +67,21 @@ const AttendanceEmployee = () => {
   }, [myAttendance]);
 
   // Get today's attendance to check if clocked in
-  const todayAttendance = myAttendance.find((att) => {
-    const today = new Date().toISOString().split('T')[0];
-    return att.date?.startsWith(today) || new Date(att.date).toISOString().split('T')[0] === today;
-  });
+  const todayAttendance = useMemo(() => {
+    // Use local date for comparison to handle timezone differences
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    return myAttendance.find((att) => {
+      if (!att.date) return false;
+      // Check if date string starts with today's date
+      if (typeof att.date === 'string' && att.date.startsWith(todayStr)) return true;
+      // Also check Date object conversion (compare local dates)
+      const attDate = new Date(att.date);
+      const attDateStr = `${attDate.getFullYear()}-${String(attDate.getMonth() + 1).padStart(2, '0')}-${String(attDate.getDate()).padStart(2, '0')}`;
+      return attDateStr === todayStr;
+    });
+  }, [myAttendance]);
 
   const isClockedIn = todayAttendance?.clockIn?.time && !todayAttendance?.clockOut?.time;
   const canClockIn = !isClockedIn;
@@ -115,6 +112,8 @@ const AttendanceEmployee = () => {
     if (success) {
       message.success('Successfully clocked in!');
     }
+    // Always refresh to show updated data (even on failure, to sync UI state)
+    refetchAfterAction();
   };
 
   // Clock out handler
@@ -132,6 +131,8 @@ const AttendanceEmployee = () => {
     });
     if (success) {
       message.success('Successfully clocked out!');
+      // Immediately refresh to show updated data
+      refetchAfterAction();
     }
   };
 
@@ -181,7 +182,7 @@ const AttendanceEmployee = () => {
   };
 
   const handleRefresh = () => {
-    fetchMyAttendance(filters);
+    refetchAfterAction();
   };
 
   // Table columns
@@ -207,15 +208,14 @@ const AttendanceEmployee = () => {
       dataIndex: "Status",
       render: (text: string, record: any) => (
         <span
-          className={`badge ${
-            record.Status === "Present"
-              ? "badge-success-transparent"
-              : record.Status === "Late"
+          className={`badge ${record.Status === "Present"
+            ? "badge-success-transparent"
+            : record.Status === "Late"
               ? "badge-warning-transparent"
               : record.Status === "Half Day"
-              ? "badge-info-transparent"
-              : "badge-danger-transparent"
-          } d-inline-flex align-items-center`}
+                ? "badge-info-transparent"
+                : "badge-danger-transparent"
+            } d-inline-flex align-items-center`}
         >
           <i className="ti ti-point-filled me-1" />
           {record.Status}
@@ -262,14 +262,13 @@ const AttendanceEmployee = () => {
       dataIndex: "ProductionHours",
       render: (text: string, record: any) => (
         <span
-          className={`badge d-inline-flex align-items-center badge-sm ${
-            parseFloat(record.ProductionHours) < 8
-              ? "badge-danger"
-              : parseFloat(record.ProductionHours) >= 8 &&
-                parseFloat(record.ProductionHours) <= 9
+          className={`badge d-inline-flex align-items-center badge-sm ${parseFloat(record.ProductionHours) < 8
+            ? "badge-danger"
+            : parseFloat(record.ProductionHours) >= 8 &&
+              parseFloat(record.ProductionHours) <= 9
               ? "badge-success"
               : "badge-info"
-          }`}
+            }`}
         >
           <i className="ti ti-clock-hour-11 me-1"></i>
           {record.ProductionHours}
@@ -303,22 +302,24 @@ const AttendanceEmployee = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="me-2 mb-2">
-                <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={all_routes.attendanceemployee}
-                    className="btn btn-icon btn-sm active bg-primary text-white me-1"
-                  >
-                    <i className="ti ti-brand-days-counter" />
-                  </Link>
-                  <Link
-                    to={all_routes.attendanceadmin}
-                    className="btn btn-icon btn-sm"
-                  >
-                    <i className="ti ti-calendar-event" />
-                  </Link>
+              {canAccessAdminAttendance && (
+                <div className="me-2 mb-2">
+                  <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
+                    <Link
+                      to={all_routes.attendanceemployee}
+                      className="btn btn-icon btn-sm active bg-primary text-white me-1"
+                    >
+                      <i className="ti ti-brand-days-counter" />
+                    </Link>
+                    <Link
+                      to={all_routes.attendanceadmin}
+                      className="btn btn-icon btn-sm"
+                    >
+                      <i className="ti ti-calendar-event" />
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="me-2 mb-2">
                 <div className="dropdown">
                   <Link

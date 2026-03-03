@@ -14,14 +14,18 @@ import { useLeaveTypesREST } from './useLeaveTypesREST';
 
 // Leave Types matching backend schema
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'on-hold';
-export type LeaveType = 'sick' | 'casual' | 'earned' | 'maternity' | 'paternity' | 'bereavement' | 'compensatory' | 'unpaid' | 'special';
+// @deprecated - Leave types now use ObjectId reference (leaveTypeId) instead of string codes
+export type LeaveTypeCode = 'sick' | 'casual' | 'earned' | 'maternity' | 'paternity' | 'bereavement' | 'compensatory' | 'unpaid' | 'special';
 
 export interface Leave {
   _id: string;
   leaveId: string;
   employeeId?: string;
   employeeName?: string;
-  leaveType: LeaveType;
+  // ObjectId-based leave type system
+  leaveTypeId?: string;        // ObjectId reference (new)
+  leaveType?: LeaveTypeCode;    // Code for backward compatibility (legacy)
+  leaveTypeName?: string;       // Display name (e.g., "Annual Leave")
   startDate: string;
   endDate: string;
   duration: number;
@@ -63,6 +67,9 @@ export interface LeaveBalance {
   used: number;
   total: number;
   pending?: number;
+  // ObjectId-based system additions
+  leaveTypeId?: string;     // ObjectId reference
+  leaveTypeName?: string;    // Display name (e.g., "Annual Leave")
   // Custom policy fields
   hasCustomPolicy?: boolean;
   customPolicyId?: string;
@@ -173,6 +180,7 @@ export const useLeaveREST = () => {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -184,10 +192,16 @@ export const useLeaveREST = () => {
   const { activeOptions } = useLeaveTypesREST();
 
   // Create dynamic leave type display map from database
+  // Maps both ObjectId (new system) and code (legacy) to display name
   const leaveTypeDisplayMap = useMemo(() => {
     const map: Record<string, string> = {};
     activeOptions.forEach(option => {
-      map[option.value.toLowerCase()] = option.label;
+      // Map by ObjectId (new system) - primary key
+      map[option.value] = option.label;
+      // Map by code (legacy) - fallback for backward compatibility
+      if (option.code) {
+        map[option.code.toLowerCase()] = option.label;
+      }
     });
     return map;
   }, [activeOptions]);
@@ -200,7 +214,7 @@ export const useLeaveREST = () => {
     limit?: number;
     search?: string;
     status?: LeaveStatus;
-    leaveType?: LeaveType;
+    leaveType?: LeaveTypeCode;
     employee?: string;
     startDate?: string;
     endDate?: string;
@@ -248,7 +262,7 @@ export const useLeaveREST = () => {
     page?: number;
     limit?: number;
     status?: LeaveStatus;
-    leaveType?: LeaveType;
+    leaveType?: LeaveTypeCode;
   } = {}) => {
     setLoading(true);
     setError(null);
@@ -315,12 +329,15 @@ export const useLeaveREST = () => {
     setError(null);
     try {
       // Transform display values to backend values
+      // Frontend sends leaveType as ObjectId (dropdown value), backend expects leaveTypeId
       const payload = {
         ...leaveData,
-        leaveType: leaveData.leaveType,
+        leaveTypeId: leaveData.leaveType || leaveData.leaveTypeId, // ObjectId from dropdown
         startDate: leaveData.startDate ? new Date(leaveData.startDate).toISOString() : undefined,
         endDate: leaveData.endDate ? new Date(leaveData.endDate).toISOString() : undefined,
       };
+      // Remove leaveType from payload (legacy field, not used by backend anymore)
+      delete (payload as any).leaveType;
 
       const response: ApiResponse<Leave> = await post('/leaves', payload);
 
@@ -521,21 +538,71 @@ export const useLeaveREST = () => {
   /**
    * Get leave balance
    */
-  const getLeaveBalance = useCallback(async (leaveType?: LeaveType): Promise<LeaveBalance | Record<string, LeaveBalance> | null> => {
+  const getLeaveBalance = useCallback(async (leaveType?: LeaveTypeCode): Promise<LeaveBalance | Record<string, LeaveBalance> | null> => {
     setLoading(true);
     setError(null);
     try {
       const params = leaveType ? { leaveType } : {};
+      console.log('[useLeaveREST] getLeaveBalance called with params:', params);
+
       const response: ApiResponse<any> = await get('/leaves/balance', { params });
+
+      console.log('[useLeaveREST] getLeaveBalance response:', response);
+      console.log('[useLeaveREST] response.success:', response.success);
+      console.log('[useLeaveREST] response.data:', response.data);
+
+      if (response.success && response.data) {
+        console.log('[useLeaveREST] Returning balance data:', response.data);
+        return response.data;
+      }
+
+      console.error('[useLeaveREST] API returned unsuccessful response:', response);
+      throw new Error(response.error?.message || 'Failed to fetch leave balance');
+    } catch (err: any) {
+      const errorMessage = getErrorMessage(err);
+      console.error('[useLeaveREST] Error fetching leave balance:', err);
+      setError(errorMessage);
+      // Only show error message if not a network/auth error (those are handled globally)
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        message.error(errorMessage);
+      }
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get leave balance for a specific employee (by MongoDB ObjectId _id)
+   * Used by HR/Admin when adding leave for other employees
+   */
+  const getLeaveBalanceByEmployeeId = useCallback(async (employeeId: string, leaveType?: LeaveTypeCode): Promise<LeaveBalance | Record<string, LeaveBalance> | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params: Record<string, string> = { employee: employeeId };
+      if (leaveType) {
+        params.leaveType = leaveType;
+      }
+      console.log('[useLeaveREST] getLeaveBalanceByEmployeeId called with params:', params);
+
+      const response: ApiResponse<any> = await get('/leaves/balance', { params });
+
+      console.log('[useLeaveREST] getLeaveBalanceByEmployeeId response:', response);
 
       if (response.success && response.data) {
         return response.data;
       }
+
       throw new Error(response.error?.message || 'Failed to fetch leave balance');
     } catch (err: any) {
-      const errorMessage = getErrorMessage(err);
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch leave balance';
+      console.error('[useLeaveREST] Error fetching balance by employeeId:', err);
       setError(errorMessage);
-      message.error(errorMessage);
+      // Only show error message if not a network/auth error
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        message.error(errorMessage);
+      }
       return null;
     } finally {
       setLoading(false);
@@ -564,10 +631,11 @@ export const useLeaveREST = () => {
   }, []);
 
   /**
-   * Refresh leaves (re-fetch with current filters)
+   * Refresh leaves — increments a counter that callers can add to their useEffect deps
+   * to trigger a re-fetch (e.g. useEffect(() => fetchMyLeaves(), [refreshKey]))
    */
   const refresh = useCallback(() => {
-    setLeaves(prev => [...prev]);
+    setRefreshKey(k => k + 1);
   }, []);
 
   // Socket.IO event listeners for real-time updates
@@ -724,8 +792,10 @@ export const useLeaveREST = () => {
     cancelLeave,
     deleteLeave,
     getLeaveBalance,
+    getLeaveBalanceByEmployeeId,
     fetchStats,
     refresh,
+    refreshKey,
     leaveTypeDisplayMap,
   };
 };

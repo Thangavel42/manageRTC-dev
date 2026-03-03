@@ -1,13 +1,12 @@
-import SimpleList from "./simple-list";
-import SharedList from "./shared-list";
 import Cloning from "./cloning";
 import DisableSorting from "./disable-sorting";
-import SortingHandle from "./sorting-handle";
-import SortingFilter from "./sorting-filter";
-import SortableGrid from "./sortable-grid";
-import NestedSortable from "./nested-sortable";
 import MultipleDrag from "./multiple-drag";
-import MultipleDragMain from "./multiple-drag";
+import NestedSortable from "./nested-sortable";
+import SharedList from "./shared-list";
+import SimpleList from "./simple-list";
+import SortableGrid from "./sortable-grid";
+import SortingFilter from "./sorting-filter";
+import SortingHandle from "./sorting-handle";
 import SwapDrag from "./swap";
 
 const Sortable = () => {

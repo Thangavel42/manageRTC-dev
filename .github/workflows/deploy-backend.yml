@@ -1,5 +1,10 @@
 name: Deploy Backend
 
+# This workflow is identical in both repos.
+# Environment is determined entirely by the GitHub secrets configured in each repo:
+#   KarnanError/manageRTC-acc  → set ACC secrets → deploys to apiacc.manage-rtc.com
+#   Sudhakarnan/manageRTC      → set DEV secrets → deploys to apidev.manage-rtc.com
+
 on:
   push:
     branches: [ main ]
@@ -8,15 +13,16 @@ on:
       - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
-env:
-  DEPLOY_PATH: /var/www/apidev.manage-rtc.com/backend
-  BACKUP_PATH: /home/deploy/backups
-  PM2_APP_NAME: manage-rtc-api-dev
-  HEALTH_CHECK_URL: https://apidev.manage-rtc.com/health
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    env:
+      BACKEND_DEPLOY_PATH: ${{ secrets.BACKEND_DEPLOY_PATH }}
+      BACKEND_STAGING_DIR: ${{ secrets.BACKEND_STAGING_DIR }}
+      PM2_APP_NAME:        ${{ secrets.PM2_APP_NAME }}
+      FRONTEND_URL:        ${{ secrets.FRONTEND_URL }}
+      BACKUP_PREFIX_BE:    ${{ secrets.BACKUP_PREFIX_BE }}
 
     steps:
       - name: Checkout
@@ -41,117 +47,141 @@ jobs:
 
       - name: Backup current deployment
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ env.BACKEND_DEPLOY_PATH }}
+          BACKUP_PREFIX: ${{ env.BACKUP_PREFIX_BE }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: DEPLOY_PATH,BACKUP_PREFIX
           script: |
             set -e
             mkdir -p ~/backups
             TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-            if [ -d "/var/www/apidev.manage-rtc.com/backend" ]; then
-              echo "Creating backup: backend-$TIMESTAMP.tar.gz"
-              tar -czf ~/backups/backend-$TIMESTAMP.tar.gz \
-                -C /var/www/apidev.manage-rtc.com/backend \
-                --exclude=node_modules \
-                .
-              # Keep only last 5 backups
-              ls -t ~/backups/backend-*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
-              echo "Backup completed. Current backups:"
-              ls -la ~/backups/backend-*.tar.gz
+            if [ -d "$DEPLOY_PATH" ] && [ "$(ls -A $DEPLOY_PATH 2>/dev/null)" ]; then
+              echo "Creating backup: $BACKUP_PREFIX-$TIMESTAMP.tar.gz"
+              tar -czf ~/backups/$BACKUP_PREFIX-$TIMESTAMP.tar.gz \
+                -C $DEPLOY_PATH --exclude=node_modules .
+              ls -t ~/backups/$BACKUP_PREFIX-*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+              echo "Backup completed."
+              ls -la ~/backups/$BACKUP_PREFIX-*.tar.gz
             else
               echo "No existing deployment to backup"
             fi
 
       - name: Deploy and restart PM2
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ env.BACKEND_DEPLOY_PATH }}
+          PM2_NAME: ${{ env.PM2_APP_NAME }}
+          STAGING_DIR: ${{ env.BACKEND_STAGING_DIR }}
+          FRONTEND_URL: ${{ env.FRONTEND_URL }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: DEPLOY_PATH,PM2_NAME,STAGING_DIR,FRONTEND_URL
           script: |
             set -e
 
-            # Extract new release
-            mkdir -p ~/releases/backend && rm -rf ~/releases/backend/*
-            tar -xzf ~/backend.tar.gz -C ~/releases/backend
+            # Safety guard — abort immediately if any critical variable is empty
+            if [ -z "$STAGING_DIR" ] || [ -z "$DEPLOY_PATH" ] || [ -z "$PM2_NAME" ]; then
+              echo "ERROR: STAGING_DIR, DEPLOY_PATH or PM2_NAME is empty. Aborting to prevent data loss."
+              exit 1
+            fi
+
+            echo "Deploying backend to $DEPLOY_PATH (PM2: $PM2_NAME)"
+
+            # Extract to staging
+            mkdir -p ~/$STAGING_DIR && rm -rf ~/$STAGING_DIR/*
+            tar -xzf ~/backend.tar.gz -C ~/$STAGING_DIR
             rm -f ~/backend.tar.gz
 
-            # Sync files (excluding node_modules and .env)
+            # Sync to deploy path
             rsync -a --delete --exclude='node_modules' --exclude='.env' \
-              ~/releases/backend/ /var/www/apidev.manage-rtc.com/backend/
+              ~/$STAGING_DIR/ $DEPLOY_PATH/
 
-            cd /var/www/apidev.manage-rtc.com/backend
+            cd $DEPLOY_PATH
 
-            # Write environment file
-            cat > .env << 'EOF'
-            PORT=${{ secrets.ENV_PORT }}
-            MONGO_URI=${{ secrets.ENV_MONGO_URI }}
-            CLERK_SECRET_KEY=${{ secrets.ENV_CLERK_SECRET_KEY }}
-            CLERK_JWT_KEY=${{ secrets.ENV_CLERK_JWT_KEY }}
-            CLERK_PUBLISHABLE_KEY=${{ secrets.ENV_CLERK_PUBLISHABLE_KEY }}
-            FRONTEND_URL=https://dev.manage-rtc.com
-            JWT=${{ secrets.ENV_JWT }}
-            NODE_ENV=production
-            ZONE_ID=${{ secrets.ENV_ZONE_ID }}
-            CLOUDFLARE_API_KEY=${{ secrets.ENV_CLOUDFLARE_API_KEY }}
-            DOMAIN=${{ secrets.ENV_DOMAIN }}
-            VPS_IP=${{ secrets.ENV_VPS_IP }}
-            EOF
+            # Write .env — ${{ secrets.* }} are resolved by GitHub Actions before SSH runs.
+            # FRONTEND_URL comes from SSH envs (shell variable, not a GA expression).
+            echo "PORT=${{ secrets.ENV_PORT }}"                                         >  .env
+            echo "MONGO_URI=${{ secrets.ENV_MONGO_URI }}"                            >> .env
+            echo "MONGODB_URI=${{ secrets.ENV_MONGO_URI }}"                          >> .env
+            echo "MONGODB_DATABASE=${{ secrets.ENV_MONGODB_DATABASE }}"              >> .env
+            echo "CLERK_SECRET_KEY=${{ secrets.ENV_CLERK_SECRET_KEY }}"              >> .env
+            echo "CLERK_JWT_KEY=${{ secrets.ENV_CLERK_JWT_KEY }}"                    >> .env
+            echo "CLERK_PUBLISHABLE_KEY=${{ secrets.ENV_CLERK_PUBLISHABLE_KEY }}"    >> .env
+            echo "JWT=${{ secrets.ENV_JWT }}"                                        >> .env
+            echo "SOCKETS_ENABLED=${{ secrets.ENV_SOCKETS_ENABLED }}"               >> .env
+            echo "NODE_ENV=production"                                               >> .env
+            echo "ZONE_ID=${{ secrets.ENV_ZONE_ID }}"                               >> .env
+            echo "CLOUDFLARE_API_KEY=${{ secrets.ENV_CLOUDFLARE_API_KEY }}"         >> .env
+            echo "DOMAIN=${{ secrets.ENV_DOMAIN }}"                                 >> .env
+            echo "VPS_IP=${{ secrets.ENV_VPS_IP }}"                                 >> .env
+            echo "FRONTEND_URL=$FRONTEND_URL"                                        >> .env
+            echo "EXTRA_ALLOWED_ORIGINS=${{ secrets.ENV_EXTRA_ALLOWED_ORIGINS }}"   >> .env
+            echo "SMTP_HOST=${{ secrets.ENV_SMTP_HOST }}"                           >> .env
+            echo "SMTP_PORT=${{ secrets.ENV_SMTP_PORT }}"                           >> .env
+            echo "SMTP_SECURE=${{ secrets.ENV_SMTP_SECURE }}"                       >> .env
+            echo "SMTP_USER=${{ secrets.ENV_SMTP_USER }}"                           >> .env
+            echo "SMTP_PASS=${{ secrets.ENV_SMTP_PASS }}"                           >> .env
+            echo "SMTP_FROM=${{ secrets.ENV_SMTP_FROM }}"                           >> .env
 
-            # Install dependencies
+            # Install production dependencies
             npm ci --omit=dev
 
-            # Zero-downtime reload
-            if pm2 describe manage-rtc-api-dev > /dev/null 2>&1; then
-              echo "Reloading PM2 process..."
-              pm2 reload manage-rtc-api-dev --update-env
+            # Zero-downtime reload or first start
+            if pm2 describe $PM2_NAME > /dev/null 2>&1; then
+              echo "Reloading $PM2_NAME..."
+              pm2 reload $PM2_NAME --update-env
             else
-              echo "Starting new PM2 process..."
-              pm2 start server.js --name manage-rtc-api-dev
+              echo "Starting $PM2_NAME for the first time..."
+              pm2 start server.js --name $PM2_NAME
               pm2 save
             fi
 
-            # Wait for process to stabilize
             sleep 5
-            pm2 status manage-rtc-api-dev
+            pm2 status $PM2_NAME
 
       - name: Health check
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          PM2_NAME: ${{ env.PM2_APP_NAME }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: PM2_NAME
           script: |
             set -e
-            echo "Running health check..."
+            echo "Running backend health check..."
 
-            # Check PM2 process status
-            if ! pm2 describe manage-rtc-api-dev | grep -q "online"; then
-              echo "ERROR: PM2 process is not online!"
-              pm2 logs manage-rtc-api-dev --lines 50
+            if ! pm2 describe $PM2_NAME | grep -q "online"; then
+              echo "ERROR: $PM2_NAME is not online!"
+              pm2 logs $PM2_NAME --lines 50
               exit 1
             fi
 
-            # Check if port 5000 is listening
-            if ! netstat -tlnp 2>/dev/null | grep -q ":5000"; then
-              echo "ERROR: Port 5000 is not listening!"
-              exit 1
+            PORT=${{ secrets.ENV_PORT }}
+
+            if ! netstat -tlnp 2>/dev/null | grep -q ":$PORT"; then
+              echo "WARNING: Port $PORT not yet listening, waiting 5s..."
+              sleep 5
             fi
 
-            # HTTP health check (with retry)
             MAX_RETRIES=3
             RETRY_COUNT=0
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if curl -sf -o /dev/null -w "%{http_code}" http://localhost:5000/ | grep -qE "^(200|404|401)$"; then
-                echo "Health check passed!"
+              if curl -sf -o /dev/null -w "%{http_code}" http://localhost:$PORT/ | grep -qE "^(200|404|401)$"; then
+                echo "Health check passed! Backend running on port $PORT"
                 exit 0
               fi
               RETRY_COUNT=$((RETRY_COUNT + 1))
-              echo "Health check attempt $RETRY_COUNT failed, retrying..."
+              echo "Attempt $RETRY_COUNT failed, retrying..."
               sleep 3
             done
 
-            echo "WARNING: HTTP health check did not return expected status, but service may still be functional"
-            echo "PM2 status:"
+            echo "WARNING: HTTP health check inconclusive, but PM2 process is online."
             pm2 status

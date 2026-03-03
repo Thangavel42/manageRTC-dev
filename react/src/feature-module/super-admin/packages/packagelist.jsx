@@ -1,20 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import CommonSelect from "../../../core/common/commonSelect";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import Table from "../../../core/common/dataTable/index";
-import { package_list } from "../../../core/data/json/packagelist";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import { useSocket } from "../../../SocketContext";
+import moment from "moment";
+import { useEffect, useRef, useState } from "react";
 import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { planDetails } from "../../../core/data/json/planDetails";
-import moment from "moment";
+import { Link } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
+import Table from "../../../core/common/dataTable/index";
+import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
 
 const Packages = () => {
   const [Data, setData] = useState([]);
@@ -241,7 +239,7 @@ const Packages = () => {
     }));
   };
 
-  const planName = [
+  const _planName = [
     { value: "Advanced", label: "Advanced" },
     { value: "Basic", label: "Basic" },
     { value: "Enterprise", label: "Enterprise" },
@@ -389,7 +387,7 @@ const Packages = () => {
 
     let hasError = false;
 
-    if (logo == null || logo == undefined || logo.trim() == "") {
+    if (logo === null || logo === undefined || logo.trim() === "") {
       hasError = true;
       toast.error("Please upload a Logo.");
     }

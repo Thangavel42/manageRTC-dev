@@ -65,9 +65,19 @@ export const requirePageAccess = (pageName, action = 'read') => {
   return async (req, res, next) => {
     try {
       // Get user info from request (set by auth middleware)
-      const { roleId, companyId, userId } = req.user || {};
+      const { roleId, companyId, userId, role: roleName } = req.user || {};
 
-      if (!roleId) {
+      // If roleId is not provided, try to look it up by role name
+      // (This happens when authenticate middleware sets role but not roleId)
+      let finalRoleId = roleId;
+      if (!finalRoleId && roleName) {
+        const role = await Role.findOne({ name: { $regex: new RegExp(`^${roleName}$`, 'i') } });
+        if (role) {
+          finalRoleId = role._id;
+        }
+      }
+
+      if (!finalRoleId) {
         return res.status(401).json({
           success: false,
           error: 'Unauthorized',
@@ -85,7 +95,7 @@ export const requirePageAccess = (pageName, action = 'read') => {
       }
 
       // Check role permission
-      const role = await Role.findById(roleId);
+      const role = await Role.findById(finalRoleId);
       if (!role) {
         return res.status(401).json({
           success: false,

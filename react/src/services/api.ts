@@ -5,6 +5,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { signOutAndClear } from './clerkLogout';
 
 // Global token cache - will be populated by AuthProvider
 let cachedToken: string | null = null;
@@ -107,7 +108,11 @@ const createApiClient = (): AxiosInstance => {
         if (token && config.headers) {
           config.headers.Authorization = `Bearer ${token}`;
         } else if (!token) {
-          console.warn('[API] No authentication token available for request');
+          console.warn('[API] No authentication token available for request, skipping');
+          // Abort the request to prevent "Failed to fetch" errors
+          const controller = new AbortController();
+          controller.abort();
+          config.signal = controller.signal;
         }
 
         console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
@@ -138,6 +143,13 @@ const createApiClient = (): AxiosInstance => {
     },
     async (error: AxiosError<ApiResponse>) => {
       console.error('[API] Response error:', error.config?.url, error.response?.data);
+      console.error('[API] Full error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        errorDetail: error.response?.data?.error,
+        validationDetails: error.response?.data?.error?.details,
+      });
 
       const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -175,10 +187,32 @@ const createApiClient = (): AxiosInstance => {
         }
       }
 
-      // Handle specific error cases
+      // Handle 403 Forbidden - Includes inactive employees, insufficient permissions
       if (error.response?.status === 403) {
-        // Forbidden - Insufficient permissions
-        console.error('[API] Forbidden - insufficient permissions');
+        const errorCode = error.response?.data?.error?.code;
+        const errorMessage = error.response?.data?.error?.message;
+
+        console.error('[API] Forbidden:', { errorCode, errorMessage });
+
+        // If employee account is locked/inactive/resigned/terminated, logout and redirect
+        if (errorCode === 'ACCOUNT_LOCKED' ||
+            errorCode === 'EMPLOYEE_INACTIVE' ||
+            errorCode === 'EMPLOYEE_STATUS_BLOCKED' ||
+            errorCode === 'EMPLOYEE_DELETED' ||
+            errorMessage?.toLowerCase().includes('deactivated') ||
+            errorMessage?.toLowerCase().includes('account has been')) {
+          console.error('[API] Employee account is locked/inactive - signing out');
+
+          // Sign out from Clerk, clear storage, and redirect
+          await signOutAndClear();
+
+          // Prevent further processing
+          return Promise.reject({
+            ...error,
+            handled: true,
+            logoutReason: 'account_locked'
+          });
+        }
       }
 
       if (error.response?.status === 404) {
@@ -259,6 +293,13 @@ export const del = async <T = any>(
  * Error Handler
  */
 export const handleApiError = (error: any): string => {
+  // Check for validation errors with details
+  if (error.response?.data?.error?.code === 'VALIDATION_ERROR' && error.response?.data?.error?.details?.length > 0) {
+    const details = error.response.data.error.details;
+    // Return the first validation error message with field name
+    const firstError = details[0];
+    return `${firstError.field}: ${firstError.message}`;
+  }
   if (error.response?.data?.error?.message) {
     return error.response.data.error.message;
   }

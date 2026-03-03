@@ -14,8 +14,11 @@ import { MongoClient } from 'mongodb';
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = process.env.DB_NAME || 'manage-rtc';
+const MONGODB_URI = process.env.MONGODB_URI;
+const DB_NAME = process.env.MONGODB_DATABASE || process.env.DB_NAME;
+if (!MONGODB_URI || !DB_NAME) {
+  throw new Error('MONGODB_URI and MONGODB_DATABASE must be set in environment variables');
+}
 
 async function syncEmployeeRole(email) {
   console.log(`[Sync Role] Starting sync for employee: ${email}`);

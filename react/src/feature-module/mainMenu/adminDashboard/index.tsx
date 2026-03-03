@@ -19,9 +19,9 @@ import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
 import { useSocket } from "../../../SocketContext";
 import { all_routes } from "../../router/all_routes";
 // Role-Based Components
-import { AdminOnly } from "../../../core/components/RoleBasedRenderer";
 import ErrorBoundary from "../../../core/components/ErrorBoundary";
 import { PageLoading } from "../../../core/components/LoadingStates";
+import { AdminOnly } from "../../../core/components/RoleBasedRenderer";
 interface DashboardData {
   pendingItems?: {
     approvals: number;
@@ -150,6 +150,7 @@ interface DashboardData {
   }>;
   projectsData?: Array<{
     id: string;
+    projectId?: string;
     name: string;
     hours: number;
     totalHours: number;
@@ -607,7 +608,7 @@ const AdminDashboard = () => {
 
   // Task Statistics Chart Data
   const taskStatsData = {
-    labels: ['Ongoing', 'Onhold', 'Completed', 'Overdue'],
+    labels: ['Ongoing', 'On Hold', 'Completed', 'Overdue'],
     datasets: [
       {
         label: 'Task Statistics',
@@ -884,16 +885,17 @@ const AdminDashboard = () => {
   };
 
   // Calculate employee status percentages
+  // Employment types from DB: 'Full-time', 'Part-time', 'Contract', 'Intern'
   const calculateEmployeeStatusPercentages = () => {
     const total = dashboardData.employeeStatus?.total || 0;
-    if (total === 0) return { fulltime: 0, contract: 0, probation: 0, wfh: 0 };
+    if (total === 0) return { fulltime: 0, parttime: 0, contract: 0, intern: 0 };
 
     const distribution = dashboardData.employeeStatus?.distribution || {};
     return {
-      fulltime: Math.round(((distribution['Fulltime'] || 0) / total) * 100),
+      fulltime: Math.round(((distribution['Full-time'] || 0) / total) * 100),
+      parttime: Math.round(((distribution['Part-time'] || 0) / total) * 100),
       contract: Math.round(((distribution['Contract'] || 0) / total) * 100),
-      probation: Math.round(((distribution['Probation'] || 0) / total) * 100),
-      wfh: Math.round(((distribution['WFH'] || 0) / total) * 100),
+      intern: Math.round(((distribution['Intern'] || 0) / total) * 100),
     };
   };
 
@@ -931,16 +933,14 @@ const AdminDashboard = () => {
       const stats = dashboardData.stats;
       if (stats) {
         doc.text(
-          `Attendance: ${stats.attendance?.present || 0}/${
-            stats.attendance?.total || 0
+          `Attendance: ${stats.attendance?.present || 0}/${stats.attendance?.total || 0
           } (${stats.attendance?.percentage?.toFixed(1) || 0}%)`,
           20,
           yPosition
         );
         yPosition += 10;
         doc.text(
-          `Projects: ${stats.projects?.completed || 0}/${
-            stats.projects?.total || 0
+          `Projects: ${stats.projects?.completed || 0}/${stats.projects?.total || 0
           } (${stats.projects?.percentage?.toFixed(1) || 0}%)`,
           20,
           yPosition
@@ -1213,2376 +1213,2323 @@ const AdminDashboard = () => {
         <>
           {/* Page Wrapper */}
           <div className="page-wrapper">
-        <div className="content">
-          {/* Breadcrumb */}
-          <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
-            <div className="my-auto mb-2">
-              <h2 className="mb-1">Admin Dashboard</h2>
-              <nav>
-                <ol className="breadcrumb mb-0">
-                  <li className="breadcrumb-item">
-                    <Link to={routes.adminDashboard}>
-                      <i className="ti ti-smart-home" />
-                    </Link>
-                  </li>
-                  <li className="breadcrumb-item">Dashboard</li>
-                  <li className="breadcrumb-item active" aria-current="page">
-                    Admin Dashboard
-                  </li>
-                </ol>
-              </nav>
-            </div>
-            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="me-2 mb-2">
-                <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    <i className="ti ti-file-export me-1" />
-                    Export
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
+            <div className="content">
+              {/* Breadcrumb */}
+              <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+                <div className="my-auto mb-2">
+                  <h2 className="mb-1">Admin Dashboard</h2>
+                  <nav>
+                    <ol className="breadcrumb mb-0">
+                      <li className="breadcrumb-item">
+                        <Link to={routes.adminDashboard}>
+                          <i className="ti ti-smart-home" />
+                        </Link>
+                      </li>
+                      <li className="breadcrumb-item">Dashboard</li>
+                      <li className="breadcrumb-item active" aria-current="page">
+                        Admin Dashboard
+                      </li>
+                    </ol>
+                  </nav>
+                </div>
+                <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
+                  <div className="me-2 mb-2">
+                    <div className="dropdown">
                       <Link
                         to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          exportToPDF();
-                        }}
-                      >
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          exportToExcel();
-                        }}
-                      >
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{' '}
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              <div className="mb-2">
-                <div className="input-icon w-120 position-relative">
-                  <span className="input-icon-addon">
-                    <i className="ti ti-calendar text-gray-9" />
-                  </span>
-                  <Calendar
-                    value={date}
-                    onChange={(e: any) => handleYearChange(e.value)}
-                    view="year"
-                    dateFormat="yy"
-                    className="Calendar-form"
-                  />
-                </div>
-              </div>
-              <div className="ms-2 head-icons">
-                <CollapseHeader />
-              </div>
-            </div>
-          </div>
-          {/* /Breadcrumb */}
-
-          {/* Welcome Wrap */}
-          <div className="card border-0">
-            <div className="card-body d-flex align-items-center justify-content-between flex-wrap pb-1">
-              <div className="d-flex align-items-center mb-3">
-                <span className="avatar avatar-xl flex-shrink-0">
-                  {isSignedIn && (profile || user) ? (
-                    <img
-                      src={
-                        (profile as any)?.companyLogo || // For admin: company logo
-                        user?.imageUrl || // Fallback to Clerk user image
-                        "assets/img/profiles/avatar-31.jpg"
-                      }
-                      alt="Profile"
-                      className="rounded-circle"
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <ImageWithBasePath
-                      src="assets/img/profiles/avatar-31.jpg"
-                      className="rounded-circle"
-                      alt="img"
-                    />
-                  )}
-                </span>
-                <div className="ms-3">
-                  <h3 className="mb-2">
-                    Welcome Back, {getUserName()}{' '}
-                    <Link to="#" className="edit-icon">
-                      <i className="ti ti-edit fs-14" />
-                    </Link>
-                  </h3>
-                  <p>
-                    You have{' '}
-                    <span className="text-primary text-decoration-underline">
-                      {dashboardData.pendingItems?.approvals || 0}
-                    </span>{' '}
-                    Pending Approvals &amp;{' '}
-                    <span className="text-primary text-decoration-underline">
-                      {dashboardData.pendingItems?.leaveRequests || 0}
-                    </span>{' '}
-                    Leave Requests
-                  </p>
-                </div>
-              </div>
-              <div className="d-flex align-items-center flex-wrap mb-1">
-                <Link to={routes.projectlist} className="btn btn-secondary btn-md me-2 mb-2">
-                  <i className="ti ti-square-rounded-plus me-1" />
-                  Add Project
-                </Link>
-                <Link
-                  to="#"
-                  className="btn btn-primary btn-md mb-2"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_leaves"
-                >
-                  <i className="ti ti-square-rounded-plus me-1" />
-                  Add Requests
-                </Link>
-              </div>
-            </div>
-          </div>
-          {/* /Welcome Wrap */}
-
-          <div className="row">
-            {/* Widget Info */}
-            <div className="col-xxl-8 d-flex">
-              <div className="row flex-fill">
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-primary mb-2">
-                        <i className="ti ti-calendar-share fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Attendance</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.attendance?.present || 0}/
-                        {dashboardData.stats?.attendance?.total || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.attendance?.percentage
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.attendance?.percentage
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.attendance?.percentage)}
-                        </span>
-                      </h3>
-                      <Link to="/attendance-employee" className="link-default">
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-secondary mb-2">
-                        <i className="ti ti-browser fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Total Projects</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.projects?.completed || 0}/
-                        {dashboardData.stats?.projects?.total || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.projects?.percentage
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.projects?.percentage
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.projects?.percentage)}
-                        </span>
-                      </h3>
-                      <Link to="/projects" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-info mb-2">
-                        <i className="ti ti-users-group fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Total Clients</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.clients || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.clientsGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.clientsGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.clientsGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/clients" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-pink mb-2">
-                        <i className="ti ti-checklist fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Total Tasks</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.tasks?.completed || 0}/
-                        {dashboardData.stats?.tasks?.total || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.tasksGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.tasksGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.tasksGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/tasks" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-purple mb-2">
-                        <i className="ti ti-moneybag fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Earnings</h6>
-                      <h3 className="mb-3">
-                        ${dashboardData.stats?.earnings || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.earningsGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.earningsGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.earningsGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/expenses" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-danger mb-2">
-                        <i className="ti ti-browser fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Profit This Week</h6>
-                      <h3 className="mb-3">
-                        ${dashboardData.stats?.weeklyProfit || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.profitGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.profitGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.profitGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/purchase-transaction" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-success mb-2">
-                        <i className="ti ti-users-group fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Job Applicants</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.jobApplications || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.applicationsGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.applicationsGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.applicationsGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/job-list" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-3 d-flex">
-                  <div className="card flex-fill">
-                    <div className="card-body">
-                      <span className="avatar rounded-circle bg-dark mb-2">
-                        <i className="ti ti-user-star fs-16" />
-                      </span>
-                      <h6 className="fs-13 fw-medium text-default mb-1">Employees</h6>
-                      <h3 className="mb-3">
-                        {dashboardData.stats?.employees || 0}{' '}
-                        <span
-                          className={`fs-12 fw-medium ${getGrowthTextClass(
-                            dashboardData.stats?.employeesGrowth
-                          )}`}
-                        >
-                          <i
-                            className={`${getGrowthIconClass(
-                              dashboardData.stats?.employeesGrowth
-                            )} me-1`}
-                          />
-                          {formatGrowthPercentage(dashboardData.stats?.employeesGrowth)}
-                        </span>
-                      </h3>
-                      <Link to="/employees" className="link-default">
-                        View All
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /Widget Info */}
-
-            {/* Employees By Department */}
-            <div className="col-xxl-4 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Employees By Department</h5>
-                  <div className="dropdown mb-2">
-                    <Link
-                      to="#"
-                      className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      <i className="ti ti-calendar me-1" />
-                      {filters.employeesByDepartment === 'today'
-                        ? 'Today'
-                        : filters.employeesByDepartment === 'week'
-                          ? 'This Week'
-                          : filters.employeesByDepartment === 'month'
-                            ? 'This Month'
-                            : filters.employeesByDepartment === 'year'
-                              ? 'This Year'
-                              : 'All Time'}
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeesByDepartment === 'all' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeesByDepartment', 'all');
-                          }}
-                        >
-                          All Time
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeesByDepartment === 'year' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeesByDepartment', 'year');
-                          }}
-                        >
-                          This Year
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeesByDepartment === 'month' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeesByDepartment', 'month');
-                          }}
-                        >
-                          This Month
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeesByDepartment === 'week' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeesByDepartment', 'week');
-                          }}
-                        >
-                          This Week
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeesByDepartment === 'today' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeesByDepartment', 'today');
-                          }}
-                        >
-                          Today
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <ReactApexChart
-                    id="emp-department"
-                    options={empDepartmentOptions}
-                    series={empDepartmentOptions.series}
-                    type="bar"
-                    height={220}
-                  />
-                  <p className="fs-13">
-                    <i className="ti ti-circle-filled me-2 fs-8 text-primary" />
-                    No of Employees{' '}
-                    {dashboardData.employeeGrowth?.trend === 'up'
-                      ? 'increased'
-                      : dashboardData.employeeGrowth?.trend === 'down'
-                        ? 'decreased'
-                        : 'remained stable'}{' '}
-                    by{' '}
-                    <span
-                      className={`fw-bold ${
-                        dashboardData.employeeGrowth?.trend === 'up'
-                          ? 'text-success'
-                          : dashboardData.employeeGrowth?.trend === 'down'
-                            ? 'text-danger'
-                            : 'text-secondary'
-                      }`}
-                    >
-                      {dashboardData.employeeGrowth?.trend === 'up'
-                        ? '+'
-                        : dashboardData.employeeGrowth?.trend === 'down'
-                          ? '-'
-                          : ''}
-                      {Math.abs(dashboardData.employeeGrowth?.percentage || 0)}%
-                    </span>{' '}
-                    from last{' '}
-                    {filters.employeesByDepartment === 'today'
-                      ? 'Day'
-                      : filters.employeesByDepartment === 'week'
-                        ? 'Week'
-                        : filters.employeesByDepartment === 'month'
-                          ? 'Month'
-                          : filters.employeesByDepartment === 'year'
-                            ? 'Year'
-                            : 'Period'}
-                  </p>
-                </div>
-              </div>
-            </div>
-            {/* /Employees By Department */}
-          </div>
-
-          <div className="row">
-            {/* Total Employee */}
-            <div className="col-xxl-4 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Employee Status</h5>
-                  <div className="dropdown mb-2">
-                    <Link
-                      to="#"
-                      className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      <i className="ti ti-calendar me-1" />
-                      {filters.employeeStatus === 'today'
-                        ? 'Today'
-                        : filters.employeeStatus === 'week'
-                          ? 'This Week'
-                          : filters.employeeStatus === 'month'
-                            ? 'This Month'
-                            : 'All'}
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeeStatus === 'month' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeeStatus', 'month');
-                          }}
-                        >
-                          This Month
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeeStatus === 'week' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeeStatus', 'week');
-                          }}
-                        >
-                          This Week
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeeStatus === 'today' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeeStatus', 'today');
-                          }}
-                        >
-                          Today
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.employeeStatus === 'all' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('employeeStatus', 'all');
-                          }}
-                        >
-                          All
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between mb-1">
-                    <p className="fs-13 mb-3">Total Employee</p>
-                    <h3 className="mb-3">{dashboardData.employeeStatus?.total || 0}</h3>
-                  </div>
-                  <div className="progress-stacked emp-stack mb-3">
-                    <div
-                      className="progress"
-                      role="progressbar"
-                      aria-label="Segment one"
-                      aria-valuenow={statusPercentages.fulltime}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      style={{ width: `${statusPercentages.fulltime}%` }}
-                    >
-                      <div className="progress-bar bg-warning" />
-                    </div>
-                    <div
-                      className="progress"
-                      role="progressbar"
-                      aria-label="Segment two"
-                      aria-valuenow={statusPercentages.contract}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      style={{ width: `${statusPercentages.contract}%` }}
-                    >
-                      <div className="progress-bar bg-secondary" />
-                    </div>
-                    <div
-                      className="progress"
-                      role="progressbar"
-                      aria-label="Segment three"
-                      aria-valuenow={statusPercentages.probation}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      style={{ width: `${statusPercentages.probation}%` }}
-                    >
-                      <div className="progress-bar bg-danger" />
-                    </div>
-                    <div
-                      className="progress"
-                      role="progressbar"
-                      aria-label="Segment four"
-                      aria-valuenow={statusPercentages.wfh}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      style={{ width: `${statusPercentages.wfh}%` }}
-                    >
-                      <div className="progress-bar bg-pink" />
-                    </div>
-                  </div>
-                  <div className="border mb-3">
-                    <div className="row gx-0">
-                      <div className="col-6">
-                        <div className="p-2 flex-fill border-end border-bottom">
-                          <p className="fs-13 mb-2">
-                            <i className="ti ti-square-filled text-primary fs-12 me-2" />
-                            Fulltime{' '}
-                            <span className="text-gray-9">({statusPercentages.fulltime}%)</span>
-                          </p>
-                          <h2 className="display-1">
-                            {dashboardData.employeeStatus?.distribution?.['Fulltime'] || 0}
-                          </h2>
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="p-2 flex-fill border-bottom text-end">
-                          <p className="fs-13 mb-2">
-                            <i className="ti ti-square-filled me-2 text-secondary fs-12" />
-                            Contract{' '}
-                            <span className="text-gray-9">({statusPercentages.contract}%)</span>
-                          </p>
-                          <h2 className="display-1">
-                            {dashboardData.employeeStatus?.distribution?.['Contract'] || 0}
-                          </h2>
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="p-2 flex-fill border-end">
-                          <p className="fs-13 mb-2">
-                            <i className="ti ti-square-filled me-2 text-danger fs-12" />
-                            Probation{' '}
-                            <span className="text-gray-9">({statusPercentages.probation}%)</span>
-                          </p>
-                          <h2 className="display-1">
-                            {dashboardData.employeeStatus?.distribution?.['Probation'] || 0}
-                          </h2>
-                        </div>
-                      </div>
-                      <div className="col-6">
-                        <div className="p-2 flex-fill text-end">
-                          <p className="fs-13 mb-2">
-                            <i className="ti ti-square-filled text-pink me-2 fs-12" />
-                            WFH <span className="text-gray-9">({statusPercentages.wfh}%)</span>
-                          </p>
-                          <h2 className="display-1">
-                            {dashboardData.employeeStatus?.distribution?.['WFH'] || 0}
-                          </h2>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <h6 className="mb-2">Top Performer</h6>
-                  {dashboardData.employeeStatus?.topPerformer && (
-                    <div className="p-2 d-flex align-items-center justify-content-between border border-primary bg-primary-100 br-5 mb-4">
-                      <div className="d-flex align-items-center overflow-hidden">
-                        <span className="me-2">
-                          <i className="ti ti-award-filled text-primary fs-24" />
-                        </span>
-                        <Link to="/employee-details" className="avatar avatar-md me-2">
-                          <ImageWithBasePath
-                            src={dashboardData.employeeStatus.topPerformer.avatar}
-                            className="rounded-circle border border-white"
-                            alt="img"
-                          />
-                        </Link>
-                        <div>
-                          <h6 className="text-truncate mb-1 fs-14 fw-medium">
-                            <Link to="/employee-details">
-                              {dashboardData.employeeStatus.topPerformer.name}
-                            </Link>
-                          </h6>
-                          <p className="fs-13">
-                            {dashboardData.employeeStatus.topPerformer.position}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-end">
-                        <p className="fs-13 mb-1">Performance</p>
-                        <h5 className="text-primary">
-                          {dashboardData.employeeStatus.topPerformer.performance}%
-                        </h5>
-                      </div>
-                    </div>
-                  )}
-                  <Link to="/employees" className="btn btn-light btn-md w-100">
-                    View All Employees
-                  </Link>
-                </div>
-              </div>
-            </div>
-            {/* /Total Employee */}
-
-            {/* Attendance Overview */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Attendance Overview</h5>
-                  <div className="dropdown mb-2">
-                    <Link
-                      to="#"
-                      className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                      data-bs-toggle="dropdown"
-                    >
-                      <i className="ti ti-calendar me-1" />
-                      {filters.attendanceOverview === 'today'
-                        ? 'Today'
-                        : filters.attendanceOverview === 'week'
-                          ? 'This Week'
-                          : filters.attendanceOverview === 'month'
-                            ? 'This Month'
-                            : 'All'}
-                    </Link>
-                    <ul className="dropdown-menu  dropdown-menu-end p-3">
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.attendanceOverview === 'month' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('attendanceOverview', 'month');
-                          }}
-                        >
-                          This Month
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.attendanceOverview === 'week' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('attendanceOverview', 'week');
-                          }}
-                        >
-                          This Week
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.attendanceOverview === 'today' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('attendanceOverview', 'today');
-                          }}
-                        >
-                          Today
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="#"
-                          className={`dropdown-item rounded-1 ${
-                            filters.attendanceOverview === 'all' ? 'active' : ''
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFilterChange('attendanceOverview', 'all');
-                          }}
-                        >
-                          All
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div className="chartjs-wrapper-demo position-relative mb-4">
-                    <Chart
-                      type="doughnut"
-                      data={attendanceChartData}
-                      options={attendanceChartOptions}
-                      className="w-full attendence-chart md:w-30rem"
-                    />
-                    <div className="position-absolute text-center attendance-canvas">
-                      <p className="fs-13 mb-1">Total Attendance</p>
-                      <h3>{dashboardData.attendanceOverview?.total || 0}</h3>
-                    </div>
-                  </div>
-                  <h6 className="mb-3">Status</h6>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <p className="f-13 mb-2">
-                      <i className="ti ti-circle-filled text-success me-1" />
-                      Present
-                    </p>
-                    <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.present || 0}
-                    </p>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <p className="f-13 mb-2">
-                      <i className="ti ti-circle-filled text-secondary me-1" />
-                      Late
-                    </p>
-                    <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.late || 0}
-                    </p>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <p className="f-13 mb-2">
-                      <i className="ti ti-circle-filled text-warning me-1" />
-                      Permission
-                    </p>
-                    <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.permission || 0}
-                    </p>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mb-2">
-                    <p className="f-13 mb-2">
-                      <i className="ti ti-circle-filled text-danger me-1" />
-                      Absent
-                    </p>
-                    <p className="f-13 fw-medium text-gray-9 mb-2">
-                      {dashboardData.attendanceOverview?.absent || 0}
-                    </p>
-                  </div>
-                  <div className="bg-light br-5 box-shadow-xs p-2 pb-0 d-flex align-items-center justify-content-between flex-wrap">
-                    <div className="d-flex align-items-center">
-                      <p className="mb-2 me-2">Total Absenties</p>
-                      <div className="avatar-list-stacked avatar-group-sm mb-2">
-                        {dashboardData.attendanceOverview?.absentees
-                          ?.slice(0, 4)
-                          .map((absentee, index) => (
-                            <span key={absentee._id} className="avatar avatar-rounded">
-                              <ImageWithBasePath
-                                className="border border-white"
-                                src={absentee.avatar}
-                                alt="img"
-                              />
-                            </span>
-                          ))}
-                        {(dashboardData.attendanceOverview?.absentees?.length || 0) > 4 && (
-                          <Link
-                            className="avatar bg-primary avatar-rounded text-fixed-white fs-10"
-                            to="#"
-                          >
-                            +{(dashboardData.attendanceOverview?.absentees?.length || 0) - 4}
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                    <Link
-                      to="/leaves"
-                      className="fs-13 link-primary text-decoration-underline mb-2"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /Attendance Overview */}
-
-            {/* Clock-In/Out */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Clock-In/Out</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center border-0 fs-13 me-2"
+                        className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                         data-bs-toggle="dropdown"
                       >
-                        {departmentFilters.clockInOut}
+                        <i className="ti ti-file-export me-1" />
+                        Export
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link
                             to="#"
-                            className={`dropdown-item rounded-1 ${
-                              departmentFilters.clockInOut === 'All Departments' ? 'active' : ''
-                            }`}
+                            className="dropdown-item rounded-1"
                             onClick={(e) => {
                               e.preventDefault();
-                              handleDepartmentFilterChange('clockInOut', 'All Departments');
+                              exportToPDF();
                             }}
                           >
-                            All Departments
+                            <i className="ti ti-file-type-pdf me-1" />
+                            Export as PDF
                           </Link>
                         </li>
-                        {dashboardData.employeesByDepartment?.map((dept) => (
-                          <li key={dept.department}>
+                        <li>
+                          <Link
+                            to="#"
+                            className="dropdown-item rounded-1"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              exportToExcel();
+                            }}
+                          >
+                            <i className="ti ti-file-type-xls me-1" />
+                            Export as Excel{' '}
+                          </Link>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <div className="input-icon w-120 position-relative">
+                      <span className="input-icon-addon">
+                        <i className="ti ti-calendar text-gray-9" />
+                      </span>
+                      <Calendar
+                        value={date}
+                        onChange={(e: any) => handleYearChange(e.value)}
+                        view="year"
+                        dateFormat="yy"
+                        className="Calendar-form"
+                      />
+                    </div>
+                  </div>
+                  <div className="ms-2 head-icons">
+                    <CollapseHeader />
+                  </div>
+                </div>
+              </div>
+              {/* /Breadcrumb */}
+
+              {/* Welcome Wrap */}
+              <div className="card border-0">
+                <div className="card-body d-flex align-items-center justify-content-between flex-wrap pb-1">
+                  <div className="d-flex align-items-center mb-3">
+                    <span className="avatar avatar-xl flex-shrink-0">
+                      {isSignedIn && (profile || user) ? (
+                        <img
+                          src={
+                            (profile as any)?.companyLogo || // For admin: company logo
+                            user?.imageUrl || // Fallback to Clerk user image
+                            "assets/img/profiles/avatar-31.jpg"
+                          }
+                          alt="Profile"
+                          className="rounded-circle"
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <ImageWithBasePath
+                          src="assets/img/profiles/avatar-31.jpg"
+                          className="rounded-circle"
+                          alt="img"
+                        />
+                      )}
+                    </span>
+                    <div className="ms-3">
+                      <h3 className="mb-2">
+                        Welcome Back, {getUserName()}{' '}
+                        <Link to="#" className="edit-icon">
+                          <i className="ti ti-edit fs-14" />
+                        </Link>
+                      </h3>
+                      <p>
+                        You have{' '}
+                        <span className="text-primary text-decoration-underline">
+                          {dashboardData.pendingItems?.approvals || 0}
+                        </span>{' '}
+                        Pending Approvals &amp;{' '}
+                        <span className="text-primary text-decoration-underline">
+                          {dashboardData.pendingItems?.leaveRequests || 0}
+                        </span>{' '}
+                        Leave Requests
+                      </p>
+                    </div>
+                  </div>
+                  <div className="d-flex align-items-center flex-wrap mb-1">
+                    <Link to={routes.projectlist} className="btn btn-secondary btn-md me-2 mb-2">
+                      <i className="ti ti-square-rounded-plus me-1" />
+                      Add Project
+                    </Link>
+                    <Link
+                      to="#"
+                      className="btn btn-primary btn-md mb-2"
+                      data-bs-toggle="modal"
+                      data-inert={true}
+                      data-bs-target="#add_leaves"
+                    >
+                      <i className="ti ti-square-rounded-plus me-1" />
+                      Add Requests
+                    </Link>
+                  </div>
+                </div>
+              </div>
+              {/* /Welcome Wrap */}
+
+              <div className="row">
+                {/* Widget Info */}
+                <div className="col-xxl-8 d-flex">
+                  <div className="row flex-fill">
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-primary mb-2">
+                            <i className="ti ti-calendar-share fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Attendance</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.attendance?.present || 0}/
+                            {dashboardData.stats?.attendance?.total || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.attendance?.percentage
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.attendance?.percentage
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.attendance?.percentage)}
+                            </span>
+                          </h3>
+                          <Link to="/attendance-employee" className="link-default">
+                            View Details
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-secondary mb-2">
+                            <i className="ti ti-browser fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Total Projects</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.projects?.completed || 0}/
+                            {dashboardData.stats?.projects?.total || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.projects?.percentage
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.projects?.percentage
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.projects?.percentage)}
+                            </span>
+                          </h3>
+                          <Link to="/projects" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-info mb-2">
+                            <i className="ti ti-users-group fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Total Clients</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.clients || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.clientsGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.clientsGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.clientsGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/clients" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-pink mb-2">
+                            <i className="ti ti-checklist fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Total Tasks</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.tasks?.completed || 0}/
+                            {dashboardData.stats?.tasks?.total || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.tasksGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.tasksGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.tasksGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/tasks" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-purple mb-2">
+                            <i className="ti ti-moneybag fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Earnings</h6>
+                          <h3 className="mb-3">
+                            ${dashboardData.stats?.earnings || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.earningsGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.earningsGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.earningsGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/expenses" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-danger mb-2">
+                            <i className="ti ti-browser fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Profit This Week</h6>
+                          <h3 className="mb-3">
+                            ${dashboardData.stats?.weeklyProfit || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.profitGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.profitGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.profitGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/purchase-transaction" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-success mb-2">
+                            <i className="ti ti-users-group fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Job Applicants</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.jobApplications || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.applicationsGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.applicationsGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.applicationsGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/job-list" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 d-flex">
+                      <div className="card flex-fill">
+                        <div className="card-body">
+                          <span className="avatar rounded-circle bg-dark mb-2">
+                            <i className="ti ti-user-star fs-16" />
+                          </span>
+                          <h6 className="fs-13 fw-medium text-default mb-1">Employees</h6>
+                          <h3 className="mb-3">
+                            {dashboardData.stats?.employees || 0}{' '}
+                            <span
+                              className={`fs-12 fw-medium ${getGrowthTextClass(
+                                dashboardData.stats?.employeesGrowth
+                              )}`}
+                            >
+                              <i
+                                className={`${getGrowthIconClass(
+                                  dashboardData.stats?.employeesGrowth
+                                )} me-1`}
+                              />
+                              {formatGrowthPercentage(dashboardData.stats?.employeesGrowth)}
+                            </span>
+                          </h3>
+                          <Link to="/employees" className="link-default">
+                            View All
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Widget Info */}
+
+                {/* Employees By Department */}
+                <div className="col-xxl-4 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Employees By Department</h5>
+                      <div className="dropdown mb-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                          data-bs-toggle="dropdown"
+                        >
+                          <i className="ti ti-calendar me-1" />
+                          {filters.employeesByDepartment === 'today'
+                            ? 'Today'
+                            : filters.employeesByDepartment === 'week'
+                              ? 'This Week'
+                              : filters.employeesByDepartment === 'month'
+                                ? 'This Month'
+                                : filters.employeesByDepartment === 'year'
+                                  ? 'This Year'
+                                  : 'All Time'}
+                        </Link>
+                        <ul className="dropdown-menu  dropdown-menu-end p-3">
+                          <li>
                             <Link
                               to="#"
-                              className={`dropdown-item rounded-1 ${
-                                departmentFilters.clockInOut === dept.department ? 'active' : ''
-                              }`}
+                              className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'all' ? 'active' : ''
+                                }`}
                               onClick={(e) => {
                                 e.preventDefault();
-                                handleDepartmentFilterChange('clockInOut', dept.department);
+                                handleFilterChange('employeesByDepartment', 'all');
                               }}
                             >
-                              {dept.department}
+                              All Time
                             </Link>
                           </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {filters.clockInOut === 'today'
-                          ? 'Today'
-                          : filters.clockInOut === 'week'
-                            ? 'This Week'
-                            : filters.clockInOut === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.clockInOut === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('clockInOut', 'month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.clockInOut === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('clockInOut', 'week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.clockInOut === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('clockInOut', 'today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.clockInOut === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('clockInOut', 'all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div>
-                    {dashboardData.clockInOutData?.slice(0, 3).map((employee, index) => (
-                      <div
-                        key={employee._id}
-                        className={`d-flex align-items-center justify-content-between mb-3 p-2 border ${
-                          index === 0 ? 'border-dashed' : ''
-                        } br-5`}
-                      >
-                        <div className="d-flex align-items-center">
-                          <Link to="#" className="avatar flex-shrink-0">
-                            <ImageWithBasePath
-                              src={employee.avatar}
-                              className="rounded-circle border border-2"
-                              alt="img"
-                            />
-                          </Link>
-                          <div className="ms-2">
-                            <h6 className="fs-14 fw-medium text-truncate">{employee.name}</h6>
-                            <p className="fs-13">{employee.position}</p>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center">
-                          <Link to="#" className="link-default me-2">
-                            <i className="ti ti-clock-share" />
-                          </Link>
-                          <span
-                            className={`fs-10 fw-medium d-inline-flex align-items-center badge ${
-                              employee.status === 'Present' ? 'badge-success' : 'badge-danger'
-                            }`}
-                          >
-                            <i className="ti ti-circle-filled fs-5 me-1" />
-                            {formatTime(employee.clockIn)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <h6 className="mb-2">Late</h6>
-                  {dashboardData.clockInOutData
-                    ?.filter((emp) => emp.status === 'Late')
-                    .slice(0, 1)
-                    .map((employee) => (
-                      <div
-                        key={employee._id}
-                        className="d-flex align-items-center justify-content-between mb-3 p-2 border border-dashed br-5"
-                      >
-                        <div className="d-flex align-items-center">
-                          <span className="avatar flex-shrink-0">
-                            <ImageWithBasePath
-                              src={employee.avatar}
-                              className="rounded-circle border border-2"
-                              alt="img"
-                            />
-                          </span>
-                          <div className="ms-2">
-                            <h6 className="fs-14 fw-medium text-truncate">
-                              {employee.name}{' '}
-                              <span className="fs-10 fw-medium d-inline-flex align-items-center badge badge-warning">
-                                <i className="ti ti-clock-hour-11 me-1" />
-                                Late
-                              </span>
-                            </h6>
-                            <p className="fs-13">{employee.position}</p>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center">
-                          <Link to="#" className="link-default me-2">
-                            <i className="ti ti-clock-share" />
-                          </Link>
-                          <span className="fs-10 fw-medium d-inline-flex align-items-center badge badge-danger">
-                            <i className="ti ti-circle-filled fs-5 me-1" />
-                            {formatTime(employee.clockIn)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  <Link to="/attendance-report" className="btn btn-light btn-md w-100">
-                    View All Attendance
-                  </Link>
-                </div>
-              </div>
-            </div>
-            {/* /Clock-In/Out */}
-          </div>
-
-          <div className="row">
-            {/* Jobs Applicants */}
-            <div className="col-xxl-4 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Jobs Applicants</h5>
-                  <Link to="/job-list" className="btn btn-light btn-md mb-2">
-                    View All
-                  </Link>
-                </div>
-                <div className="card-body">
-                  <ul
-                    className="nav nav-tabs tab-style-1 nav-justified d-sm-flex d-block p-0 mb-4"
-                    role="tablist"
-                  >
-                    <li className="nav-item" role="presentation">
-                      <Link
-                        className="nav-link fw-medium"
-                        data-bs-toggle="tab"
-                        data-bs-target="#openings"
-                        aria-current="page"
-                        to="#openings"
-                        aria-selected="true"
-                        role="tab"
-                      >
-                        Openings
-                      </Link>
-                    </li>
-                    <li className="nav-item" role="presentation">
-                      <Link
-                        className="nav-link fw-medium active"
-                        data-bs-toggle="tab"
-                        data-bs-target="#applicants"
-                        to="#applicants"
-                        aria-selected="false"
-                        tabIndex={-1}
-                        role="tab"
-                      >
-                        Applicants
-                      </Link>
-                    </li>
-                  </ul>
-                  <div className="tab-content">
-                    <div className="tab-pane fade" id="openings">
-                      {dashboardData.jobApplicants?.openings?.map((opening, index) => (
-                        <div
-                          key={opening._id}
-                          className="d-flex align-items-center justify-content-between mb-4"
-                        >
-                          <div className="d-flex align-items-center">
+                          <li>
                             <Link
                               to="#"
-                              className="avatar overflow-hidden flex-shrink-0 bg-gray-100"
+                              className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'year' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeesByDepartment', 'year');
+                              }}
                             >
-                              <ImageWithBasePath
-                                src="assets/img/icons/apple.svg"
-                                className="img-fluid rounded-circle w-auto h-auto"
-                                alt="img"
-                              />
+                              This Year
                             </Link>
-                            <div className="ms-2 overflow-hidden">
-                              <p className="text-dark fw-medium text-truncate mb-0">
-                                <Link to="#">{opening._id}</Link>
-                              </p>
-                              <span className="fs-12">No of Openings : {opening.count}</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-light btn-sm p-0 btn-icon d-flex align-items-center justify-content-center"
-                          >
-                            <i className="ti ti-edit" />
-                          </Link>
-                        </div>
-                      ))}
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'month' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeesByDepartment', 'month');
+                              }}
+                            >
+                              This Month
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'week' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeesByDepartment', 'week');
+                              }}
+                            >
+                              This Week
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'today' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeesByDepartment', 'today');
+                              }}
+                            >
+                              Today
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
                     </div>
-                    <div className="tab-pane fade show active" id="applicants">
-                      {dashboardData.jobApplicants?.applicants?.map((applicant, index) => (
-                        <div
-                          key={applicant._id}
-                          className="d-flex align-items-center justify-content-between mb-4"
+                    <div className="card-body">
+                      <ReactApexChart
+                        id="emp-department"
+                        options={empDepartmentOptions}
+                        series={empDepartmentOptions.series}
+                        type="bar"
+                        height={220}
+                      />
+                      <p className="fs-13">
+                        <i className="ti ti-circle-filled me-2 fs-8 text-primary" />
+                        No of Employees{' '}
+                        {dashboardData.employeeGrowth?.trend === 'up'
+                          ? 'increased'
+                          : dashboardData.employeeGrowth?.trend === 'down'
+                            ? 'decreased'
+                            : 'remained stable'}{' '}
+                        by{' '}
+                        <span
+                          className={`fw-bold ${dashboardData.employeeGrowth?.trend === 'up'
+                            ? 'text-success'
+                            : dashboardData.employeeGrowth?.trend === 'down'
+                              ? 'text-danger'
+                              : 'text-secondary'
+                            }`}
                         >
-                          <div className="d-flex align-items-center">
-                            <Link to="#" className="avatar overflow-hidden flex-shrink-0">
-                              <ImageWithBasePath
-                                src={applicant.avatar}
-                                className="img-fluid rounded-circle"
-                                alt="img"
-                              />
-                            </Link>
-                            <div className="ms-2 overflow-hidden">
-                              <p className="text-dark fw-medium text-truncate mb-0">
-                                <Link to="#">{applicant.name}</Link>
-                              </p>
-                              <span className="fs-13 d-inline-flex align-items-center">
-                                Exp : {applicant.experience}
-                                <i className="ti ti-circle-filled fs-4 mx-2 text-primary" />
-                                {(() => {
-                                  if (
-                                    typeof applicant.location === 'object' &&
-                                    applicant.location !== null
-                                  ) {
-                                    const loc = applicant.location as {
-                                      city?: string;
-                                      state?: string;
-                                      country?: string;
-                                    };
-                                    const parts = [loc.city, loc.state, loc.country].filter(
-                                      Boolean
-                                    );
-                                    return parts.length > 0 ? parts.join(', ') : '-';
-                                  }
-                                  return (applicant.location as string) || '-';
-                                })()}
-                              </span>
-                            </div>
-                          </div>
-                          <span className="badge badge-secondary badge-xs">
-                            {applicant.position}
-                          </span>
-                        </div>
-                      ))}
+                          {dashboardData.employeeGrowth?.trend === 'up'
+                            ? '+'
+                            : dashboardData.employeeGrowth?.trend === 'down'
+                              ? '-'
+                              : ''}
+                          {Math.abs(dashboardData.employeeGrowth?.percentage || 0)}%
+                        </span>{' '}
+                        from last{' '}
+                        {filters.employeesByDepartment === 'today'
+                          ? 'Day'
+                          : filters.employeesByDepartment === 'week'
+                            ? 'Week'
+                            : filters.employeesByDepartment === 'month'
+                              ? 'Month'
+                              : filters.employeesByDepartment === 'year'
+                                ? 'Year'
+                                : 'Period'}
+                      </p>
                     </div>
                   </div>
                 </div>
+                {/* /Employees By Department */}
               </div>
-            </div>
-            {/* /Jobs Applicants */}
 
-            {/* Employees */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Employees</h5>
-                  <Link to="/employees" className="btn btn-light btn-md mb-2">
-                    View All
-                  </Link>
+              <div className="row">
+                {/* Total Employee */}
+                <div className="col-xxl-4 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Employee Status</h5>
+                      <div className="dropdown mb-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                          data-bs-toggle="dropdown"
+                        >
+                          <i className="ti ti-calendar me-1" />
+                          {filters.employeeStatus === 'today'
+                            ? 'Today'
+                            : filters.employeeStatus === 'week'
+                              ? 'This Week'
+                              : filters.employeeStatus === 'month'
+                                ? 'This Month'
+                                : 'All'}
+                        </Link>
+                        <ul className="dropdown-menu  dropdown-menu-end p-3">
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeeStatus === 'month' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeeStatus', 'month');
+                              }}
+                            >
+                              This Month
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeeStatus === 'week' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeeStatus', 'week');
+                              }}
+                            >
+                              This Week
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeeStatus === 'today' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeeStatus', 'today');
+                              }}
+                            >
+                              Today
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.employeeStatus === 'all' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('employeeStatus', 'all');
+                              }}
+                            >
+                              All
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between mb-1">
+                        <p className="fs-13 mb-3">Total Employee</p>
+                        <h3 className="mb-3">{dashboardData.employeeStatus?.total || 0}</h3>
+                      </div>
+                      <div className="progress-stacked emp-stack mb-3">
+                        <div
+                          className="progress"
+                          role="progressbar"
+                          aria-label="Full-time"
+                          aria-valuenow={statusPercentages.fulltime}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          style={{ width: `${statusPercentages.fulltime}%` }}
+                        >
+                          <div className="progress-bar bg-primary" />
+                        </div>
+                        <div
+                          className="progress"
+                          role="progressbar"
+                          aria-label="Part-time"
+                          aria-valuenow={statusPercentages.parttime}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          style={{ width: `${statusPercentages.parttime}%` }}
+                        >
+                          <div className="progress-bar bg-warning" />
+                        </div>
+                        <div
+                          className="progress"
+                          role="progressbar"
+                          aria-label="Contract"
+                          aria-valuenow={statusPercentages.contract}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          style={{ width: `${statusPercentages.contract}%` }}
+                        >
+                          <div className="progress-bar bg-secondary" />
+                        </div>
+                        <div
+                          className="progress"
+                          role="progressbar"
+                          aria-label="Intern"
+                          aria-valuenow={statusPercentages.intern}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          style={{ width: `${statusPercentages.intern}%` }}
+                        >
+                          <div className="progress-bar bg-info" />
+                        </div>
+                      </div>
+                      <div className="border mb-3">
+                        <div className="row gx-0">
+                          <div className="col-6">
+                            <div className="p-2 flex-fill border-end border-bottom">
+                              <p className="fs-13 mb-2">
+                                <i className="ti ti-square-filled text-primary fs-12 me-2" />
+                                Full-time{' '}
+                                <span className="text-gray-9">({statusPercentages.fulltime}%)</span>
+                              </p>
+                              <h2 className="display-1">
+                                {dashboardData.employeeStatus?.distribution?.['Full-time'] || 0}
+                              </h2>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="p-2 flex-fill border-bottom text-end">
+                              <p className="fs-13 mb-2">
+                                <i className="ti ti-square-filled me-2 text-warning fs-12" />
+                                Part-time{' '}
+                                <span className="text-gray-9">({statusPercentages.parttime}%)</span>
+                              </p>
+                              <h2 className="display-1">
+                                {dashboardData.employeeStatus?.distribution?.['Part-time'] || 0}
+                              </h2>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="p-2 flex-fill border-end">
+                              <p className="fs-13 mb-2">
+                                <i className="ti ti-square-filled me-2 text-secondary fs-12" />
+                                Contract{' '}
+                                <span className="text-gray-9">({statusPercentages.contract}%)</span>
+                              </p>
+                              <h2 className="display-1">
+                                {dashboardData.employeeStatus?.distribution?.['Contract'] || 0}
+                              </h2>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="p-2 flex-fill text-end">
+                              <p className="fs-13 mb-2">
+                                <i className="ti ti-square-filled text-info me-2 fs-12" />
+                                Intern <span className="text-gray-9">({statusPercentages.intern}%)</span>
+                              </p>
+                              <h2 className="display-1">
+                                {dashboardData.employeeStatus?.distribution?.['Intern'] || 0}
+                              </h2>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <h6 className="mb-2">Top Performer</h6>
+                      {dashboardData.employeeStatus?.topPerformer && (
+                        <div className="p-2 d-flex align-items-center justify-content-between border border-primary bg-primary-100 br-5 mb-4">
+                          <div className="d-flex align-items-center overflow-hidden">
+                            <span className="me-2">
+                              <i className="ti ti-award-filled text-primary fs-24" />
+                            </span>
+                            <Link to="/employee-details" className="avatar avatar-md me-2">
+                              <ImageWithBasePath
+                                src={dashboardData.employeeStatus.topPerformer.avatar}
+                                className="rounded-circle border border-white"
+                                alt="img"
+                              />
+                            </Link>
+                            <div>
+                              <h6 className="text-truncate mb-1 fs-14 fw-medium">
+                                <Link to="/employee-details">
+                                  {dashboardData.employeeStatus.topPerformer.name}
+                                </Link>
+                              </h6>
+                              <p className="fs-13">
+                                {dashboardData.employeeStatus.topPerformer.position}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-end">
+                            <p className="fs-13 mb-1">Performance</p>
+                            <h5 className="text-primary">
+                              {dashboardData.employeeStatus.topPerformer.performance != null
+                                ? `${dashboardData.employeeStatus.topPerformer.performance}%`
+                                : 'N/A'}
+                            </h5>
+                          </div>
+                        </div>
+                      )}
+                      <Link to="/employees" className="btn btn-light btn-md w-100">
+                        View All Employees
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-                <div className="card-body p-0">
-                  <div className="table-responsive">
-                    <table className="table table-nowrap mb-0">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Department</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dashboardData.employeesList?.slice(0, 5).map((employee, index) => (
-                          <tr key={employee._id}>
-                            <td>
-                              <div className="d-flex align-items-center">
-                                <Link to="#" className="avatar">
+                {/* /Total Employee */}
+
+                {/* Attendance Overview */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Attendance Overview</h5>
+                      <div className="dropdown mb-2">
+                        <Link
+                          to="#"
+                          className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                          data-bs-toggle="dropdown"
+                        >
+                          <i className="ti ti-calendar me-1" />
+                          {filters.attendanceOverview === 'today'
+                            ? 'Today'
+                            : filters.attendanceOverview === 'week'
+                              ? 'This Week'
+                              : filters.attendanceOverview === 'month'
+                                ? 'This Month'
+                                : 'All'}
+                        </Link>
+                        <ul className="dropdown-menu  dropdown-menu-end p-3">
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'month' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('attendanceOverview', 'month');
+                              }}
+                            >
+                              This Month
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'week' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('attendanceOverview', 'week');
+                              }}
+                            >
+                              This Week
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'today' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('attendanceOverview', 'today');
+                              }}
+                            >
+                              Today
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'all' ? 'active' : ''
+                                }`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleFilterChange('attendanceOverview', 'all');
+                              }}
+                            >
+                              All
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div className="chartjs-wrapper-demo position-relative mb-4">
+                        <Chart
+                          type="doughnut"
+                          data={attendanceChartData}
+                          options={attendanceChartOptions}
+                          className="w-full attendence-chart md:w-30rem"
+                        />
+                        <div className="position-absolute text-center attendance-canvas">
+                          <p className="fs-13 mb-1">Total Attendance</p>
+                          <h3>{dashboardData.attendanceOverview?.total || 0}</h3>
+                        </div>
+                      </div>
+                      <h6 className="mb-3">Status</h6>
+                      <div className="d-flex align-items-center justify-content-between">
+                        <p className="f-13 mb-2">
+                          <i className="ti ti-circle-filled text-success me-1" />
+                          Present
+                        </p>
+                        <p className="f-13 fw-medium text-gray-9 mb-2">
+                          {dashboardData.attendanceOverview?.present || 0}
+                        </p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between">
+                        <p className="f-13 mb-2">
+                          <i className="ti ti-circle-filled text-secondary me-1" />
+                          Late
+                        </p>
+                        <p className="f-13 fw-medium text-gray-9 mb-2">
+                          {dashboardData.attendanceOverview?.late || 0}
+                        </p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between">
+                        <p className="f-13 mb-2">
+                          <i className="ti ti-circle-filled text-warning me-1" />
+                          Permission
+                        </p>
+                        <p className="f-13 fw-medium text-gray-9 mb-2">
+                          {dashboardData.attendanceOverview?.permission || 0}
+                        </p>
+                      </div>
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <p className="f-13 mb-2">
+                          <i className="ti ti-circle-filled text-danger me-1" />
+                          Absent
+                        </p>
+                        <p className="f-13 fw-medium text-gray-9 mb-2">
+                          {dashboardData.attendanceOverview?.absent || 0}
+                        </p>
+                      </div>
+                      <div className="bg-light br-5 box-shadow-xs p-2 pb-0 d-flex align-items-center justify-content-between flex-wrap">
+                        <div className="d-flex align-items-center">
+                          <p className="mb-2 me-2">Total Absenties</p>
+                          <div className="avatar-list-stacked avatar-group-sm mb-2">
+                            {dashboardData.attendanceOverview?.absentees
+                              ?.slice(0, 4)
+                              .map((absentee, index) => (
+                                <span key={absentee._id} className="avatar avatar-rounded">
                                   <ImageWithBasePath
-                                    src={employee.avatar}
+                                    className="border border-white"
+                                    src={absentee.avatar}
+                                    alt="img"
+                                  />
+                                </span>
+                              ))}
+                            {(dashboardData.attendanceOverview?.absentees?.length || 0) > 4 && (
+                              <Link
+                                className="avatar bg-primary avatar-rounded text-fixed-white fs-10"
+                                to="#"
+                              >
+                                +{(dashboardData.attendanceOverview?.absentees?.length || 0) - 4}
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                        <Link
+                          to="/leaves"
+                          className="fs-13 link-primary text-decoration-underline mb-2"
+                        >
+                          View Details
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Attendance Overview */}
+
+                {/* Clock-In/Out */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Clock-In/Out</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center border-0 fs-13 me-2"
+                            data-bs-toggle="dropdown"
+                          >
+                            {departmentFilters.clockInOut}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${departmentFilters.clockInOut === 'All Departments' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDepartmentFilterChange('clockInOut', 'All Departments');
+                                }}
+                              >
+                                All Departments
+                              </Link>
+                            </li>
+                            {dashboardData.employeesByDepartment?.map((dept) => (
+                              <li key={dept.department}>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${departmentFilters.clockInOut === dept.department ? 'active' : ''
+                                    }`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDepartmentFilterChange('clockInOut', dept.department);
+                                  }}
+                                >
+                                  {dept.department}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {filters.clockInOut === 'today'
+                              ? 'Today'
+                              : filters.clockInOut === 'week'
+                                ? 'This Week'
+                                : filters.clockInOut === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.clockInOut === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('clockInOut', 'month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.clockInOut === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('clockInOut', 'week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.clockInOut === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('clockInOut', 'today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.clockInOut === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('clockInOut', 'all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div>
+                        {dashboardData.clockInOutData?.slice(0, 3).map((employee, index) => (
+                          <div
+                            key={employee._id}
+                            className={`d-flex align-items-center justify-content-between mb-3 p-2 border ${index === 0 ? 'border-dashed' : ''
+                              } br-5`}
+                          >
+                            <div className="d-flex align-items-center">
+                              <Link to="#" className="avatar flex-shrink-0">
+                                <ImageWithBasePath
+                                  src={employee.avatar}
+                                  className="rounded-circle border border-2"
+                                  alt="img"
+                                />
+                              </Link>
+                              <div className="ms-2">
+                                <h6 className="fs-14 fw-medium text-truncate">{employee.name}</h6>
+                                <p className="fs-13">{employee.position}</p>
+                              </div>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <Link to="#" className="link-default me-2">
+                                <i className="ti ti-clock-share" />
+                              </Link>
+                              <span
+                                className={`fs-10 fw-medium d-inline-flex align-items-center badge ${employee.status === 'Present' ? 'badge-success' : 'badge-danger'
+                                  }`}
+                              >
+                                <i className="ti ti-circle-filled fs-5 me-1" />
+                                {formatTime(employee.clockIn)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <h6 className="mb-2">Late</h6>
+                      {dashboardData.clockInOutData
+                        ?.filter((emp) => emp.status === 'Late')
+                        .slice(0, 1)
+                        .map((employee) => (
+                          <div
+                            key={employee._id}
+                            className="d-flex align-items-center justify-content-between mb-3 p-2 border border-dashed br-5"
+                          >
+                            <div className="d-flex align-items-center">
+                              <span className="avatar flex-shrink-0">
+                                <ImageWithBasePath
+                                  src={employee.avatar}
+                                  className="rounded-circle border border-2"
+                                  alt="img"
+                                />
+                              </span>
+                              <div className="ms-2">
+                                <h6 className="fs-14 fw-medium text-truncate">
+                                  {employee.name}{' '}
+                                  <span className="fs-10 fw-medium d-inline-flex align-items-center badge badge-warning">
+                                    <i className="ti ti-clock-hour-11 me-1" />
+                                    Late
+                                  </span>
+                                </h6>
+                                <p className="fs-13">{employee.position}</p>
+                              </div>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <Link to="#" className="link-default me-2">
+                                <i className="ti ti-clock-share" />
+                              </Link>
+                              <span className="fs-10 fw-medium d-inline-flex align-items-center badge badge-danger">
+                                <i className="ti ti-circle-filled fs-5 me-1" />
+                                {formatTime(employee.clockIn)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      <Link to="/attendance-report" className="btn btn-light btn-md w-100">
+                        View All Attendance
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+                {/* /Clock-In/Out */}
+              </div>
+
+              <div className="row">
+                {/* Jobs Applicants */}
+                <div className="col-xxl-4 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Jobs Applicants</h5>
+                      <Link to="/job-list" className="btn btn-light btn-md mb-2">
+                        View All
+                      </Link>
+                    </div>
+                    <div className="card-body">
+                      <ul
+                        className="nav nav-tabs tab-style-1 nav-justified d-sm-flex d-block p-0 mb-4"
+                        role="tablist"
+                      >
+                        <li className="nav-item" role="presentation">
+                          <Link
+                            className="nav-link fw-medium"
+                            data-bs-toggle="tab"
+                            data-bs-target="#openings"
+                            aria-current="page"
+                            to="#openings"
+                            aria-selected="true"
+                            role="tab"
+                          >
+                            Openings
+                          </Link>
+                        </li>
+                        <li className="nav-item" role="presentation">
+                          <Link
+                            className="nav-link fw-medium active"
+                            data-bs-toggle="tab"
+                            data-bs-target="#applicants"
+                            to="#applicants"
+                            aria-selected="false"
+                            tabIndex={-1}
+                            role="tab"
+                          >
+                            Applicants
+                          </Link>
+                        </li>
+                      </ul>
+                      <div className="tab-content">
+                        <div className="tab-pane fade" id="openings">
+                          {dashboardData.jobApplicants?.openings?.map((opening, index) => (
+                            <div
+                              key={opening._id}
+                              className="d-flex align-items-center justify-content-between mb-4"
+                            >
+                              <div className="d-flex align-items-center">
+                                <span
+                                  className="avatar overflow-hidden flex-shrink-0 bg-primary-transparent"
+                                >
+                                  <i className="ti ti-briefcase fs-20 text-primary" />
+                                </span>
+                                <div className="ms-2 overflow-hidden">
+                                  <p className="text-dark fw-medium text-truncate mb-0">
+                                    <Link to="#">{opening._id}</Link>
+                                  </p>
+                                  <span className="fs-12">No of Openings : {opening.count}</span>
+                                </div>
+                              </div>
+                              <Link
+                                to="#"
+                                className="btn btn-light btn-sm p-0 btn-icon d-flex align-items-center justify-content-center"
+                              >
+                                <i className="ti ti-edit" />
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="tab-pane fade show active" id="applicants">
+                          {dashboardData.jobApplicants?.applicants?.map((applicant, index) => (
+                            <div
+                              key={applicant._id}
+                              className="d-flex align-items-center justify-content-between mb-4"
+                            >
+                              <div className="d-flex align-items-center">
+                                <Link to="#" className="avatar overflow-hidden flex-shrink-0">
+                                  <ImageWithBasePath
+                                    src={applicant.avatar}
                                     className="img-fluid rounded-circle"
                                     alt="img"
                                   />
                                 </Link>
-                                <div className="ms-2">
-                                  <h6 className="fw-medium">
-                                    <Link to="#">{employee.name}</Link>
-                                  </h6>
-                                  <span className="fs-12">{employee.position}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <span className="badge badge-secondary-transparent badge-xs">
-                                {employee.department}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /Employees */}
-
-            {/* Todo */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Todo</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2 me-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {todoFilter === 'today'
-                          ? 'Today'
-                          : todoFilter === 'week'
-                            ? 'This Week'
-                            : todoFilter === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              todoFilter === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleTodoFilterChange('month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              todoFilter === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleTodoFilterChange('week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              todoFilter === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleTodoFilterChange('today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              todoFilter === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleTodoFilterChange('all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                    <Link
-                      to="#"
-                      className="btn btn-primary btn-icon btn-xs rounded-circle d-flex align-items-center justify-content-center p-0 mb-2"
-                      data-bs-toggle="modal"
-                      data-inert={true}
-                      data-bs-target="#add_todo"
-                    >
-                      <i className="ti ti-plus fs-16" />
-                    </Link>
-                  </div>
-                </div>
-                <div className="card-body">
-                  {filteredTodos.map((todo, index) => (
-                    <div
-                      key={todo._id}
-                      className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                        todo.completed ? 'todo-strike' : ''
-                      }`}
-                    >
-                      <i className="ti ti-grid-dots me-2" />
-                      <div className="form-check flex-grow-1">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id={`todo${index}`}
-                          checked={todo.completed}
-                          onChange={() => toggleTodo(todo._id, !todo.completed)}
-                        />
-                        <label className="form-check-label fw-medium" htmlFor={`todo${index}`}>
-                          {todo.title}
-                        </label>
-                      </div>
-                      <div className="todo-actions ms-2">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-danger btn-icon"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                'Are you sure you want to delete this todo? This action cannot be undone.'
-                              )
-                            ) {
-                              deleteTodo(todo._id);
-                            }
-                          }}
-                          title="Delete todo"
-                        >
-                          <i className="ti ti-trash fs-12" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {(!dashboardData.todos || filteredTodos.length === 0) && (
-                    <div className="text-center py-4">
-                      <p className="text-muted">No todos found for the selected period.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            {/* /Todo */}
-          </div>
-
-          <div className="row">
-            {/* Sales Overview */}
-            <div className="col-xl-7 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Sales Overview</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="dropdown-toggle btn btn-white border-0 btn-sm d-inline-flex align-items-center fs-13 me-2"
-                        data-bs-toggle="dropdown"
-                      >
-                        {departmentFilters.salesOverview}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              departmentFilters.salesOverview === 'All Departments' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleDepartmentFilterChange('salesOverview', 'All Departments');
-                            }}
-                          >
-                            All Departments
-                          </Link>
-                        </li>
-                        {dashboardData.employeesByDepartment?.map((dept) => (
-                          <li key={dept.department}>
-                            <Link
-                              to="#"
-                              className={`dropdown-item rounded-1 ${
-                                departmentFilters.salesOverview === dept.department ? 'active' : ''
-                              }`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleDepartmentFilterChange('salesOverview', dept.department);
-                              }}
-                            >
-                              {dept.department}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {filters.salesOverview === 'today'
-                          ? 'Today'
-                          : filters.salesOverview === 'week'
-                            ? 'This Week'
-                            : filters.salesOverview === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.salesOverview === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('salesOverview', 'month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.salesOverview === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('salesOverview', 'week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.salesOverview === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('salesOverview', 'today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.salesOverview === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('salesOverview', 'all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-body pb-0">
-                  <div className="d-flex align-items-center justify-content-between flex-wrap">
-                    <div className="d-flex align-items-center mb-1">
-                      <p className="fs-13 text-gray-9 me-3 mb-0">
-                        <i className="ti ti-square-filled me-2 text-primary" />
-                        Income
-                      </p>
-                      <p className="fs-13 text-gray-9 mb-0">
-                        <i className="ti ti-square-filled me-2 text-gray-2" />
-                        Expenses
-                      </p>
-                    </div>
-                    <p className="fs-13 mb-1">
-                      Last Updated{' '}
-                      {formatLastUpdated(dashboardData.salesOverview?.lastUpdated || '')}
-                    </p>
-                  </div>
-                  <ReactApexChart
-                    id="sales-income"
-                    options={salesIncomeOptions}
-                    series={salesIncomeOptions.series}
-                    type="bar"
-                    height={270}
-                  />
-                </div>
-              </div>
-            </div>
-            {/* /Sales Overview */}
-
-            {/* Invoices */}
-            <div className="col-xl-5 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Invoices</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center fs-13 me-2 border-0"
-                        data-bs-toggle="dropdown"
-                      >
-                        {invoiceFilter === 'all'
-                          ? 'All Invoices'
-                          : invoiceFilter === 'paid'
-                            ? 'Paid'
-                            : invoiceFilter === 'unpaid'
-                              ? 'Unpaid'
-                              : 'All Invoices'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              invoiceFilter === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleInvoiceFilterChange('all');
-                            }}
-                          >
-                            All Invoices
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              invoiceFilter === 'paid' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleInvoiceFilterChange('paid');
-                            }}
-                          >
-                            Paid
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              invoiceFilter === 'unpaid' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleInvoiceFilterChange('unpaid');
-                            }}
-                          >
-                            Unpaid
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {filters.invoices === 'today'
-                          ? 'Today'
-                          : filters.invoices === 'week'
-                            ? 'This Week'
-                            : filters.invoices === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.invoices === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('invoices', 'month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.invoices === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('invoices', 'week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.invoices === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('invoices', 'today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.invoices === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('invoices', 'all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-body pt-2">
-                  <div className="table-responsive pt-1">
-                    <table className="table table-nowrap table-borderless mb-0">
-                      <tbody>
-                        {filteredInvoices.length > 0 ? (
-                          filteredInvoices.slice(0, 5).map((invoice, index) => (
-                            <tr key={invoice._id}>
-                              <td className="px-0">
-                                <div className="d-flex align-items-center">
-                                  <Link to="/invoice-details" className="avatar">
-                                    <ImageWithBasePath
-                                      src={invoice.clientLogo}
-                                      className="img-fluid rounded-circle"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="ms-2">
-                                    <h6 className="fw-medium">
-                                      <Link to="/invoice-details">{invoice.title}</Link>
-                                    </h6>
-                                    <span className="fs-13 d-inline-flex align-items-center">
-                                      {invoice.invoiceNumber}
-                                      <i className="ti ti-circle-filled fs-4 mx-1 text-primary" />
-                                      {invoice.clientName}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                <p className="fs-13 mb-1">Payment</p>
-                                <h6 className="fw-medium">${invoice.amount}</h6>
-                              </td>
-                              <td className="px-0 text-end">
-                                <span
-                                  className={`badge ${
-                                    invoice.status === 'Paid'
-                                      ? 'badge-success-transparent'
-                                      : 'badge-danger-transparent'
-                                  } badge-xs d-inline-flex align-items-center`}
-                                >
-                                  <i className="ti ti-circle-filled fs-5 me-1" />
-                                  {invoice.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3} className="text-center py-4">
-                              <p className="text-muted">
-                                No invoices found for the selected filter.
-                              </p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <Link to="/invoice" className="btn btn-light btn-md w-100 mt-2">
-                    View All
-                  </Link>
-                </div>
-              </div>
-            </div>
-            {/* /Invoices */}
-          </div>
-
-          <div className="row">
-            {/* Projects */}
-            <div className="col-xxl-8 col-xl-7 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Projects</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {filters.projects === 'today'
-                          ? 'Today'
-                          : filters.projects === 'week'
-                            ? 'This Week'
-                            : filters.projects === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.projects === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('projects', 'month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.projects === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('projects', 'week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.projects === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('projects', 'today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.projects === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('projects', 'all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-body p-0">
-                  <div className="table-responsive">
-                    <table className="table table-nowrap mb-0">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Name</th>
-                          <th>Team</th>
-                          <th>Hours</th>
-                          <th>Deadline</th>
-                          <th>Priority</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dashboardData.projectsData?.slice(0, 7).map((project, index) => (
-                          <tr key={project.id}>
-                            <td>
-                              <Link to="/project-details" className="link-default">
-                                PRO-{String(index + 1).padStart(3, '0')}
-                              </Link>
-                            </td>
-                            <td>
-                              <h6 className="fw-medium">
-                                <Link to="/project-details">{project.name}</Link>
-                              </h6>
-                            </td>
-                            <td>
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                {project.team.slice(0, 3).map((member, idx) => (
-                                  <span key={idx} className="avatar avatar-rounded">
-                                    <ImageWithBasePath
-                                      className="border border-white"
-                                      src={member.avatar}
-                                      alt="img"
-                                    />
+                                <div className="ms-2 overflow-hidden">
+                                  <p className="text-dark fw-medium text-truncate mb-0">
+                                    <Link to="#">{applicant.name}</Link>
+                                  </p>
+                                  <span className="fs-13 d-inline-flex align-items-center">
+                                    Exp : {applicant.experience}
+                                    <i className="ti ti-circle-filled fs-4 mx-2 text-primary" />
+                                    {(() => {
+                                      if (
+                                        typeof applicant.location === 'object' &&
+                                        applicant.location !== null
+                                      ) {
+                                        const loc = applicant.location as {
+                                          city?: string;
+                                          state?: string;
+                                          country?: string;
+                                        };
+                                        const parts = [loc.city, loc.state, loc.country].filter(
+                                          Boolean
+                                        );
+                                        return parts.length > 0 ? parts.join(', ') : '-';
+                                      }
+                                      return (applicant.location as string) || '-';
+                                    })()}
                                   </span>
-                                ))}
-                                {project.team.length > 3 && (
-                                  <Link
-                                    className="avatar bg-primary avatar-rounded text-fixed-white fs-10 fw-medium"
-                                    to="#"
-                                  >
-                                    +{project.team.length - 3}
-                                  </Link>
-                                )}
+                                </div>
                               </div>
-                            </td>
-                            <td>
-                              <p className="mb-1">
-                                {project.hours}/{project.totalHours} Hrs
-                              </p>
-                              <div
-                                className="progress progress-xs w-100"
-                                role="progressbar"
-                                aria-valuenow={project.progress}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                              >
-                                <div
-                                  className="progress-bar bg-primary"
-                                  style={{ width: `${project.progress}%` }}
-                                />
-                              </div>
-                            </td>
-                            <td>{formatDate(project.deadline)}</td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  project.priority === 'High'
-                                    ? 'badge-danger'
-                                    : project.priority === 'Medium'
-                                      ? 'badge-pink'
-                                      : 'badge-success'
-                                } d-inline-flex align-items-center badge-xs`}
-                              >
-                                <i className="ti ti-point-filled me-1" />
-                                {project.priority}
+                              <span className="badge badge-secondary badge-xs">
+                                {applicant.position}
                               </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /Projects */}
-
-            {/* Tasks Statistics */}
-            <div className="col-xxl-4 col-xl-5 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Tasks Statistics</h5>
-                  <div className="d-flex align-items-center">
-                    <div className="dropdown mb-2">
-                      <Link
-                        to="#"
-                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
-                      >
-                        <i className="ti ti-calendar me-1" />
-                        {filters.taskStatistics === 'today'
-                          ? 'Today'
-                          : filters.taskStatistics === 'week'
-                            ? 'This Week'
-                            : filters.taskStatistics === 'month'
-                              ? 'This Month'
-                              : 'All'}
-                      </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.taskStatistics === 'month' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('taskStatistics', 'month');
-                            }}
-                          >
-                            This Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.taskStatistics === 'week' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('taskStatistics', 'week');
-                            }}
-                          >
-                            This Week
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.taskStatistics === 'today' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('taskStatistics', 'today');
-                            }}
-                          >
-                            Today
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className={`dropdown-item rounded-1 ${
-                              filters.taskStatistics === 'all' ? 'active' : ''
-                            }`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFilterChange('taskStatistics', 'all');
-                            }}
-                          >
-                            All
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div className="chartjs-wrapper-demo position-relative mb-4">
-                    <Chart
-                      type="doughnut"
-                      data={taskStatsData}
-                      options={taskStatsOptions}
-                      className="w-full md:w-30rem semi-donut-chart"
-                    />
-                    <div className="position-absolute text-center attendance-canvas">
-                      <p className="fs-13 mb-1">Total Tasks</p>
-                      <h3>{dashboardData.taskStatistics?.total || 0}</h3>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center flex-wrap">
-                    <div className="border-end text-center me-2 pe-2 mb-3">
-                      <p className="fs-13 d-inline-flex align-items-center mb-1">
-                        <i className="ti ti-circle-filled fs-10 me-1 text-warning" />
-                        Ongoing
-                      </p>
-                      <h5>
-                        {dashboardData.taskStatistics?.distribution?.['Ongoing']?.percentage || 0}%
-                      </h5>
-                    </div>
-                    <div className="border-end text-center me-2 pe-2 mb-3">
-                      <p className="fs-13 d-inline-flex align-items-center mb-1">
-                        <i className="ti ti-circle-filled fs-10 me-1 text-info" />
-                        On Hold{' '}
-                      </p>
-                      <h5>
-                        {dashboardData.taskStatistics?.distribution?.['On Hold']?.percentage || 0}%
-                      </h5>
-                    </div>
-                    <div className="border-end text-center me-2 pe-2 mb-3">
-                      <p className="fs-13 d-inline-flex align-items-center mb-1">
-                        <i className="ti ti-circle-filled fs-10 me-1 text-danger" />
-                        Overdue
-                      </p>
-                      <h5>
-                        {dashboardData.taskStatistics?.distribution?.['Overdue']?.percentage || 0}%
-                      </h5>
-                    </div>
-                    <div className="text-center me-2 pe-2 mb-3">
-                      <p className="fs-13 d-inline-flex align-items-center mb-1">
-                        <i className="ti ti-circle-filled fs-10 me-1 text-success" />
-                        Completed
-                      </p>
-                      <h5>
-                        {dashboardData.taskStatistics?.distribution?.['Completed']?.percentage || 0}
-                        %
-                      </h5>
-                    </div>
-                  </div>
-                  <div className="bg-dark br-5 p-3 pb-0 d-flex align-items-center justify-content-between">
-                    <div className="mb-2">
-                      <h4 className="text-success">
-                        {dashboardData.taskStatistics?.hoursSpent || 0}/
-                        {dashboardData.taskStatistics?.targetHours || 0} hrs
-                      </h4>
-                      <p className="fs-13 mb-0">Spent on Overall Tasks This Week</p>
-                    </div>
-                    <Link to="/tasks" className="btn btn-sm btn-light mb-2 text-nowrap">
-                      View All
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /Tasks Statistics */}
-          </div>
-
-          <div className="row">
-            {/* Schedules */}
-            <div className="col-xxl-4 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Schedules</h5>
-                  <Link to="/candidates" className="btn btn-light btn-md mb-2">
-                    View All
-                  </Link>
-                </div>
-                <div className="card-body">
-                  {dashboardData.schedules?.slice(0, 2).map((schedule, index) => (
-                    <div
-                      key={schedule._id}
-                      className={`bg-light p-3 br-5 ${index === 0 ? 'mb-4' : 'mb-0'}`}
-                    >
-                      <span className="badge badge-secondary badge-xs mb-1">{schedule.type}</span>
-                      <h6 className="mb-2 text-truncate">{schedule.title}</h6>
-                      <div className="d-flex align-items-center flex-wrap">
-                        <p className="fs-13 mb-1 me-2">
-                          <i className="ti ti-calendar-event me-2" />
-                          {formatDate(schedule.date)}
-                        </p>
-                        <p className="fs-13 mb-1">
-                          <i className="ti ti-clock-hour-11 me-2" />
-                          {schedule.startTime} - {schedule.endTime}
-                        </p>
-                      </div>
-                      <div className="d-flex align-items-center justify-content-between border-top mt-2 pt-3">
-                        <div className="avatar-list-stacked avatar-group-sm">
-                          {schedule.participants.slice(0, 5).map((participant, idx) => (
-                            <span key={idx} className="avatar avatar-rounded">
-                              <ImageWithBasePath
-                                className="border border-white"
-                                src={participant.avatar}
-                                alt="img"
-                              />
-                            </span>
+                            </div>
                           ))}
-                          {schedule.participants.length > 5 && (
-                            <Link
-                              className="avatar bg-primary avatar-rounded text-fixed-white fs-10 fw-medium"
-                              to="#"
-                            >
-                              +{schedule.participants.length - 5}
-                            </Link>
-                          )}
                         </div>
-                        <Link to="#" className="btn btn-primary btn-xs">
-                          Join Meeting
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Jobs Applicants */}
+
+                {/* Employees */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Employees</h5>
+                      <Link to="/employees" className="btn btn-light btn-md mb-2">
+                        View All
+                      </Link>
+                    </div>
+                    <div className="card-body p-0">
+                      <div className="table-responsive">
+                        <table className="table table-nowrap mb-0">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Department</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dashboardData.employeesList?.slice(0, 5).map((employee, index) => (
+                              <tr key={employee._id}>
+                                <td>
+                                  <div className="d-flex align-items-center">
+                                    <Link to="#" className="avatar">
+                                      <ImageWithBasePath
+                                        src={employee.avatar}
+                                        className="img-fluid rounded-circle"
+                                        alt="img"
+                                      />
+                                    </Link>
+                                    <div className="ms-2">
+                                      <h6 className="fw-medium">
+                                        <Link to="#">{employee.name}</Link>
+                                      </h6>
+                                      <span className="fs-12">{employee.position}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="badge badge-secondary-transparent badge-xs">
+                                    {employee.department}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Employees */}
+
+                {/* Todo */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Todo</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2 me-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {todoFilter === 'today'
+                              ? 'Today'
+                              : todoFilter === 'week'
+                                ? 'This Week'
+                                : todoFilter === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${todoFilter === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleTodoFilterChange('month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${todoFilter === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleTodoFilterChange('week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${todoFilter === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleTodoFilterChange('today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${todoFilter === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleTodoFilterChange('all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                        <Link
+                          to="#"
+                          className="btn btn-primary btn-icon btn-xs rounded-circle d-flex align-items-center justify-content-center p-0 mb-2"
+                          data-bs-toggle="modal"
+                          data-inert={true}
+                          data-bs-target="#add_todo"
+                        >
+                          <i className="ti ti-plus fs-16" />
                         </Link>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {/* /Schedules */}
-
-            {/* Recent Activities */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Recent Activities</h5>
-                  <Link to="/activity" className="btn btn-light btn-md mb-2">
-                    View All
-                  </Link>
-                </div>
-                <div className="card-body">
-                  {dashboardData.recentActivities?.slice(0, 6).map((activity, index) => (
-                    <div key={activity._id} className="recent-item">
-                      <div className="d-flex justify-content-between">
-                        <div className="d-flex align-items-center w-100">
-                          <Link to="#" className="avatar flex-shrink-0">
-                            <ImageWithBasePath
-                              src={activity.employeeAvatar}
-                              className="rounded-circle"
-                              alt="img"
+                    <div className="card-body">
+                      {filteredTodos.map((todo, index) => (
+                        <div
+                          key={todo._id}
+                          className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${todo.completed ? 'todo-strike' : ''
+                            }`}
+                        >
+                          <i className="ti ti-grid-dots me-2" />
+                          <div className="form-check flex-grow-1">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id={`todo${index}`}
+                              checked={todo.completed}
+                              onChange={() => toggleTodo(todo._id, !todo.completed)}
                             />
-                          </Link>
-                          <div className="ms-2 flex-fill">
-                            <div className="d-flex align-items-center justify-content-between">
-                              <h6 className="fs-medium text-truncate">
-                                <Link to="#">{activity.employeeName}</Link>
-                              </h6>
-                              <p className="fs-13">{formatTime(activity.createdAt)}</p>
-                            </div>
-                            <p className="fs-13">{activity.description}</p>
+                            <label className="form-check-label fw-medium" htmlFor={`todo${index}`}>
+                              {todo.title}
+                            </label>
                           </div>
+                          <div className="todo-actions ms-2">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger btn-icon"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    'Are you sure you want to delete this todo? This action cannot be undone.'
+                                  )
+                                ) {
+                                  deleteTodo(todo._id);
+                                }
+                              }}
+                              title="Delete todo"
+                            >
+                              <i className="ti ti-trash fs-12" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {(!dashboardData.todos || filteredTodos.length === 0) && (
+                        <div className="text-center py-4">
+                          <p className="text-muted">No todos found for the selected period.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* /Todo */}
+              </div>
+
+              <div className="row">
+                {/* Sales Overview */}
+                <div className="col-xl-7 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Sales Overview</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="dropdown-toggle btn btn-white border-0 btn-sm d-inline-flex align-items-center fs-13 me-2"
+                            data-bs-toggle="dropdown"
+                          >
+                            {departmentFilters.salesOverview}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${departmentFilters.salesOverview === 'All Departments' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDepartmentFilterChange('salesOverview', 'All Departments');
+                                }}
+                              >
+                                All Departments
+                              </Link>
+                            </li>
+                            {dashboardData.employeesByDepartment?.map((dept) => (
+                              <li key={dept.department}>
+                                <Link
+                                  to="#"
+                                  className={`dropdown-item rounded-1 ${departmentFilters.salesOverview === dept.department ? 'active' : ''
+                                    }`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDepartmentFilterChange('salesOverview', dept.department);
+                                  }}
+                                >
+                                  {dept.department}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {filters.salesOverview === 'today'
+                              ? 'Today'
+                              : filters.salesOverview === 'week'
+                                ? 'This Week'
+                                : filters.salesOverview === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.salesOverview === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('salesOverview', 'month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.salesOverview === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('salesOverview', 'week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.salesOverview === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('salesOverview', 'today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.salesOverview === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('salesOverview', 'all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
                         </div>
                       </div>
                     </div>
-                  ))}
+                    <div className="card-body pb-0">
+                      <div className="d-flex align-items-center justify-content-between flex-wrap">
+                        <div className="d-flex align-items-center mb-1">
+                          <p className="fs-13 text-gray-9 me-3 mb-0">
+                            <i className="ti ti-square-filled me-2 text-primary" />
+                            Income
+                          </p>
+                          <p className="fs-13 text-gray-9 mb-0">
+                            <i className="ti ti-square-filled me-2 text-gray-2" />
+                            Expenses
+                          </p>
+                        </div>
+                        <p className="fs-13 mb-1">
+                          Last Updated{' '}
+                          {formatLastUpdated(dashboardData.salesOverview?.lastUpdated || '')}
+                        </p>
+                      </div>
+                      <ReactApexChart
+                        id="sales-income"
+                        options={salesIncomeOptions}
+                        series={salesIncomeOptions.series}
+                        type="bar"
+                        height={270}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            {/* /Recent Activities */}
+                {/* /Sales Overview */}
 
-            {/* Birthdays */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
-                  <h5 className="mb-2">Birthdays</h5>
-                  <Link to="#" className="btn btn-light btn-md mb-2">
-                    View All
-                  </Link>
-                </div>
-                <div className="card-body pb-1">
-                  {dashboardData.birthdays?.today && dashboardData.birthdays.today.length > 0 && (
-                    <>
-                      <h6 className="mb-2">Today</h6>
-                      {dashboardData.birthdays.today.map((person, index) => (
-                        <div
-                          key={index}
-                          className="bg-light p-2 border border-dashed rounded-top mb-3"
-                        >
-                          <div className="d-flex align-items-center justify-content-between">
-                            <div className="d-flex align-items-center">
-                              <Link to="#" className="avatar">
-                                <ImageWithBasePath
-                                  src={person.avatar}
-                                  className="rounded-circle"
-                                  alt="img"
-                                />
+                {/* Invoices */}
+                <div className="col-xl-5 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Invoices</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center fs-13 me-2 border-0"
+                            data-bs-toggle="dropdown"
+                          >
+                            {invoiceFilter === 'all'
+                              ? 'All Invoices'
+                              : invoiceFilter === 'paid'
+                                ? 'Paid'
+                                : invoiceFilter === 'unpaid'
+                                  ? 'Unpaid'
+                                  : 'All Invoices'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${invoiceFilter === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleInvoiceFilterChange('all');
+                                }}
+                              >
+                                All Invoices
                               </Link>
-                              <div className="ms-2 overflow-hidden">
-                                <h6 className="fs-medium">{person.name}</h6>
-                                <p className="fs-13">{person.position}</p>
-                              </div>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${invoiceFilter === 'paid' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleInvoiceFilterChange('paid');
+                                }}
+                              >
+                                Paid
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${invoiceFilter === 'unpaid' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleInvoiceFilterChange('unpaid');
+                                }}
+                              >
+                                Unpaid
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {filters.invoices === 'today'
+                              ? 'Today'
+                              : filters.invoices === 'week'
+                                ? 'This Week'
+                                : filters.invoices === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.invoices === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('invoices', 'month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.invoices === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('invoices', 'week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.invoices === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('invoices', 'today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.invoices === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('invoices', 'all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card-body pt-2">
+                      <div className="table-responsive pt-1">
+                        <table className="table table-nowrap table-borderless mb-0">
+                          <tbody>
+                            {filteredInvoices.length > 0 ? (
+                              filteredInvoices.slice(0, 5).map((invoice, index) => (
+                                <tr key={invoice._id}>
+                                  <td className="px-0">
+                                    <div className="d-flex align-items-center">
+                                      <Link to="/invoice-details" className="avatar">
+                                        <ImageWithBasePath
+                                          src={invoice.clientLogo}
+                                          className="img-fluid rounded-circle"
+                                          alt="img"
+                                        />
+                                      </Link>
+                                      <div className="ms-2">
+                                        <h6 className="fw-medium">
+                                          <Link to="/invoice-details">{invoice.title}</Link>
+                                        </h6>
+                                        <span className="fs-13 d-inline-flex align-items-center">
+                                          {invoice.invoiceNumber}
+                                          <i className="ti ti-circle-filled fs-4 mx-1 text-primary" />
+                                          {invoice.clientName}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <p className="fs-13 mb-1">Payment</p>
+                                    <h6 className="fw-medium">${invoice.amount}</h6>
+                                  </td>
+                                  <td className="px-0 text-end">
+                                    <span
+                                      className={`badge ${invoice.status === 'Paid'
+                                        ? 'badge-success-transparent'
+                                        : 'badge-danger-transparent'
+                                        } badge-xs d-inline-flex align-items-center`}
+                                    >
+                                      <i className="ti ti-circle-filled fs-5 me-1" />
+                                      {invoice.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={3} className="text-center py-4">
+                                  <p className="text-muted">
+                                    No invoices found for the selected filter.
+                                  </p>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <Link to="/invoice" className="btn btn-light btn-md w-100 mt-2">
+                        View All
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+                {/* /Invoices */}
+              </div>
+
+              <div className="row">
+                {/* Projects */}
+                <div className="col-xxl-8 col-xl-7 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Projects</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {filters.projects === 'today'
+                              ? 'Today'
+                              : filters.projects === 'week'
+                                ? 'This Week'
+                                : filters.projects === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.projects === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('projects', 'month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.projects === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('projects', 'week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.projects === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('projects', 'today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.projects === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('projects', 'all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card-body p-0">
+                      <div className="table-responsive">
+                        <table className="table table-nowrap mb-0">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Name</th>
+                              <th>Team</th>
+                              <th>Hours</th>
+                              <th>Deadline</th>
+                              <th>Priority</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dashboardData.projectsData?.slice(0, 7).map((project, index) => (
+                              <tr key={project.id}>
+                                <td>
+                                  <Link to="/project-details" className="link-default">
+                                    {project.projectId || `PRO-${String(index + 1).padStart(4, '0')}`}
+                                  </Link>
+                                </td>
+                                <td>
+                                  <h6 className="fw-medium">
+                                    <Link to="/project-details">{project.name}</Link>
+                                  </h6>
+                                </td>
+                                <td>
+                                  <div className="avatar-list-stacked avatar-group-sm">
+                                    {project.team.slice(0, 3).map((member, idx) => (
+                                      <span key={idx} className="avatar avatar-rounded">
+                                        <ImageWithBasePath
+                                          className="border border-white"
+                                          src={member.avatar}
+                                          alt="img"
+                                        />
+                                      </span>
+                                    ))}
+                                    {project.team.length > 3 && (
+                                      <Link
+                                        className="avatar bg-primary avatar-rounded text-fixed-white fs-10 fw-medium"
+                                        to="#"
+                                      >
+                                        +{project.team.length - 3}
+                                      </Link>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <p className="mb-1">
+                                    {project.hours}/{project.totalHours} Hrs
+                                  </p>
+                                  <div
+                                    className="progress progress-xs w-100"
+                                    role="progressbar"
+                                    aria-valuenow={project.progress}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                  >
+                                    <div
+                                      className="progress-bar bg-primary"
+                                      style={{ width: `${project.progress}%` }}
+                                    />
+                                  </div>
+                                </td>
+                                <td>{formatDate(project.deadline)}</td>
+                                <td>
+                                  <span
+                                    className={`badge ${project.priority === 'High'
+                                      ? 'badge-danger'
+                                      : project.priority === 'Medium'
+                                        ? 'badge-pink'
+                                        : 'badge-success'
+                                      } d-inline-flex align-items-center badge-xs`}
+                                  >
+                                    <i className="ti ti-point-filled me-1" />
+                                    {project.priority}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Projects */}
+
+                {/* Tasks Statistics */}
+                <div className="col-xxl-4 col-xl-5 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Tasks Statistics</h5>
+                      <div className="d-flex align-items-center">
+                        <div className="dropdown mb-2">
+                          <Link
+                            to="#"
+                            className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-calendar me-1" />
+                            {filters.taskStatistics === 'today'
+                              ? 'Today'
+                              : filters.taskStatistics === 'week'
+                                ? 'This Week'
+                                : filters.taskStatistics === 'month'
+                                  ? 'This Month'
+                                  : 'All'}
+                          </Link>
+                          <ul className="dropdown-menu  dropdown-menu-end p-3">
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.taskStatistics === 'month' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('taskStatistics', 'month');
+                                }}
+                              >
+                                This Month
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.taskStatistics === 'week' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('taskStatistics', 'week');
+                                }}
+                              >
+                                This Week
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.taskStatistics === 'today' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('taskStatistics', 'today');
+                                }}
+                              >
+                                Today
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${filters.taskStatistics === 'all' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleFilterChange('taskStatistics', 'all');
+                                }}
+                              >
+                                All
+                              </Link>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div className="chartjs-wrapper-demo position-relative mb-4">
+                        <Chart
+                          type="doughnut"
+                          data={taskStatsData}
+                          options={taskStatsOptions}
+                          className="w-full md:w-30rem semi-donut-chart"
+                        />
+                        <div className="position-absolute text-center attendance-canvas">
+                          <p className="fs-13 mb-1">Total Tasks</p>
+                          <h3>{dashboardData.taskStatistics?.total || 0}</h3>
+                        </div>
+                      </div>
+                      <div className="d-flex align-items-center flex-wrap">
+                        <div className="border-end text-center me-2 pe-2 mb-3">
+                          <p className="fs-13 d-inline-flex align-items-center mb-1">
+                            <i className="ti ti-circle-filled fs-10 me-1 text-warning" />
+                            Ongoing
+                          </p>
+                          <h5>
+                            {dashboardData.taskStatistics?.distribution?.['Ongoing']?.percentage || 0}%
+                          </h5>
+                        </div>
+                        <div className="border-end text-center me-2 pe-2 mb-3">
+                          <p className="fs-13 d-inline-flex align-items-center mb-1">
+                            <i className="ti ti-circle-filled fs-10 me-1 text-info" />
+                            On Hold{' '}
+                          </p>
+                          <h5>
+                            {dashboardData.taskStatistics?.distribution?.['On Hold']?.percentage || 0}%
+                          </h5>
+                        </div>
+                        <div className="border-end text-center me-2 pe-2 mb-3">
+                          <p className="fs-13 d-inline-flex align-items-center mb-1">
+                            <i className="ti ti-circle-filled fs-10 me-1 text-danger" />
+                            Overdue
+                          </p>
+                          <h5>
+                            {dashboardData.taskStatistics?.distribution?.['Overdue']?.percentage || 0}%
+                          </h5>
+                        </div>
+                        <div className="text-center me-2 pe-2 mb-3">
+                          <p className="fs-13 d-inline-flex align-items-center mb-1">
+                            <i className="ti ti-circle-filled fs-10 me-1 text-success" />
+                            Completed
+                          </p>
+                          <h5>
+                            {dashboardData.taskStatistics?.distribution?.['Completed']?.percentage || 0}
+                            %
+                          </h5>
+                        </div>
+                      </div>
+                      <div className="bg-dark br-5 p-3 pb-0 d-flex align-items-center justify-content-between">
+                        <div className="mb-2">
+                          <h4 className="text-success">
+                            {dashboardData.taskStatistics?.hoursSpent || 0}/
+                            {dashboardData.taskStatistics?.targetHours || 0} hrs
+                          </h4>
+                          <p className="fs-13 mb-0">Spent on Overall Tasks This Week</p>
+                        </div>
+                        <Link to="/tasks" className="btn btn-sm btn-light mb-2 text-nowrap">
+                          View All
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* /Tasks Statistics */}
+              </div>
+
+              <div className="row">
+                {/* Schedules */}
+                <div className="col-xxl-4 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Schedules</h5>
+                      <Link to="/candidates" className="btn btn-light btn-md mb-2">
+                        View All
+                      </Link>
+                    </div>
+                    <div className="card-body">
+                      {dashboardData.schedules?.slice(0, 2).map((schedule, index) => (
+                        <div
+                          key={schedule._id}
+                          className={`bg-light p-3 br-5 ${index === 0 ? 'mb-4' : 'mb-0'}`}
+                        >
+                          <span className="badge badge-secondary badge-xs mb-1">{schedule.type}</span>
+                          <h6 className="mb-2 text-truncate">{schedule.title}</h6>
+                          <div className="d-flex align-items-center flex-wrap">
+                            <p className="fs-13 mb-1 me-2">
+                              <i className="ti ti-calendar-event me-2" />
+                              {formatDate(schedule.date)}
+                            </p>
+                            <p className="fs-13 mb-1">
+                              <i className="ti ti-clock-hour-11 me-2" />
+                              {schedule.startTime} - {schedule.endTime}
+                            </p>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between border-top mt-2 pt-3">
+                            <div className="avatar-list-stacked avatar-group-sm">
+                              {schedule.participants.slice(0, 5).map((participant, idx) => (
+                                <span key={idx} className="avatar avatar-rounded">
+                                  <ImageWithBasePath
+                                    className="border border-white"
+                                    src={participant.avatar}
+                                    alt="img"
+                                  />
+                                </span>
+                              ))}
+                              {schedule.participants.length > 5 && (
+                                <Link
+                                  className="avatar bg-primary avatar-rounded text-fixed-white fs-10 fw-medium"
+                                  to="#"
+                                >
+                                  +{schedule.participants.length - 5}
+                                </Link>
+                              )}
                             </div>
-                            <Link to="#" className="btn btn-secondary btn-xs">
-                              <i className="ti ti-cake me-1" />
-                              Send
+                            <Link to="#" className="btn btn-primary btn-xs">
+                              Join Meeting
                             </Link>
                           </div>
                         </div>
                       ))}
-                    </>
-                  )}
-
-                  {dashboardData.birthdays?.tomorrow &&
-                    dashboardData.birthdays.tomorrow.length > 0 && (
-                      <>
-                        <h6 className="mb-2">Tomorrow</h6>
-                        {dashboardData.birthdays.tomorrow.map((person, index) => (
-                          <div
-                            key={index}
-                            className="bg-light p-2 border border-dashed rounded-top mb-3"
-                          >
-                            <div className="d-flex align-items-center justify-content-between">
-                              <div className="d-flex align-items-center">
-                                <Link to="#" className="avatar">
-                                  <ImageWithBasePath
-                                    src={person.avatar}
-                                    className="rounded-circle"
-                                    alt="img"
-                                  />
-                                </Link>
-                                <div className="ms-2 overflow-hidden">
-                                  <h6 className="fs-medium">
-                                    <Link to="#">{person.name}</Link>
-                                  </h6>
-                                  <p className="fs-13">{person.position}</p>
-                                </div>
-                              </div>
-                              <Link to="#" className="btn btn-secondary btn-xs">
-                                <i className="ti ti-cake me-1" />
-                                Send
-                              </Link>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-
-                  {dashboardData.birthdays?.upcoming &&
-                    dashboardData.birthdays.upcoming.length > 0 && (
-                      <>
-                        <h6 className="mb-2">Upcoming</h6>
-                        {dashboardData.birthdays.upcoming.slice(0, 2).map((person, index) => (
-                          <div
-                            key={index}
-                            className="bg-light p-2 border border-dashed rounded-top mb-3"
-                          >
-                            <div className="d-flex align-items-center justify-content-between">
-                              <div className="d-flex align-items-center">
-                                <span className="avatar">
-                                  <ImageWithBasePath
-                                    src={person.avatar}
-                                    className="rounded-circle"
-                                    alt="img"
-                                  />
-                                </span>
-                                <div className="ms-2 overflow-hidden">
-                                  <h6 className="fs-medium">{person.name}</h6>
-                                  <p className="fs-13">{person.position}</p>
-                                </div>
-                              </div>
-                              <Link to="#" className="btn btn-secondary btn-xs">
-                                <i className="ti ti-cake me-1" />
-                                Send
-                              </Link>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
+                    </div>
+                  </div>
                 </div>
+                {/* /Schedules */}
+
+                {/* Recent Activities */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Recent Activities</h5>
+                      <Link to="/activity" className="btn btn-light btn-md mb-2">
+                        View All
+                      </Link>
+                    </div>
+                    <div className="card-body">
+                      {dashboardData.recentActivities?.slice(0, 6).map((activity, index) => (
+                        <div key={activity._id} className="recent-item">
+                          <div className="d-flex justify-content-between">
+                            <div className="d-flex align-items-center w-100">
+                              <Link to="#" className="avatar flex-shrink-0">
+                                <ImageWithBasePath
+                                  src={activity.employeeAvatar}
+                                  className="rounded-circle"
+                                  alt="img"
+                                />
+                              </Link>
+                              <div className="ms-2 flex-fill">
+                                <div className="d-flex align-items-center justify-content-between">
+                                  <h6 className="fs-medium text-truncate">
+                                    <Link to="#">{activity.employeeName}</Link>
+                                  </h6>
+                                  <p className="fs-13">{formatTime(activity.createdAt)}</p>
+                                </div>
+                                <p className="fs-13">{activity.description}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {/* /Recent Activities */}
+
+                {/* Birthdays */}
+                <div className="col-xxl-4 col-xl-6 d-flex">
+                  <div className="card flex-fill">
+                    <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
+                      <h5 className="mb-2">Birthdays</h5>
+                      <Link to="#" className="btn btn-light btn-md mb-2">
+                        View All
+                      </Link>
+                    </div>
+                    <div className="card-body pb-1">
+                      {dashboardData.birthdays?.today && dashboardData.birthdays.today.length > 0 && (
+                        <>
+                          <h6 className="mb-2">Today</h6>
+                          {dashboardData.birthdays.today.map((person, index) => (
+                            <div
+                              key={index}
+                              className="bg-light p-2 border border-dashed rounded-top mb-3"
+                            >
+                              <div className="d-flex align-items-center justify-content-between">
+                                <div className="d-flex align-items-center">
+                                  <Link to="#" className="avatar">
+                                    <ImageWithBasePath
+                                      src={person.avatar}
+                                      className="rounded-circle"
+                                      alt="img"
+                                    />
+                                  </Link>
+                                  <div className="ms-2 overflow-hidden">
+                                    <h6 className="fs-medium">{person.name}</h6>
+                                    <p className="fs-13">{person.position}</p>
+                                  </div>
+                                </div>
+                                <Link to="#" className="btn btn-secondary btn-xs">
+                                  <i className="ti ti-cake me-1" />
+                                  Send
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+
+                      {dashboardData.birthdays?.tomorrow &&
+                        dashboardData.birthdays.tomorrow.length > 0 && (
+                          <>
+                            <h6 className="mb-2">Tomorrow</h6>
+                            {dashboardData.birthdays.tomorrow.map((person, index) => (
+                              <div
+                                key={index}
+                                className="bg-light p-2 border border-dashed rounded-top mb-3"
+                              >
+                                <div className="d-flex align-items-center justify-content-between">
+                                  <div className="d-flex align-items-center">
+                                    <Link to="#" className="avatar">
+                                      <ImageWithBasePath
+                                        src={person.avatar}
+                                        className="rounded-circle"
+                                        alt="img"
+                                      />
+                                    </Link>
+                                    <div className="ms-2 overflow-hidden">
+                                      <h6 className="fs-medium">
+                                        <Link to="#">{person.name}</Link>
+                                      </h6>
+                                      <p className="fs-13">{person.position}</p>
+                                    </div>
+                                  </div>
+                                  <Link to="#" className="btn btn-secondary btn-xs">
+                                    <i className="ti ti-cake me-1" />
+                                    Send
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+
+                      {dashboardData.birthdays?.upcoming &&
+                        dashboardData.birthdays.upcoming.length > 0 && (
+                          <>
+                            <h6 className="mb-2">Upcoming</h6>
+                            {dashboardData.birthdays.upcoming.slice(0, 2).map((person, index) => (
+                              <div
+                                key={index}
+                                className="bg-light p-2 border border-dashed rounded-top mb-3"
+                              >
+                                <div className="d-flex align-items-center justify-content-between">
+                                  <div className="d-flex align-items-center">
+                                    <span className="avatar">
+                                      <ImageWithBasePath
+                                        src={person.avatar}
+                                        className="rounded-circle"
+                                        alt="img"
+                                      />
+                                    </span>
+                                    <div className="ms-2 overflow-hidden">
+                                      <h6 className="fs-medium">{person.name}</h6>
+                                      <p className="fs-13">{person.position}</p>
+                                    </div>
+                                  </div>
+                                  <Link to="#" className="btn btn-secondary btn-xs">
+                                    <i className="ti ti-cake me-1" />
+                                    Send
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                    </div>
+                  </div>
+                </div>
+                {/* /Birthdays */}
               </div>
             </div>
-            {/* /Birthdays */}
+
+            <Footer />
           </div>
-        </div>
+          {/* /Page Wrapper */}
 
-        <Footer />
-      </div>
-      {/* /Page Wrapper */}
-
-      <RequestModals
-        onLeaveRequestCreated={async () => {
-          // Refresh dashboard data via REST API when leave request is created
-          await fetchAllDashboardData({ year: date.getFullYear() });
-        }}
-        mode="admin"
-      />
-      <TodoModal
-        onTodoAdded={async () => {
-          // Refresh dashboard data via REST API when todo is added
-          await fetchAllDashboardData({ year: date.getFullYear() });
-        }}
-      />
-      </>
-    </AdminOnly>
-  </ErrorBoundary>
+          <RequestModals
+            onLeaveRequestCreated={async () => {
+              // Refresh dashboard data via REST API when leave request is created
+              await fetchAllDashboardData({ year: date.getFullYear() });
+            }}
+            mode="admin"
+          />
+          <TodoModal
+            onTodoAdded={async () => {
+              // Refresh dashboard data via REST API when todo is added
+              await fetchAllDashboardData({ year: date.getFullYear() });
+            }}
+          />
+        </>
+      </AdminOnly>
+    </ErrorBoundary>
   );
 };
 

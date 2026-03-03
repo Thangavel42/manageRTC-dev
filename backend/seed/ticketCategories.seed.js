@@ -1,8 +1,3 @@
-/**
- * Ticket Categories Seed Data
- * Main Categories with Subcategories as per requirements
- */
-
 const ticketCategoriesData = [
   {
     name: "Human Resources (HR)",
@@ -92,13 +87,14 @@ const ticketCategoriesData = [
 ];
 
 /**
- * Seed ticket categories for a tenant
- * @param {string} tenantDbName - Tenant database name
- * @param {object} collections - Tenant collections object
+ * Seed ticket categories into the superadmin (AmasQIS) database.
+ * Only seeds if categories don't already exist.
+ * Called automatically on server startup.
  */
-async function seedTicketCategories(tenantDbName, collections) {
+async function seedTicketCategories() {
   try {
-    console.log(`\n📁 Seeding ticket categories for tenant: ${tenantDbName}`);
+    const { getsuperadminCollections } = await import('../config/db.js');
+    const collections = getsuperadminCollections();
 
     // Check if categories already exist
     const existingCategories = await collections.ticketCategories.countDocuments();
@@ -106,6 +102,8 @@ async function seedTicketCategories(tenantDbName, collections) {
       console.log(`✅ Ticket categories already exist (${existingCategories} found). Skipping seed.`);
       return;
     }
+
+    console.log('📁 Seeding ticket categories into superadmin database...');
 
     // Prepare categories with subcategory objects
     const categoriesToInsert = ticketCategoriesData.map(cat => ({
@@ -132,64 +130,32 @@ async function seedTicketCategories(tenantDbName, collections) {
 
     return result;
   } catch (error) {
-    console.error(`❌ Error seeding ticket categories for ${tenantDbName}:`, error);
+    console.error('❌ Error seeding ticket categories:', error);
     throw error;
   }
 }
 
 /**
  * Re-seed ticket categories (clears existing and adds new)
- * @param {string} tenantDbName - Tenant database name
- * @param {object} collections - Tenant collections object
  */
-async function reseedTicketCategories(tenantDbName, collections) {
+async function reseedTicketCategories() {
   try {
-    console.log(`\n🔄 Re-seeding ticket categories for tenant: ${tenantDbName}`);
+    const { getsuperadminCollections } = await import('../config/db.js');
+    const collections = getsuperadminCollections();
+
+    console.log('🔄 Re-seeding ticket categories in superadmin database...');
 
     // Clear existing categories
     const deleteResult = await collections.ticketCategories.deleteMany({});
     console.log(`🗑️  Deleted ${deleteResult.deletedCount} existing categories`);
 
     // Seed new categories
-    return await seedTicketCategories(tenantDbName, collections);
+    return await seedTicketCategories();
   } catch (error) {
-    console.error(`❌ Error re-seeding ticket categories for ${tenantDbName}:`, error);
+    console.error('❌ Error re-seeding ticket categories:', error);
     throw error;
   }
 }
 
 // Export for use in other scripts
 export { ticketCategoriesData, seedTicketCategories, reseedTicketCategories };
-
-// Run directly if executed
-if (import.meta.url === `file://${process.argv[1]}`) {
-  import('../config/db.js').then(async ({ getTenantCollections, connectDB }) => {
-    const tenantDbName = process.argv[2] || 'amc_user_001';
-
-    try {
-      // Force output to be visible immediately
-      process.stdout.write('🔌 Connecting to database...\n');
-
-      // Connect to database first
-      await connectDB();
-
-      process.stdout.write('✅ Database connected\n');
-
-      const collections = getTenantCollections(tenantDbName);
-
-      // Check existing categories first
-      const existingCount = await collections.ticketCategories.countDocuments();
-      process.stdout.write(`📊 Found ${existingCount} existing categories\n`);
-
-      // Always use reseed to ensure categories are up to date
-      await reseedTicketCategories(tenantDbName, collections);
-
-      process.stdout.write('\n✨ Ticket categories seeding completed\n');
-      process.exit(0);
-    } catch (error) {
-      process.stderr.write('\n❌ Seeding failed: ' + error.message + '\n');
-      console.error(error);
-      process.exit(1);
-    }
-  });
-}

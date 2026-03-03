@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { useSocket } from '../../../SocketContext';
-import { Socket } from 'socket.io-client';
 import { message } from 'antd';
-import { toast, ToastContainer } from 'react-toastify';
+import React, { useState } from 'react';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { Socket } from 'socket.io-client';
+import { useSocket } from '../../../SocketContext';
 
 interface JobFormData {
   title: string;
@@ -70,8 +70,8 @@ const AddJob = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'minSalary' || name === 'maxSalary' || name === 'numberOfPositions' 
-        ? Number(value) || 0 
+      [name]: name === 'minSalary' || name === 'maxSalary' || name === 'numberOfPositions'
+        ? Number(value) || 0
         : value
     }));
 
@@ -155,7 +155,7 @@ const AddJob = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -166,7 +166,7 @@ const AddJob = () => {
     }
 
     setLoading(true);
-    
+
     try {
       console.log('Creating job:', formData);
       socket.emit('job:create', formData);
@@ -176,7 +176,7 @@ const AddJob = () => {
         if (response.done) {
           console.log('Job created successfully:', response.data);
           message.success('Job created successfully!');
-          
+
           // Reset form
           setFormData({
             title: '',
@@ -246,11 +246,11 @@ const AddJob = () => {
       modal.classList.remove('show');
       modal.setAttribute('aria-hidden', 'true');
       modal.removeAttribute('aria-modal');
-      
+
       // Remove backdrop
       const backdrops = document.querySelectorAll('.modal-backdrop');
       backdrops.forEach(backdrop => backdrop.remove());
-      
+
       // Remove modal-open class from body
       document.body.classList.remove('modal-open');
       document.body.style.overflow = '';

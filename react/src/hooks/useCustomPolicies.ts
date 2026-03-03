@@ -69,7 +69,7 @@ export const useCustomPolicies = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<CustomPolicyStats | null>(null);
-  const { userId } = useAuth();
+  const { userId: _userId } = useAuth();
 
   /**
    * Fetch all custom policies

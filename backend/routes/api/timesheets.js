@@ -5,14 +5,16 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../middleware/auth.js';
 import * as timesheetController from '../../controllers/rest/timesheet.controller.js';
-import { weeklyTimesheetSchemas } from '../../middleware/validate.js';
+import { authenticate, requireEmployeeActive } from '../../middleware/auth.js';
+import { bulkRateLimiter, clockInOutRateLimiter } from '../../middleware/rateLimiter.js';
+import { validateBody, validateQuery, weeklyTimesheetSchemas } from '../../middleware/validate.js';
+import { sanitizeBody, sanitizeQuery } from '../../utils/sanitize.js';
 
 const router = express.Router();
 
-// Apply authentication to ALL routes
-router.use(authenticate);
+// Apply authentication to ALL routes AND require active employee status
+router.use(authenticate, requireEmployeeActive);
 
 /**
  * @route   GET /api/timesheets
@@ -21,7 +23,8 @@ router.use(authenticate);
  */
 router.get(
   '/',
-  weeklyTimesheetSchemas.list,
+  sanitizeQuery(),
+  validateQuery(weeklyTimesheetSchemas.list),
   timesheetController.getAllTimesheets
 );
 
@@ -32,6 +35,7 @@ router.get(
  */
 router.get(
   '/my',
+  sanitizeQuery(),
   timesheetController.getMyTimesheets
 );
 
@@ -42,6 +46,7 @@ router.get(
  */
 router.get(
   '/stats',
+  sanitizeQuery(),
   timesheetController.getTimesheetStats
 );
 
@@ -52,6 +57,7 @@ router.get(
  */
 router.get(
   '/:id',
+  sanitizeQuery(),
   timesheetController.getTimesheetById
 );
 
@@ -62,7 +68,9 @@ router.get(
  */
 router.post(
   '/',
-  weeklyTimesheetSchemas.create,
+  sanitizeBody({ type: 'timesheet' }),
+  clockInOutRateLimiter,
+  validateBody(weeklyTimesheetSchemas.create),
   timesheetController.createTimesheet
 );
 
@@ -73,7 +81,9 @@ router.post(
  */
 router.put(
   '/:id',
-  weeklyTimesheetSchemas.update,
+  sanitizeBody({ type: 'timesheet' }),
+  clockInOutRateLimiter,
+  validateBody(weeklyTimesheetSchemas.update),
   timesheetController.updateTimesheet
 );
 
@@ -84,6 +94,8 @@ router.put(
  */
 router.post(
   '/:id/submit',
+  sanitizeBody({ type: 'timesheet' }),
+  clockInOutRateLimiter,
   timesheetController.submitTimesheet
 );
 
@@ -94,7 +106,9 @@ router.post(
  */
 router.post(
   '/:id/approve',
-  weeklyTimesheetSchemas.approveReject,
+  sanitizeBody({ type: 'timesheet' }),
+  bulkRateLimiter,
+  validateBody(weeklyTimesheetSchemas.approveReject),
   timesheetController.approveTimesheet
 );
 
@@ -105,7 +119,9 @@ router.post(
  */
 router.post(
   '/:id/reject',
-  weeklyTimesheetSchemas.approveReject,
+  sanitizeBody({ type: 'timesheet' }),
+  bulkRateLimiter,
+  validateBody(weeklyTimesheetSchemas.approveReject),
   timesheetController.rejectTimesheet
 );
 

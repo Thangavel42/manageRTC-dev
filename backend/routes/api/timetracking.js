@@ -99,16 +99,10 @@ router.get(
   getTimeEntriesByUser
 );
 
-// Get single time entry by ID
-router.get(
-  '/:id',
-  authenticate,
-  requireCompany,
-  getTimeEntryById
-);
-
 /**
- * Admin/HR Routes (Restricted access)
+ * Manager-Level Routes (Admin/HR/Superadmin + Project Managers + Team Leaders)
+ * Role authorization is handled inside the controller via getUserProjectScope().
+ * IMPORTANT: These static routes must be defined BEFORE /:id to avoid being swallowed by the param route
  */
 
 // List all time entries with pagination and filtering
@@ -116,8 +110,15 @@ router.get(
   '/',
   authenticate,
   requireCompany,
-  requireRole('admin', 'hr', 'superadmin'),
   getTimeEntries
+);
+
+// Get time tracking statistics
+router.get(
+  '/stats',
+  authenticate,
+  requireCompany,
+  getTimeTrackingStats
 );
 
 // Approve timesheet
@@ -125,7 +126,6 @@ router.post(
   '/approve',
   authenticate,
   requireCompany,
-  requireRole('admin', 'hr', 'superadmin'),
   approveTimesheet
 );
 
@@ -134,17 +134,15 @@ router.post(
   '/reject',
   authenticate,
   requireCompany,
-  requireRole('admin', 'hr', 'superadmin'),
   rejectTimesheet
 );
 
-// Get time tracking statistics
+// Get single time entry by ID (must be AFTER all static routes)
 router.get(
-  '/stats',
+  '/:id',
   authenticate,
   requireCompany,
-  requireRole('admin', 'hr', 'superadmin'),
-  getTimeTrackingStats
+  getTimeEntryById
 );
 
 export default router;

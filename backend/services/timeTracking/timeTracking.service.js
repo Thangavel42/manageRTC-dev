@@ -87,6 +87,17 @@ export const createTimeEntry = async (companyId, timeEntryData) => {
       newTimeEntry.milestoneId = new ObjectId(timeEntryData.milestoneId);
     }
 
+    // Resolve and store employee MongoDB ObjectId for fast _id-based lookups
+    if (timeEntryData.userId) {
+      const emp = await collections.employees.findOne(
+        { clerkUserId: timeEntryData.userId },
+        { projection: { _id: 1, firstName: 1, lastName: 1, employeeId: 1, profileImage: 1 } }
+      );
+      if (emp) {
+        newTimeEntry.employeeObjectId = emp._id;
+      }
+    }
+
     const result = await collections.timeEntries.insertOne(newTimeEntry);
     console.log('[TimeTrackingService] insertOne result', { result });
 
@@ -110,16 +121,41 @@ export const createTimeEntry = async (companyId, timeEntryData) => {
 
 /**
  * Get time entries by user
+ * @param {string} companyId - Company ID
+ * @param {string} userIdOrEmployeeId - Clerk userId or employeeId (EMP-XXXX format)
+ * @param {object} filters - Query filters
  */
-export const getTimeEntriesByUser = async (companyId, userId, filters = {}) => {
+export const getTimeEntriesByUser = async (companyId, userIdOrEmployeeId, filters = {}) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log('[TimeTrackingService] getTimeEntriesByUser', { companyId, userId, filters });
+    console.log('[TimeTrackingService] getTimeEntriesByUser', { companyId, userIdOrEmployeeId, filters });
 
-    const query = {
-      userId,
+    // Determine if this is a userId (Clerk) or employeeId (EMP-XXXX)
+    const isEmployeeId = userIdOrEmployeeId?.startsWith('EMP-');
+
+    let query = {
       isDeleted: { $ne: true }
     };
+
+    // Handle both userId (Clerk) and employeeId (EMP-XXXX) cases
+    if (isEmployeeId) {
+      // This is an employeeId - look up the user first
+      const employee = await collections.employees.findOne({
+        employeeId: userIdOrEmployeeId,
+        isDeleted: { $ne: true }
+      });
+
+      if (!employee) {
+        console.warn('[TimeTrackingService] Employee not found:', userIdOrEmployeeId);
+        return { done: true, data: [] };
+      }
+
+      // Use the employee's Clerk userId for the lookup
+      query.userId = employee.clerkUserId;
+    } else {
+      // This is a userId (Clerk) - use directly
+      query.userId = userIdOrEmployeeId;
+    }
 
     // Apply status filter
     if (filters.status && filters.status !== 'all') {
@@ -154,13 +190,30 @@ export const getTimeEntriesByUser = async (companyId, userId, filters = {}) => {
       .sort(sort)
       .toArray();
 
-    // Populate userDetails for the user
-    const employee = await collections.employees.findOne({ userId });
+    // Populate userDetails — prefer _id lookup via employeeObjectId stored on entries
+    // (all new entries have employeeObjectId; fall back to clerkUserId for older entries)
+    let employee = null;
+    const sampleEntry = timeEntries.find(e => e.employeeObjectId);
+    if (sampleEntry) {
+      employee = await collections.employees.findOne(
+        { _id: sampleEntry.employeeObjectId },
+        { projection: { _id: 1, firstName: 1, lastName: 1, employeeId: 1, clerkUserId: 1, profileImage: 1 } }
+      );
+    }
+    if (!employee && query.userId) {
+      // Fallback: clerkUserId lookup for entries created before employeeObjectId was added
+      employee = await collections.employees.findOne(
+        { clerkUserId: query.userId },
+        { projection: { _id: 1, firstName: 1, lastName: 1, employeeId: 1, clerkUserId: 1, profileImage: 1 } }
+      );
+    }
+
     const userDetails = employee ? {
       firstName: employee.firstName,
       lastName: employee.lastName,
       employeeId: employee.employeeId,
-      userId: employee.userId
+      userId: employee.clerkUserId,
+      avatar: employee.profileImage || null
     } : null;
 
     // Populate projectDetails for all entries
@@ -180,11 +233,31 @@ export const getTimeEntriesByUser = async (companyId, userId, filters = {}) => {
       }])
     );
 
-    // Enrich time entries with userDetails and projectDetails
+    // Populate taskDetails for all entries
+    const taskIds = [...new Set(timeEntries
+      .filter(entry => entry.taskId)
+      .map(entry => entry.taskId.toString())
+    )];
+
+    const tasks = await collections.tasks?.find({
+      _id: { $in: taskIds.map(id => new ObjectId(id)) }
+    }).toArray() || [];
+
+    const taskMap = new Map(
+      tasks.map(task => [task._id.toString(), {
+        taskId: task.taskId,
+        title: task.title,
+        status: task.status,
+        priority: task.priority
+      }])
+    );
+
+    // Enrich time entries with userDetails, projectDetails, and taskDetails
     const enrichedEntries = timeEntries.map(entry => ({
       ...entry,
       userDetails,
-      projectDetails: entry.projectId ? projectMap.get(entry.projectId.toString()) : undefined
+      projectDetails: entry.projectId ? projectMap.get(entry.projectId.toString()) : undefined,
+      taskDetails: entry.taskId ? taskMap.get(entry.taskId.toString()) : undefined
     }));
 
     return { done: true, data: enrichedEntries };
@@ -241,18 +314,42 @@ export const getTimeEntriesByProject = async (companyId, projectId, filters = {}
       .sort(sort)
       .toArray();
 
-    // Populate userDetails for all entries
-    const userIds = [...new Set(timeEntries.map(entry => entry.userId))];
-    const employees = await collections.employees.find({
-      userId: { $in: userIds }
-    }).toArray();
+    // Populate userDetails — use employeeObjectId (_id) when available, fallback to clerkUserId
+    const empObjectIds = [...new Set(
+      timeEntries.filter(e => e.employeeObjectId).map(e => e.employeeObjectId.toString())
+    )];
+    const fallbackClerkIds = [...new Set(
+      timeEntries.filter(e => !e.employeeObjectId && e.userId).map(e => e.userId)
+    )];
 
-    const employeeMap = new Map(
-      employees.map(emp => [emp.userId, {
+    const empQuery = { $or: [] };
+    if (empObjectIds.length > 0) {
+      empQuery.$or.push({ _id: { $in: empObjectIds.map(id => new ObjectId(id)) } });
+    }
+    if (fallbackClerkIds.length > 0) {
+      empQuery.$or.push({ clerkUserId: { $in: fallbackClerkIds } });
+    }
+
+    const employees = empQuery.$or.length > 0
+      ? await collections.employees.find(empQuery).toArray()
+      : [];
+
+    const employeeByObjectId = new Map(
+      employees.map(emp => [emp._id.toString(), {
         firstName: emp.firstName,
         lastName: emp.lastName,
         employeeId: emp.employeeId,
-        userId: emp.userId
+        userId: emp.clerkUserId,
+        avatar: emp.profileImage || null
+      }])
+    );
+    const employeeByClerkId = new Map(
+      employees.map(emp => [emp.clerkUserId, {
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        employeeId: emp.employeeId,
+        userId: emp.clerkUserId,
+        avatar: emp.profileImage || null
       }])
     );
 
@@ -269,7 +366,9 @@ export const getTimeEntriesByProject = async (companyId, projectId, filters = {}
     // Enrich time entries with userDetails and projectDetails
     const enrichedEntries = timeEntries.map(entry => ({
       ...entry,
-      userDetails: employeeMap.get(entry.userId),
+      userDetails: entry.employeeObjectId
+        ? employeeByObjectId.get(entry.employeeObjectId.toString())
+        : employeeByClerkId.get(entry.userId),
       projectDetails
     }));
 
@@ -331,8 +430,10 @@ export const getTimeEntries = async (companyId, filters = {}) => {
       query.userId = filters.userId;
     }
 
-    // Apply project filter
-    if (filters.projectId && ObjectId.isValid(filters.projectId)) {
+    // Apply project filter — single projectId or array of projectIds (for PM/TL scope)
+    if (filters.projectIds && Array.isArray(filters.projectIds) && filters.projectIds.length > 0) {
+      query.projectId = { $in: filters.projectIds.map(id => new ObjectId(id)) };
+    } else if (filters.projectId && ObjectId.isValid(filters.projectId)) {
       query.projectId = new ObjectId(filters.projectId);
     }
 
@@ -376,18 +477,48 @@ export const getTimeEntries = async (companyId, filters = {}) => {
       .sort(sort)
       .toArray();
 
-    // Populate userDetails for all entries
-    const userIds = [...new Set(timeEntries.map(entry => entry.userId))];
-    const employees = await collections.employees.find({
-      userId: { $in: userIds }
-    }).toArray();
+    // Populate userDetails — use employeeObjectId (_id lookup) when available,
+    // fall back to clerkUserId string match for older entries without employeeObjectId
+    const employeeObjectIds = [...new Set(
+      timeEntries
+        .filter(e => e.employeeObjectId)
+        .map(e => e.employeeObjectId.toString())
+    )];
+    const clerkUserIds = [...new Set(
+      timeEntries
+        .filter(e => !e.employeeObjectId && e.userId)
+        .map(e => e.userId)
+    )];
 
-    const employeeMap = new Map(
-      employees.map(emp => [emp.userId, {
+    const employeeQuery = { $or: [] };
+    if (employeeObjectIds.length > 0) {
+      employeeQuery.$or.push({ _id: { $in: employeeObjectIds.map(id => new ObjectId(id)) } });
+    }
+    if (clerkUserIds.length > 0) {
+      employeeQuery.$or.push({ clerkUserId: { $in: clerkUserIds } });
+    }
+
+    const employees = employeeQuery.$or.length > 0
+      ? await collections.employees.find(employeeQuery).toArray()
+      : [];
+
+    // Build two maps: by ObjectId string and by clerkUserId
+    const employeeByObjectId = new Map(
+      employees.map(emp => [emp._id.toString(), {
         firstName: emp.firstName,
         lastName: emp.lastName,
         employeeId: emp.employeeId,
-        userId: emp.userId
+        userId: emp.clerkUserId,
+        avatar: emp.profileImage || null
+      }])
+    );
+    const employeeByClerkId = new Map(
+      employees.map(emp => [emp.clerkUserId, {
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        employeeId: emp.employeeId,
+        userId: emp.clerkUserId,
+        avatar: emp.profileImage || null
       }])
     );
 
@@ -408,11 +539,33 @@ export const getTimeEntries = async (companyId, filters = {}) => {
       }])
     );
 
-    // Enrich time entries with userDetails and projectDetails
+    // Populate taskDetails for all entries
+    const taskIds = [...new Set(timeEntries
+      .filter(entry => entry.taskId)
+      .map(entry => entry.taskId.toString())
+    )];
+
+    const tasks = await collections.tasks?.find({
+      _id: { $in: taskIds.map(id => new ObjectId(id)) }
+    }).toArray() || [];
+
+    const taskMap = new Map(
+      tasks.map(task => [task._id.toString(), {
+        taskId: task.taskId,
+        title: task.title,
+        status: task.status,
+        priority: task.priority
+      }])
+    );
+
+    // Enrich time entries with userDetails, projectDetails, and taskDetails
     const enrichedEntries = timeEntries.map(entry => ({
       ...entry,
-      userDetails: employeeMap.get(entry.userId),
-      projectDetails: entry.projectId ? projectMap.get(entry.projectId.toString()) : undefined
+      userDetails: entry.employeeObjectId
+        ? employeeByObjectId.get(entry.employeeObjectId.toString())
+        : employeeByClerkId.get(entry.userId),
+      projectDetails: entry.projectId ? projectMap.get(entry.projectId.toString()) : undefined,
+      taskDetails: entry.taskId ? taskMap.get(entry.taskId.toString()) : undefined
     }));
 
     return { done: true, data: enrichedEntries };
@@ -474,14 +627,16 @@ export const getTimeEntryById = async (companyId, timeEntryId) => {
 
     // Populate task details
     if (timeEntry.taskId) {
-      const task = await collections.tasks.findOne({
+      const task = await collections.tasks?.findOne({
         _id: timeEntry.taskId,
         isDeleted: { $ne: true }
       });
       if (task) {
         timeEntry.taskDetails = {
+          taskId: task.taskId,
           title: task.title,
-          status: task.status
+          status: task.status,
+          priority: task.priority
         };
       }
     }

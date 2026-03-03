@@ -1,5 +1,4 @@
-import { config } from 'dotenv';
-config();
+import 'dotenv/config';
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import compression from 'compression';
@@ -12,6 +11,8 @@ import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
+import { seedTicketCategories } from './seed/ticketCategories.seed.js';
+import { attachRequestId } from './middleware/auth.js';
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -36,11 +37,15 @@ import assetCategoryRoutes from './routes/api/asset-categories.js';
 import assetRoutes from './routes/api/assets.js';
 import assetUserRoutes from './routes/api/assetUsers.js';
 import attendanceRoutes from './routes/api/attendance.js';
+import auditRoutes from './routes/api/audit.js';
 import batchRoutes from './routes/api/batches.js';
 import candidatesRoutes from './routes/api/candidates.js';
+import changeRequestRoutes from './routes/api/changeRequest.js';
 import clientRoutes from './routes/api/clients.js';
 import departmentRoutes from './routes/api/departments.js';
 import designationRoutes from './routes/api/designations.js';
+import emailChangeRoutes from './routes/api/emailChange.routes.js';
+import employeeDashboardRoutes from './routes/api/employee-dashboard.js';
 import employeeRoutes from './routes/api/employees.js';
 import holidayTypeRoutes from './routes/api/holiday-types.js';
 import holidayRoutes from './routes/api/holidays.js';
@@ -61,6 +66,7 @@ import subcontractRoutes from './routes/api/subcontracts.js';
 import syncRoleRoutes from './routes/api/syncRole.routes.js';
 import taskRoutes from './routes/api/tasks.js';
 import terminationRoutes from './routes/api/terminations.js';
+import timesheetRoutes from './routes/api/timesheets.js';
 import timetrackingRoutes from './routes/api/timetracking.js';
 import trainingRoutes from './routes/api/training.js';
 import userProfileRoutes from './routes/api/user-profile.js';
@@ -79,6 +85,18 @@ import rbacRolesRoutes from './routes/api/rbac/roles.js';
 import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
 import superadminRoutes from './routes/api/superadmin.routes.js';
 import debugRoutes from './routes/debug/auth-debug.js';
+import adminUsersRoutes from "./routes/api/admin.users.js";
+import companyPagesRoutes from "./routes/api/companyPages.routes.js";
+import rbacModulesRoutes from "./routes/api/rbac/modules.js";
+import rbacPageCategoriesRoutes from "./routes/api/rbac/pageCategories.routes.js";
+import rbacPagesRoutes from "./routes/api/rbac/pages.js";
+import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
+import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
+import rbacRolesRoutes from "./routes/api/rbac/roles.js";
+import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
+import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
+import superadminRoutes from "./routes/api/superadmin.routes.js";
+import debugRoutes from "./routes/debug/auth-debug.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,13 +104,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// CORS configuration
+// CORS configuration — set EXTRA_ALLOWED_ORIGINS in .env as comma-separated list for additional origins
+const extraOrigins = process.env.EXTRA_ALLOWED_ORIGINS
+  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://dev.manage-rtc.com',
-  'https://apidev.manage-rtc.com',
   process.env.FRONTEND_URL,
+  ...extraOrigins,
 ].filter(Boolean);
 
 app.use(
@@ -116,7 +136,12 @@ app.use(
 // Compress all responses
 app.use(compression());
 
-app.use(express.json());
+// Parse JSON bodies with increased limit for base64 images
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Attach unique request ID to all requests for tracing
+app.use(attachRequestId);
 
 // Note: We use manual token verification in the authenticate middleware
 // No need for clerkMiddleware() since we use verifyToken() directly
@@ -191,6 +216,13 @@ const initializeServer = async () => {
     await connectDB();
     console.log('Database connection established successfully');
 
+    // Seed ticket categories into superadmin DB (only if not already present)
+    try {
+      await seedTicketCategories();
+    } catch (err) {
+      console.error('⚠️  Ticket categories seed failed:', err.message);
+    }
+
     // Routes
     app.use('/api/socialfeed', socialFeedRoutes);
     app.use('/api/deals', dealRoutes);
@@ -206,6 +238,7 @@ const initializeServer = async () => {
 
     // REST API Routes (Socket.IO to REST Migration)
     app.use('/api/employees', employeeRoutes);
+    app.use('/api/employees', emailChangeRoutes);
     app.use('/api/projects', projectRoutes);
     app.use('/api/projectcontracts', projectContractRoutes);
     app.use('/api/subcontracts', subcontractRoutes);
@@ -213,6 +246,7 @@ const initializeServer = async () => {
     app.use('/api/leads', leadRoutes);
     app.use('/api/clients', clientRoutes);
     app.use('/api/attendance', attendanceRoutes);
+    app.use('/api/employee/dashboard', employeeDashboardRoutes);
     app.use('/api/leaves', leaveRoutes);
     app.use('/api/leave-types', leaveTypeRoutes);
     app.use('/api/assets', assetRoutes);
@@ -235,10 +269,13 @@ const initializeServer = async () => {
     app.use('/api/hr-dashboard', hrDashboardRoutes);
     app.use('/api/admin-dashboard', adminDashboardRoutes);
     app.use('/api/user-profile', userProfileRoutes);
+    app.use('/api/change-requests', changeRequestRoutes);
     app.use('/api/timetracking', timetrackingRoutes);
     app.use('/api/overtime', overtimeRoutes);
+    app.use('/api/timesheets', timesheetRoutes);
     app.use('/api/schedule', scheduleRoutes);
     app.use('/api/sync-role', syncRoleRoutes);
+    app.use('/api/audit', auditRoutes);
 
     // RBAC Routes
     app.use('/api/rbac/categories', rbacPageCategoriesRoutes);
@@ -252,6 +289,9 @@ const initializeServer = async () => {
     // Superadmin Routes
     app.use('/api/superadmin', superadminCompaniesRoutes);
     app.use('/api/superadmin/users', superadminRoutes);
+
+    // Company Change Request Routes (Admin → Superadmin approval flow)
+    app.use('/api/company-change-requests', companyChangeRequestRoutes);
 
     // Company Pages Routes (module-based sidebar filtering)
     app.use('/api/company', companyPagesRoutes);
@@ -306,6 +346,7 @@ const initializeServer = async () => {
           publicMetadata: {
             companyId,
             role,
+            ...(role === 'admin' ? { isAdminVerified: true } : {}),
           },
         });
 

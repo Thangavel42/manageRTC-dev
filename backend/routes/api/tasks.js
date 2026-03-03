@@ -20,7 +20,7 @@ import {
   updateTaskStatus,
   updateTaskStatusBoard,
 } from '../../controllers/rest/task.controller.js';
-import { attachRequestId, authenticate, requireRole } from '../../middleware/auth.js';
+import { attachRequestId, authenticate, requireEmployeeActive, requireRole } from '../../middleware/auth.js';
 import { taskSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
@@ -55,10 +55,10 @@ router.delete(
 );
 
 // Get current user's tasks
-router.get('/my', authenticate, getMyTasks);
+router.get('/my', authenticate, requireEmployeeActive, getMyTasks);
 
 // Get current user's tasks for a specific project
-router.get('/my/project/:projectId', authenticate, getEmployeeProjectTasks);
+router.get('/my/project/:projectId', authenticate, requireEmployeeActive, getEmployeeProjectTasks);
 
 // Get tasks by project
 router.get('/project/:projectId', authenticate, getTasksByProject);

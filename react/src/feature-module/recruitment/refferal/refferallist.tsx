@@ -1,15 +1,10 @@
-import React from "react";
-import { all_routes } from "../../router/all_routes";
 import { Link } from "react-router-dom";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { DatePicker } from "antd";
-import CommonSelect from "../../../core/common/commonSelect";
-import Table from "../../../core/common/dataTable/index";
-import { refferallistDetails } from "./refferallistDetails";
-import { render } from "react-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { all_routes } from "../../router/all_routes";
+import { refferallistDetails } from "./refferallistDetails";
 
 const RefferalList = () => {
   const data = refferallistDetails;

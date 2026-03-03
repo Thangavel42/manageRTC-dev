@@ -43,7 +43,7 @@ interface PageCategory {
   sortOrder: number;
 }
 
-interface Page {
+interface _Page {
   _id: string;
   name: string;
   displayName: string;
@@ -99,7 +99,7 @@ const ACCESS_LEVEL_LABELS: Record<string, string> = {
   'enterprise': 'Enterprise',
 };
 
-const MODULE_CATEGORY_LABELS: Record<string, string> = {
+const _MODULE_CATEGORY_LABELS: Record<string, string> = {
   'super-admin': 'Super Admin',
   'users-permissions': 'Users & Permissions',
   'applications': 'Applications',
@@ -121,7 +121,7 @@ const MODULE_CATEGORY_LABELS: Record<string, string> = {
 const Modules = () => {
   // State
   const [loading, setLoading] = useState(true);
-  const [loadingTree, setLoadingTree] = useState(true);
+  const [_loadingTree, setLoadingTree] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modules, setModules] = useState<Module[]>([]);
   const [categoryTree, setCategoryTree] = useState<CategoryTree[]>([]);
@@ -470,7 +470,7 @@ const Modules = () => {
   };
 
   // Handle toggle page active status
-  const handleTogglePage = async (pageId: string) => {
+  const _handleTogglePage = async (pageId: string) => {
     if (!selectedModule) return;
 
     try {
@@ -730,11 +730,10 @@ const Modules = () => {
                           </button>
                         </td>
                         <td>
-                          <span className={`badge ${
-                            module.accessLevel === 'all' ? 'bg-success' :
-                            module.accessLevel === 'premium' ? 'bg-warning' :
-                            'bg-danger'
-                          }`}>
+                          <span className={`badge ${module.accessLevel === 'all' ? 'bg-success' :
+                              module.accessLevel === 'premium' ? 'bg-warning' :
+                                'bg-danger'
+                            }`}>
                             {ACCESS_LEVEL_LABELS[module.accessLevel] || module.accessLevel}
                           </span>
                         </td>

@@ -17,6 +17,41 @@ import {
 } from '../../utils/apiResponse.js';
 import { broadcastDashboardEvents, broadcastResignationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
+const ACTIVE_RESIGNATION_STATUSES = new Set(["pending", "approved", "on_notice", "resigned"]);
+
+const resolveEmployeeIdForUser = async (collections, user) => {
+  const userId = user.userId || user._id?.toString();
+  if (!userId) return null;
+
+  const directEmployeeId = user.employeeId || user.employee_id;
+  if (directEmployeeId) return String(directEmployeeId);
+
+  const employeeRecord = await collections.employees.findOne({
+    isDeleted: { $ne: true },
+    $or: [
+      { clerkUserId: userId },
+      { 'account.userId': userId }
+    ]
+  }, { projection: { _id: 1 } });
+
+  return employeeRecord?._id?.toString() || null;
+};
+
+const findActiveResignation = async (collections, employeeId) => {
+  if (!employeeId) return null;
+  return collections.resignation.findOne(
+    {
+      employeeId: employeeId,
+      $or: [
+        { finalStatus: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } },
+        { resignationStatus: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } },
+        { status: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } }
+      ]
+    },
+    { sort: { created_at: -1, _id: -1 } }
+  );
+};
+
 /**
  * @desc    Get resignation statistics
  * @route   GET /api/resignations/stats
@@ -156,6 +191,24 @@ export const createResignation = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const resignationData = req.body;
   const io = getSocketIO(req);
+  const collections = getTenantCollections(user.companyId);
+  const isEmployeeRole = (user.role || '').toLowerCase() === 'employee';
+  const resolvedEmployeeId = await resolveEmployeeIdForUser(collections, user);
+  const targetEmployeeId = isEmployeeRole ? resolvedEmployeeId : (resignationData.employeeId || resolvedEmployeeId);
+
+  if (isEmployeeRole && !targetEmployeeId) {
+    throw buildValidationError('employeeId', 'Employee profile not found for current user');
+  }
+
+  if (targetEmployeeId) {
+    const existing = await findActiveResignation(collections, targetEmployeeId);
+    if (existing) {
+      return res.status(403).json({
+        message: "You already have an active resignation.",
+        status: existing.finalStatus || existing.resignationStatus || existing.status || 'pending'
+      });
+    }
+  }
 
   // Add creator info
   resignationData.created_by = {
@@ -388,6 +441,43 @@ export const getEmployeesByDepartmentId = asyncHandler(async (req, res) => {
   return sendSuccess(res, result.data, 'Employees retrieved successfully');
 });
 
+/**
+ * @desc    Check if the logged-in employee can apply for resignation
+ * @route   GET /api/resignations/check-status
+ * @access  Private
+ */
+export const checkResignationStatus = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const collections = getTenantCollections(user.companyId);
+
+  const employeeId = await resolveEmployeeIdForUser(collections, user);
+
+  if (!employeeId) {
+    throw buildValidationError('employeeId', 'Employee profile not found for current user');
+  }
+
+  const existing = await findActiveResignation(collections, employeeId);
+
+  if (existing) {
+    const status = (existing.finalStatus || existing.resignationStatus || existing.status || 'pending').toLowerCase();
+    return res.status(400).json({
+      message: 'Resignation already applied.',
+      canApply: false,
+      status
+    });
+  }
+
+  const latest = await collections.resignation.findOne(
+    { employeeId },
+    { sort: { created_at: -1, _id: -1 }, projection: { finalStatus: 1, resignationStatus: 1, status: 1 } }
+  );
+
+  const status = (latest?.finalStatus || latest?.resignationStatus || latest?.status || 'none').toLowerCase();
+  const canApply = status === 'none' || status === 'rejected';
+
+  return sendSuccess(res, { canApply, status }, 'Resignation status check completed');
+});
+
 export default {
   getStats,
   getAllResignations,
@@ -399,5 +489,6 @@ export default {
   rejectResignationById,
   processResignationById,
   getResignationDepartments,
-  getEmployeesByDepartmentId
+  getEmployeesByDepartmentId,
+  checkResignationStatus
 };

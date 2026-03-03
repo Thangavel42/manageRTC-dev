@@ -7,16 +7,20 @@ import express from 'express';
 import { uploadEmployeeImage } from '../../config/multer.config.js';
 import {
     bulkUploadEmployees,
+    changeEmployeePassword,
     checkDuplicates,
     checkLifecycleStatus,
     createEmployee,
     deleteEmployee,
-    deleteEmployeeProfileImage, getActiveEmployeesList, getEmployeeById,
+    deleteEmployeeProfileImage,
+    exportEmployees,
+    getActiveEmployeesList, getEmployeeById,
     getEmployeeReportees,
     getEmployees, getEmployeeStatsByDepartment,
     getMyProfile,
     reassignAndDeleteEmployee,
     searchEmployees,
+    sendEmployeeCredentials,
     serveEmployeeProfileImage,
     syncMyEmployeeRecord,
     updateEmployee,
@@ -27,13 +31,16 @@ import {
     attachRequestId,
     authenticate,
     requireCompany,
+    requireEmployeeActive,
     requireRole
 } from '../../middleware/auth.js';
+import { requirePageAccess } from '../../middleware/pageAccess.js';
 import {
     employeeSchemas,
     validateBody,
     validateQuery
 } from '../../middleware/validate.js';
+import emailChangeRoutes from './emailChange.routes.js';
 
 const router = express.Router();
 
@@ -44,7 +51,7 @@ router.use(attachRequestId);
  * Public Routes (Authenticated users can access their own profile)
  */
 
-// Get current user's profile
+// Get current user's profile (accessible during login - no status check)
 router.get(
   '/me',
   authenticate,
@@ -55,6 +62,7 @@ router.get(
 router.put(
   '/me',
   authenticate,
+  requireEmployeeActive,
   validateBody(employeeSchemas.update),
   updateMyProfile
 );
@@ -91,6 +99,7 @@ router.get(
 router.get(
   '/active-list',
   authenticate,
+  requireEmployeeActive,
   requireCompany,
   getActiveEmployeesList
 );
@@ -112,6 +121,15 @@ router.post(
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),
   checkLifecycleStatus
+);
+
+// Export employees (PDF/Excel)
+router.get(
+  '/export',
+  authenticate,
+  requireCompany,
+  requireRole('admin', 'hr', 'superadmin'),
+  exportEmployees
 );
 
 // Create new employee
@@ -152,6 +170,13 @@ router.post(
 );
 
 /**
+ * Email Change Routes
+ * All routes for email change functionality with OTP verification
+ * IMPORTANT: These must come BEFORE /:id routes to avoid being captured as :id parameter
+ */
+router.use('/', emailChangeRoutes);
+
+/**
  * Individual Employee Routes
  * NOTE: These must come AFTER all non-parameterized routes
  */
@@ -185,11 +210,12 @@ router.post(
 );
 
 // Delete employee (soft delete)
+// Uses RBAC - requires 'hrm.employees' page with 'delete' action
 router.delete(
   '/:id',
   authenticate,
   requireCompany,
-  requireRole('admin', 'superadmin'),
+  requirePageAccess('hrm.employees', 'delete'),
   deleteEmployee
 );
 
@@ -240,6 +266,32 @@ router.delete(
 router.get(
   '/:id/image',
   serveEmployeeProfileImage
+);
+
+/**
+ * @route   POST /api/employees/:id/send-credentials
+ * @desc    Generate new password and send login credentials email to employee
+ * @access  Private (HR / Admin)
+ */
+router.post(
+  '/:id/send-credentials',
+  authenticate,
+  requireCompany,
+  requireRole('hr', 'admin', 'superadmin'),
+  sendEmployeeCredentials
+);
+
+/**
+ * @route   POST /api/employees/:id/change-password
+ * @desc    HR/Admin changes employee password (no current password required)
+ * @access  Private (HR / Admin)
+ */
+router.post(
+  '/:id/change-password',
+  authenticate,
+  requireCompany,
+  requireRole('hr', 'admin', 'superadmin'),
+  changeEmployeePassword
 );
 
 export default router;

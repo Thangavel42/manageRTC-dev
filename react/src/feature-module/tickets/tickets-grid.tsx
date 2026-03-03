@@ -1,26 +1,26 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
-import { all_routes } from "../router/all_routes";
+import jsPDF from "jspdf";
+import { useEffect, useState } from "react";
 import ReactApexChart from "react-apexcharts";
-import TicketGridModal from "../../core/modals/ticketGridModal";
+import { Link } from "react-router-dom";
+import * as XLSX from "xlsx";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import TicketGridModal from "../../core/modals/ticketGridModal";
 import { useSocket } from "../../SocketContext";
-import jsPDF from "jspdf";
-import * as XLSX from "xlsx";
+import { all_routes } from "../router/all_routes";
 
 const TicketGrid = () => {
   const routes = all_routes;
   const socket = useSocket();
-  
+
   // State for dynamic data
   const [ticketsList, setTicketsList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalTickets, setTotalTickets] = useState(0);
-  
+  const [currentPage, _setCurrentPage] = useState(1);
+  const [_totalPages, setTotalPages] = useState(1);
+  const [_totalTickets, setTotalTickets] = useState(0);
+
   // State for dashboard statistics
   const [ticketsStats, setTicketsStats] = useState({
     newTickets: 0,
@@ -40,10 +40,10 @@ const TicketGrid = () => {
     status: '',
     sortBy: 'recently'
   });
-  const [exportLoading, setExportLoading] = useState(false);
+  const [_exportLoading, setExportLoading] = useState(false);
 
   // State for edit/delete operations
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [_selectedTicket, setSelectedTicket] = useState<any>(null);
 
   // Set up socket listeners for tickets list response
   useEffect(() => {
@@ -203,7 +203,7 @@ const TicketGrid = () => {
   };
 
   // Helper function to get priority badge class
-  const getPriorityBadgeClass = (priority) => {
+  const _getPriorityBadgeClass = (priority) => {
     switch (priority) {
       case 'High': return 'badge-danger';
       case 'Medium': return 'badge-warning';
@@ -214,7 +214,7 @@ const TicketGrid = () => {
   };
 
   // Helper function to get status badge class
-  const getStatusBadgeClass = (status) => {
+  const _getStatusBadgeClass = (status) => {
     switch (status) {
       case 'New': return 'bg-outline-primary';
       case 'Open': return 'bg-outline-pink';
@@ -226,11 +226,11 @@ const TicketGrid = () => {
   };
 
   // Helper function to format time ago
-  const getTimeAgo = (date) => {
+  const _getTimeAgo = (date) => {
     const now = new Date();
     const ticketDate = new Date(date);
     const diffInHours = Math.floor((now.getTime() - ticketDate.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours} hours ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -248,27 +248,27 @@ const TicketGrid = () => {
       const currentYear = new Date().getFullYear();
 
       // Company colors (based on website theme)
-      const primaryColor = [242, 101, 34]; // Orange - primary brand color
-      const secondaryColor = [59, 112, 128]; // Blue-gray - secondary color
+      const _primaryColor = [242, 101, 34]; // Orange - primary brand color
+      const _secondaryColor = [59, 112, 128]; // Blue-gray - secondary color
       const textColor = [33, 37, 41]; // Dark gray - main text
       const lightGray = [248, 249, 250]; // Light background
-      const borderColor = [222, 226, 230]; // Border color
+      const _borderColor = [222, 226, 230]; // Border color
 
       // Add company logo with multiple fallback options
       const addCompanyLogo = async () => {
         console.log('🎯 Starting logo loading process...');
-        
+
         // Try to load the new manage RTC logo first
         const logoPaths = [
           '/assets/img/logo.svg',           // New manage RTC logo (priority)
           '/assets/img/logo-white.svg',     // White version of manage RTC logo
           '/assets/img/logo-small.svg',     // Small version of manage RTC logo
         ];
-        
+
         for (const logoPath of logoPaths) {
           try {
             console.log(`🔄 Loading NEW logo: ${logoPath}`);
-            
+
             // Try multiple approaches to load the logo
             const approaches = [
               // Approach 1: Direct fetch with cache busting
@@ -278,7 +278,7 @@ const TicketGrid = () => {
               // Approach 3: No cache busting
               logoPath
             ];
-            
+
             for (const url of approaches) {
               try {
                 console.log(`🔄 Trying URL: ${url}`);
@@ -291,14 +291,14 @@ const TicketGrid = () => {
                     'Expires': '0'
                   }
                 });
-                
+
                 if (response.ok) {
                   console.log(`✅ Logo response OK: ${response.status}`);
-                  
+
                   // Get the SVG content as text
                   const svgText = await response.text();
                   console.log(`📄 SVG content length: ${svgText.length} characters`);
-                  
+
                   // Check if this is a valid SVG
                   if (svgText.includes('<svg') && svgText.length > 100) {
                     console.log('🎉 Found valid SVG logo!');
@@ -306,24 +306,24 @@ const TicketGrid = () => {
                     console.log('⚠️ Invalid SVG content, trying next approach...');
                     continue;
                   }
-                  
+
                   // Try to convert SVG to canvas for better PDF compatibility
                   try {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     const img = new Image();
-                    
+
                     // Set canvas size to maintain aspect ratio (logo.svg is 115x40)
                     canvas.width = 115;
                     canvas.height = 40;
-                    
+
                     // Create a promise to handle image loading
                     const imagePromise = new Promise((resolve, reject) => {
                       img.onload = () => {
                         try {
                           // Draw the SVG image to canvas maintaining aspect ratio
                           ctx?.drawImage(img, 0, 0, 115, 40);
-                          
+
                           // Convert canvas to PNG data URL
                           const pngDataUrl = canvas.toDataURL('image/png');
                           console.log(`✅ Successfully converted SVG to PNG: ${logoPath}`);
@@ -333,23 +333,23 @@ const TicketGrid = () => {
                         }
                       };
                       img.onerror = reject;
-                      
+
                       // Set the SVG as image source
                       const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
                       img.src = svgDataUrl;
                     });
-                    
+
                     // Wait for image conversion
                     const pngDataUrl = await imagePromise;
-                    
+
                     // Add PNG to PDF with proper dimensions (maintain aspect ratio)
                     doc.addImage(pngDataUrl as string, 'PNG', 20, 15, 30, 10.4);
                     console.log(`✅ Successfully added logo to PDF: ${logoPath}`);
                     return true;
-                    
+
                   } catch (canvasError) {
                     console.log(`❌ Canvas conversion failed:`, canvasError);
-                    
+
                     // Fallback: Try direct SVG
                     try {
                       const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgText)}`;
@@ -371,7 +371,7 @@ const TicketGrid = () => {
             console.log(`❌ Error loading ${logoPath}:`, error);
           }
         }
-        
+
         console.log('❌ All logo loading attempts failed');
         return false;
       };
@@ -401,22 +401,22 @@ const TicketGrid = () => {
       doc.text(`Total Tickets: ${filteredTickets.length}`, 50, 45);
 
       // Add security watermark
-      (doc as any).setGState(new (doc as any).GState({opacity: 0.1}));
+      (doc as any).setGState(new (doc as any).GState({ opacity: 0.1 }));
       doc.setTextColor(128, 128, 128);
       doc.setFontSize(60);
       doc.setFont('helvetica', 'bold');
-      doc.text('CONFIDENTIAL', 60, 120, {angle: 45});
-      (doc as any).setGState(new (doc as any).GState({opacity: 1}));
+      doc.text('CONFIDENTIAL', 60, 120, { angle: 45 });
+      (doc as any).setGState(new (doc as any).GState({ opacity: 1 }));
 
       // Table headers
       let yPosition = 60;
       doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
       doc.rect(20, yPosition, 170, 8, 'F');
-      
+
       doc.setTextColor(textColor[0], textColor[1], textColor[2]);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      
+
       doc.text('Ticket ID', 22, yPosition + 6);
       doc.text('Title', 45, yPosition + 6);
       doc.text('Status', 90, yPosition + 6);
@@ -429,12 +429,12 @@ const TicketGrid = () => {
       // Table data
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      
+
       filteredTickets.forEach((ticket, index) => {
         if (yPosition > 270) {
           doc.addPage();
           yPosition = 20;
-          
+
           // Add header to new page
           doc.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
           doc.rect(20, yPosition, 170, 8, 'F');
@@ -462,16 +462,16 @@ const TicketGrid = () => {
         doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        
+
         doc.text(ticket.ticketId || 'N/A', 22, yPosition + 4);
         doc.text((ticket.title || 'Untitled').substring(0, 20), 45, yPosition + 4);
         doc.text(ticket.status || 'New', 90, yPosition + 4);
         doc.text(ticket.priority || 'Medium', 110, yPosition + 4);
         doc.text(
-          ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
+          ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
             ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`.substring(0, 15)
-            : 'Unassigned', 
-          130, 
+            : 'Unassigned',
+          130,
           yPosition + 4
         );
         doc.text(new Date(ticket.createdAt).toLocaleDateString(), 160, yPosition + 4);
@@ -504,7 +504,7 @@ const TicketGrid = () => {
   const handleExportExcel = () => {
     try {
       setExportLoading(true);
-      const currentDate = new Date().toLocaleDateString();
+      const _currentDate = new Date().toLocaleDateString();
       const wb = XLSX.utils.book_new();
 
       // Prepare tickets data for Excel
@@ -515,10 +515,10 @@ const TicketGrid = () => {
         "Category": ticket.category || "",
         "Status": ticket.status || "",
         "Priority": ticket.priority || "",
-        "Assigned To": ticket.assignedTo?.firstName && ticket.assignedTo?.lastName 
+        "Assigned To": ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
           ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
           : "Unassigned",
-        "Created By": ticket.createdBy?.firstName && ticket.createdBy?.lastName 
+        "Created By": ticket.createdBy?.firstName && ticket.createdBy?.lastName
           ? `${ticket.createdBy.firstName} ${ticket.createdBy.lastName}`
           : "Unknown",
         "Created Date": ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : "",
@@ -529,7 +529,7 @@ const TicketGrid = () => {
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(ticketsDataForExcel);
-      
+
       // Set column widths
       const colWidths = [
         { wch: 15 }, // Ticket ID
@@ -1114,8 +1114,8 @@ const TicketGrid = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1127,8 +1127,8 @@ const TicketGrid = () => {
                       </Link>
                     </li>
                     <li>
-                      <Link 
-                        to="#" 
+                      <Link
+                        to="#"
                         className="dropdown-item rounded-1"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1344,8 +1344,8 @@ const TicketGrid = () => {
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
-                    <Link
-                      to="#"
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1356,20 +1356,20 @@ const TicketGrid = () => {
                         </Link>
                       </li>
                       <li>
-                    <Link
-                      to="#"
-                            className="dropdown-item rounded-1"
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('priority', 'High');
                           }}
                         >
                           High
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1377,11 +1377,11 @@ const TicketGrid = () => {
                           }}
                         >
                           Low
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1389,46 +1389,46 @@ const TicketGrid = () => {
                           }}
                         >
                           Medium
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
                   <div className="dropdown me-2">
-                      <Link
-                        to="#"
+                    <Link
+                      to="#"
                       className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
+                      data-bs-toggle="dropdown"
                     >
                       {filters.status || 'Select Status'}
-                          </Link>
+                    </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('status', '');
                           }}
                         >
                           All Status
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('status', 'New');
                           }}
                         >
                           New
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1436,35 +1436,35 @@ const TicketGrid = () => {
                           }}
                         >
                           Open
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('status', 'On Hold');
                           }}
                         >
                           On Hold
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('status', 'Solved');
                           }}
                         >
                           Solved
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1472,50 +1472,50 @@ const TicketGrid = () => {
                           }}
                         >
                           Closed
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
                   <div className="dropdown">
-                      <Link
-                        to="#"
+                    <Link
+                      to="#"
                       className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
-                        data-bs-toggle="dropdown"
+                      data-bs-toggle="dropdown"
                     >
-                      Sort By: {filters.sortBy === 'recently' ? 'Recently Added' : 
-                               filters.sortBy === 'ascending' ? 'Ascending' :
-                               filters.sortBy === 'descending' ? 'Descending' :
-                               filters.sortBy === 'lastMonth' ? 'Last Month' :
-                               filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'}
-                          </Link>
+                      Sort By: {filters.sortBy === 'recently' ? 'Recently Added' :
+                        filters.sortBy === 'ascending' ? 'Ascending' :
+                          filters.sortBy === 'descending' ? 'Descending' :
+                            filters.sortBy === 'lastMonth' ? 'Last Month' :
+                              filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'}
+                    </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('sortBy', 'recently');
                           }}
                         >
                           Recently Added
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
                             handleFilterChange('sortBy', 'ascending');
                           }}
                         >
                           Ascending
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1523,11 +1523,11 @@ const TicketGrid = () => {
                           }}
                         >
                           Descending
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1535,11 +1535,11 @@ const TicketGrid = () => {
                           }}
                         >
                           Last Month
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="#"
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1547,21 +1547,21 @@ const TicketGrid = () => {
                           }}
                         >
                           Last 7 Days
-                          </Link>
-                        </li>
-                      </ul>
-                    </div>
+                        </Link>
+                      </li>
+                    </ul>
                   </div>
-                  </div>
-                    </div>
-                    </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="row">
             {loading ? (
               <div className="col-12 text-center">
                 <div className="spinner-border" role="status">
                   <span className="visually-hidden">Loading...</span>
-                    </div>
-                  </div>
+                </div>
+              </div>
             ) : filteredTickets.length > 0 ? (
               filteredTickets.map(ticket => renderTicketCard(ticket))
             ) : (
@@ -1571,9 +1571,9 @@ const TicketGrid = () => {
                     <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
                     <h5 className="text-muted">No tickets found</h5>
                     <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
-                      </div>
-                    </div>
-                    </div>
+                  </div>
+                </div>
+              </div>
             )}
             <div className="col-md-12">
               <div className="text-center mb-4">

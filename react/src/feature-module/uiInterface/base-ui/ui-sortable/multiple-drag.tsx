@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
@@ -14,7 +14,7 @@ const initialItems = [
 ];
 
 const MultipleDragList = () => {
-  const [items, setItems] = useState(initialItems);
+  const [items, _setItems] = useState(initialItems);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
   const toggleItemSelection = (index: number) => {
@@ -53,9 +53,8 @@ const MultipleDragList = () => {
           <li
             key={index}
             ref={drag}
-            className={`list-group-item ${
-              selectedItems.has(index) ? "selected" : ""
-            }`}
+            className={`list-group-item ${selectedItems.has(index) ? "selected" : ""
+              }`}
             onClick={() => toggleItemSelection(index)}
             style={{
               cursor: "pointer",

@@ -1,19 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
-import { useJobs, Job } from "../../../hooks/useJobs";
-import Table from "../../../core/common/dataTable/index";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import Table from "../../../core/common/dataTable/index";
+import { Job, useJobs } from "../../../hooks/useJobs";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
 import AddJob from "./add_job";
-import EditJob from "./edit_job";
 import DeleteJob from "./delete_job";
-import { message } from "antd";
+import EditJob from "./edit_job";
 
 const JobList = () => {
-  const socket = useSocket() as Socket | null;
+  const _socket = useSocket() as Socket | null;
 
   // State management using the custom hook
   const {
@@ -28,7 +26,7 @@ const JobList = () => {
   } = useJobs();
 
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
-  
+
   // Filter states
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -40,7 +38,7 @@ const JobList = () => {
   // Extract unique categories and types for filters
   const [categories, setCategories] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [_selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   // Initialize data fetch
   useEffect(() => {
@@ -56,7 +54,7 @@ const JobList = () => {
           .map(j => j.category)
           .filter((category): category is string => Boolean(category))
       ));
-      
+
       const uniqueTypes = Array.from(new Set(
         jobs
           .map(j => j.type)
@@ -120,11 +118,11 @@ const JobList = () => {
         const description = job.description?.toLowerCase() || '';
         const skills = job.skills?.join(' ').toLowerCase() || '';
         const location = `${job.location?.city || ''} ${job.location?.state || ''} ${job.location?.country || ''}`.toLowerCase();
-        
+
         return title.includes(query) ||
-               description.includes(query) ||
-               skills.includes(query) ||
-               location.includes(query);
+          description.includes(query) ||
+          skills.includes(query) ||
+          location.includes(query);
       });
     }
 
@@ -133,7 +131,7 @@ const JobList = () => {
       result.sort((a, b) => {
         const dateA = new Date(a.createdAt);
         const dateB = new Date(b.createdAt);
-        
+
         switch (selectedSort) {
           case "title_asc":
             return a.title.localeCompare(b.title);
@@ -277,7 +275,7 @@ const JobList = () => {
       dataIndex: "location",
       render: (text: any, record: Job) => (
         <span>
-          {record.location?.city && record.location?.state && record.location?.country 
+          {record.location?.city && record.location?.state && record.location?.country
             ? `${record.location.city}, ${record.location.state}, ${record.location.country}`
             : "Not specified"}
         </span>
@@ -288,7 +286,7 @@ const JobList = () => {
       dataIndex: "salaryRange",
       render: (text: any, record: Job) => (
         <span>
-          {record.salaryRange?.min && record.salaryRange?.max 
+          {record.salaryRange?.min && record.salaryRange?.max
             ? `${record.salaryRange.min.toLocaleString()} - ${record.salaryRange.max.toLocaleString()} ${record.salaryRange.currency}`
             : "Not specified"}
         </span>
@@ -388,7 +386,7 @@ const JobList = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-               <div className="me-2 mb-2">
+              <div className="me-2 mb-2">
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
                   <Link
                     to={all_routes.joblist}
@@ -659,21 +657,20 @@ const JobList = () => {
                     data-bs-toggle="dropdown"
                   >
                     {selectedSort
-                      ? `Sort: ${
-                          selectedSort === "title_asc"
-                            ? "A-Z"
-                            : selectedSort === "title_desc"
-                            ? "Z-A"
-                            : selectedSort === "date_recent"
+                      ? `Sort: ${selectedSort === "title_asc"
+                        ? "A-Z"
+                        : selectedSort === "title_desc"
+                          ? "Z-A"
+                          : selectedSort === "date_recent"
                             ? "Recent"
                             : selectedSort === "date_oldest"
-                            ? "Oldest"
-                            : selectedSort === "salary_high"
-                            ? "High Salary"
-                            : selectedSort === "salary_low"
-                            ? "Low Salary"
-                            : "Applications"
-                        }`
+                              ? "Oldest"
+                              : selectedSort === "salary_high"
+                                ? "High Salary"
+                                : selectedSort === "salary_low"
+                                  ? "Low Salary"
+                                  : "Applications"
+                      }`
                       : "Sort By"}
                   </Link>
                   <div className="dropdown-menu dropdown-menu-end p-3">
@@ -765,19 +762,19 @@ const JobList = () => {
                   searchQuery ||
                   dateRange.start ||
                   dateRange.end) && (
-                  <div className="mb-3">
-                    <Link
-                      to="#"
-                      className="btn btn-outline-danger"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleClearFilters();
-                      }}
-                    >
-                      Clear Filters
-                    </Link>
-                  </div>
-                )}
+                    <div className="mb-3">
+                      <Link
+                        to="#"
+                        className="btn btn-outline-danger"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleClearFilters();
+                        }}
+                      >
+                        Clear Filters
+                      </Link>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -816,15 +813,15 @@ const JobList = () => {
                         searchQuery ||
                         dateRange.start ||
                         dateRange.end) && (
-                        <div className="text-muted small">
-                          Filters applied:
-                          {selectedStatus && ` Status: ${selectedStatus}`}
-                          {selectedCategory && ` Category: ${selectedCategory}`}
-                          {selectedType && ` Type: ${selectedType}`}
-                          {selectedSort && ` Sort: ${selectedSort}`}
-                          {searchQuery && ` Search: "${searchQuery}"`}
-                        </div>
-                      )}
+                          <div className="text-muted small">
+                            Filters applied:
+                            {selectedStatus && ` Status: ${selectedStatus}`}
+                            {selectedCategory && ` Category: ${selectedCategory}`}
+                            {selectedType && ` Type: ${selectedType}`}
+                            {selectedSort && ` Sort: ${selectedSort}`}
+                            {searchQuery && ` Search: "${searchQuery}"`}
+                          </div>
+                        )}
                     </div>
                   </div>
 

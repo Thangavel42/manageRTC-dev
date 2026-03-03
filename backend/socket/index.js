@@ -53,33 +53,23 @@ setInterval(() => {
   }
 }, RATE_LIMIT_WINDOW);
 
+// Origins from env — set EXTRA_ALLOWED_ORIGINS in .env as comma-separated list
+const extraOrigins = process.env.EXTRA_ALLOWED_ORIGINS
+  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://amasqis.ai",
-  "https://devhrms-pm.amasqis.ai",
-  "http://byte.localhost:3000",
-  "http://test.localhost:3000",
-  "http://dummy.localhost:3000",
-  "https://hrms-tool-amasqis.onrender.com",
-  "https://devmanagertc.amasqis.ai",
-  "https://dev.manage-rtc.com",
-  "https://apidev.manage-rtc.com",
   process.env.FRONTEND_URL,
+  ...extraOrigins,
 ].filter(Boolean);
 
 const authorizedParties = [
-  "https://devhrms-pm.amasqis.ai/",
   "http://localhost:3000",
-  "http://185.199.53.177:5000/",
-  "http://byte.localhost:3000",
-  "http://test.localhost:3000",
-  "http://dummy.localhost:3000",
-  "https://devhrms-pm.amasqis.ai",
-  "https://devmanagertc.amasqis.ai",
-  "https://dev.manage-rtc.com",
-  "https://apidev.manage-rtc.com",
-];
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+  ...extraOrigins,
+].filter(Boolean);
 
 export const socketHandler = (httpServer) => {
   const io = new SocketIOServer(httpServer, {
@@ -101,8 +91,9 @@ export const socketHandler = (httpServer) => {
 
     try {
       const verifiedToken = await verifyToken(token, {
-        jwtKey: process.env.CLERK_JWT_KEY,
+        secretKey: process.env.CLERK_SECRET_KEY,
         authorizedParties,
+        clockSkewInMs: 30000, // Allow 30s clock skew between Clerk and this server
       });
 
       if (verifiedToken) {

@@ -25,6 +25,7 @@ import {
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   attachRequestId,
   authenticate,
+  requireEmployeeActive,
   requireRole,
 } from '../../middleware/auth.js';
 import { projectSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
@@ -42,6 +43,7 @@ router.use(attachRequestId);
 router.get(
   '/my',
   authenticate,
+  requireEmployeeActive,
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   getMyProjects
 );

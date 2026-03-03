@@ -12,14 +12,16 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useCallback, useEffect, useState } from 'react';
 import { setAuthToken, setTokenRefreshCallback } from './api';
+import { initGlobalSignOut } from './clerkLogout';
 
 /**
  * AuthProvider Component
  * Wraps the app to provide authentication token to API service
  */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { getToken, isSignedIn, isLoaded } = useAuth();
-  const [tokenReady, setTokenReady] = useState(false);
+  const { getToken, isSignedIn, isLoaded, signOut } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_tokenReady, setTokenReady] = useState(false);
 
   // Create a stable callback for token refresh
   const refreshToken = useCallback(async () => {
@@ -38,10 +40,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set the token refresh callback for API interceptor
     setTokenRefreshCallback(refreshToken);
 
+    // Initialize global signOut function for use in API interceptors
+    initGlobalSignOut(signOut);
+
     return () => {
       setTokenRefreshCallback(null);
     };
-  }, [refreshToken]);
+  }, [refreshToken, signOut]);
 
   useEffect(() => {
     // Don't proceed if auth is not loaded or user is not signed in

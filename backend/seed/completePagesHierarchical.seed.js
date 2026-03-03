@@ -131,7 +131,6 @@ const PAGE_DEFINITIONS = {
           children: [
             { name: 'hrm.attendance-admin', displayName: 'Attendance (Admin)', route: 'attendance-admin', icon: 'ti ti-calendar-check', sortOrder: 10 },
             { name: 'hrm.attendance-employee', displayName: 'Attendance (Employee)', route: 'attendance-employee', icon: 'ti ti-calendar-check', sortOrder: 20 },
-            { name: 'hrm.timesheet', displayName: 'Timesheet', route: 'timesheets', icon: 'ti ti-clock', sortOrder: 30 },
           ]
         },
         {
@@ -228,6 +227,7 @@ const PAGE_DEFINITIONS = {
         { name: 'projects.projects-grid', displayName: 'Projects Grid', route: 'projects-grid', icon: 'ti ti-folder', sortOrder: 10 },
         { name: 'projects.tasks', displayName: 'Tasks', route: 'tasks', icon: 'ti ti-checklist', sortOrder: 20 },
         { name: 'projects.task-board', displayName: 'Task Board', route: 'task-board', icon: 'ti ti-columns', sortOrder: 30 },
+        { name: 'projects.timesheet', displayName: 'Timesheet', route: 'timesheets', icon: 'ti ti-clock', sortOrder: 40 },
       ]
     },
   ],

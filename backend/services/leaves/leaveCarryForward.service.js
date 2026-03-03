@@ -3,9 +3,6 @@
  * Handles automatic carry forward of unused leave balance at year end
  */
 
-import LeaveLedger from '../../models/leave/leaveLedger.schema.js';
-import Leave from '../../models/leave/leave.schema.js';
-import Employee from '../../models/employee/employee.schema.js';
 import { getTenantCollections } from '../../config/db.js';
 
 /**
@@ -89,12 +86,12 @@ export const updateCarryForwardConfig = async (companyId, config) => {
 export const calculateEmployeeCarryForward = async (companyId, employeeId, fromYear) => {
   try {
     const toYear = fromYear + 1;
-    const { Employee } = await getTenantCollections(companyId);
+    const { employees } = getTenantCollections(companyId);
 
-    const employee = await Employee.findOne({
+    const employee = await employees.findOne({
       employeeId,
-      isDeleted: false,
-    }).lean();
+      isDeleted: { $ne: true },
+    });
 
     if (!employee || !employee.leaveBalance?.balances) {
       return {
@@ -157,11 +154,11 @@ export const calculateEmployeeCarryForward = async (companyId, employeeId, fromY
 export const executeEmployeeCarryForward = async (companyId, employeeId, fromYear, executedBy) => {
   try {
     const toYear = fromYear + 1;
-    const { Employee } = await getTenantCollections(companyId);
+    const { employees, leaveLedger } = getTenantCollections(companyId);
 
-    const employee = await Employee.findOne({
+    const employee = await employees.findOne({
       employeeId,
-      isDeleted: false,
+      isDeleted: { $ne: true },
     });
 
     if (!employee || !employee.leaveBalance?.balances) {
@@ -172,8 +169,9 @@ export const executeEmployeeCarryForward = async (companyId, employeeId, fromYea
     }
 
     const results = [];
+    const updatedBalances = [...employee.leaveBalance.balances];
 
-    for (const balanceItem of employee.leaveBalance.balances) {
+    for (const balanceItem of updatedBalances) {
       const config = CARRY_FORWARD_CONFIG[balanceItem.type];
 
       if (!config || !config.enabled) {
@@ -192,42 +190,49 @@ export const executeEmployeeCarryForward = async (companyId, employeeId, fromYea
         continue;
       }
 
-      // Create ledger entry for carry forward
-      const ledgerEntry = await LeaveLedger.recordCarryForward(
-        employeeId,
+      // Create ledger entry for carry forward (native MongoDB insert)
+      const ledgerEntry = {
         companyId,
-        balanceItem.type,
-        carryForwardAmount,
+        employeeId,
+        leaveType: balanceItem.type,
+        transactionType: 'carry_forward',
+        amount: carryForwardAmount,
+        financialYear: `FY${fromYear}-${toYear}`,
         fromYear,
-        toYear
-      );
+        toYear,
+        changedBy: executedBy,
+        transactionDate: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isDeleted: false,
+      };
+      const insertResult = await leaveLedger.insertOne(ledgerEntry);
 
-      // Update employee balance (add carry forward to new year's balance)
-      const balanceIndex = employee.leaveBalance.balances.findIndex(
-        b => b.type === balanceItem.type
-      );
-
+      // Update balance in memory
+      const balanceIndex = updatedBalances.findIndex(b => b.type === balanceItem.type);
       if (balanceIndex !== -1) {
-        // Deduct carried forward amount from old balance
-        employee.leaveBalance.balances[balanceIndex].balance -= carryForwardAmount;
-
         // Add to new year's balance (reset total to new year's allocation + carry forward)
-        // This assumes a new allocation happens at year start
-        // The actual new allocation amount would come from company policy
         const newAllocation = getNewAllocationForType(balanceItem.type);
-        employee.leaveBalance.balances[balanceIndex].total = newAllocation + carryForwardAmount;
-        employee.leaveBalance.balances[balanceIndex].used = 0;
-        employee.leaveBalance.balances[balanceIndex].balance = newAllocation + carryForwardAmount;
+        updatedBalances[balanceIndex] = {
+          ...updatedBalances[balanceIndex],
+          total: newAllocation + carryForwardAmount,
+          used: 0,
+          balance: newAllocation + carryForwardAmount,
+        };
       }
 
       results.push({
         leaveType: balanceItem.type,
         amount: carryForwardAmount,
-        ledgerEntry,
+        ledgerEntryId: insertResult.insertedId,
       });
     }
 
-    await employee.save();
+    // Persist updated balances with native driver
+    await employees.updateOne(
+      { employeeId },
+      { $set: { 'leaveBalance.balances': updatedBalances, updatedAt: new Date() } }
+    );
 
     return {
       success: true,
@@ -267,18 +272,18 @@ const getNewAllocationForType = (leaveType) => {
  */
 export const executeCompanyCarryForward = async (companyId, fromYear, executedBy) => {
   try {
-    const { Employee } = await getTenantCollections(companyId);
+    const { employees } = getTenantCollections(companyId);
 
-    const employees = await Employee.find({
+    const allEmployees = await employees.find({
       companyId,
       isActive: true,
-      isDeleted: false,
+      isDeleted: { $ne: true },
       employmentStatus: 'Active',
-    }).lean();
+    }).toArray();
 
     const results = [];
 
-    for (const employee of employees) {
+    for (const employee of allEmployees) {
       const result = await executeEmployeeCarryForward(
         companyId,
         employee.employeeId,
@@ -296,7 +301,7 @@ export const executeCompanyCarryForward = async (companyId, fromYear, executedBy
     return {
       success: true,
       data: {
-        totalEmployees: employees.length,
+        totalEmployees: allEmployees.length,
         processed: results.length,
         results,
       },
@@ -315,15 +320,16 @@ export const executeCompanyCarryForward = async (companyId, fromYear, executedBy
  */
 export const getCarryForwardHistory = async (companyId, employeeId) => {
   try {
-    const entries = await LeaveLedger.find({
+    const { leaveLedger } = getTenantCollections(companyId);
+
+    const entries = await leaveLedger.find({
       companyId,
       employeeId,
       transactionType: 'carry_forward',
-      isDeleted: false,
+      isDeleted: { $ne: true },
     })
       .sort({ transactionDate: -1 })
-      .populate('changedBy', 'firstName lastName employeeId')
-      .lean();
+      .toArray();
 
     return {
       success: true,
@@ -342,13 +348,15 @@ export const getCarryForwardHistory = async (companyId, employeeId) => {
  */
 export const getCarryForwardSummary = async (companyId, financialYear) => {
   try {
-    const summary = await LeaveLedger.aggregate([
+    const { leaveLedger } = getTenantCollections(companyId);
+
+    const summary = await leaveLedger.aggregate([
       {
         $match: {
           companyId,
           transactionType: 'carry_forward',
           financialYear,
-          isDeleted: false,
+          isDeleted: { $ne: true },
         },
       },
       {
@@ -359,7 +367,7 @@ export const getCarryForwardSummary = async (companyId, financialYear) => {
           avgDays: { $avg: '$amount' },
         },
       },
-    ]);
+    ]).toArray();
 
     return {
       success: true,

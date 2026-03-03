@@ -1,7 +1,8 @@
-import React from "react";
 import dayjs from "dayjs";
-import ImageWithBasePath from "../common/imageWithBasePath";
+import React from "react";
 import type { Termination } from "../../hooks/useTerminationsREST";
+import { resolveDesignation } from "../../utils/designationUtils";
+import ImageWithBasePath from "../common/imageWithBasePath";
 
 interface TerminationDetailsModalProps {
   termination: Termination | null;
@@ -145,7 +146,7 @@ const TerminationDetailsModal: React.FC<TerminationDetailsModalProps> = ({
                       {termination.designation && (
                         <div className="col-md-6 mb-3">
                           <label className="form-label text-muted mb-1">Designation</label>
-                          <p className="fw-medium mb-0">{termination.designation}</p>
+                          <p className="fw-medium mb-0">{resolveDesignation(termination.designation, 'N/A')}</p>
                         </div>
                       )}
                       <div className="col-md-6 mb-3">

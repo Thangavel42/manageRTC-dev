@@ -4,13 +4,13 @@
  */
 
 import express from 'express';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, requireEmployeeActive } from '../../middleware/auth.js';
 import trainingController from '../../controllers/rest/training.controller.js';
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate);
+// All routes require authentication AND active employee status
+router.use(authenticate, requireEmployeeActive);
 
 /**
  * @route   GET /api/trainings

@@ -3,8 +3,6 @@
  * Handles conversion of unused leave to salary
  */
 
-import LeaveLedger from '../../models/leave/leaveLedger.schema.js';
-import Employee from '../../models/employee/employee.schema.js';
 import { getTenantCollections } from '../../config/db.js';
 
 /**
@@ -61,12 +59,12 @@ export const getEncashmentConfig = async (companyId) => {
  */
 export const calculateEncashment = async (companyId, employeeId, leaveType, daysRequested) => {
   try {
-    const { Employee } = await getTenantCollections(companyId);
+    const { employees, leaveLedger } = getTenantCollections(companyId);
 
-    const employee = await Employee.findOne({
+    const employee = await employees.findOne({
       employeeId,
-      isDeleted: false,
-    }).lean();
+      isDeleted: { $ne: true },
+    });
 
     if (!employee) {
       return {
@@ -136,7 +134,6 @@ export const calculateEncashment = async (companyId, employeeId, leaveType, days
 
     // Calculate encashment amount
     // For now, using basic salary / 30 as daily rate
-    // In production, this would consider gross salary and company policy
     const dailyRate = (employee.salary?.basic || 0) / 30;
     const encashmentAmount = dailyRate * daysRequested;
 
@@ -145,7 +142,7 @@ export const calculateEncashment = async (companyId, employeeId, leaveType, days
     const yearStart = new Date(currentYear, 0, 1);
     const yearEnd = new Date(currentYear, 11, 31);
 
-    const encashedDays = await LeaveLedger.aggregate([
+    const encashedDays = await leaveLedger.aggregate([
       {
         $match: {
           companyId,
@@ -153,7 +150,7 @@ export const calculateEncashment = async (companyId, employeeId, leaveType, days
           leaveType,
           transactionType: 'encashed',
           transactionDate: { $gte: yearStart, $lte: yearEnd },
-          isDeleted: false,
+          isDeleted: { $ne: true },
         },
       },
       {
@@ -162,7 +159,7 @@ export const calculateEncashment = async (companyId, employeeId, leaveType, days
           totalDays: { $sum: { $abs: '$amount' } },
         },
       },
-    ]);
+    ]).toArray();
 
     const totalEncashedThisYear = encashedDays[0]?.totalDays || 0;
     const remainingEncashmentDays = maxEncashableDays - totalEncashedThisYear;
@@ -221,6 +218,7 @@ export const executeEncashment = async (companyId, employeeId, leaveType, daysRe
     }
 
     const data = calculation.data;
+    const { employees, leaveLedger } = getTenantCollections(companyId);
 
     // Create ledger entry for encashment
     const now = new Date();
@@ -228,17 +226,20 @@ export const executeEncashment = async (companyId, employeeId, leaveType, daysRe
     const month = now.getMonth() + 1;
 
     // Get current balance from ledger
-    const latestEntry = await LeaveLedger.findOne({
-      companyId,
-      employeeId,
-      leaveType,
-      isDeleted: false,
-    }).sort({ transactionDate: -1 }).lean();
+    const latestEntry = await leaveLedger.findOne(
+      {
+        companyId,
+        employeeId,
+        leaveType,
+        isDeleted: { $ne: true },
+      },
+      { sort: { transactionDate: -1 } }
+    );
 
     const balanceBefore = latestEntry ? latestEntry.balanceAfter : data.currentBalance;
     const balanceAfter = balanceBefore - daysRequested;
 
-    const ledgerEntry = await LeaveLedger.create({
+    const ledgerDoc = {
       employeeId,
       companyId,
       leaveType,
@@ -254,28 +255,37 @@ export const executeEncashment = async (companyId, employeeId, leaveType, daysRe
       adjustmentReason: remarks || 'Leave encashed as per employee request',
       changedBy: requestedBy,
       changedByUserId: requestedBy,
-    });
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const insertResult = await leaveLedger.insertOne(ledgerDoc);
 
-    // Update employee balance
-    const { Employee } = await getTenantCollections(companyId);
-    const employee = await Employee.findOne({ employeeId, isDeleted: false });
+    // Update employee balance with native driver
+    const employee = await employees.findOne({ employeeId, isDeleted: { $ne: true } });
 
     if (employee && employee.leaveBalance?.balances) {
-      const balanceIndex = employee.leaveBalance.balances.findIndex(
-        b => b.type === leaveType
-      );
+      const updatedBalances = employee.leaveBalance.balances.map(b => {
+        if (b.type === leaveType) {
+          return {
+            ...b,
+            balance: balanceAfter,
+            used: (b.used || 0) + daysRequested,
+          };
+        }
+        return b;
+      });
 
-      if (balanceIndex !== -1) {
-        employee.leaveBalance.balances[balanceIndex].balance = balanceAfter;
-        employee.leaveBalance.balances[balanceIndex].used += daysRequested;
-        await employee.save();
-      }
+      await employees.updateOne(
+        { employeeId },
+        { $set: { 'leaveBalance.balances': updatedBalances, updatedAt: now } }
+      );
     }
 
     return {
       success: true,
       data: {
-        ledgerEntry,
+        ledgerEntryId: insertResult.insertedId,
         encashmentDetails: data,
         message: `${daysRequested} days of ${leaveType} leave encashed successfully. Amount: ${data.encashmentAmount.toFixed(2)}`,
       },
@@ -293,11 +303,13 @@ export const executeEncashment = async (companyId, employeeId, leaveType, daysRe
  */
 export const getEncashmentHistory = async (companyId, employeeId, year) => {
   try {
+    const { leaveLedger } = getTenantCollections(companyId);
+
     const matchQuery = {
       companyId,
       employeeId,
       transactionType: 'encashed',
-      isDeleted: false,
+      isDeleted: { $ne: true },
     };
 
     if (year) {
@@ -306,23 +318,22 @@ export const getEncashmentHistory = async (companyId, employeeId, year) => {
       matchQuery.transactionDate = { $gte: yearStart, $lte: yearEnd };
     }
 
-    const entries = await LeaveLedger.find(matchQuery)
+    const entries = await leaveLedger.find(matchQuery)
       .sort({ transactionDate: -1 })
-      .populate('changedBy', 'firstName lastName employeeId')
-      .lean();
+      .toArray();
 
     // Calculate totals
-    const totals = await LeaveLedger.aggregate([
+    const totals = await leaveLedger.aggregate([
       { $match: matchQuery },
       {
         $group: {
           _id: '$leaveType',
           totalDays: { $sum: { $abs: '$amount' } },
-          totalAmount: { $sum: '$balanceBefore' }, // This would need proper calculation based on salary
+          totalAmount: { $sum: '$balanceBefore' },
           count: { $sum: 1 },
         },
       },
-    ]);
+    ]).toArray();
 
     return {
       success: true,
@@ -344,10 +355,12 @@ export const getEncashmentHistory = async (companyId, employeeId, year) => {
  */
 export const getEncashmentSummary = async (companyId, year) => {
   try {
+    const { leaveLedger } = getTenantCollections(companyId);
+
     const matchQuery = {
       companyId,
       transactionType: 'encashed',
-      isDeleted: false,
+      isDeleted: { $ne: true },
     };
 
     if (year) {
@@ -356,7 +369,7 @@ export const getEncashmentSummary = async (companyId, year) => {
       matchQuery.transactionDate = { $gte: yearStart, $lte: yearEnd };
     }
 
-    const summary = await LeaveLedger.aggregate([
+    const summary = await leaveLedger.aggregate([
       { $match: matchQuery },
       {
         $group: {
@@ -387,7 +400,7 @@ export const getEncashmentSummary = async (companyId, year) => {
         },
       },
       { $sort: { totalDays: -1 } },
-    ]);
+    ]).toArray();
 
     return {
       success: true,

@@ -20,6 +20,7 @@
 
 import { getTenantCollections } from '../../config/db.js';
 import { ObjectId } from 'mongodb';
+import leaveLedgerService from './leaveLedger.service.js';
 
 /**
  * Helper: Safely convert value to ObjectId if valid, otherwise return null
@@ -83,6 +84,29 @@ export const createCustomPolicy = async (companyId, policyData, userId) => {
   };
 
   const result = await customLeavePolicies.insertOne(policy);
+
+  // Create ledger entries for each employee to track the custom policy adjustment
+  const policyId = result.insertedId.toString();
+  const leaveTypeCode = leaveType.code.toLowerCase();
+  const defaultQuota = leaveType.annualQuota || 0;
+
+  // Create adjustment entries for all employees
+  for (const empId of employeeIds) {
+    try {
+      await leaveLedgerService.recordCustomPolicyAdjustment(
+        companyId,
+        empId,
+        leaveTypeCode,
+        annualQuota,
+        defaultQuota,
+        name,
+        policyId
+      );
+    } catch (ledgerError) {
+      console.error(`[Custom Policy] Failed to create ledger entry for employee ${empId}:`, ledgerError);
+      // Continue with other employees even if one fails
+    }
+  }
 
   // Enrich with leaveType details before returning
   const enrichedPolicy = {
@@ -262,6 +286,11 @@ export const updateCustomPolicy = async (companyId, policyId, updateData, userId
     throw new Error('Annual quota must be greater than 0');
   }
 
+  // Store old values for comparison
+  const oldQuota = existing.annualQuota || 0;
+  const oldEmployeeIds = existing.employeeIds || [];
+  const quotaChanged = updates.annualQuota !== undefined && updates.annualQuota !== oldQuota;
+
   await customLeavePolicies.updateOne(
     { _id: new ObjectId(policyId) },
     { $set: updates }
@@ -277,6 +306,38 @@ export const updateCustomPolicy = async (companyId, policyId, updateData, userId
       _id: updated.leaveTypeId,
       isDeleted: { $ne: true }
     });
+  }
+
+  // Handle ledger entries for quota changes or new employees
+  if (quotaChanged || (updates.employeeIds && updates.employeeIds.length > 0)) {
+    const leaveTypeCode = enrichedLeaveType?.code.toLowerCase() || 'earned';
+    const defaultQuota = enrichedLeaveType?.annualQuota || 0;
+    const newQuota = updated.annualQuota || 0;
+    const policyName = updated.name || 'Custom Policy';
+    const newEmployeeIds = updates.employeeIds || updated.employeeIds || [];
+
+    // Find employees who need new adjustment entries:
+    // 1. All employees if quota changed
+    // 2. New employees added to the policy
+    const employeesToProcess = quotaChanged
+      ? newEmployeeIds  // All employees when quota changes
+      : newEmployeeIds.filter(id => !oldEmployeeIds.includes(id));  // Only new employees
+
+    for (const empId of employeesToProcess) {
+      try {
+        await leaveLedgerService.recordCustomPolicyAdjustment(
+          companyId,
+          empId,
+          leaveTypeCode,
+          newQuota,
+          defaultQuota,
+          policyName,
+          policyId
+        );
+      } catch (ledgerError) {
+        console.error(`[Custom Policy] Failed to create ledger entry for employee ${empId}:`, ledgerError);
+      }
+    }
   }
 
   return {
@@ -302,9 +363,10 @@ export const updateCustomPolicy = async (companyId, policyId, updateData, userId
 
 /**
  * Delete (soft delete) a custom policy
+ * Creates reversal ledger entries for all affected employees
  */
 export const deleteCustomPolicy = async (companyId, policyId, userId) => {
-  const { customLeavePolicies } = getTenantCollections(companyId);
+  const { customLeavePolicies, leaveTypes } = getTenantCollections(companyId);
 
   const existing = await customLeavePolicies.findOne({
     _id: new ObjectId(policyId)
@@ -313,6 +375,23 @@ export const deleteCustomPolicy = async (companyId, policyId, userId) => {
   if (!existing) {
     throw new Error('Custom policy not found');
   }
+
+  // Store details for ledger entries before deleting
+  const employeeIds = existing.employeeIds || [];
+  const annualQuota = existing.annualQuota || 0;
+  const policyName = existing.name || 'Custom Policy';
+
+  // Get leave type details
+  let leaveType = null;
+  if (existing.leaveTypeId) {
+    leaveType = await leaveTypes.findOne({
+      _id: existing.leaveTypeId,
+      isDeleted: { $ne: true }
+    });
+  }
+
+  const leaveTypeCode = leaveType?.code.toLowerCase() || 'earned';
+  const defaultQuota = leaveType?.annualQuota || 0;
 
   // Soft delete - set isActive to false and isDeleted to true
   const userObjectId = toObjectId(userId);
@@ -327,6 +406,22 @@ export const deleteCustomPolicy = async (companyId, policyId, userId) => {
       }
     }
   );
+
+  // Create reversal ledger entries for all affected employees
+  for (const empId of employeeIds) {
+    try {
+      await leaveLedgerService.recordCustomPolicyReversal(
+        companyId,
+        empId,
+        leaveTypeCode,
+        annualQuota,
+        defaultQuota,
+        policyName
+      );
+    } catch (ledgerError) {
+      console.error(`[Custom Policy] Failed to create reversal entry for employee ${empId}:`, ledgerError);
+    }
+  }
 
   return { message: 'Policy deleted successfully', policyId };
 };

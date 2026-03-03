@@ -5,21 +5,24 @@
  * - All roles: Full profile with address, emergency contact, social links, skills, bio
  */
 
+import { clerkClient } from '@clerk/clerk-sdk-node';
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
 import { getsuperadminCollections, getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildForbiddenError,
-  buildNotFoundError,
-  buildValidationError,
+    asyncHandler,
+    buildForbiddenError,
+    buildNotFoundError,
+    buildValidationError,
 } from '../../middleware/errorHandler.js';
+import otpService from '../../services/otp/otp.service.js';
 import {
-  extractUser,
-  sendSuccess
+    extractUser,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import { getSystemDefaultAvatarUrl, isValidAvatar } from '../../utils/avatarUtils.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
+import { sendPasswordChangedEmail } from '../../utils/emailer.js';
+import { devError, devLog } from '../../utils/logger.js';
 
 /**
  * Helper function to get valid avatar URL with proper validation
@@ -131,25 +134,70 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       {
         $addFields: {
+          // Handle both departmentId (string) and department (ObjectId) field names
           departmentObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-              then: { $toObjectId: '$departmentId' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: departmentId is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$departmentId', null] },
+                    { $ne: ['$departmentId', ''] },
+                    { $eq: [{ $type: '$departmentId' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$departmentId' }
+                },
+                // Case 2: department is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$department' }, 'objectId'] },
+                  then: '$department'
+                }
+              ],
+              default: null
             }
           },
+          // Handle both designationId (string) and designation (ObjectId) field names
           designationObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
-              then: { $toObjectId: '$designationId' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: designationId is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$designationId', null] },
+                    { $ne: ['$designationId', ''] },
+                    { $eq: [{ $type: '$designationId' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$designationId' }
+                },
+                // Case 2: designation is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$designation' }, 'objectId'] },
+                  then: '$designation'
+                }
+              ],
+              default: null
             }
           },
+          // Handle reportingTo as both string and ObjectId
           reportingToObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
-              then: { $toObjectId: '$reportingTo' },
-              else: null
+            $switch: {
+              branches: [
+                // Case 1: reportingTo is a non-empty string - convert to ObjectId
+                {
+                  case: { $and: [
+                    { $ne: ['$reportingTo', null] },
+                    { $ne: ['$reportingTo', ''] },
+                    { $eq: [{ $type: '$reportingTo' }, 'string'] }
+                  ]},
+                  then: { $toObjectId: '$reportingTo' }
+                },
+                // Case 2: reportingTo is already an ObjectId - use it directly
+                {
+                  case: { $eq: [{ $type: '$reportingTo' }, 'objectId'] },
+                  then: '$reportingTo'
+                }
+              ],
+              default: null
             }
           }
         }
@@ -198,8 +246,20 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       {
         $addFields: {
-          departmentName: { $arrayElemAt: ['$departmentInfo.department', 0] },
-          designationTitle: { $arrayElemAt: ['$designationInfo.title', 0] },
+          departmentName: {
+            $ifNull: [
+              { $arrayElemAt: ['$departmentInfo.department', 0] },
+              { $arrayElemAt: ['$departmentInfo.name', 0] }
+            ]
+          },
+          // Try title first, then name, then designation field for backwards compatibility
+          designationTitle: {
+            $ifNull: [
+              { $arrayElemAt: ['$designationInfo.title', 0] },
+              { $arrayElemAt: ['$designationInfo.name', 0] },
+              { $arrayElemAt: ['$designationInfo.designation', 0] }
+            ]
+          },
           reportingTo: { $arrayElemAt: ['$reportingToInfo', 0] }
         }
       },
@@ -222,6 +282,19 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Employee profile');
     }
 
+    // Debug log to check fetched employee data
+    devLog('[User Profile Controller] Employee data fetched:', {
+      employeeId: employee.employeeId,
+      designationId: employee.designationId,
+      designation: employee.designation,
+      designationObjId: employee.designationObjId,
+      designationTitle: employee.designationTitle,
+      departmentId: employee.departmentId,
+      department: employee.department,
+      departmentName: employee.departmentName,
+      reportingTo: employee.reportingTo
+    });
+
     // Get valid avatar URL using helper function
     const validAvatarUrl = getValidAvatarUrl(employee);
 
@@ -238,6 +311,8 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       email: employee.email || employee.contact?.email || user.email,
       // Use canonical phone field (with fallback to contact for backward compatibility)
       phone: employee.phone || employee.contact?.phone || null,
+      // Phone country code
+      phoneCode: employee.phoneCode || employee.contact?.phoneCode || null,
       designation: employee.designationTitle || null,
       department: employee.departmentName || null,
       // For header profile image - validated avatar URL
@@ -263,8 +338,8 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
         employeeId: employee.reportingTo.employeeId || '',
         email: employee.reportingTo.email || ''
       } : null,
-      // Check both about and notes, and bio
-      about: employee.about || employee.notes || employee.bio || '',
+      // Canonical: bio. Fallback to legacy notes/about for existing data.
+      about: employee.bio || employee.notes || employee.about || '',
       // Use canonical address field (with fallback to personal.address for backward compatibility)
       address: {
         street: employee.address?.street || employee.personal?.address?.street || '',
@@ -277,6 +352,7 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       emergencyContact: {
         name: employee.emergencyContact?.name || (Array.isArray(employee.emergencyContacts) && employee.emergencyContacts[0]?.name) || '',
         phone: employee.emergencyContact?.phone || (Array.isArray(employee.emergencyContacts) && employee.emergencyContacts[0]?.phone) || (Array.isArray(employee.emergencyContacts) && employee.emergencyContacts[0]?.phone?.[0]) || '',
+        phone2: employee.emergencyContact?.phone2 || (Array.isArray(employee.emergencyContacts) && employee.emergencyContacts[0]?.phone?.[1]) || '',
         relationship: employee.emergencyContact?.relationship || (Array.isArray(employee.emergencyContacts) && employee.emergencyContacts[0]?.relationship) || ''
       },
       // Check socialProfiles vs socialLinks
@@ -288,9 +364,15 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       skills: employee.skills || [],
       bio: employee.bio || employee.about || employee.notes || '',
-      // Education, Experience, Family, Documents
+      // Education (stored as 'education', falls back to 'qualifications' for legacy data)
       education: employee.education || employee.qualifications || [],
-      experience: employee.experience || [],
+      // Normalize experience: employeedetails saves as 'previousCompany', profile page uses 'company'
+      experience: (employee.experience || []).map(e => ({
+        ...e,
+        company: e.company || e.previousCompany || '',
+        designation: e.designation || e.position || '',
+        current: e.current || e.currentlyWorking || false,
+      })),
       family: employee.family || [],
       documents: employee.documents || [],
       // Personal Information (Passport, Nationality, etc.)
@@ -319,17 +401,19 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       },
       // Bank Information
       bankDetails: employee.bankDetails ? {
+        accountHolderName: employee.bankDetails.accountHolderName || '',
         bankName: employee.bankDetails.bankName || '',
         accountNumber: employee.bankDetails.accountNumber || '',
         ifscCode: employee.bankDetails.ifscCode || '',
         branch: employee.bankDetails.branch || '',
-        accountType: employee.bankDetails.accountType || 'Savings'
+        accountType: employee.bankDetails.accountType || 'Savings Account'
       } : {
+        accountHolderName: '',
         bankName: '',
         accountNumber: '',
         ifscCode: '',
         branch: '',
-        accountType: 'Savings'
+        accountType: 'Savings Account'
       },
       createdAt: employee.createdAt || new Date(),
       updatedAt: employee.updatedAt || new Date()
@@ -459,9 +543,42 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     if (updateData.dateOfBirth !== undefined) sanitizedUpdate.dateOfBirth = updateData.dateOfBirth;
     if (updateData.gender !== undefined) sanitizedUpdate.gender = updateData.gender;
     if (updateData.profilePhoto !== undefined) sanitizedUpdate.profileImage = updateData.profilePhoto;
-    if (updateData.about !== undefined) sanitizedUpdate.notes = updateData.about;
+    // Canonical field: bio. Do NOT duplicate into 'notes' or 'about'.
     if (updateData.bio !== undefined) sanitizedUpdate.bio = updateData.bio;
+    else if (updateData.about !== undefined) sanitizedUpdate.bio = updateData.about;
     if (updateData.skills !== undefined) sanitizedUpdate.skills = updateData.skills;
+
+    // Handle education - accept both 'education' and 'qualifications' keys, store in 'education'
+    if (updateData.education !== undefined) {
+      sanitizedUpdate.education = updateData.education;
+    }
+    if (updateData.qualifications !== undefined) {
+      // Also store under 'education' for consistency with employeedetails page
+      sanitizedUpdate.education = updateData.qualifications;
+    }
+
+    // Handle experience - normalize field names to canonical 'company'
+    if (updateData.experience !== undefined) {
+      sanitizedUpdate.experience = Array.isArray(updateData.experience)
+        ? updateData.experience.map(e => ({
+            ...e,
+            company: e.company || e.previousCompany || '',
+            designation: e.designation || e.position || '',
+            current: e.current || e.currentlyWorking || false,
+          }))
+        : updateData.experience;
+    }
+
+    // Handle family - normalize to match employeedetails format { Name, relationship, phone }
+    if (updateData.family !== undefined) {
+      sanitizedUpdate.family = Array.isArray(updateData.family)
+        ? updateData.family.map(member => ({
+            Name: member.Name || member.familyMemberName || member.name || '',
+            relationship: member.relationship || '',
+            phone: member.phone || ''
+          }))
+        : [];
+    }
 
     // Handle phone (use canonical phone field at root level)
     if (updateData.phone !== undefined) {
@@ -484,6 +601,7 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
       sanitizedUpdate.emergencyContact = {
         name: updateData.emergencyContact.name || '',
         phone: updateData.emergencyContact.phone || '',
+        phone2: updateData.emergencyContact.phone2 || '',
         relationship: updateData.emergencyContact.relationship || ''
       };
     }
@@ -536,6 +654,9 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     if (updateData.bankDetails) {
       const bankDetailsUpdate = {};
 
+      if (updateData.bankDetails.accountHolderName !== undefined) {
+        bankDetailsUpdate['bankDetails.accountHolderName'] = updateData.bankDetails.accountHolderName;
+      }
       if (updateData.bankDetails.bankName !== undefined) {
         bankDetailsUpdate['bankDetails.bankName'] = updateData.bankDetails.bankName;
       }
@@ -543,7 +664,8 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
         bankDetailsUpdate['bankDetails.accountNumber'] = updateData.bankDetails.accountNumber;
       }
       if (updateData.bankDetails.ifscCode !== undefined) {
-        bankDetailsUpdate['bankDetails.ifscCode'] = updateData.bankDetails.ifscCode;
+        // Convert IFSC code to uppercase before saving
+        bankDetailsUpdate['bankDetails.ifscCode'] = updateData.bankDetails.ifscCode.toUpperCase();
       }
       if (updateData.bankDetails.branch !== undefined) {
         bankDetailsUpdate['bankDetails.branch'] = updateData.bankDetails.branch;
@@ -580,15 +702,15 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
         $addFields: {
           departmentObjId: {
             $cond: {
-              if: { $and: [{ $ne: ['$department', null] }, { $ne: ['$department', ''] }] },
-              then: { $toObjectId: '$department' },
+              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+              then: { $toObjectId: '$departmentId' },
               else: null
             }
           },
           designationObjId: {
             $cond: {
-              if: { $and: [{ $ne: ['$designation', null] }, { $ne: ['$designation', ''] }] },
-              then: { $toObjectId: '$designation' },
+              if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
+              then: { $toObjectId: '$designationId' },
               else: null
             }
           },
@@ -698,7 +820,7 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
         employeeId: updatedEmployee.reportingTo.employeeId || '',
         email: updatedEmployee.reportingTo.email || ''
       } : null,
-      about: updatedEmployee.about || updatedEmployee.notes || updatedEmployee.bio || '',
+      about: updatedEmployee.bio || updatedEmployee.notes || updatedEmployee.about || '',
       // Check both root address and personal.address
       address: {
         street: updatedEmployee.address?.street || updatedEmployee.personal?.address?.street || '',
@@ -711,6 +833,7 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
       emergencyContact: {
         name: updatedEmployee.emergencyContact?.name || (Array.isArray(updatedEmployee.emergencyContacts) && updatedEmployee.emergencyContacts[0]?.name) || '',
         phone: updatedEmployee.emergencyContact?.phone || (Array.isArray(updatedEmployee.emergencyContacts) && updatedEmployee.emergencyContacts[0]?.phone) || (Array.isArray(updatedEmployee.emergencyContacts) && updatedEmployee.emergencyContacts[0]?.phone?.[0]) || '',
+        phone2: updatedEmployee.emergencyContact?.phone2 || (Array.isArray(updatedEmployee.emergencyContacts) && updatedEmployee.emergencyContacts[0]?.phone?.[1]) || '',
         relationship: updatedEmployee.emergencyContact?.relationship || (Array.isArray(updatedEmployee.emergencyContacts) && updatedEmployee.emergencyContacts[0]?.relationship) || ''
       },
       // Check socialProfiles vs socialLinks
@@ -724,7 +847,12 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
       bio: updatedEmployee.bio || updatedEmployee.about || updatedEmployee.notes || '',
       // Education, Experience, Family, Documents
       education: updatedEmployee.education || updatedEmployee.qualifications || [],
-      experience: updatedEmployee.experience || [],
+      experience: (updatedEmployee.experience || []).map(e => ({
+        ...e,
+        company: e.company || e.previousCompany || '',
+        designation: e.designation || e.position || '',
+        current: e.current || e.currentlyWorking || false,
+      })),
       family: updatedEmployee.family || [],
       documents: updatedEmployee.documents || [],
       // Personal Information (Passport, Nationality, etc.)
@@ -757,13 +885,13 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
         accountNumber: updatedEmployee.bankDetails.accountNumber || '',
         ifscCode: updatedEmployee.bankDetails.ifscCode || '',
         branch: updatedEmployee.bankDetails.branch || '',
-        accountType: updatedEmployee.bankDetails.accountType || 'Savings'
+        accountType: updatedEmployee.bankDetails.accountType || 'Savings Account'
       } : {
         bankName: '',
         accountNumber: '',
         ifscCode: '',
         branch: '',
-        accountType: 'Savings'
+        accountType: 'Savings Account'
       },
       createdAt: updatedEmployee.createdAt || new Date(),
       updatedAt: updatedEmployee.updatedAt || new Date()
@@ -799,12 +927,10 @@ export const changePassword = asyncHandler(async (req, res) => {
     throw buildValidationError('newPassword', 'New password must be at least 6 characters long');
   }
 
-  // For employee/admin roles, update the password in the database (case-insensitive)
   const userRole = user.role?.toLowerCase();
   if (user.companyId && (userRole === 'hr' || userRole === 'employee' || userRole === 'admin')) {
     const collections = getTenantCollections(user.companyId);
 
-    // Find employee/user by Clerk user ID
     const employee = await collections.employees.findOne({
       isDeleted: { $ne: true },
       $or: [
@@ -814,18 +940,33 @@ export const changePassword = asyncHandler(async (req, res) => {
     });
 
     if (employee) {
-      // Verify current password (if stored)
+      // Verify current password against DB (bcrypt hash or plaintext fallback)
       if (employee.account?.password) {
-        const isPasswordValid = await bcrypt.compare(currentPassword, employee.account.password);
+        let isPasswordValid = false;
+        try {
+          isPasswordValid = await bcrypt.compare(currentPassword, employee.account.password);
+        } catch {
+          // Stored as plaintext
+          isPasswordValid = currentPassword === employee.account.password;
+        }
         if (!isPasswordValid) {
           throw buildValidationError('currentPassword', 'Current password is incorrect');
         }
       }
 
-      // Hash new password
+      // Hash new password for DB storage
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-      // Update password
+      // Update Clerk password (primary auth source)
+      try {
+        await clerkClient.users.updateUser(user.userId, { password: newPassword });
+        devLog('[changePassword] Clerk password updated for userId:', user.userId);
+      } catch (clerkErr) {
+        devError('[changePassword] Clerk password update failed:', clerkErr.message);
+        throw buildValidationError('password', 'Failed to update password. Please try again.');
+      }
+
+      // Update DB
       await collections.employees.updateOne(
         { _id: employee._id },
         {
@@ -837,14 +978,125 @@ export const changePassword = asyncHandler(async (req, res) => {
         }
       );
 
+      // Send notification email (non-fatal)
+      sendPasswordChangedEmail({
+        to: employee.email || user.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        companyName: 'ManageRTC',
+      }).catch(() => {});
+
       return sendSuccess(res, { message: 'Password changed successfully' }, 'Password changed successfully');
     }
   }
 
-  // For other roles or if no employee record found
-  // Note: In a Clerk-based system, password changes would be handled through Clerk API
-  // This is a placeholder for systems that store passwords locally
-  return sendSuccess(res, { message: 'Password change request processed' }, 'Password change request processed');
+  // Superadmin or no employee record — update Clerk only
+  try {
+    await clerkClient.users.updateUser(user.userId, { password: newPassword });
+  } catch (clerkErr) {
+    devError('[changePassword] Clerk password update failed:', clerkErr.message);
+    throw buildValidationError('password', 'Failed to update password. Please try again.');
+  }
+  return sendSuccess(res, { message: 'Password changed successfully' }, 'Password changed successfully');
+});
+
+/**
+ * @desc    Send OTP to registered email for password reset (Forgot Password)
+ * @route   POST /api/user-profile/forgot-password/send-otp
+ * @access  Private (All authenticated users)
+ */
+export const sendForgotPasswordOTP = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company context required');
+  }
+  if (!user.email) {
+    throw buildValidationError('email', 'No registered email found for this account');
+  }
+
+  devLog('[sendForgotPasswordOTP] Sending OTP to:', user.email);
+
+  const result = await otpService.sendOTP(user.companyId, user.email, 'forgot_password');
+
+  if (!result.success) {
+    throw buildValidationError('otp', result.error || 'Failed to send OTP. Please try again.');
+  }
+
+  return sendSuccess(res, { email: user.email }, 'OTP sent to your registered email. Valid for 10 minutes.');
+});
+
+/**
+ * @desc    Reset password using OTP (no current password required)
+ * @route   POST /api/user-profile/forgot-password/reset
+ * @access  Private (All authenticated users)
+ */
+export const resetForgotPassword = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const { otp, newPassword, confirmPassword } = req.body;
+
+  if (!otp || !newPassword || !confirmPassword) {
+    throw buildValidationError('fields', 'OTP, new password, and confirm password are required');
+  }
+
+  if (newPassword !== confirmPassword) {
+    throw buildValidationError('confirmPassword', 'New password and confirm password do not match');
+  }
+
+  if (newPassword.length < 6) {
+    throw buildValidationError('newPassword', 'Password must be at least 6 characters long');
+  }
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company context required');
+  }
+
+  // Verify OTP
+  const otpResult = await otpService.verifyOTP(user.companyId, user.email, otp, 'forgot_password');
+  if (!otpResult.valid) {
+    throw buildValidationError('otp', 'Invalid or expired OTP. Please request a new one.');
+  }
+
+  // Update Clerk password
+  try {
+    await clerkClient.users.updateUser(user.userId, { password: newPassword });
+    devLog('[resetForgotPassword] Clerk password updated for userId:', user.userId);
+  } catch (clerkErr) {
+    devError('[resetForgotPassword] Clerk password update failed:', clerkErr.message);
+    throw buildValidationError('password', 'Failed to reset password. Please try again.');
+  }
+
+  // Update DB if employee record exists
+  if (user.companyId) {
+    const collections = getTenantCollections(user.companyId);
+    const employee = await collections.employees.findOne({
+      isDeleted: { $ne: true },
+      $or: [{ clerkUserId: user.userId }, { 'account.userId': user.userId }]
+    });
+
+    if (employee) {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await collections.employees.updateOne(
+        { _id: employee._id },
+        {
+          $set: {
+            'account.password': hashedPassword,
+            passwordChangedAt: new Date(),
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      sendPasswordChangedEmail({
+        to: employee.email || user.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        companyName: 'ManageRTC',
+      }).catch(() => {});
+    }
+  }
+
+  return sendSuccess(res, { message: 'Password reset successfully' }, 'Password reset successfully. You can now log in with your new password.');
 });
 
 /**
@@ -1047,10 +1299,383 @@ export const updateAdminProfile = asyncHandler(async (req, res) => {
   );
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 2: Extended Profile Endpoints for Read-Only Sections
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @desc    Get work info for current employee (shift, batch, timezone)
+ * @route   GET /api/user-profile/work-info
+ * @access  Private (All authenticated users)
+ */
+export const getWorkInfo = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company ID is required');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+
+  // Find employee - get both field naming conventions
+  const employee = await collections.employees.findOne(
+    { clerkUserId: user.userId, isDeleted: { $ne: true } },
+    { projection: { _id: 1, employeeId: 1, shiftId: 1, shift: 1, batchId: 1, batch: 1, employmentType: 1, timezone: 1 } }
+  );
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  // Handle both field naming conventions (shiftId/shift, batchId/batch)
+  const employeeShiftId = employee.shiftId || employee.shift;
+  const employeeBatchId = employee.batchId || employee.batch;
+
+  // Fetch shift details if assigned
+  let shiftDetails = null;
+  if (employeeShiftId) {
+    // Convert shiftId to ObjectId if it's a string
+    const shiftObjId = typeof employeeShiftId === 'string' && ObjectId.isValid(employeeShiftId)
+      ? new ObjectId(employeeShiftId)
+      : employeeShiftId;
+    const shift = await collections.shifts.findOne({ _id: shiftObjId });
+    if (shift) {
+      shiftDetails = {
+        _id: shift._id.toString(),
+        name: shift.name,
+        code: shift.code,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        duration: shift.duration,
+        color: shift.color,
+        type: shift.type,
+        isNightShift: shift.isNightShift,
+      };
+    }
+  }
+
+  // Fetch batch details if assigned
+  let batchDetails = null;
+  if (employeeBatchId) {
+    // Convert batchId to ObjectId if it's a string
+    const batchObjId = typeof employeeBatchId === 'string' && ObjectId.isValid(employeeBatchId)
+      ? new ObjectId(employeeBatchId)
+      : employeeBatchId;
+    const batch = await collections.batches.findOne({ _id: batchObjId });
+    if (batch) {
+      // Fetch batch's shift for timing
+      let batchShift = null;
+      if (batch.shiftId) {
+        // Convert batch's shiftId to ObjectId if it's a string
+        const batchShiftObjId = typeof batch.shiftId === 'string' && ObjectId.isValid(batch.shiftId)
+          ? new ObjectId(batch.shiftId)
+          : batch.shiftId;
+        const shift = await collections.shifts.findOne({ _id: batchShiftObjId });
+        if (shift) {
+          batchShift = {
+            _id: shift._id.toString(),
+            name: shift.name,
+            code: shift.code,
+            startTime: shift.startTime,
+            endTime: shift.endTime,
+            color: shift.color,
+          };
+        }
+      }
+      batchDetails = {
+        _id: batch._id.toString(),
+        name: batch.name,
+        code: batch.code,
+        shift: batchShift,
+      };
+    }
+  }
+
+  const workInfo = {
+    employmentType: employee.employmentType || null,
+    timezone: employee.timezone || 'UTC',
+    shift: shiftDetails,
+    batch: batchDetails,
+  };
+
+  return sendSuccess(res, workInfo, 'Work info retrieved successfully');
+});
+
+/**
+ * @desc    Get salary info for current employee
+ * @route   GET /api/user-profile/salary
+ * @access  Private (All authenticated users)
+ */
+export const getSalaryInfo = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company ID is required');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+
+  // Find employee with salary fields
+  const employee = await collections.employees.findOne(
+    { clerkUserId: user.userId, isDeleted: { $ne: true } },
+    { projection: { _id: 1, employeeId: 1, salary: 1 } }
+  );
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  if (!employee.salary) {
+    return sendSuccess(res, {
+      basic: 0,
+      hra: 0,
+      allowances: 0,
+      totalCTC: 0,
+      currency: 'USD',
+    }, 'Salary info retrieved successfully');
+  }
+
+  const salaryInfo = {
+    basic: employee.salary.basic || 0,
+    hra: employee.salary.hra || 0,
+    allowances: employee.salary.allowances || 0,
+    totalCTC: (employee.salary.basic || 0) + (employee.salary.hra || 0) + (employee.salary.allowances || 0),
+    currency: employee.salary.currency || 'USD',
+  };
+
+  return sendSuccess(res, salaryInfo, 'Salary info retrieved successfully');
+});
+
+/**
+ * @desc    Get statutory info for current employee (PF, ESI from latest payslip)
+ * @route   GET /api/user-profile/statutory
+ * @access  Private (All authenticated users)
+ */
+export const getStatutoryInfo = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company ID is required');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+
+  // Find employee
+  const employee = await collections.employees.findOne(
+    { clerkUserId: user.userId, isDeleted: { $ne: true } },
+    { projection: { _id: 1, employeeId: 1 } }
+  );
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  // Fetch latest payroll record for this employee
+  const latestPayroll = await collections.payrolls.findOne(
+    { employeeId: employee._id },
+    { sort: { payPeriodStart: -1 } }
+  );
+
+  const statutoryInfo = {
+    pfContribution: latestPayroll?.deductions?.providentFund || 0,
+    esiContribution: latestPayroll?.deductions?.esi || 0,
+    lastPayPeriod: latestPayroll ? {
+      start: latestPayroll.payPeriodStart,
+      end: latestPayroll.payPeriodEnd,
+    } : null,
+  };
+
+  return sendSuccess(res, statutoryInfo, 'Statutory info retrieved successfully');
+});
+
+/**
+ * @desc    Get assigned assets for current employee
+ * @route   GET /api/user-profile/assets
+ * @access  Private (All authenticated users)
+ */
+export const getMyAssets = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company ID is required');
+  }
+
+  const { status } = req.query;
+
+  const collections = getTenantCollections(user.companyId);
+
+  // Find employee
+  const employee = await collections.employees.findOne(
+    { clerkUserId: user.userId, isDeleted: { $ne: true } },
+    { projection: { _id: 1, employeeId: 1 } }
+  );
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  // Build filter for assetUsers
+  const filter = {
+    employeeId: employee._id.toString(),
+    isDeleted: { $ne: true },
+  };
+
+  if (status) {
+    filter.status = status;
+  } else {
+    // Default to assigned assets only
+    filter.status = 'assigned';
+  }
+
+  // Fetch assetUser records
+  const assetUsers = await collections.assetusers.find(filter).sort({ assignedDate: -1 }).toArray();
+
+  // Fetch asset details for each
+  const assetIds = assetUsers.map(au => new ObjectId(au.assetId));
+  const assets = assetIds.length > 0
+    ? await collections.assets.find({ _id: { $in: assetIds } }).toArray()
+    : [];
+
+  const assetMap = new Map(assets.map(a => [a._id.toString(), a]));
+
+  // Build response with asset details
+  const result = assetUsers.map(au => {
+    const asset = assetMap.get(au.assetId);
+    return {
+      _id: au._id?.toString(),
+      assetId: au.assetId,
+      assetName: asset?.name || 'Unknown',
+      category: asset?.category || null,
+      serialNumber: asset?.serialNumber || null,
+      status: au.status,
+      assignedDate: au.assignedDate,
+      returnDate: au.returnDate || null,
+      notes: au.notes || null,
+      image: asset?.image || null,
+    };
+  });
+
+  return sendSuccess(res, result, 'Assets retrieved successfully');
+});
+
+/**
+ * @desc    Get career history for current employee (promotions, policies, resignation, termination)
+ * @route   GET /api/user-profile/career
+ * @access  Private (All authenticated users)
+ */
+export const getCareerHistory = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+
+  if (!user.companyId) {
+    throw buildValidationError('companyId', 'Company ID is required');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+
+  // Find employee - get both field naming conventions
+  const employee = await collections.employees.findOne(
+    { clerkUserId: user.userId, isDeleted: { $ne: true } },
+    { projection: { _id: 1, employeeId: 1, departmentId: 1, designationId: 1, department: 1, designation: 1 } }
+  );
+
+  if (!employee) {
+    throw buildNotFoundError('Employee', user.userId);
+  }
+
+  // Handle both field naming conventions for department and designation
+  const employeeDepartmentId = employee.departmentId || (employee.department ? employee.department.toString() : null);
+  const employeeDesignationId = employee.designationId || (employee.designation ? employee.designation.toString() : null);
+
+  // Fetch promotions
+  const promotions = await collections.promotions
+    .find({ employeeId: employee._id.toString(), isDeleted: { $ne: true } })
+    .sort({ effectiveDate: -1 })
+    .toArray();
+
+  // Fetch resignation record
+  const resignation = await collections.resignation.findOne({
+    employeeId: employee._id.toString(),
+    isDeleted: { $ne: true },
+  });
+
+  // Fetch termination record
+  const termination = await collections.termination.findOne({
+    employeeId: employee._id.toString(),
+    isDeleted: { $ne: true },
+  });
+
+  // Fetch applicable policies
+  // Policy applies if: applyToAll=true OR (assignTo.departmentId matches AND assignTo.designationIds includes employee's designation)
+  const policyFilter = {
+    isDeleted: { $ne: true },
+    $or: [
+      { applyToAll: true },
+      {
+        $and: [
+          { 'assignTo.departmentId': employeeDepartmentId },
+          { 'assignTo.designationIds': employeeDesignationId },
+        ],
+      },
+    ],
+  };
+
+  const policies = await collections.policies.find(policyFilter).sort({ effectiveDate: -1 }).toArray();
+
+  const careerHistory = {
+    promotions: promotions.map(p => ({
+      _id: p._id.toString(),
+      effectiveDate: p.effectiveDate,
+      promotionType: p.promotionType,
+      previousDesignation: p.promotionFrom?.designation || null,
+      newDesignation: p.promotionTo?.designation || null,
+      previousDepartment: p.promotionFrom?.department || null,
+      newDepartment: p.promotionTo?.department || null,
+      salaryChange: p.salaryChange ? {
+        previousSalary: p.salaryChange.previousSalary,
+        newSalary: p.salaryChange.newSalary,
+        increment: p.salaryChange.increment,
+      } : null,
+      status: p.status,
+      notes: p.notes || null,
+    })),
+    resignation: resignation ? {
+      _id: resignation._id.toString(),
+      noticeDate: resignation.noticeDate,
+      resignationDate: resignation.resignationDate,
+      lastWorkingDay: resignation.lastWorkingDay,
+      reason: resignation.reason || null,
+      status: resignation.status,
+    } : null,
+    termination: termination ? {
+      _id: termination._id.toString(),
+      terminationDate: termination.terminationDate,
+      reason: termination.reason || null,
+      type: termination.type || null,
+      noticePeriodServed: termination.noticePeriodServed || false,
+    } : null,
+    policies: policies.map(p => ({
+      _id: p._id.toString(),
+      name: p.name,
+      description: p.description || null,
+      effectiveDate: p.effectiveDate,
+      category: p.category || null,
+      status: p.status,
+    })),
+  };
+
+  return sendSuccess(res, careerHistory, 'Career history retrieved successfully');
+});
+
 export default {
   getCurrentUserProfile,
   updateCurrentUserProfile,
   changePassword,
   getAdminProfile,
   updateAdminProfile,
+  // Phase 2: Extended Profile Endpoints
+  getWorkInfo,
+  getSalaryInfo,
+  getStatutoryInfo,
+  getMyAssets,
+  getCareerHistory,
 };

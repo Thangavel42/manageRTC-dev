@@ -49,8 +49,10 @@ export interface LedgerTransaction {
   updatedAt: string;
 }
 
+// Balance summary is now keyed by leaveTypeId (ObjectId string) instead of leaveTypeCode (string)
+// Example: { "6997ddbf244f4b67d04bf3c2": { total: 15, used: 2, balance: 13, ... } }
 export interface BalanceSummary {
-  [leaveType: string]: {
+  [leaveTypeId: string]: {
     total: number;
     used: number;
     balance: number;
@@ -67,6 +69,8 @@ export interface BalanceSummary {
     annualQuota?: number;
     // Custom policy information
     hasCustomPolicy?: boolean;
+    customPolicyId?: string;
+    customPolicyName?: string;
     customDays?: number;
   };
 }
@@ -107,19 +111,21 @@ export const transactionTypeDisplayMap: Record<TransactionType, { label: string;
 
 /**
  * Transform backend summary to frontend format
- * Handles two different backend response structures:
- * 1. From calculateSummary (used with history): totalAllocated, totalUsed, totalRestored, currentBalance
- * 2. From getBalanceSummary (direct endpoint): total, used, balance, ledgerBalance, lastTransaction, yearlyStats
- * Also passes through dynamic fields: leaveTypeName, isPaid, annualQuota, hasCustomPolicy, customDays
+ *
+ * IMPORTANT: The backend now returns summary keyed by leaveTypeId (ObjectId string)
+ * Example: { "6997ddbf244f4b67d04bf3c2": { total: 15, used: 2, balance: 13, ... } }
+ *
+ * This function handles the response and passes through all fields directly.
  */
 const transformSummary = (backendSummary: any): BalanceSummary => {
   const result: BalanceSummary = {};
 
-  for (const [leaveType, data] of Object.entries(backendSummary)) {
+  for (const [leaveTypeId, data] of Object.entries(backendSummary)) {
     const dataObj = data as any;
 
-    // Handle both response structures
-    result[leaveType] = {
+    // Backend returns summary keyed by leaveTypeId (ObjectId string)
+    // Just pass through all fields - they already have the correct structure
+    result[leaveTypeId] = {
       // calculateSummary uses 'totalAllocated', getBalanceSummary uses 'total'
       total: dataObj.totalAllocated ?? dataObj.total ?? 0,
       // calculateSummary uses 'totalUsed', getBalanceSummary uses 'used'
@@ -141,6 +147,8 @@ const transformSummary = (backendSummary: any): BalanceSummary => {
       annualQuota: dataObj.annualQuota ?? 0,
       // Custom policy information
       hasCustomPolicy: dataObj.hasCustomPolicy,
+      customPolicyId: dataObj.customPolicyId,
+      customPolicyName: dataObj.customPolicyName,
       customDays: dataObj.customDays,
     };
   }

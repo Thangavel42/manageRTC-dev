@@ -1,6 +1,8 @@
-const { MongoClient } = require('mongodb');
+import 'dotenv/config';
+import { MongoClient } from 'mongodb';
 
-const uri = process.env.MONGODB_URI || 'mongodb+srv://admin:AdMin-2025@cluster0.iooxltd.mongodb.net/';
+const uri = process.env.MONGODB_URI;
+if (!uri) throw new Error('MONGODB_URI is not set in environment variables');
 const client = new MongoClient(uri);
 
 async function checkSampleProject() {

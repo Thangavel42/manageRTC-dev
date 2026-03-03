@@ -4,9 +4,9 @@
  * Provides comprehensive attendance management functionality
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { message, Spin } from 'antd';
-import { get, post, put, del as apiDel, buildParams, ApiResponse } from '../services/api';
+import { message } from 'antd';
+import { useCallback, useState } from 'react';
+import { ApiResponse, buildParams, del as apiDel, get, post, put } from '../services/api';
 
 // Attendance Types
 export interface ClockInLocation {

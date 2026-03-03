@@ -1,11 +1,12 @@
 import dayjs from "dayjs";
 import React from "react";
-import type { Department, Promotion } from "../../hooks/usePromotionsREST";
+import type { Department, Designation, Promotion } from "../../hooks/usePromotionsREST";
 
 interface PromotionDetailsModalProps {
   promotion: Promotion | null;
   departments?: Department[];
   designationLookup?: Record<string, string>;
+  designations?: Array<Designation | { id?: string; _id?: string; designation?: string; name?: string }>;
   modalId?: string;
 }
 
@@ -13,6 +14,7 @@ const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
   promotion,
   departments = [],
   designationLookup = {},
+  designations = [],
   modalId = "view_promotion_details"
 }) => {
   // Build quick maps for resolving names by ID
@@ -27,8 +29,22 @@ const PromotionDetailsModal: React.FC<PromotionDetailsModalProps> = ({
   const resolveDepartment = (name?: string, id?: string) =>
     name || (id ? departmentMap[id] : undefined) || "N/A";
 
-  const resolveDesignation = (name?: string, id?: string) =>
-    name || (id ? designationLookup[id] : undefined) || "N/A";
+  const resolveDesignation = (name?: string, id?: string) => {
+    if (name && name.trim()) return name;
+    if (id) {
+      const key = typeof id === "string" ? id : String(id);
+      if (designationLookup[key]) return designationLookup[key];
+
+      const found = designations.find((d) => {
+        const did = (d as any).id || (d as any)._id || (d as any).designationId;
+        return did && String(did) === key;
+      }) as any;
+
+      if (found?.designation) return found.designation;
+      if (found?.name) return found.name;
+    }
+    return "N/A";
+  };
 
   // Always render modal structure, just show empty/loading state when no data
   if (!promotion) {

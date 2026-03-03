@@ -25,7 +25,7 @@ export const HorizontalSidebarData = [
             menuValue: 'Employee Dashboard',
             route: routes.employeeDashboard,
             base: 'employee',
-            roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+            roles: ['employee', 'hr', 'manager', 'leads'],
           },
           {
             menuValue: 'Deals Dashboard',
@@ -82,6 +82,11 @@ export const HorizontalSidebarData = [
             base: 'modules',
           },
           {
+            menuValue: 'Pages',
+            route: routes.superAdminPages,
+            base: 'super-admin-pages',
+          },
+          {
             menuValue: 'Domain',
             route: routes.superAdminDomain,
             base: 'domain',
@@ -120,11 +125,6 @@ export const HorizontalSidebarData = [
             menuValue: 'Mandatory Permissions',
             route: routes.mandatoryPermissions,
             base: 'mandatory-permissions',
-          },
-          {
-            menuValue: 'Pages',
-            route: routes.superAdminPages,
-            base: 'super-admin-pages',
           },
           {
             menuValue: 'Super Admins',
@@ -409,6 +409,11 @@ export const HorizontalSidebarData = [
                 route: routes.taskboard,
                 base: 'task-board',
               },
+              {
+                menuValue: 'Timesheet',
+                route: routes.timesheet,
+                base: 'timesheet',
+              },
               { menuValue: 'Sub-Contracts', route: routes.subcontractlist, base: 'sub-contracts' },
             ],
           },
@@ -560,11 +565,6 @@ export const HorizontalSidebarData = [
                 roles: ['hr', 'manager', 'leads', 'employee'],
               },
 
-              {
-                menuValue: 'Timesheet',
-                route: routes.timesheet,
-                base: 'timesheet',
-              },
               {
                 menuValue: 'Shift & Schedule',
                 route: routes.scheduletiming,
@@ -905,11 +905,6 @@ export const HorizontalSidebarData = [
                     base: 'attendance-employee',
                   },
 
-                  {
-                    menuValue: 'Timesheet',
-                    route: routes.timesheet,
-                    base: 'timesheet',
-                  },
                   {
                     menuValue: 'Shift & Schedule',
                     route: routes.scheduletiming,

@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
@@ -19,6 +19,7 @@ const Tickets = () => {
 
   // Tab configuration
   const isAdmin = ['superadmin', 'admin', 'hr'].includes(role);
+  const isEmployeeRole = ['employee', 'manager'].includes(role);
 
   const normalUserTabs = [
     { id: 'my-tickets', label: 'My Tickets' },
@@ -71,7 +72,7 @@ const Tickets = () => {
     priority: '',
     sortBy: 'recently'
   });
-  const [exportLoading, setExportLoading] = useState(false);
+  const [_exportLoading, setExportLoading] = useState(false);
 
   // State for categories
   const [categories, setCategories] = useState([]);
@@ -83,6 +84,35 @@ const Tickets = () => {
 
   // Tab counts
   const [tabCounts, setTabCounts] = useState({});
+
+  // Compute category counts from user's tickets for employees
+  const employeeCategoryCounts = useMemo(() => {
+    if (!isEmployeeRole || !ticketsList || ticketsList.length === 0) {
+      return {};
+    }
+    // Count tickets by category from the user's ticket list
+    const counts: Record<string, number> = {};
+    ticketsList.forEach((ticket: any) => {
+      const categoryName = ticket.category || 'Uncategorized';
+      counts[categoryName] = (counts[categoryName] || 0) + 1;
+    });
+    return counts;
+  }, [isEmployeeRole, ticketsList]);
+
+  // Get display categories with counts based on role
+  const displayCategories = useMemo(() => {
+    if (!categories || categories.length === 0) return [];
+
+    if (isEmployeeRole) {
+      // For employees, use counts from their ticket list
+      return categories.map((category: any) => ({
+        ...category,
+        ticketCount: employeeCategoryCounts[category.name] || 0
+      }));
+    }
+    // For admins, use server-provided counts
+    return categories;
+  }, [categories, isEmployeeRole, employeeCategoryCounts]);
 
   // Fetch tickets statistics
   useEffect(() => {
@@ -396,11 +426,11 @@ const Tickets = () => {
       const currentYear = new Date().getFullYear();
 
       // Company colors (based on website theme)
-      const primaryColor = [242, 101, 34]; // Orange - primary brand color
-      const secondaryColor = [59, 112, 128]; // Blue-gray - secondary color
+      const _primaryColor = [242, 101, 34]; // Orange - primary brand color
+      const _secondaryColor = [59, 112, 128]; // Blue-gray - secondary color
       const textColor = [33, 37, 41]; // Dark gray - main text
       const lightGray = [248, 249, 250]; // Light background
-      const borderColor = [222, 226, 230]; // Border color
+      const _borderColor = [222, 226, 230]; // Border color
 
       // Add company logo with multiple fallback options
       const addCompanyLogo = async () => {
@@ -549,12 +579,12 @@ const Tickets = () => {
       doc.text(`Total Tickets: ${filteredTickets.length}`, 50, 45);
 
       // Add security watermark
-      (doc as any).setGState(new (doc as any).GState({opacity: 0.1}));
+      (doc as any).setGState(new (doc as any).GState({ opacity: 0.1 }));
       doc.setTextColor(128, 128, 128);
       doc.setFontSize(60);
       doc.setFont('helvetica', 'bold');
-      doc.text('CONFIDENTIAL', 60, 120, {angle: 45});
-      (doc as any).setGState(new (doc as any).GState({opacity: 1}));
+      doc.text('CONFIDENTIAL', 60, 120, { angle: 45 });
+      (doc as any).setGState(new (doc as any).GState({ opacity: 1 }));
 
       // Table headers
       let yPosition = 60;
@@ -652,7 +682,7 @@ const Tickets = () => {
   const handleExportExcel = () => {
     try {
       setExportLoading(true);
-      const currentDate = new Date().toLocaleDateString();
+      const _currentDate = new Date().toLocaleDateString();
       const wb = XLSX.utils.book_new();
 
       // Prepare tickets data for Excel
@@ -843,7 +873,7 @@ const Tickets = () => {
   };
 
   // Dynamic chart data that updates with ticketsStats
-  const Areachart = {
+  const _Areachart = {
     series: [
       {
         name: "Tickets",
@@ -929,7 +959,7 @@ const Tickets = () => {
       },
     },
   };
-  const Areachart1 = {
+  const _Areachart1 = {
     series: [
       {
         name: "Tickets",
@@ -1015,7 +1045,7 @@ const Tickets = () => {
       },
     },
   };
-  const Areachart2 = {
+  const _Areachart2 = {
     series: [
       {
         name: "Tickets",
@@ -1101,7 +1131,7 @@ const Tickets = () => {
       },
     },
   };
-  const Areachart3 = {
+  const _Areachart3 = {
     series: [
       {
         name: "Tickets",
@@ -1578,10 +1608,10 @@ const Tickets = () => {
                       data-bs-toggle="dropdown"
                     >
                       Sort By: {filters.sortBy === 'recently' ? 'Recently Added' :
-                               filters.sortBy === 'ascending' ? 'Ascending' :
-                               filters.sortBy === 'descending' ? 'Descending' :
-                               filters.sortBy === 'lastMonth' ? 'Last Month' :
-                               filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'}
+                        filters.sortBy === 'ascending' ? 'Ascending' :
+                          filters.sortBy === 'descending' ? 'Descending' :
+                            filters.sortBy === 'lastMonth' ? 'Last Month' :
+                              filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'}
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
@@ -1915,12 +1945,12 @@ const Tickets = () => {
               )}
 
               {filteredTickets.length > 10 && (
-              <div className="text-center mb-4">
-                <Link to="#" className="btn btn-primary">
-                  <i className="ti ti-loader-3 me-1" />
-                  Load More
-                </Link>
-              </div>
+                <div className="text-center mb-4">
+                  <Link to="#" className="btn btn-primary">
+                    <i className="ti ti-loader-3 me-1" />
+                    Load More
+                  </Link>
+                </div>
               )}
             </div>
             <div className="col-xl-3 col-md-4">
@@ -1946,14 +1976,13 @@ const Tickets = () => {
                         <span className="visually-hidden">Loading...</span>
                       </div>
                     </div>
-                  ) : categories && categories.length > 0 ? (
+                  ) : displayCategories && displayCategories.length > 0 ? (
                     <div className="d-flex flex-column">
-                      {categories.map((category, index) => (
+                      {displayCategories.map((category: any, index: number) => (
                         <div
                           key={category._id || index}
-                          className={`d-flex align-items-center justify-content-between p-3 ${
-                            index < categories.length - 1 ? 'border-bottom' : ''
-                          }`}
+                          className={`d-flex align-items-center justify-content-between p-3 ${index < displayCategories.length - 1 ? 'border-bottom' : ''
+                            }`}
                         >
                           <Link to="#">{category.name}</Link>
                           <div className="d-flex align-items-center">
@@ -1987,9 +2016,8 @@ const Tickets = () => {
                       supportAgents.map((agent: any, index: number) => (
                         <div
                           key={agent._id || index}
-                          className={`d-flex align-items-center justify-content-between p-3 ${
-                            index < supportAgents.length - 1 ? 'border-bottom' : ''
-                          }`}
+                          className={`d-flex align-items-center justify-content-between p-3 ${index < supportAgents.length - 1 ? 'border-bottom' : ''
+                            }`}
                         >
                           <span className="d-flex align-items-center">
                             <ImageWithBasePath

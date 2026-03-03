@@ -1,19 +1,24 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import Table from "../../../core/common/dataTable/index";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import CommonSelect from "../../../core/common/commonSelect";
-import { DatePicker, TimePicker, Spin, Input, message } from "antd";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import Footer from "../../../core/common/footer";
-import { useAttendanceREST, toTableFormat, formatAttendanceDate } from "../../../hooks/useAttendanceREST";
 import { ReloadOutlined } from "@ant-design/icons";
-import { useSocketAttendance, AttendanceClockInEvent, AttendanceClockOutEvent } from "../../../hooks/useSocket";
-import { getAuthToken } from "../../../services/api";
+import { DatePicker, Input, Spin, TimePicker } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
+import Table from "../../../core/common/dataTable/index";
+import PredefinedDateRanges from "../../../core/common/datePicker";
+import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { toTableFormat, useAttendanceREST } from "../../../hooks/useAttendanceREST";
+import { useAuth } from "../../../hooks/useAuth";
+import { useAutoReloadActions } from "../../../hooks/useAutoReload";
+import { all_routes } from "../../router/all_routes";
 
 const AttendanceAdmin = () => {
+  // Role-based access control
+  const { role } = useAuth();
+  // Show switch only if user has access to both attendance pages (hr and superadmin have access to both)
+  const showPageSwitch = ['hr', 'superadmin'].includes(role);
+
   // API Hook
   const {
     attendance,
@@ -28,58 +33,13 @@ const AttendanceAdmin = () => {
     updateAttendance
   } = useAttendanceREST();
 
-  // Socket.IO Hook - Real-time attendance updates
-  const { isConnected: socketConnected } = useSocketAttendance(getAuthToken() || undefined, {
-    // Handle clock in events from other users
-    onClockIn: (data: AttendanceClockInEvent) => {
-      console.log('[AttendanceAdmin] Clock in event received:', data);
-      // Refresh attendance list to show new clock in
-      fetchAttendance(filters);
-      // Refresh stats
-      fetchStats();
-      // Show notification
-      message.success(`${data.employee || 'An employee'} clocked in`);
-    },
-
-    // Handle clock out events from other users
-    onClockOut: (data: AttendanceClockOutEvent) => {
-      console.log('[AttendanceAdmin] Clock out event received:', data);
-      // Refresh attendance list to show clock out
-      fetchAttendance(filters);
-      // Refresh stats
-      fetchStats();
-      // Show notification
-      message.info(`${data.employee || 'An employee'} clocked out`);
-    },
-
-    // Handle new attendance records
-    onCreated: (data) => {
-      console.log('[AttendanceAdmin] Attendance created event received:', data);
+  // Auto-reload hook for refetching after actions
+  const { refetchAfterAction } = useAutoReloadActions({
+    fetchFn: () => {
       fetchAttendance(filters);
       fetchStats();
     },
-
-    // Handle attendance updates
-    onUpdated: (data) => {
-      console.log('[AttendanceAdmin] Attendance updated event received:', data);
-      fetchAttendance(filters);
-      fetchStats();
-    },
-
-    // Handle attendance deletion
-    onDeleted: (data) => {
-      console.log('[AttendanceAdmin] Attendance deleted event received:', data);
-      fetchAttendance(filters);
-      fetchStats();
-    },
-
-    // Handle bulk updates
-    onBulkUpdated: (data) => {
-      console.log('[AttendanceAdmin] Bulk update event received:', data);
-      fetchAttendance(filters);
-      fetchStats();
-      message.success(`Bulk action completed: ${data.updatedCount} records updated`);
-    },
+    debug: true,
   });
 
   // Filters state
@@ -155,13 +115,12 @@ const AttendanceAdmin = () => {
       dataIndex: "Status",
       render: (text: string) => (
         <span
-          className={`badge ${
-            text === "Present" || text === "Late"
-              ? "badge-success-transparent"
-              : text === "Absent"
+          className={`badge ${text === "Present" || text === "Late"
+            ? "badge-success-transparent"
+            : text === "Absent"
               ? "badge-danger-transparent"
               : "badge-warning-transparent"
-          } d-inline-flex align-items-center`}
+            } d-inline-flex align-items-center`}
         >
           <i className="ti ti-point-filled me-1" />
           {text}
@@ -194,14 +153,13 @@ const AttendanceAdmin = () => {
       dataIndex: "ProductionHours",
       render: (text: string, record: any) => (
         <span
-          className={`badge d-inline-flex align-items-center badge-sm ${
-            parseFloat(record.ProductionHours) < 8
-              ? "badge-danger"
-              : parseFloat(record.ProductionHours) >= 8 &&
-                parseFloat(record.ProductionHours) <= 9
+          className={`badge d-inline-flex align-items-center badge-sm ${parseFloat(record.ProductionHours) < 8
+            ? "badge-danger"
+            : parseFloat(record.ProductionHours) >= 8 &&
+              parseFloat(record.ProductionHours) <= 9
               ? "badge-success"
               : "badge-info"
-          }`}
+            }`}
         >
           <i className="ti ti-clock-hour-11 me-1"></i>
           {record.ProductionHours}
@@ -269,8 +227,7 @@ const AttendanceAdmin = () => {
   };
 
   const handleRefresh = () => {
-    fetchAttendance(filters);
-    fetchStats();
+    refetchAfterAction();
   };
 
   const handleEdit = (attendance: any) => {
@@ -318,15 +275,16 @@ const AttendanceAdmin = () => {
         const modal = (window as any).bootstrap.Modal.getInstance(modalEl);
         if (modal) modal.hide();
       }
-      // Refresh data
-      fetchAttendance(filters);
-      fetchStats();
+      // Refresh data using auto-reload
+      refetchAfterAction();
     }
   };
 
   const handleDelete = async (attendanceId: string) => {
     if (window.confirm('Are you sure you want to delete this attendance record?')) {
       await deleteAttendance(attendanceId);
+      // Refresh data using auto-reload
+      refetchAfterAction();
     }
   };
 
@@ -364,22 +322,24 @@ const AttendanceAdmin = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="me-2 mb-2">
-                <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
-                  <Link
-                    to={all_routes.attendanceemployee}
-                    className="btn btn-icon btn-sm  me-1"
-                  >
-                    <i className="ti ti-brand-days-counter" />
-                  </Link>
-                  <Link
-                    to={all_routes.attendanceadmin}
-                    className="btn btn-icon btn-sm active bg-primary text-white"
-                  >
-                    <i className="ti ti-calendar-event" />
-                  </Link>
+              {showPageSwitch && (
+                <div className="me-2 mb-2">
+                  <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
+                    <Link
+                      to={all_routes.attendanceemployee}
+                      className="btn btn-icon btn-sm  me-1"
+                    >
+                      <i className="ti ti-brand-days-counter" />
+                    </Link>
+                    <Link
+                      to={all_routes.attendanceadmin}
+                      className="btn btn-icon btn-sm active bg-primary text-white"
+                    >
+                      <i className="ti ti-calendar-event" />
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="me-2 mb-2">
                 <div className="dropdown">
                   <Link

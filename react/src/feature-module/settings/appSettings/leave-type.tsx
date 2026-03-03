@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import { Spin } from "antd";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import Footer from "../../../core/common/footer";
 import { useLeaveTypesREST, type LeaveType } from "../../../hooks/useLeaveTypesREST";
-import { Spin } from "antd";
+import { all_routes } from "../../router/all_routes";
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -24,7 +24,7 @@ const LeaveTypeSettings = () => {
     createLeaveType,
     updateLeaveType,
     deleteLeaveType,
-    toggleLeaveTypeStatus,
+    toggleLeaveTypeStatus: _toggleLeaveTypeStatus,
   } = useLeaveTypesREST();
 
   // Local state for form handling

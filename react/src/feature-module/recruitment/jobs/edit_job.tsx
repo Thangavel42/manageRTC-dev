@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useSocket } from '../../../SocketContext';
-import { Socket } from 'socket.io-client';
 import { message } from 'antd';
-import { toast, ToastContainer } from 'react-toastify';
+import React, { useEffect, useState } from 'react';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { Socket } from 'socket.io-client';
+import { useSocket } from '../../../SocketContext';
 
 interface JobFormData {
   _id: string;
@@ -109,8 +109,8 @@ const EditJob = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'minSalary' || name === 'maxSalary' || name === 'numberOfPositions' 
-        ? Number(value) || 0 
+      [name]: name === 'minSalary' || name === 'maxSalary' || name === 'numberOfPositions'
+        ? Number(value) || 0
         : value
     }));
 
@@ -194,7 +194,7 @@ const EditJob = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -205,7 +205,7 @@ const EditJob = () => {
     }
 
     setLoading(true);
-    
+
     try {
       console.log('Updating job:', formData);
       // Backend expects the job data directly with _id field included
@@ -216,7 +216,7 @@ const EditJob = () => {
         if (response.done) {
           console.log('Job updated successfully:', response.data);
           message.success('Job updated successfully!');
-          
+
           // Show success message briefly, then close modal
           setTimeout(() => {
             closeModal();
@@ -263,11 +263,11 @@ const EditJob = () => {
       modal.classList.remove('show');
       modal.setAttribute('aria-hidden', 'true');
       modal.removeAttribute('aria-modal');
-      
+
       // Remove backdrop
       const backdrops = document.querySelectorAll('.modal-backdrop');
       backdrops.forEach(backdrop => backdrop.remove());
-      
+
       // Remove modal-open class from body
       document.body.classList.remove('modal-open');
       document.body.style.overflow = '';

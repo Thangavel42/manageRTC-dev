@@ -1,6 +1,4 @@
-import React from "react";
 import { Chart } from "primereact/chart";
-import { Link } from "react-router-dom";
 import Footer from "../../../core/common/footer";
 
 const PrimeReactChart = () => {

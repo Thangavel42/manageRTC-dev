@@ -1,15 +1,15 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import ReactApexChart from "react-apexcharts";
-import Table from "../../../core/common/dataTable/index";
-import { useSocket } from "../../../SocketContext";
-import { Socket } from "socket.io-client";
-import { ApexOptions } from "apexcharts";
 import { message } from "antd";
+import { ApexOptions } from "apexcharts";
+import { useEffect, useRef, useState } from "react";
+import ReactApexChart from "react-apexcharts";
+import { Link } from "react-router-dom";
+import { Socket } from "socket.io-client";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
 
 // Helper to format date as dd-mm-yyyy
 const formatDate = (iso: string) => {
@@ -28,7 +28,7 @@ const Subscription = () => {
     expiredSubscribers: 0,
   });
   const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -131,9 +131,8 @@ const Subscription = () => {
             // Create a temporary link and trigger download
             const link = document.createElement("a");
             link.href = response.data.pdfUrl;
-            link.download = `invoice_${
-              selectedInvoice.companyId
-            }_${Date.now()}.pdf`;
+            link.download = `invoice_${selectedInvoice.companyId
+              }_${Date.now()}.pdf`;
             link.id = "pdf-download-link";
             link.setAttribute("type", "application/pdf");
             link.setAttribute("target", "_blank");
@@ -216,13 +215,12 @@ const Subscription = () => {
       dataIndex: "Status",
       render: (text: string) => (
         <span
-          className={`badge ${
-            text === "Paid"
+          className={`badge ${text === "Paid"
               ? "badge-success"
               : text === "Expired"
-              ? "badge-danger"
-              : "badge-secondary"
-          } d-inline-flex align-items-center badge-xs`}
+                ? "badge-danger"
+                : "badge-secondary"
+            } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
           {text}

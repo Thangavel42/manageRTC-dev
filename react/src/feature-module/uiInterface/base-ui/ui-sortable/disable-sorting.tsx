@@ -1,13 +1,10 @@
-import React, { useState } from "react";
 import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  DropResult,
+  DragDropContext, Draggable, Droppable, DropResult
 } from "@hello-pangea/dnd";
+import { useState } from "react";
 
 const DisableSorting = () => {
-  const [leftTasks, setLeftTasks] = useState([
+  const [leftTasks, _setLeftTasks] = useState([
     "Write customer service script.",
     "Schedule team training.",
     "Edit presentation slides.",

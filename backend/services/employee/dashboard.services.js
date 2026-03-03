@@ -1,9 +1,7 @@
-import { ObjectId } from "mongodb";
-import { getStartOfDayInTimeZone } from "../../utils/startDayTimeZone.js";
-import { getTenantCollections } from "../../config/db.js";
-import { getWorkingDays } from "../../utils/workingDays.js";
-import { fillSalaryMonths } from "../../utils/fillMissingMonths.js";
 import { DateTime } from "luxon";
+import { ObjectId } from "mongodb";
+import { getTenantCollections } from "../../config/db.js";
+import { fillSalaryMonths } from "../../utils/fillMissingMonths.js";
 
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
@@ -12,7 +10,7 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
     const collections = getTenantCollections(companyId);
     const [employee, companyDetails] = await Promise.all([
       collections.employees.findOne(
-        { userId: employeeId },
+        { clerkUserId: employeeId },
         {
           projection: {
             _id: 1,
@@ -38,9 +36,8 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
       return { done: false, error: "Employee not found" };
     }
 
-    if (!companyDetails || !companyDetails.timeZone) {
-      return { done: false, error: "Company timezone not found" };
-    }
+    // Use company timezone with fallback to employee timezone or UTC
+    const companyTimeZone = companyDetails?.timeZone || employee.timeZone || "UTC";
 
     // Add avatar field with default fallback for frontend compatibility
     const employeeData = {
@@ -53,7 +50,7 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
       done: true,
       data: {
         ...employeeData,
-        companyTimeZone: companyDetails.timeZone,
+        companyTimeZone,
       },
     };
   } catch (error) {
@@ -137,9 +134,7 @@ export const getLeaveStats = async (companyId, employeeId, year) => {
     const collections = getTenantCollections(companyId);
 
     const detailsDoc = await collections.details.findOne();
-    if (!detailsDoc) throw new Error("Details document not found");
-
-    const totalLeavesAllowed = detailsDoc.totalLeavesAllowed || 0;
+    const totalLeavesAllowed = detailsDoc?.totalLeavesAllowed || 0;
 
     const inputYear = !isNaN(parseInt(year))
       ? parseInt(year)
@@ -194,7 +189,7 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
     const { leaveType, startDate, endDate, reason, noOfDays } = leaveData;
 
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found" };
@@ -279,7 +274,7 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
@@ -401,7 +396,7 @@ export const punchOut = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) return { done: false, error: "Employee not found" };
 
@@ -492,7 +487,7 @@ export const startBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
@@ -546,7 +541,7 @@ export const resumeBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
@@ -638,14 +633,7 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
       }
     );
 
-    if (!companyDetails) {
-      return {
-        done: false,
-        error: "Company details not found",
-      };
-    }
-
-    const timeZone = companyDetails.timeZone || "UTC";
+    const timeZone = companyDetails?.timeZone || "UTC";
     const now = DateTime.now().setZone(timeZone);
 
     // Set up time periods in company timezone
@@ -665,12 +653,12 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
     const startOfMonth = now.startOf("month");
     const endOfMonth = startOfMonth.plus({ months: 1 });
 
-    const HOURS_PER_DAY = companyDetails.totalWorkHoursPerDay ?? 8;
+    const HOURS_PER_DAY = companyDetails?.totalWorkHoursPerDay ?? 8;
     const HOURS_PER_WEEK =
-      companyDetails.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
+      companyDetails?.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
     const HOURS_PER_MONTH =
-      companyDetails.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
-    const MAX_OVERTIME_MONTH = companyDetails.totalOvertimePerMonth ?? 5;
+      companyDetails?.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
+    const MAX_OVERTIME_MONTH = companyDetails?.totalOvertimePerMonth ?? 5;
 
     const attendanceRecords = await collections.attendance
       .find({
@@ -778,7 +766,7 @@ export const getProjects = async (companyId, employeeId, filter) => {
             {
               $match: {
                 $expr: {
-                  $in: ["$userId", "$$teamLeaderIds"],
+                  $in: ["$clerkUserId", "$$teamLeaderIds"],
                 },
               },
             },
@@ -787,7 +775,7 @@ export const getProjects = async (companyId, employeeId, filter) => {
                 avatarUrl: 1,
                 firstName: 1,
                 lastName: 1,
-                userId: 1,
+                clerkUserId: 1,
                 _id: 0,
               },
             },
@@ -805,7 +793,7 @@ export const getProjects = async (companyId, employeeId, filter) => {
             {
               $match: {
                 $expr: {
-                  $in: ["$userId", "$$memberIds"],
+                  $in: ["$clerkUserId", "$$memberIds"],
                 },
               },
             },
@@ -891,7 +879,7 @@ export const getTasks = async (companyId, employeeId, filter) => {
     const collections = getTenantCollections(companyId);
     // check if employee exists
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -946,7 +934,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1002,7 +990,7 @@ export const updateTask = async ({ companyId, employeeId, taskData }) => {
     const taskObjectId = new ObjectId(taskId);
 
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1042,7 +1030,7 @@ export const getPerformance = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return {
@@ -1077,7 +1065,7 @@ export const getSkills = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1110,7 +1098,7 @@ export const getTeamMembers = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1145,7 +1133,7 @@ export const getTodaysNotifications = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1239,7 +1227,7 @@ export const getMeetings = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({
-      userId: employeeId,
+      clerkUserId: employeeId,
     });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
@@ -1383,7 +1371,7 @@ export const getLastDayTimmings = async (companyId, employeeId) => {
     const timezoneDoc = await collections.details.findOne({});
     const tz = (timezoneDoc && timezoneDoc.timeZone) || "UTC";
 
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({ clerkUserId: employeeId });
     if (!employee)
       return { done: false, error: "Employee not found in this company." };
 
@@ -1440,5 +1428,81 @@ export const getLastDayTimmings = async (companyId, employeeId) => {
     }
   } catch (error) {
     return { done: false, error: error.message || "Internal server error" };
+  }
+};
+
+export const getNextHoliday = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find the nearest upcoming holiday with status Active
+    const nextHoliday = await collections.holidays.findOne(
+      {
+        date: { $gte: today },
+        $or: [
+          { status: "Active" },
+          { isActive: true },
+        ],
+      },
+      { sort: { date: 1 } }
+    );
+
+    if (!nextHoliday) {
+      return { done: true, data: null };
+    }
+
+    return {
+      done: true,
+      data: {
+        title: nextHoliday.title || nextHoliday.name || "Holiday",
+        date: nextHoliday.date,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching next holiday:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+export const getLeavePolicy = async (companyId, employeeId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    // Get employee to know department/designation for policy filtering
+    const employee = await collections.employees.findOne(
+      { clerkUserId: employeeId },
+      { projection: { department: 1, designation: 1 } }
+    );
+
+    // Find policies that apply to this employee (applyToAll=true or matching department)
+    const policies = await collections.policy
+      .find({
+        $or: [
+          { applyToAll: true },
+          ...(employee?.department
+            ? [{ "assignTo.departmentId": employee.department }]
+            : []),
+        ],
+      })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(5)
+      .toArray();
+
+    // Get the latest update date
+    const latestPolicy = policies[0];
+    const lastUpdated = latestPolicy?.updatedAt || latestPolicy?.createdAt || null;
+
+    return {
+      done: true,
+      data: {
+        count: policies.length,
+        lastUpdated,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching leave policy:", error);
+    return { done: false, error: error.message };
   }
 };

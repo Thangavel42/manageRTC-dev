@@ -3,6 +3,9 @@ z-docs
 react-org
 .claude
 .claudes
+# Private deployment guides (contain secrets)
+/deployment_guide
+old_db
 # Build outputs
 dist/
 build/

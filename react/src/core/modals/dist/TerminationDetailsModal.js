@@ -1,7 +1,8 @@
 "use strict";
 exports.__esModule = true;
-var react_1 = require("react");
 var dayjs_1 = require("dayjs");
+var react_1 = require("react");
+var designationUtils_1 = require("../../utils/designationUtils");
 var imageWithBasePath_1 = require("../common/imageWithBasePath");
 var TerminationDetailsModal = function (_a) {
     var termination = _a.termination, _b = _a.modalId, modalId = _b === void 0 ? "view_termination_details" : _b;
@@ -33,19 +34,6 @@ var TerminationDetailsModal = function (_a) {
                     react_1["default"].createElement("div", { className: "modal-footer" },
                         react_1["default"].createElement("button", { type: "button", className: "btn btn-primary", "data-bs-dismiss": "modal" }, "Close"))))));
     }
-    // Status badge rendering
-    var getStatusBadge = function (status) {
-        var statusMap = {
-            pending: { className: "badge badge-soft-warning", text: "Pending" },
-            processed: { className: "badge badge-soft-success", text: "Processed" },
-            cancelled: { className: "badge badge-soft-danger", text: "Cancelled" }
-        };
-        var statusInfo = statusMap[(status === null || status === void 0 ? void 0 : status.toLowerCase()) || ''] || {
-            className: "badge badge-soft-secondary",
-            text: status || "Unknown"
-        };
-        return react_1["default"].createElement("span", { className: statusInfo.className }, statusInfo.text);
-    };
     return (react_1["default"].createElement("div", { className: "modal fade", id: modalId },
         react_1["default"].createElement("div", { className: "modal-dialog modal-dialog-centered modal-lg" },
             react_1["default"].createElement("div", { className: "modal-content" },
@@ -61,7 +49,7 @@ var TerminationDetailsModal = function (_a) {
                                     react_1["default"].createElement("div", { className: "avatar avatar-lg me-3" }, termination.employeeImage && termination.employeeImage.trim() !== '' ? (react_1["default"].createElement(imageWithBasePath_1["default"], { src: termination.employeeImage, className: "rounded-circle img-fluid", alt: displayName, isLink: true })) : (react_1["default"].createElement("div", { className: "avatar-title bg-danger-transparent rounded-circle text-danger" }, displayName.charAt(0).toUpperCase()))),
                                     react_1["default"].createElement("div", null,
                                         react_1["default"].createElement("h5", { className: "mb-1" }, displayName),
-                                        react_1["default"].createElement("p", { className: "text-muted mb-0" }, termination.department || "N/A"))),
+                                        react_1["default"].createElement("p", { className: "text-muted mb-0" }, termination.department || termination.departmentId || "N/A"))),
                                 termination.status && (react_1["default"].createElement("div", null, (function () {
                                     var _a;
                                     var statusMap = {
@@ -81,13 +69,13 @@ var TerminationDetailsModal = function (_a) {
                                     react_1["default"].createElement("div", { className: "row" },
                                         react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
                                             react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Employee ID"),
-                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.employeeId || "N/A")),
+                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.employeeId || termination.employee_id || "N/A")),
                                         react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
                                             react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Department"),
-                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.department || "N/A")),
+                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.department || termination.departmentId || "N/A")),
                                         termination.designation && (react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
                                             react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Designation"),
-                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.designation))),
+                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, designationUtils_1.resolveDesignation(termination.designation, 'N/A')))),
                                         react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
                                             react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Termination Type"),
                                             react_1["default"].createElement("p", { className: "fw-medium mb-0" },
@@ -107,6 +95,12 @@ var TerminationDetailsModal = function (_a) {
                                             react_1["default"].createElement("p", { className: "fw-medium mb-0" },
                                                 react_1["default"].createElement("i", { className: "ti ti-calendar-check me-1 text-gray-5" }),
                                                 dayjs_1["default"](termination.lastWorkingDate).format("DD MMM YYYY")))),
+                                        termination.processedBy && (react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
+                                            react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Processed By"),
+                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, termination.processedBy))),
+                                        termination.processedAt && (react_1["default"].createElement("div", { className: "col-md-6 mb-3" },
+                                            react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Processed At"),
+                                            react_1["default"].createElement("p", { className: "fw-medium mb-0" }, dayjs_1["default"](termination.processedAt).format("DD MMM YYYY")))),
                                         termination.reason && (react_1["default"].createElement("div", { className: "col-md-12 mb-0" },
                                             react_1["default"].createElement("label", { className: "form-label text-muted mb-1" }, "Reason"),
                                             react_1["default"].createElement("p", { className: "mb-0" }, termination.reason))))))))),

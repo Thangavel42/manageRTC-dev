@@ -3,9 +3,9 @@
  * Tests for attendance REST API hook functionality
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { useAttendanceREST, formatAttendanceDate, formatAttendanceTime, formatHours, toTableFormat } from '../useAttendanceREST';
-import { get, post, put, del as apiDel } from '../../services/api';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { del as apiDel, get, post, put } from '../../services/api';
+import { formatAttendanceDate, formatAttendanceTime, formatHours, toTableFormat, useAttendanceREST } from '../useAttendanceREST';
 
 // Mock the API service
 jest.mock('../../services/api', () => ({
@@ -109,7 +109,7 @@ describe('useAttendanceREST Hook', () => {
       });
 
       expect(get).toHaveBeenCalledWith('/attendance', {
-        params: ''
+        params: undefined
       });
       expect(result.current.attendance).toEqual(mockAttendanceData);
       expect(result.current.loading).toBe(false);
@@ -192,7 +192,7 @@ describe('useAttendanceREST Hook', () => {
       });
 
       expect(get).toHaveBeenCalledWith('/attendance/my', {
-        params: ''
+        params: undefined
       });
       expect(result.current.myAttendance).toEqual(mockAttendanceData);
     });
@@ -314,7 +314,7 @@ describe('useAttendanceREST Hook', () => {
 
       const { result } = renderHook(() => useAttendanceREST());
 
-      const success = act(async () => {
+      const success = await act(async () => {
         return await result.current.clockOut('att-001');
       });
 
@@ -357,7 +357,7 @@ describe('useAttendanceREST Hook', () => {
       });
 
       expect(get).toHaveBeenCalledWith('/attendance/stats', {
-        params: ''
+        params: undefined
       });
       expect(result.current.stats).toEqual(mockStats);
     });

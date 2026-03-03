@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
+import { all_routes } from "../router/all_routes";
 
 // API Base URL
 const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
@@ -335,7 +335,7 @@ const MandatoryPermissionsPage = () => {
     return result;
   };
 
-  const findPageById = (pageId: string): PagePermission | null => {
+  const _findPageById = (pageId: string): PagePermission | null => {
     for (const cat of categoryTree) {
       const directChild = cat.directChildren.find(p => p._id === pageId);
       if (directChild) return directChild;

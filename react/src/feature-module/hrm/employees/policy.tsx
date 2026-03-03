@@ -1,15 +1,17 @@
 import { DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import Table from "../../../core/common/dataTable/index";
 import PredefinedDateRanges from '../../../core/common/datePicker';
 import Footer from "../../../core/common/footer";
+import { useAuth } from '../../../hooks/useAuth';
 import { useDepartmentsREST } from "../../../hooks/useDepartmentsREST";
 import { useDesignationsREST } from "../../../hooks/useDesignationsREST";
-import { PolicyAssignment, Policy as PolicyType, usePoliciesREST } from "../../../hooks/usePoliciesREST";
+import { Policy as PolicyType, PolicyAssignment, usePoliciesREST } from "../../../hooks/usePoliciesREST";
+import { ApiResponse, get } from "../../../services/api";
 import { hideModal } from '../../../utils/modalUtils';
 
 interface Department {
@@ -37,6 +39,11 @@ const staticOptions = [
 ];
 
 const Policy = () => {
+  // Role-based access control
+  const { role, employeeId: authEmployeeId } = useAuth();
+  const canManagePolicy = ['admin', 'hr', 'superadmin'].includes(role);
+  const isEmployeeOrManager = ['employee', 'manager'].includes(role);
+
   // Local state for UI and form management only
   const [sortedPolicies, setSortedPolicies] = useState<PolicyType[]>([]);
   const [sortOrder, setSortOrder] = useState("");
@@ -53,7 +60,7 @@ const Policy = () => {
 
   // PolicyType Assignment State - Hierarchical toggle-based structure
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);  // Array of department IDs where toggle is ON
-  const [selectedDesignations, setSelectedDesignations] = useState<{[departmentId: string]: string[]}>({});  // Map: deptId -> designationIds[]
+  const [selectedDesignations, setSelectedDesignations] = useState<{ [departmentId: string]: string[] }>({});  // Map: deptId -> designationIds[]
   const [applyToAll, setApplyToAll] = useState<boolean>(false);
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());  // Track which departments are expanded
 
@@ -98,6 +105,60 @@ const Policy = () => {
     loading: designationsLoading,
     fetchDesignations
   } = useDesignationsREST();
+
+  // State for current employee's department/designation (for policy filtering)
+  const [currentEmployee, setCurrentEmployee] = useState<{ departmentId?: string; designationId?: string } | null>(null);
+
+  // Fetch current employee details for policy filtering (direct API call to avoid auto-fetch)
+  useEffect(() => {
+    const loadCurrentEmployee = async () => {
+      if (isEmployeeOrManager && authEmployeeId) {
+        try {
+          const response: ApiResponse<any> = await get(`/employees/${authEmployeeId}`);
+          if (response.success && response.data) {
+            setCurrentEmployee({
+              departmentId: response.data.departmentId,
+              designationId: response.data.designationId
+            });
+          }
+        } catch (err) {
+          console.error('Failed to fetch current employee:', err);
+        }
+      }
+    };
+    loadCurrentEmployee();
+  }, [isEmployeeOrManager, authEmployeeId]);
+
+  // Filter policies for employees/managers - only show policies assigned to them
+  const filteredPolicies = useMemo(() => {
+    if (!isEmployeeOrManager || !currentEmployee) {
+      // Admins/HR see all policies
+      return policies;
+    }
+
+    return policies.filter((policy) => {
+      // Include if policy applies to all
+      if (policy.applyToAll) return true;
+
+      // Check if policy is assigned to current employee's department/designation
+      if (policy.assignTo && policy.assignTo.length > 0) {
+        return policy.assignTo.some((assignment) => {
+          if (assignment.departmentId !== currentEmployee.departmentId) {
+            return false;
+          }
+          // If no specific designations, policy applies to whole department
+          if (!assignment.designationIds || assignment.designationIds.length === 0) {
+            return true;
+          }
+          // Check if employee's designation is in the list
+          return currentEmployee.designationId &&
+            assignment.designationIds.includes(currentEmployee.designationId);
+        });
+      }
+
+      return false;
+    });
+  }, [policies, isEmployeeOrManager, currentEmployee]);
 
   // Modal container helper (for DatePicker positioning)
   const getModalContainer = (): HTMLElement => {
@@ -261,62 +322,66 @@ const Policy = () => {
           >
             <i className="ti ti-eye" />
           </Link>
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_policy"
-            onClick={() => {
-              setEditingPolicyType(policy);
-              setApplyToAll(policy.applyToAll || false);
+          {canManagePolicy && (
+            <Link
+              to="#"
+              className="me-2"
+              data-bs-toggle="modal"
+              data-inert={true}
+              data-bs-target="#edit_policy"
+              onClick={() => {
+                setEditingPolicyType(policy);
+                setApplyToAll(policy.applyToAll || false);
 
-              // Initialize from policy assignTo with hierarchical logic
-              if (!policy.applyToAll && policy.assignTo && policy.assignTo.length > 0) {
-                const toggledDepts: string[] = [];
-                const desigMap: {[key: string]: string[]} = {};
-                const expandedSet = new Set<string>();
+                // Initialize from policy assignTo with hierarchical logic
+                if (!policy.applyToAll && policy.assignTo && policy.assignTo.length > 0) {
+                  const toggledDepts: string[] = [];
+                  const desigMap: { [key: string]: string[] } = {};
+                  const expandedSet = new Set<string>();
 
-                policy.assignTo.forEach(a => {
-                  // Empty designationIds = department toggle is ON (all designations)
-                  if (!a.designationIds || a.designationIds.length === 0) {
-                    toggledDepts.push(a.departmentId);
-                  }
-                  // Non-empty designationIds = specific designations selected
-                  else {
-                    desigMap[a.departmentId] = a.designationIds;
-                    expandedSet.add(a.departmentId);  // Auto-expand if has specific designations
-                  }
-                });
+                  policy.assignTo.forEach(a => {
+                    // Empty designationIds = department toggle is ON (all designations)
+                    if (!a.designationIds || a.designationIds.length === 0) {
+                      toggledDepts.push(a.departmentId);
+                    }
+                    // Non-empty designationIds = specific designations selected
+                    else {
+                      desigMap[a.departmentId] = a.designationIds;
+                      expandedSet.add(a.departmentId);  // Auto-expand if has specific designations
+                    }
+                  });
 
-                setSelectedDepartments(toggledDepts);
-                setSelectedDesignations(desigMap);
-                setExpandedDepartments(expandedSet);
-              } else {
-                setSelectedDepartments([]);
-                setSelectedDesignations({});
-                setExpandedDepartments(new Set());
-              }
-            }}
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={() => { setPolicyTypeToDelete(policy); }}
-          >
-            <i className="ti ti-trash" />
-          </Link>
+                  setSelectedDepartments(toggledDepts);
+                  setSelectedDesignations(desigMap);
+                  setExpandedDepartments(expandedSet);
+                } else {
+                  setSelectedDepartments([]);
+                  setSelectedDesignations({});
+                  setExpandedDepartments(new Set());
+                }
+              }}
+            >
+              <i className="ti ti-edit" />
+            </Link>
+          )}
+          {canManagePolicy && (
+            <Link
+              to="#"
+              className="me-2"
+              data-bs-toggle="modal"
+              data-inert={true}
+              data-bs-target="#delete_modal"
+              onClick={() => { setPolicyTypeToDelete(policy); }}
+            >
+              <i className="ti ti-trash" />
+            </Link>
+          )}
         </div>
       ),
     }
   ]
 
-  const policiesWithKey = policies.map((policy, index) => ({
+  const policiesWithKey = filteredPolicies.map((policy, index) => ({
     ...policy,
     key: policy._id || index.toString(),
   }));
@@ -353,15 +418,15 @@ const Policy = () => {
         setPolicyTypeNameError(errorMessage);
       }
     } else if (error.includes("effective date") || error.includes("effectivedate") ||
-               error.includes("in-effect date") || error.includes("date") ||
-               error.includes("future")) {
+      error.includes("in-effect date") || error.includes("date") ||
+      error.includes("future")) {
       if (isEditMode) {
         setEditEffectiveDateError(errorMessage);
       } else {
         setEffectiveDateError(errorMessage);
       }
     } else if (error.includes("department") || error.includes("designation") ||
-               error.includes("apply") || error.includes("assign")) {
+      error.includes("apply") || error.includes("assign")) {
       if (isEditMode) {
         setEditApplyToError(errorMessage);
       } else {
@@ -947,19 +1012,21 @@ const Policy = () => {
                   </ul>
                 </div>
               </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_policy"
-                  className="btn btn-primary d-flex align-items-center"
-                  onClick={resetAddPolicyTypeForm}
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add PolicyType
-                </Link>
-              </div>
+              {canManagePolicy && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    data-bs-toggle="modal"
+                    data-inert={true}
+                    data-bs-target="#add_policy"
+                    className="btn btn-primary d-flex align-items-center"
+                    onClick={resetAddPolicyTypeForm}
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add PolicyType
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2">
                 <CollapseHeader />
               </div>
@@ -967,77 +1034,79 @@ const Policy = () => {
           </div>
           {/* /Breadcrumb */}
 
-          {/* PolicyType Stats Cards */}
-          <div className="row">
-            <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="card bg-comman w-100">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="bg-primary-light rounded-circle p-2">
-                      <i className="ti ti-file-text text-primary fs-20" />
+          {/* PolicyType Stats Cards - Only visible to admin/hr/superadmin */}
+          {canManagePolicy && (
+            <div className="row">
+              <div className="col-xl-3 col-sm-6 col-12 d-flex">
+                <div className="card bg-comman w-100">
+                  <div className="card-body">
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div className="bg-primary-light rounded-circle p-2">
+                        <i className="ti ti-file-text text-primary fs-20" />
+                      </div>
+                      <h5 className="fs-22 fw-semibold text-truncate mb-0">
+                        {stats?.total || 0}
+                      </h5>
                     </div>
-                    <h5 className="fs-22 fw-semibold text-truncate mb-0">
-                      {stats?.total || 0}
-                    </h5>
+                    <div className="d-flex align-items-center justify-content-between mt-3">
+                      <span className="fs-14 fw-medium text-gray">Total Policies</span>
+                    </div>
                   </div>
-                  <div className="d-flex align-items-center justify-content-between mt-3">
-                    <span className="fs-14 fw-medium text-gray">Total Policies</span>
+                </div>
+              </div>
+              <div className="col-xl-3 col-sm-6 col-12 d-flex">
+                <div className="card bg-comman w-100">
+                  <div className="card-body">
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div className="bg-success-light rounded-circle p-2">
+                        <i className="ti ti-circle-check text-success fs-20" />
+                      </div>
+                      <h5 className="fs-22 fw-semibold text-truncate mb-0">
+                        {stats?.active || 0}
+                      </h5>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mt-3">
+                      <span className="fs-14 fw-medium text-gray">Active</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-xl-3 col-sm-6 col-12 d-flex">
+                <div className="card bg-comman w-100">
+                  <div className="card-body">
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div className="bg-danger-light rounded-circle p-2">
+                        <i className="ti ti-circle-x text-danger fs-20" />
+                      </div>
+                      <h5 className="fs-22 fw-semibold text-truncate mb-0">
+                        {stats?.inactive || 0}
+                      </h5>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mt-3">
+                      <span className="fs-14 fw-medium text-gray">Inactive</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-xl-3 col-sm-6 col-12 d-flex">
+                <div className="card bg-comman w-100">
+                  <div className="card-body">
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div className="bg-info-light rounded-circle p-2">
+                        <i className="ti ti-users text-info fs-20" />
+                      </div>
+                      <h5 className="fs-22 fw-semibold text-truncate mb-0">
+                        {stats?.applyToAllCount || 0}
+                      </h5>
+                    </div>
+                    <div className="d-flex align-items-center justify-content-between mt-3">
+                      <span className="fs-14 fw-medium text-gray">Apply To All</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="card bg-comman w-100">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="bg-success-light rounded-circle p-2">
-                      <i className="ti ti-circle-check text-success fs-20" />
-                    </div>
-                    <h5 className="fs-22 fw-semibold text-truncate mb-0">
-                      {stats?.active || 0}
-                    </h5>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mt-3">
-                    <span className="fs-14 fw-medium text-gray">Active</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="card bg-comman w-100">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="bg-danger-light rounded-circle p-2">
-                      <i className="ti ti-circle-x text-danger fs-20" />
-                    </div>
-                    <h5 className="fs-22 fw-semibold text-truncate mb-0">
-                      {stats?.inactive || 0}
-                    </h5>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mt-3">
-                    <span className="fs-14 fw-medium text-gray">Inactive</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-xl-3 col-sm-6 col-12 d-flex">
-              <div className="card bg-comman w-100">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="bg-info-light rounded-circle p-2">
-                      <i className="ti ti-users text-info fs-20" />
-                    </div>
-                    <h5 className="fs-22 fw-semibold text-truncate mb-0">
-                      {stats?.applyToAllCount || 0}
-                    </h5>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mt-3">
-                    <span className="fs-14 fw-medium text-gray">Apply To All</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
           {/* /PolicyType Stats Cards */}
 
           {/* PolicyType list */}
@@ -1065,9 +1134,8 @@ const Policy = () => {
                   >
                     Department
                     {selectedFilterDepartment && selectedFilterDepartment !== "Select"
-                      ? `: ${
-                          options.find(opt => opt.value === selectedFilterDepartment)?.label || "None"
-                        }`
+                      ? `: ${options.find(opt => opt.value === selectedFilterDepartment)?.label || "None"
+                      }`
                       : ": None"}
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
@@ -1299,46 +1367,46 @@ const Policy = () => {
                                   {deptDesignations.length > 0 && (
                                     <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
                                       <div className="p-3 bg-white border-top">
-                                      <small className="text-muted d-block mb-2">
-                                        {isDeptToggled ? (
-                                          <span className="text-success">
-                                            <i className="ti ti-check me-1"></i>
-                                            Department toggle is ON - all designations included
-                                          </span>
-                                        ) : (
-                                          <>
-                                            <i className="ti ti-info-circle me-1"></i>
-                                            Select specific designations (or toggle department for all)
-                                          </>
-                                        )}
-                                      </small>
-                                      <div className="row">
-                                        {deptDesignations.map(desig => (
-                                          <div key={desig._id} className="col-md-6 mb-2">
-                                            <div className="form-check">
-                                              <input
-                                                className="form-check-input"
-                                                type="checkbox"
-                                                id={`desig-${desig._id}`}
-                                                checked={isDeptToggled || selectedDesigs.includes(desig._id)}
-                                                onChange={(e) => {
-                                                  if (!isDeptToggled) {
-                                                    handleDesignationToggle(dept._id, desig._id, e.target.checked);
-                                                  }
-                                                }}
-                                                disabled={isDeptToggled}
-                                              />
-                                              <label
-                                                className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`}
-                                                htmlFor={`desig-${desig._id}`}
-                                              >
-                                                {desig.designation}
-                                              </label>
+                                        <small className="text-muted d-block mb-2">
+                                          {isDeptToggled ? (
+                                            <span className="text-success">
+                                              <i className="ti ti-check me-1"></i>
+                                              Department toggle is ON - all designations included
+                                            </span>
+                                          ) : (
+                                            <>
+                                              <i className="ti ti-info-circle me-1"></i>
+                                              Select specific designations (or toggle department for all)
+                                            </>
+                                          )}
+                                        </small>
+                                        <div className="row">
+                                          {deptDesignations.map(desig => (
+                                            <div key={desig._id} className="col-md-6 mb-2">
+                                              <div className="form-check">
+                                                <input
+                                                  className="form-check-input"
+                                                  type="checkbox"
+                                                  id={`desig-${desig._id}`}
+                                                  checked={isDeptToggled || selectedDesigs.includes(desig._id)}
+                                                  onChange={(e) => {
+                                                    if (!isDeptToggled) {
+                                                      handleDesignationToggle(dept._id, desig._id, e.target.checked);
+                                                    }
+                                                  }}
+                                                  disabled={isDeptToggled}
+                                                />
+                                                <label
+                                                  className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`}
+                                                  htmlFor={`desig-${desig._id}`}
+                                                >
+                                                  {desig.designation}
+                                                </label>
+                                              </div>
                                             </div>
-                                          </div>
-                                        ))}
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
                                     </div>
                                   )}
 
@@ -1596,46 +1664,46 @@ const Policy = () => {
                                   {deptDesignations.length > 0 && (
                                     <div className={`designation-collapse ${isExpanded ? 'show' : ''}`}>
                                       <div className="p-3 bg-white border-top">
-                                      <small className="text-muted d-block mb-2">
-                                        {isDeptToggled ? (
-                                          <span className="text-success">
-                                            <i className="ti ti-check me-1"></i>
-                                            Department toggle is ON - all designations included
-                                          </span>
-                                        ) : (
-                                          <>
-                                            <i className="ti ti-info-circle me-1"></i>
-                                            Select specific designations (or toggle department for all)
-                                          </>
-                                        )}
-                                      </small>
-                                      <div className="row">
-                                        {deptDesignations.map(desig => (
-                                          <div key={desig._id} className="col-md-6 mb-2">
-                                            <div className="form-check">
-                                              <input
-                                                className="form-check-input"
-                                                type="checkbox"
-                                                id={`desig-edit-${desig._id}`}
-                                                checked={isDeptToggled || selectedDesigs.includes(desig._id)}
-                                                onChange={(e) => {
-                                                  if (!isDeptToggled) {
-                                                    handleDesignationToggle(dept._id, desig._id, e.target.checked);
-                                                  }
-                                                }}
-                                                disabled={isDeptToggled}
-                                              />
-                                              <label
-                                                className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`}
-                                                htmlFor={`desig-edit-${desig._id}`}
-                                              >
-                                                {desig.designation}
-                                              </label>
+                                        <small className="text-muted d-block mb-2">
+                                          {isDeptToggled ? (
+                                            <span className="text-success">
+                                              <i className="ti ti-check me-1"></i>
+                                              Department toggle is ON - all designations included
+                                            </span>
+                                          ) : (
+                                            <>
+                                              <i className="ti ti-info-circle me-1"></i>
+                                              Select specific designations (or toggle department for all)
+                                            </>
+                                          )}
+                                        </small>
+                                        <div className="row">
+                                          {deptDesignations.map(desig => (
+                                            <div key={desig._id} className="col-md-6 mb-2">
+                                              <div className="form-check">
+                                                <input
+                                                  className="form-check-input"
+                                                  type="checkbox"
+                                                  id={`desig-edit-${desig._id}`}
+                                                  checked={isDeptToggled || selectedDesigs.includes(desig._id)}
+                                                  onChange={(e) => {
+                                                    if (!isDeptToggled) {
+                                                      handleDesignationToggle(dept._id, desig._id, e.target.checked);
+                                                    }
+                                                  }}
+                                                  disabled={isDeptToggled}
+                                                />
+                                                <label
+                                                  className={`form-check-label ${isDeptToggled ? 'text-muted' : ''}`}
+                                                  htmlFor={`desig-edit-${desig._id}`}
+                                                >
+                                                  {desig.designation}
+                                                </label>
+                                              </div>
                                             </div>
-                                          </div>
-                                        ))}
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
                                     </div>
                                   )}
 

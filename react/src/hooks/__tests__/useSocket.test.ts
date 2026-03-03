@@ -3,9 +3,9 @@
  * Tests for Socket.IO connection and event handling
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { useSocket, useSocketAttendance } from '../useSocket';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { io as ioClient } from 'socket.io-client';
+import { useSocket, useSocketAttendance } from '../useSocket';
 
 // Mock socket.io-client
 jest.mock('socket.io-client', () => ({
@@ -203,7 +203,7 @@ describe('useSocket Hook', () => {
       renderHook(() => useSocketAttendance('test-token', {
         onClockIn: clockInHandler,
         onClockOut: clockOutHandler
-      });
+      }));
 
       await waitFor(() => {
         expect(clockInHandler).toHaveBeenCalledWith({ attendanceId: 'ATT-001' });

@@ -1,4 +1,4 @@
-import { DatePicker, message, Spin } from "antd";
+import { DatePicker, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../../core/common/collapse-header/collapse-header";
@@ -7,13 +7,98 @@ import Table from "../../../../core/common/dataTable/index";
 import Footer from "../../../../core/common/footer";
 import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
 import { useAuth } from "../../../../hooks/useAuth";
+import { useAutoReloadActions } from "../../../../hooks/useAutoReload";
 import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
-import { statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveType } from "../../../../hooks/useLeaveREST";
+import { statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveTypeCode } from "../../../../hooks/useLeaveREST";
+import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
 import { all_routes } from "../../../router/all_routes";
 
-const LoadingSpinner = () => (
-  <div style={{ textAlign: 'center', padding: '50px' }}>
-    <Spin size="large" />
+// Skeleton Loaders
+const StatCardSkeleton = () => (
+  <div className="card border border-light shadow-sm">
+    <div className="card-body">
+      <style>{`
+        @keyframes skeleton-loading {
+          0% { background-color: #e0e0e0; }
+          50% { background-color: #f0f0f0; }
+          100% { background-color: #e0e0e0; }
+        }
+        .skeleton-text {
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          border-radius: 4px;
+        }
+        .skeleton-stat-label {
+          width: 120px;
+          height: 14px;
+          margin-bottom: 8px;
+        }
+        .skeleton-stat-value {
+          width: 60px;
+          height: 32px;
+        }
+        .skeleton-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 8px;
+        }
+      `}</style>
+      <div className="d-flex align-items-center justify-content-between">
+        <div>
+          <div className="skeleton-text skeleton-stat-label"></div>
+          <div className="skeleton-text skeleton-stat-value"></div>
+        </div>
+        <div className="skeleton-text skeleton-icon"></div>
+      </div>
+    </div>
+  </div>
+);
+
+const TeamMemberCardSkeleton = () => (
+  <div className="col-xl-4 col-md-6 mb-3">
+    <div className="d-flex align-items-center p-3 border rounded">
+      <style>{`
+        .skeleton-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+        }
+        .skeleton-team-name {
+          width: 140px;
+          height: 16px;
+          margin-bottom: 8px;
+        }
+        .skeleton-team-info {
+          width: 180px;
+          height: 14px;
+        }
+        .skeleton-badge {
+          width: 70px;
+          height: 24px;
+          border-radius: 4px;
+        }
+      `}</style>
+      <div className="skeleton-text skeleton-avatar me-3"></div>
+      <div className="flex-grow-1">
+        <div className="skeleton-text skeleton-team-name"></div>
+        <div className="skeleton-text skeleton-team-info"></div>
+      </div>
+      <div className="skeleton-text skeleton-badge"></div>
+    </div>
+  </div>
+);
+
+const TableSkeleton = () => (
+  <div className="p-4">
+    <style>{`
+      .skeleton-table-row {
+        height: 60px;
+        margin-bottom: 8px;
+        border-radius: 4px;
+      }
+    `}</style>
+    {Array.from({ length: 5 }).map((_, i) => (
+      <div key={i} className="skeleton-text skeleton-table-row"></div>
+    ))}
   </div>
 );
 
@@ -48,7 +133,7 @@ const StatusBadge = ({ status }: { status: LeaveStatus }) => {
 
 // Leave type badge component
 const LeaveTypeBadge = ({ leaveType, leaveTypeDisplayMap }: { leaveType: string; leaveTypeDisplayMap: Record<string, string> }) => {
-  const displayType = leaveTypeDisplayMap[leaveType] || leaveType;
+  const displayType = leaveTypeDisplayMap[leaveType?.toLowerCase?.()] || leaveType;
   return (
     <span className="fs-14 fw-medium d-flex align-items-center">
       {displayType}
@@ -62,6 +147,16 @@ const ManagerLeaveDashboard = () => {
   const { role, userId } = useAuth();
   const { leaves, loading, fetchLeaves, approveLeave, rejectLeave, managerActionLeave, fetchStats, leaveTypeDisplayMap } = useLeaveREST();
   const { employees, fetchEmployees } = useEmployeesREST();
+  const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
+
+  // Auto-reload hook for refetching after actions
+  const { refetchAfterAction } = useAutoReloadActions({
+    fetchFn: () => {
+      fetchLeaves(filters);
+      // Stats will be recalculated via useEffect when leaves change
+    },
+    debug: true,
+  });
 
   // Stats state
   const [stats, setStats] = useState({
@@ -75,7 +170,7 @@ const ManagerLeaveDashboard = () => {
   // Local state for filters
   const [filters, setFilters] = useState<{
     status?: LeaveStatus;
-    leaveType?: LeaveType;
+    leaveType?: LeaveTypeCode;
     page: number;
     limit: number;
     dateRange?: [any, any];
@@ -99,6 +194,7 @@ const ManagerLeaveDashboard = () => {
   useEffect(() => {
     fetchEmployees({ status: 'Active' });
     fetchLeaves(filters);
+    fetchActiveLeaveTypes();
   }, []);
 
   // Fetch stats when leaves change
@@ -175,23 +271,51 @@ const ManagerLeaveDashboard = () => {
     return new Map<string, string>(entries);
   }, [employees]);
 
+  // Employee data map for avatar, role, etc.
+  const employeeDataMap = useMemo(() => {
+    const map = new Map<string, { avatar?: string; avatarUrl?: string; profileImage?: string; role?: string; designation?: string }>();
+    employees.forEach(emp => {
+      map.set(emp.employeeId, {
+        avatar: emp.avatar,
+        avatarUrl: emp.avatarUrl || emp.profileImage,
+        profileImage: emp.profileImage,
+        role: emp.role,
+        designation: emp.designation,
+      });
+    });
+    return map;
+  }, [employees]);
+
   // Transform leaves for table display
   const data = useMemo(() => {
     return teamLeaves.map((leave) => {
       const employeeName = employeeNameById.get(leave.employeeId) || leave.employeeName || "Unknown";
+      const employeeData = employeeDataMap.get(leave.employeeId);
       const managerStatusValue = leave.managerStatus || 'pending';
       const statusValue = leave.finalStatus || leave.status || 'pending';
       const startDate = new Date(leave.startDate);
       const endDate = new Date(leave.endDate);
 
+      // Get avatar URL (priority: avatarUrl > profileImage > avatar > default)
+      const avatarUrl = employeeData?.avatarUrl || employeeData?.profileImage || employeeData?.avatar;
+      // Get role or designation (priority: role > designation > "Employee")
+      // designation may be a populated MongoDB object with a .designation string field
+      const rawDesignation = employeeData?.designation;
+      const designationStr = typeof rawDesignation === 'object' && rawDesignation !== null
+        ? (rawDesignation as any).designation || (rawDesignation as any).name || ''
+        : rawDesignation;
+      const roleOrDesignation = employeeData?.role || designationStr || "Employee";
+
       return {
         key: leave._id,
         _id: leave._id,
-        Image: "user-32.jpg",
+        Image: avatarUrl || "user-32.jpg", // Use employee avatar or fallback to default
         Employee: employeeName,
-        Role: "Employee",
+        Role: roleOrDesignation,
+        EmpId: leave.employeeId || "-",
         ReportingManager: leave.reportingManagerName || "-",
         LeaveType: leave.leaveType,
+        LeaveTypeName: leave.leaveTypeName, // Display name from backend (ObjectId system)
         From: startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
         To: endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
         NoOfDays: `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
@@ -200,7 +324,7 @@ const ManagerLeaveDashboard = () => {
         rawLeave: leave,
       };
     });
-  }, [teamLeaves, employeeNameById]);
+  }, [teamLeaves, employeeNameById, employeeDataMap]);
 
   // Helper function to format dates
   function formatDate(dateString: string): string {
@@ -219,7 +343,7 @@ const ManagerLeaveDashboard = () => {
     const success = await managerActionLeave(id, 'approved');
     if (success) {
       message.success('Leave approved successfully');
-      fetchLeaves(filters);
+      refetchAfterAction();
     }
   };
 
@@ -242,7 +366,7 @@ const ManagerLeaveDashboard = () => {
     if (success) {
       message.success('Leave rejected successfully');
       setRejectModal({ show: false, leaveId: null, reason: '' });
-      fetchLeaves(filters);
+      refetchAfterAction();
     }
   };
 
@@ -254,13 +378,12 @@ const ManagerLeaveDashboard = () => {
     { value: "rejected", label: "Rejected" },
   ];
 
-  // Leave type options
-  const leaveTypeOptions = [
+  // Dynamic leave type options built from active leave types in database
+  // Use ObjectId (value) for filtering - backend supports both leaveType (legacy) and leaveTypeId (new)
+  const leaveTypeOptions = useMemo(() => [
     { value: "", label: "All Types" },
-    { value: "sick", label: "Medical Leave" },
-    { value: "casual", label: "Casual Leave" },
-    { value: "earned", label: "Annual Leave" },
-  ];
+    ...activeOptions.map(option => ({ value: option.value, label: String(option.label) })),
+  ], [activeOptions]);
 
   // Table columns
   const columns = [
@@ -271,17 +394,43 @@ const ManagerLeaveDashboard = () => {
       render: (employee: string, record: any) => (
         <div className="d-flex align-items-center">
           <span className="avatar avatar-md me-2">
-            <ImageWithBasePath src="assets/img/users/user-32.jpg" className="rounded-circle" alt="img" />
+            {record.Image && record.Image !== "user-32.jpg" ? (
+              <img
+                src={record.Image}
+                className="rounded-circle"
+                alt="img"
+                onError={(e) => { (e.target as HTMLImageElement).src = 'assets/img/users/user-32.jpg'; }}
+              />
+            ) : (
+              <ImageWithBasePath src="assets/img/users/user-32.jpg" className="rounded-circle" alt="img" />
+            )}
           </span>
-          <span>{employee}</span>
+          <div>
+            <span className="d-block">{employee}</span>
+            <span className="fs-12 text-muted">{record.Role}</span>
+          </div>
         </div>
       ),
     },
     {
+      title: "Emp ID",
+      dataIndex: "EmpId",
+      width: 100,
+      sorter: (a: any, b: any) => (a.EmpId || '').localeCompare(b.EmpId || ''),
+    },
+    {
       title: "Leave Type",
       dataIndex: "LeaveType",
-      render: (leaveType: string) => <LeaveTypeBadge leaveType={leaveType} leaveTypeDisplayMap={leaveTypeDisplayMap} />,
-      sorter: (a: any, b: any) => a.LeaveType.length - b.LeaveType.length,
+      render: (_: string, record: any) => {
+        // Use leaveTypeName from backend (ObjectId system) with fallback to map for backward compatibility
+        const displayName = record.LeaveTypeName || leaveTypeDisplayMap[record.LeaveType?.toLowerCase?.()] || record.LeaveType;
+        return (
+          <span className="fs-14 fw-medium d-flex align-items-center">
+            {displayName}
+          </span>
+        );
+      },
+      sorter: (a: any, b: any) => (a.LeaveTypeName || '').localeCompare(b.LeaveTypeName || ''),
     },
     {
       title: "From",
@@ -335,10 +484,6 @@ const ManagerLeaveDashboard = () => {
     },
   ];
 
-  if (loading && leaves.length === 0) {
-    return <LoadingSpinner />;
-  }
-
   return (
     <>
       <div className="page-wrapper">
@@ -370,66 +515,78 @@ const ManagerLeaveDashboard = () => {
 
           {/* Stats Cards */}
           <div className="row">
-            <div className="col-xl-3 col-md-6">
-              <div className="card bg-primary-img">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <p className="mb-1">Team Size</p>
-                      <h4 className="mb-0">{stats.teamSize}</h4>
-                    </div>
-                    <div className="avatar avatar-md bg-primary-transparent rounded">
-                      <i className="ti ti-users fs-24 text-primary" />
+            {(loading || employees.length === 0) ? (
+              <>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="col-xl-3 col-md-6">
+                    <StatCardSkeleton />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <div className="col-xl-3 col-md-6">
+                  <div className="card bg-primary-img">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div>
+                          <p className="mb-1">Team Size</p>
+                          <h4 className="mb-0">{stats.teamSize}</h4>
+                        </div>
+                        <div className="avatar avatar-md bg-primary-transparent rounded">
+                          <i className="ti ti-users fs-24 text-primary" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-xl-3 col-md-6">
-              <div className="card bg-warning-img">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <p className="mb-1">On Leave Today</p>
-                      <h4 className="mb-0">{stats.onLeaveToday}</h4>
-                    </div>
-                    <div className="avatar avatar-md bg-warning-transparent rounded">
-                      <i className="ti ti-calendar-event fs-24 text-warning" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-xl-3 col-md-6">
-              <div className="card bg-info-img">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <p className="mb-1">Pending Approvals</p>
-                      <h4 className="mb-0">{stats.pendingApprovals}</h4>
-                    </div>
-                    <div className="avatar avatar-md bg-info-transparent rounded">
-                      <i className="ti ti-clock-hour fs-24 text-info" />
+                <div className="col-xl-3 col-md-6">
+                  <div className="card bg-warning-img">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div>
+                          <p className="mb-1">On Leave Today</p>
+                          <h4 className="mb-0">{stats.onLeaveToday}</h4>
+                        </div>
+                        <div className="avatar avatar-md bg-warning-transparent rounded">
+                          <i className="ti ti-calendar-event fs-24 text-warning" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-xl-3 col-md-6">
-              <div className="card bg-success-img">
-                <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <p className="mb-1">Approved This Month</p>
-                      <h4 className="mb-0">{stats.approvedThisMonth}</h4>
-                    </div>
-                    <div className="avatar avatar-md bg-success-transparent rounded">
-                      <i className="ti ti-check-circle fs-24 text-success" />
+                <div className="col-xl-3 col-md-6">
+                  <div className="card bg-info-img">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div>
+                          <p className="mb-1">Pending Approvals</p>
+                          <h4 className="mb-0">{stats.pendingApprovals}</h4>
+                        </div>
+                        <div className="avatar avatar-md bg-info-transparent rounded">
+                          <i className="ti ti-clock-hour-4 fs-24 text-info" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+                <div className="col-xl-3 col-md-6">
+                  <div className="card bg-success-img">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div>
+                          <p className="mb-1">Approved This Month</p>
+                          <h4 className="mb-0">{stats.approvedThisMonth}</h4>
+                        </div>
+                        <div className="avatar avatar-md bg-success-transparent rounded">
+                          <i className="ti ti-circle-check fs-24 text-success" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Team Members on Leave Today */}
@@ -437,11 +594,17 @@ const ManagerLeaveDashboard = () => {
             <div className="card-header d-flex align-items-center justify-content-between">
               <h5 className="mb-0">Team Members on Leave Today</h5>
               <span className="badge bg-primary-transparent">
-                {stats.onLeaveToday} member{stats.onLeaveToday !== 1 ? 's' : ''}
+                {(loading || employees.length === 0) ? 0 : stats.onLeaveToday} member{stats.onLeaveToday !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="card-body">
-              {stats.onLeaveToday > 0 ? (
+              {(loading || employees.length === 0) ? (
+                <div className="row">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <TeamMemberCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : stats.onLeaveToday > 0 ? (
                 <div className="row">
                   {teamLeaves
                     .filter(leave => {
@@ -463,7 +626,7 @@ const ManagerLeaveDashboard = () => {
                             <div className="flex-grow-1">
                               <h6 className="mb-1">{employeeName}</h6>
                               <p className="text-muted mb-0 small">
-                                {leaveTypeDisplayMap[leave.leaveType] || leave.leaveType} - {leave.duration} day{leave.duration > 1 ? 's' : ''}
+                                {leave.leaveTypeName || leaveTypeDisplayMap[leave.leaveType] || leave.leaveType} - {leave.duration} day{leave.duration > 1 ? 's' : ''}
                               </p>
                             </div>
                             <span className="badge bg-success">On Leave</span>
@@ -502,7 +665,7 @@ const ManagerLeaveDashboard = () => {
                   <CommonSelect
                     className="select"
                     options={leaveTypeOptions}
-                    onChange={(option) => setFilters({ ...filters, leaveType: option.value as LeaveType, page: 1 })}
+                    onChange={(option) => setFilters({ ...filters, leaveType: option.value as LeaveTypeCode, page: 1 })}
                   />
                 </div>
                 <div>

@@ -175,6 +175,31 @@ const Promotion = () => {
   // Track employees already promoted (for duplicate check)
   const [promotedEmployeeIds] = useState<Set<string>>(new Set());
 
+  const resolveDesignationName = useCallback(
+    (designationId?: string, fallback?: string) => {
+      if (fallback && fallback.trim()) return fallback;
+      if (!designationId) return fallback || "N/A";
+
+      const key = typeof designationId === "string" ? designationId : String(designationId);
+
+      const fromLookup = designationLookup[key];
+      if (fromLookup) return fromLookup;
+
+      const found = designations.find(
+        (d: any) => {
+          const did = d.id || d._id || (d as any).designationId;
+          return did && String(did) === key;
+        }
+      );
+
+      if (found?.name) return found.name;
+      if ((found as any)?.designation) return (found as any).designation;
+
+      return fallback || "N/A";
+    },
+    [designationLookup, designations]
+  );
+
   // Validation errors for Edit Promotion
   const [editErrors, setEditErrors] = useState({
     departmentId: "",
@@ -351,7 +376,19 @@ const Promotion = () => {
   useEffect(() => {
     if (hookEmployees && hookEmployees.length > 0) {
       console.log("[Promotion] Syncing hook employees to local state:", hookEmployees.length);
-      const transformedEmployees = hookEmployees.map(emp => ({
+
+      // Exclude employees in resignation/on-notice/terminated/inactive/on-leave states from promotion eligibility
+      const eligible = hookEmployees.filter((emp) => {
+        const status = (emp.status || '').toLowerCase();
+        const employmentStatus = (emp as any).employmentStatus ? String((emp as any).employmentStatus).toLowerCase() : '';
+
+        const disallowed = new Set(['on notice', 'resigned', 'terminated', 'inactive', 'on leave']);
+        if (disallowed.has(status) || disallowed.has(employmentStatus)) return false;
+
+        return status === 'active' || employmentStatus === 'probation' || employmentStatus === 'active';
+      });
+
+      const transformedEmployees = eligible.map(emp => ({
         id: emp._id || (emp as any).id,
         name: `${emp.firstName} ${emp.lastName}`,
         email: emp.email,
@@ -917,7 +954,19 @@ const Promotion = () => {
     // Find the original API promotion data
     const apiPromo = apiPromotions.find(p => p._id === promotion._id);
     if (apiPromo) {
-      setViewingPromotion(apiPromo);
+      const enriched: APIPromotion = {
+        ...apiPromo,
+        promotionFrom: {
+          ...apiPromo.promotionFrom,
+          designation: resolveDesignationName(apiPromo.promotionFrom?.designationId, apiPromo.promotionFrom?.designation),
+        },
+        promotionTo: {
+          ...apiPromo.promotionTo,
+          designation: resolveDesignationName(apiPromo.promotionTo?.designationId, apiPromo.promotionTo?.designation),
+        },
+      };
+
+      setViewingPromotion(enriched);
     } else {
       console.error("[Promotion] Could not find API promotion data");
       toast.error("Unable to load promotion details");
@@ -1892,6 +1941,7 @@ const Promotion = () => {
           promotion={viewingPromotion}
           departments={departments}
           designationLookup={designationLookup}
+          designations={designations}
           modalId="view_promotion"
         />
         {/* /View Promotion Detail Modal */}

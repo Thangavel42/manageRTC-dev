@@ -1,14 +1,15 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useUser } from "@clerk/clerk-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import Slider from "react-slick";
+import "slick-carousel/slick/slick-theme.css";
+import "slick-carousel/slick/slick.css";
 import Lightbox from 'yet-another-react-lightbox';
 import "yet-another-react-lightbox/styles.css";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import HashtagHighlighter from "../../components/HashtagHighlighter";
-import Slider from "react-slick";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import { useSocialFeed } from "../../hooks/useSocialFeed";
-import { useUser } from "@clerk/clerk-react";
+import { resolveDesignation } from "../../utils/designationUtils";
 
 interface PostUser {
   id: string;
@@ -1165,7 +1166,7 @@ const SocialFeed = () => {
                                   <Link to="#">{employee.name}</Link>
                                 </h6>
                                 <span className="fs-12 d-block text-muted mb-1">
-                                  {employee.role || employee.designation || 'Employee'}
+                                  {employee.role || resolveDesignation(employee.designation) || 'Employee'}
                                 </span>
                                 <span className="fs-12 d-block">
                                   {employee.postCount || 0} posts • {employee.department || 'General'}
@@ -1361,7 +1362,7 @@ const SocialFeed = () => {
                                 <Link to="#">{employee.name}</Link>
                               </h6>
                               <span className="fs-12 d-block text-muted mb-1">
-                                {employee.role || employee.designation || 'Employee'}
+                                {employee.role || resolveDesignation(employee.designation) || 'Employee'}
                               </span>
                               <span className="fs-12 d-block">
                                 {employee.postCount || 0} posts • {employee.department || 'General'}

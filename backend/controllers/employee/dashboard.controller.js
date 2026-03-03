@@ -1,6 +1,6 @@
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { ObjectId } from "mongodb";
 import * as employeeService from "../../services/employee/dashboard.services.js";
+import { devError, devLog, devWarn } from '../../utils/logger.js';
 
 const employeeDashboardController = (socket, io) => {
     // Correct isDevelopment logic: should check equality, not always true due to ||
@@ -18,15 +18,20 @@ const employeeDashboardController = (socket, io) => {
             devError(`[Employee] Invalid company ID format: ${socket.companyId}`);
             throw new Error("Invalid company ID format");
         }
-        if (socket.userMetadata?.companyId !== socket.companyId) {
+        // Compare companyId: check both 'companyId' and 'company' fields in metadata
+        const metadataCompanyId = socket.userMetadata?.companyId || socket.userMetadata?.company;
+        if (metadataCompanyId !== socket.companyId) {
             devError(
-                `[Employee] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`
+                `[Employee] Company ID mismatch: user metadata has ${metadataCompanyId}, socket has ${socket.companyId}`
             );
             throw new Error("Unauthorized: Company ID mismatch");
         }
-        if (socket.userMetadata?.role !== "employee") {
-            devError(`[Employee] Unauthorized role: ${socket.userMetadata?.role}, employee role required`);
-            throw new Error("Unauthorized: Employee role required");
+        // Case-insensitive role check — HR/admin/manager are also employees and can view their own dashboard
+        const userRole = (socket.userMetadata?.role || '').toLowerCase();
+        const allowedRoles = ["employee", "hr", "admin", "manager"];
+        if (!allowedRoles.includes(userRole)) {
+            devError(`[Employee] Unauthorized role: ${socket.userMetadata?.role}, one of ${allowedRoles.join("|")} required`);
+            throw new Error("Unauthorized: Employee dashboard access required");
         }
         return { companyId: socket.companyId, employeeId: socket.user?.sub };
     };
@@ -399,7 +404,7 @@ devLog("chek-2");
             socket.emit("employee/dashboard/update-task-response", result);
         } catch (err) {
             devLog(err);
-            
+
             socket.emit("employee/dashboard/update-task-response", {
                 done: false,
                 error: err.message || "Unexpected error while updating task."
@@ -533,7 +538,9 @@ devLog("chek-2");
                 notifications,
                 meetings,
                 birthdays,
-                lastDayTimmings
+                lastDayTimmings,
+                nextHoliday,
+                leavePolicy
             ] = await Promise.all([
                 employeeService.getEmployeeDetails(companyId, employeeId),
                 employeeService.getAttendanceStats(companyId, employeeId, year),
@@ -548,12 +555,14 @@ devLog("chek-2");
                 employeeService.getMeetings(companyId, employeeId, "today"),
                 employeeService.getTodaysBirthday(companyId, employeeId),
                 employeeService.getLastDayTimmings(companyId, employeeId),
+                employeeService.getNextHoliday(companyId),
+                employeeService.getLeavePolicy(companyId, employeeId),
             ])
-            
+
             if (!employeeDetails.done){
                 socket.emit("employee/dashboard/get-all-data-response", {
                     done: false,
-                    message: "Employee not found"
+                    error: employeeDetails.error || "Employee not found"
                 })
                 return;
             }
@@ -574,12 +583,14 @@ devLog("chek-2");
                     meetings: meetings.data,
                     birthdays: birthdays.data,
                     lastDayTimmings: lastDayTimmings.data,
+                    nextHoliday: nextHoliday.data,
+                    leavePolicy: leavePolicy.data,
                 }
             })
         } catch (error) {
             socket.emit("employee/dashboard/get-all-data-response", {
                 done: false,
-                error: error.message,
+                error: error.message || "Failed to fetch dashboard data",
             });
         }
     })

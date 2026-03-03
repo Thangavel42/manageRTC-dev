@@ -113,19 +113,25 @@ export const commonSchemas = {
     'date.format': 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)',
   }),
 
-  // Date validation (DD-MM-YYYY)
-  ddmmyyyy: Joi.string()
-    .custom((value, helpers) => {
-      if (value === '' || value === null) return value;
-      const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-      if (!dt.isValid) {
+  // Date validation (DD-MM-YYYY or ISO 8601 format)
+  ddmmyyyy: Joi.alternatives().try(
+    Joi.string()
+      .custom((value, helpers) => {
+        if (value === '' || value === null) return value;
+        // Try DD-MM-YYYY format
+        const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
+        if (dt.isValid) return value;
+        // Try ISO format (ISO 8601 strings from MongoDB)
+        const dtIso = DateTime.fromISO(value, { zone: 'utc' });
+        if (dtIso.isValid) return value;
         return helpers.message('Date must be in DD-MM-YYYY format');
-      }
-      return value;
-    })
-    .messages({
-      'string.base': 'Date must be a string in DD-MM-YYYY format',
-    }),
+      })
+      .messages({
+        'string.base': 'Date must be a string in DD-MM-YYYY format',
+      }),
+    Joi.date().iso()
+  )
+  .allow('', null),
 
   // Pagination
   pagination: {
@@ -166,8 +172,13 @@ export const employeeSchemas = {
     dateOfBirth: commonSchemas.ddmmyyyy.optional().allow('', null).custom((value, helpers) => {
       if (value === '' || value === null) return value;
       const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-      if (dt.isValid && dt > DateTime.utc().startOf('day')) {
+      if (!dt.isValid) return value;
+      if (dt > DateTime.utc().startOf('day')) {
         return helpers.message('Date of birth cannot be in the future');
+      }
+      const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
+      if (dt > minAgeDate) {
+        return helpers.message('Employee must be at least 15 years old');
       }
       return value;
     }),
@@ -223,6 +234,18 @@ export const employeeSchemas = {
         postalCode: Joi.string().allow('').optional(),
         country: Joi.string().allow('').optional(),
       }).optional(),
+      // Personal info fields
+      nationality: Joi.string().max(100).allow('').optional(),
+      religion: Joi.string().max(100).allow('').optional(),
+      maritalStatus: Joi.string().max(50).allow('').optional(),
+      employmentOfSpouse: Joi.string().max(100).allow('').optional(),
+      noOfChildren: Joi.number().min(0).integer().optional(),
+      // Passport object
+      passport: Joi.object({
+        number: Joi.string().max(50).allow('').optional(),
+        expiryDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+        country: Joi.string().max(100).allow('').optional(),
+      }).optional(),
     }).optional(),
 
     // Support nested account object structure
@@ -262,8 +285,13 @@ export const employeeSchemas = {
     dateOfBirth: commonSchemas.ddmmyyyy.optional().allow('', null).custom((value, helpers) => {
       if (value === '' || value === null) return value;
       const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-      if (dt.isValid && dt > DateTime.utc().startOf('day')) {
+      if (!dt.isValid) return value;
+      if (dt > DateTime.utc().startOf('day')) {
         return helpers.message('Date of birth cannot be in the future');
+      }
+      const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
+      if (dt > minAgeDate) {
+        return helpers.message('Employee must be at least 15 years old');
       }
       return value;
     }),
@@ -300,15 +328,16 @@ export const employeeSchemas = {
     personal: Joi.object({
       gender: Joi.string().optional(),
       birthday: commonSchemas.ddmmyyyy.optional().allow('', null),
-      maritalStatus: Joi.string().optional(),
+      nationality: Joi.string().max(100).allow('').optional(),
+      maritalStatus: Joi.string().allow('', null).optional(),
       religion: Joi.string().allow('').optional(),
-      employmentOfSpouse: Joi.boolean().optional(),
+      employmentOfSpouse: Joi.string().max(100).allow('').optional(),
       noOfChildren: Joi.number().min(0).optional(),
       passport: Joi.object({
-        number: Joi.string().optional(),
+        number: Joi.string().allow('').optional(),
         issueDate: commonSchemas.ddmmyyyy.optional().allow('', null),
         expiryDate: commonSchemas.ddmmyyyy.optional().allow('', null),
-        country: Joi.string().optional(),
+        country: Joi.string().allow('', null).optional(),
       }).optional(),
       address: Joi.object({
         street: Joi.string().optional(),
@@ -318,13 +347,77 @@ export const employeeSchemas = {
         country: Joi.string().optional(),
       }).optional(),
     }).optional(),
-    // Bank information
+    // Bank information (legacy field name)
     bank: Joi.object({
       accountHolderName: Joi.string().allow('').optional(),
-      accountNumber: Joi.string().allow('').optional(),
-      bankName: Joi.string().allow('').optional(),
-      branch: Joi.string().allow('').optional(),
-      ifscCode: Joi.string().allow('').optional(),
+      accountNumber: Joi.string()
+        .pattern(/^\d{8,18}$/)
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Account number must be 8-18 digits',
+        }),
+      bankName: Joi.string()
+        .min(3)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Bank name must be at least 3 characters',
+        }),
+      branch: Joi.string()
+        .min(2)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Branch name must be at least 2 characters',
+        }),
+      ifscCode: Joi.string()
+        .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+        .uppercase()
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+        }),
+      accountType: Joi.string()
+        .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
+        .optional(),
+    }).optional(),
+    // Bank information (canonical field name - used by REST API)
+    bankDetails: Joi.object({
+      accountHolderName: Joi.string().allow('').optional(),
+      accountNumber: Joi.string()
+        .pattern(/^\d{8,18}$/)
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Account number must be 8-18 digits',
+        }),
+      bankName: Joi.string()
+        .min(3)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Bank name must be at least 3 characters',
+        }),
+      branch: Joi.string()
+        .min(2)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Branch name must be at least 2 characters',
+        }),
+      ifscCode: Joi.string()
+        .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+        .uppercase()
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+        }),
+      accountType: Joi.string()
+        .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
+        .optional(),
     }).optional(),
     // Emergency contacts
     emergencyContacts: Joi.array().items(
@@ -365,7 +458,6 @@ export const employeeSchemas = {
     // Account information
     account: Joi.object({
       role: Joi.string().allow('').optional(),
-      userName: Joi.string().allow('').optional(),
     }).optional(),
     // Additional employee fields
     about: Joi.string().max(2000).allow('').optional(),
@@ -1623,11 +1715,11 @@ export const resignationSchemas = {
     reportingManagerId: commonSchemas.objectId.required().messages({
       'any.required': 'Reporting manager is required',
     }),
-    resignationDate: commonSchemas.ddmmyyyy.required().messages({
-      'any.required': 'Resignation date is required',
+    resignationDate: commonSchemas.ddmmyyyy.optional().allow(null, '').messages({
+      'date.base': 'Resignation date must be in DD-MM-YYYY format',
     }),
-    noticeDate: commonSchemas.ddmmyyyy.required().messages({
-      'any.required': 'Notice date is required',
+    noticeDate: commonSchemas.ddmmyyyy.optional().allow(null, '').messages({
+      'date.base': 'Notice date must be in DD-MM-YYYY format',
     }),
     noticePeriodDays: Joi.number().integer().min(0).max(180).default(30).optional().messages({
       'number.min': 'Notice period cannot be negative',
@@ -1643,6 +1735,17 @@ export const resignationSchemas = {
       'any.invalid': 'Last working date must be after resignation date',
     }),
   }).custom((value, helpers) => {
+    const hasNotice = Boolean(value.noticeDate);
+    const hasResignation = Boolean(value.resignationDate);
+
+    if (hasNotice !== hasResignation) {
+      return helpers.message('Notice date and resignation date must both be provided together');
+    }
+
+    if (!hasNotice && !hasResignation) {
+      return value;
+    }
+
     const notice = DateTime.fromFormat(value.noticeDate, 'dd-MM-yyyy', { zone: 'utc' });
     const resignation = DateTime.fromFormat(value.resignationDate, 'dd-MM-yyyy', { zone: 'utc' });
 
@@ -1662,6 +1765,7 @@ export const resignationSchemas = {
     // Validate lastWorkingDate is after resignationDate
     if (value.lastWorkingDate) {
       const lastWorkingDate = new Date(value.lastWorkingDate);
+
       if (lastWorkingDate <= resignation.toJSDate()) {
         return helpers.message('Last working date must be after resignation date');
       }

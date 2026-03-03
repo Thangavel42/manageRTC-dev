@@ -5,32 +5,38 @@
  */
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
+import ExcelJS from 'exceljs';
 import { ObjectId } from 'mongodb';
+import PDFDocument from 'pdfkit';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-  asyncHandler,
-  buildNotFoundError,
-  buildValidationError,
+    asyncHandler,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
+import employeeStatusService from '../../services/employee/employeeStatus.service.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-  buildPagination,
-  extractUser,
-  getRequestId,
-  sendCreated,
-  sendSuccess,
+    buildPagination,
+    extractUser,
+    getRequestId,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
-import { canUserDeleteAvatar, getSystemDefaultAvatarUrl } from '../../utils/avatarUtils.js';
+import {
+    canUserDeleteAvatar,
+    getSystemDefaultAvatarUrl
+} from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
-import { sendEmployeeCredentialsEmail } from '../../utils/emailer.js';
+import { sendEmployeeCredentialsEmail, sendPasswordChangedEmail } from '../../utils/emailer.js';
 import { devError, devLog } from '../../utils/logger.js';
 import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
  * Generate secure random password for new employees
  */
-function generateSecurePassword(length = 12) {
+export function generateSecurePassword(length = 12) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
   const randomValues = new Uint32Array(length);
   crypto.getRandomValues(randomValues);
@@ -182,6 +188,47 @@ const formatEmployeeDates = (employee) => {
   return formatted;
 };
 
+const DEFAULT_EXPORT_COLUMNS = ['employeeId', 'name', 'email', 'phone', 'department', 'role', 'status'];
+
+const parseQueryDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+      const [day, month, year] = value.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const getInclusiveEndDate = (value) => {
+  if (!value) return null;
+  const end = new Date(value);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
+const resolveHrDepartmentId = async (collections, employeeId) => {
+  if (!employeeId) return null;
+
+  const baseFilter = { isDeleted: { $ne: true } };
+
+  if (ObjectId.isValid(employeeId)) {
+    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId), ...baseFilter });
+    if (employee?.departmentId) {
+      return employee.departmentId;
+    }
+  }
+
+  const employeeByCode = await collections.employees.findOne({ employeeId, ...baseFilter });
+  return employeeByCode?.departmentId || null;
+};
+
 /**
  * @desc    Get all employees with pagination and filtering
  * @route   GET /api/employees
@@ -247,14 +294,15 @@ export const getEmployees = asyncHandler(async (req, res) => {
       { $match: filter },
       {
         $addFields: {
+          // Handle both departmentId (string) and department (ObjectId) field names
           departmentObjId: {
             $cond: {
               if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
               then: { $toObjectId: '$departmentId' },
-              else: null,
-            },
-          },
-        },
+              else: null
+            }
+          }
+        }
       },
       {
         $lookup: {
@@ -354,42 +402,47 @@ export const getEmployees = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
             then: { $toObjectId: '$departmentId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
             then: { $toObjectId: '$designationId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
             then: { $toObjectId: '$reportingTo' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
             then: { $toObjectId: '$shiftId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
             then: { $toObjectId: '$batchId' },
-            else: null,
-          },
-        },
-      },
+            else: null
+          }
+        }
+      }
     },
     {
       $lookup: {
@@ -488,6 +541,28 @@ export const getEmployees = asyncHandler(async (req, res) => {
             else: null,
           },
         },
+        // Reporting Manager Employee ID from populated manager (for frontend lookups)
+        reportingToEmployeeId: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: '$reportingToManager.employeeId',
+            else: null
+          }
+        },
+        // Reporting To Name (alias for reportingManagerName for consistency)
+        reportingToName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
         // Shift information from populated shift
         shiftName: { $ifNull: ['$shiftData.name', null] },
         shiftColor: { $ifNull: ['$shiftData.color', null] },
@@ -517,6 +592,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
         batchShiftColor: { $ifNull: ['$batchData.currentShiftColor', null] },
         // Flatten personal info to root level for frontend compatibility
         passport: '$personal.passport',
+        nationality: '$personal.nationality',
         religion: '$personal.religion',
         maritalStatus: '$personal.maritalStatus',
         employmentOfSpouse: '$personal.employmentOfSpouse',
@@ -539,7 +615,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
         shiftData: 0,
         batchData: 0,
         salary: 0,
-        bank: 0,
+        bankDetails: 0,
         emergencyContacts: 0,
         'account.password': 0,
       },
@@ -556,6 +632,269 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const pagination = buildPagination(pageNum, limitNum, total);
 
   return sendSuccess(res, formattedEmployees, 'Employees retrieved successfully', 200, pagination);
+});
+
+/**
+ * @desc    Export employees as PDF or Excel with filters
+ * @route   GET /api/employees/export
+ * @access  Private (Admin, HR, Superadmin)
+ */
+export const exportEmployees = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const {
+    type = 'pdf',
+    department,
+    status,
+    fromDate,
+    toDate,
+    sortBy,
+    order,
+    columns
+  } = req.query || {};
+
+  const exportType = String(type).toLowerCase();
+  if (!['pdf', 'excel'].includes(exportType)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_EXPORT_TYPE',
+        message: 'Export type must be pdf or excel'
+      }
+    });
+  }
+
+  if (!['admin', 'hr', 'superadmin'].includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'NOT_AUTHORIZED',
+        message: 'Not authorized to export employees'
+      }
+    });
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const filter = { isDeleted: { $ne: true } };
+
+  if (status && status !== 'none') {
+    filter.status = status;
+  }
+
+  if (user.role === 'hr') {
+    const hrDepartmentId = await resolveHrDepartmentId(collections, user.employeeId);
+    if (!hrDepartmentId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'NOT_AUTHORIZED',
+          message: 'HR user department not found for export'
+        }
+      });
+    }
+    filter.departmentId = hrDepartmentId;
+  } else if (department && department !== 'none') {
+    filter.departmentId = department;
+  }
+
+  const start = parseQueryDate(fromDate);
+  const end = getInclusiveEndDate(parseQueryDate(toDate));
+  if (start && end) {
+    filter.createdAt = { $gte: start, $lte: end };
+  }
+
+  const normalizedOrder = (order || '').toString().toLowerCase();
+  const sortField = sortBy === 'name' || sortBy === 'fullName' ? 'fullName' : sortBy || 'createdAt';
+  const sortDirection = normalizedOrder === 'desc' ? -1 : 1;
+  const sortObj = { [sortField]: sortDirection };
+
+  const selectedColumns =
+    typeof columns === 'string' && columns.trim() !== ''
+      ? columns
+          .split(',')
+          .map((col) => col.trim())
+          .filter((col) => DEFAULT_EXPORT_COLUMNS.includes(col))
+      : DEFAULT_EXPORT_COLUMNS;
+  const exportColumns = selectedColumns.length > 0 ? selectedColumns : DEFAULT_EXPORT_COLUMNS;
+
+  const pipeline = [
+    { $match: filter },
+    {
+      $addFields: {
+        departmentObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+            then: { $toObjectId: '$departmentId' },
+            else: null
+          }
+        },
+        designationObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
+            then: { $toObjectId: '$designationId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'departmentObjId',
+        foreignField: '_id',
+        as: 'departmentInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'designations',
+        localField: 'designationObjId',
+        foreignField: '_id',
+        as: 'designationInfo'
+      }
+    },
+    {
+      $addFields: {
+        department: { $arrayElemAt: ['$departmentInfo', 0] },
+        designation: { $arrayElemAt: ['$designationInfo', 0] },
+        fullName: {
+          $ifNull: [
+            '$fullName',
+            {
+              $concat: [
+                { $ifNull: ['$firstName', ''] },
+                ' ',
+                { $ifNull: ['$lastName', ''] }
+              ]
+            }
+          ]
+        },
+        contactEmail: '$contact.email',
+        contactPhone: '$contact.phone'
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        employeeId: 1,
+        firstName: 1,
+        lastName: 1,
+        fullName: 1,
+        email: 1,
+        phone: 1,
+        contactEmail: 1,
+        contactPhone: 1,
+        departmentId: 1,
+        department: 1,
+        designation: 1,
+        role: 1,
+        account: 1,
+        status: 1,
+        createdAt: 1
+      }
+    },
+    { $sort: sortObj }
+  ];
+
+  const employees = await collections.employees.aggregate(pipeline).toArray();
+  const normalizedEmployees = employees.map((emp) => ({
+    ...emp,
+    status: normalizeStatus(emp.status)
+  }));
+
+  const columnDefinitions = {
+    employeeId: {
+      header: 'Employee ID',
+      width: 16,
+      getValue: (emp) => emp.employeeId || ''
+    },
+    name: {
+      header: 'Name',
+      width: 26,
+      getValue: (emp) => (emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`).trim()
+    },
+    email: {
+      header: 'Email',
+      width: 30,
+      getValue: (emp) => emp.email || emp.contactEmail || ''
+    },
+    phone: {
+      header: 'Phone',
+      width: 18,
+      getValue: (emp) => {
+        const phoneVal = emp.phone || emp.contactPhone;
+        if (Array.isArray(phoneVal)) {
+          return phoneVal.filter(Boolean).join(', ');
+        }
+        return phoneVal || '';
+      }
+    },
+    department: {
+      header: 'Department',
+      width: 22,
+      getValue: (emp) => emp.department?.department || emp.department?.name || ''
+    },
+    role: {
+      header: 'Role',
+      width: 18,
+      getValue: (emp) => emp.account?.role || emp.role || ''
+    },
+    status: {
+      header: 'Status',
+      width: 14,
+      getValue: (emp) => normalizeStatus(emp.status)
+    }
+  };
+
+  if (exportType === 'excel') {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Employees');
+
+    worksheet.columns = exportColumns.map((key) => ({
+      header: columnDefinitions[key].header,
+      key,
+      width: columnDefinitions[key].width
+    }));
+
+    normalizedEmployees.forEach((emp) => {
+      const row = {};
+      exportColumns.forEach((key) => {
+        row[key] = columnDefinitions[key].getValue(emp);
+      });
+      worksheet.addRow(row);
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="employees.xlsx"');
+
+    await workbook.xlsx.write(res);
+    return res.end();
+  }
+
+  // Default to PDF export
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="employees.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  doc.pipe(res);
+
+  doc.fontSize(16).text('Employee List', { align: 'center' });
+  doc.moveDown();
+
+  normalizedEmployees.forEach((emp, index) => {
+    exportColumns.forEach((key) => {
+      const value = columnDefinitions[key].getValue(emp) || '-';
+      doc.fontSize(11).text(`${columnDefinitions[key].header}: ${value}`);
+    });
+
+    if (index < normalizedEmployees.length - 1) {
+      doc.moveDown();
+    }
+  });
+
+  doc.end();
 });
 
 /**
@@ -588,14 +927,15 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
             then: { $toObjectId: '$departmentId' },
-            else: null,
-          },
-        },
-      },
+            else: null
+          }
+        }
+      }
     },
     {
       $lookup: {
@@ -674,28 +1014,31 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     { $match: { _id: new ObjectId(id) } },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
             then: { $toObjectId: '$departmentId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
             then: { $toObjectId: '$designationId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
             then: { $toObjectId: '$reportingTo' },
-            else: null,
-          },
-        },
-      },
+            else: null
+          }
+        }
+      }
     },
     {
       $lookup: {
@@ -730,21 +1073,23 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
             then: { $toObjectId: '$shiftId' },
-            else: null,
-          },
+            else: null
+          }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
             then: { $toObjectId: '$batchId' },
-            else: null,
-          },
-        },
-      },
+            else: null
+          }
+        }
+      }
     },
     {
       $lookup: {
@@ -812,6 +1157,28 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
             else: null,
           },
         },
+        // Reporting Manager Employee ID from populated manager (for frontend lookups)
+        reportingToEmployeeId: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: '$reportingToManager.employeeId',
+            else: null
+          }
+        },
+        // Reporting To Name (alias for reportingManagerName for consistency)
+        reportingToName: {
+          $cond: {
+            if: { $ne: ['$reportingToManager', null] },
+            then: {
+              $concat: [
+                { $ifNull: ['$reportingToManager.firstName', ''] },
+                ' ',
+                { $ifNull: ['$reportingToManager.lastName', ''] }
+              ]
+            },
+            else: null
+          }
+        },
         // Shift information from populated shift
         shiftName: { $ifNull: ['$shiftData.name', null] },
         shiftColor: { $ifNull: ['$shiftData.color', null] },
@@ -843,6 +1210,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         reportingTo: '$reportingTo',
         // Flatten personal info to root level for frontend compatibility
         passport: '$personal.passport',
+        nationality: '$personal.nationality',
         religion: '$personal.religion',
         maritalStatus: '$personal.maritalStatus',
         employmentOfSpouse: '$personal.employmentOfSpouse',
@@ -877,7 +1245,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
 
   // Remove sensitive fields for non-admin users
   if (user.role !== 'admin' && user.role !== 'hr' && user.role !== 'superadmin') {
-    const { salary, bank, emergencyContacts, ...sanitizedEmployee } = employee;
+    const { salary, bankDetails, emergencyContacts, ...sanitizedEmployee } = employee;
     const formattedEmployee = formatEmployeeDates(sanitizedEmployee);
     return sendSuccess(res, formattedEmployee);
   }
@@ -897,6 +1265,10 @@ export const createEmployee = asyncHandler(async (req, res) => {
 
   devLog('[Employee Controller] createEmployee - companyId:', user.companyId);
   devLog('[Employee Controller] employeeData:', JSON.stringify(employeeData, null, 2));
+  devLog('[Employee Controller] nationality value in request:', employeeData?.nationality);
+  devLog('[Employee Controller] personal object in request:', JSON.stringify(employeeData?.personal));
+  devLog('[Employee Controller] religion value in request:', employeeData?.religion);
+  devLog('[Employee Controller] maritalStatus value in request:', employeeData?.maritalStatus);
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -905,7 +1277,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const { permissionsData, ...restEmployeeData } = employeeData;
 
   // Normalize data - use canonical schema structure (root level fields only)
-  // Canonical schema: email, phone, dateOfBirth, gender, address at root level
+  // Canonical schema: email, phone, phoneCode, dateOfBirth, gender, address at root level
   // personal object contains: passport, nationality, religion, maritalStatus, employmentOfSpouse, noOfChildren only
   const normalizedData = {
     ...restEmployeeData,
@@ -914,6 +1286,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
     email: restEmployeeData.email ?? restEmployeeData.contact?.email,
     // Extract phone from root level or contact object (for backward compatibility)
     phone: restEmployeeData.phone ?? restEmployeeData.contact?.phone,
+    // Extract phoneCode from request (country code for phone)
+    phoneCode: restEmployeeData.phoneCode ?? restEmployeeData.contact?.phoneCode ?? '+1',
     // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
     dateOfBirth: restEmployeeData.dateOfBirth ?? restEmployeeData.personal?.birthday,
     // Extract gender from root level or personal.gender (for backward compatibility)
@@ -1110,8 +1484,10 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const employeeToInsert = {
     ...normalizedWithDates,
     clerkUserId: clerkUserId,
+    // Remove the account object from normalizedWithDates before spreading to prevent conflicts
+    // Then set account explicitly with password
     account: {
-      ...normalizedWithDates.account,
+      userName: normalizedWithDates.account?.userName,
       password: password, // Store password (for reference)
       role: normalizedWithDates.account?.role || 'Employee',
     },
@@ -1127,21 +1503,83 @@ export const createEmployee = asyncHandler(async (req, res) => {
     status: normalizeStatus(normalizedWithDates.status || 'Active'),
   };
 
+  // Remove account from normalizedWithDates to prevent it from overwriting our explicitly set account object
+  delete normalizedWithDates.account;
+
+  // ✅ CRITICAL: Handle nationality BEFORE spreading to ensure it's preserved
+  // Extract nationality from root level or personal.nationality (frontend sends it in personal object)
+  const nationalityValue = normalizedWithDates.nationality || normalizedData.nationality || restEmployeeData?.nationality || restEmployeeData?.personal?.nationality;
+
+  // Extract other personal fields from root level or personal object (frontend sends them in personal object)
+  const religionValue = normalizedWithDates.religion || normalizedData.religion || restEmployeeData?.religion || restEmployeeData?.personal?.religion;
+  const maritalStatusValue = normalizedWithDates.maritalStatus || normalizedData.maritalStatus || restEmployeeData?.maritalStatus || restEmployeeData?.personal?.maritalStatus;
+  const noOfChildrenValue = normalizedWithDates.noOfChildren || normalizedData.noOfChildren || restEmployeeData?.noOfChildren || restEmployeeData?.personal?.noOfChildren;
+  const employmentOfSpouseValue = normalizedWithDates.employmentOfSpouse || normalizedData.employmentOfSpouse || restEmployeeData?.employmentOfSpouse || restEmployeeData?.personal?.employmentOfSpouse;
+  const passportValue = normalizedWithDates.passport || normalizedData.passport || restEmployeeData?.passport || restEmployeeData?.personal?.passport;
+
+  // ✅ CRITICAL: Extract and preserve passport from the request before any processing
+  // The passport object might be in different locations depending on the frontend
+  let extractedPassport = passportValue || null;
+
   // ✅ CRITICAL: Handle nested objects correctly
   // Remove nested contact (email, phone already at root)
   delete employeeToInsert.contact;
 
-  // Handle personal object: keep passport, religion, maritalStatus, employmentOfSpouse, noOfChildren
-  // but remove duplicated fields (gender, birthday, address) that are now at root level
+  // Remove nationality from root level after extracting (we'll add it to personal)
+  delete employeeToInsert.nationality;
+  delete normalizedWithDates.nationality;
+
+  // Remove religion, maritalStatus, noOfChildren, employmentOfSpouse from root (they go in personal)
+  delete employeeToInsert.religion;
+  delete employeeToInsert.maritalStatus;
+  delete employeeToInsert.noOfChildren;
+  delete employeeToInsert.employmentOfSpouse;
+  delete employeeToInsert.passport;
+
+  // ✅ CRITICAL: Build personal object with all extracted values
+  const personalData = {
+    ...(extractedPassport ? { passport: extractedPassport } : {}),
+    ...(nationalityValue ? { nationality: nationalityValue } : {}),
+    ...(religionValue ? { religion: religionValue } : {}),
+    ...(maritalStatusValue ? { maritalStatus: maritalStatusValue } : {}),
+    ...(noOfChildrenValue !== undefined ? { noOfChildren: noOfChildrenValue } : {}),
+    ...(employmentOfSpouseValue ? { employmentOfSpouse: employmentOfSpouseValue } : {})
+  };
+
+  // Merge with existing personal object if it has other fields (like from frontend)
   if (employeeToInsert.personal && typeof employeeToInsert.personal === 'object') {
-    const cleanPersonal = { ...employeeToInsert.personal };
-    // Remove fields that have root-level equivalents
-    delete cleanPersonal.gender;
-    delete cleanPersonal.birthday;
-    delete cleanPersonal.address;
-    // Keep the cleaned personal object with passport, religion, maritalStatus, etc.
-    employeeToInsert.personal = cleanPersonal;
+    // Keep the personal object but ensure our extracted fields are set
+    employeeToInsert.personal = {
+      ...employeeToInsert.personal, // Keep any existing fields
+      ...personalData  // Override with our extracted values
+    };
+  } else if (Object.keys(personalData).length > 0) {
+    // Only set personal if we have data
+    employeeToInsert.personal = personalData;
   }
+
+  // Clean up the personal object - remove fields that are now at root level
+  if (employeeToInsert.personal && typeof employeeToInsert.personal === 'object') {
+    // Remove these from personal since they're kept at root level
+    delete employeeToInsert.personal.gender;
+    delete employeeToInsert.personal.birthday; // Old field name
+    delete employeeToInsert.personal.address; // Address is at root
+  }
+
+  // Debug log to verify all personal fields
+  devLog('[Employee Controller] Personal Data Check:', {
+    extractedNationality: nationalityValue,
+    extractedReligion: religionValue,
+    extractedMaritalStatus: maritalStatusValue,
+    extractedPassport: extractedPassport,
+    finalPersonal: employeeToInsert.personal
+  });
+
+  // Debug log to verify password is being set
+  devLog('[Employee Controller] Password check - Generated password exists:', !!password);
+  devLog('[Employee Controller] Password check - employeeToInsert.account:', JSON.stringify(employeeToInsert.account));
+  devLog('[Employee Controller] Password check - employeeToInsert.account.password exists:', !!employeeToInsert.account?.password);
+  devLog('[Employee Controller] Password check - normalizedWithDates.account:', JSON.stringify(normalizedWithDates.account));
 
   // Create employee
   const result = await collections.employees.insertOne(employeeToInsert);
@@ -1155,6 +1593,20 @@ export const createEmployee = asyncHandler(async (req, res) => {
       devError('[Employee Controller] Failed to rollback Clerk user:', rollbackError);
     }
     throw new Error('Failed to create employee');
+  }
+
+  // Handle Self Reporting: Update reportingTo to the employee's own _id
+  if (restEmployeeData.selfReporting) {
+    try {
+      await collections.employees.updateOne(
+        { _id: result.insertedId },
+        { $set: { reportingTo: result.insertedId.toString() } }
+      );
+      devLog('[Employee Controller] Set self-reporting for employee:', result.insertedId);
+    } catch (selfReportingError) {
+      devError('[Employee Controller] Failed to set self-reporting:', selfReportingError);
+      // Continue anyway - can be fixed later
+    }
   }
 
   // Create permissions record if provided
@@ -1239,35 +1691,25 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  // Check email uniqueness only if email is in the root level (not nested personal data)
+// Check email uniqueness only if email is in the root level (not nested personal data)
   if (updateData.email) {
     const newEmail = updateData.email.trim().toLowerCase();
     const currentEmail = (employee.email || '').trim().toLowerCase();
 
-    devLog(
-      '[Email Check] newEmail:',
-      newEmail,
-      'currentEmail:',
-      currentEmail,
-      'equal?',
-      newEmail === currentEmail
-    );
+    devLog('[Email Check] newEmail:', newEmail, 'currentEmail:', currentEmail, 'equal?', newEmail === currentEmail);
 
     // Only check for duplicates if email is actually changing
     if (newEmail !== currentEmail) {
       // Simple case-insensitive email check
       const emailExists = await collections.employees.countDocuments({
         email: { $regex: `^${newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-        _id: { $ne: new ObjectId(id) },
+        _id: { $ne: new ObjectId(id) }
       });
 
       devLog('[Email Check] Email exists count:', emailExists);
 
       if (emailExists > 0) {
-        throw buildValidationError(
-          'email',
-          'This email address is already registered. Please use a different email.'
-        );
+        throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
       }
     }
   }
@@ -1292,14 +1734,18 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     ...updateData,
   };
 
-  // Only set email if it's explicitly provided
-  if (updateData.email) {
-    normalizedData.email = updateData.email;
-  }
+  // ⚠️ CRITICAL: Email is managed by Clerk and cannot be updated
+  // Always exclude email from update data
+  delete normalizedData.email;
 
   // Extract phone from root level or contact object (for backward compatibility)
   if (updateData.phone || updateData.contact?.phone) {
     normalizedData.phone = updateData.phone ?? updateData.contact?.phone;
+  }
+
+  // Extract phoneCode from root level or contact object (for backward compatibility)
+  if (updateData.phoneCode !== undefined || updateData.contact?.phoneCode !== undefined) {
+    normalizedData.phoneCode = updateData.phoneCode ?? updateData.contact?.phoneCode;
   }
 
   // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
@@ -1325,35 +1771,94 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   const normalizedUpdateData = normalizeEmployeeDates(normalizedData);
   ensureEmployeeDateLogic(normalizedUpdateData, employee);
 
-  // ⚠️ CRITICAL: If email hasn't changed, exclude it from the update to avoid MongoDB duplicate key errors
-  const currentEmailLower = (employee.email || '').trim().toLowerCase();
-  if (normalizedUpdateData.email) {
-    const newEmailLower = (normalizedUpdateData.email || '').trim().toLowerCase();
-    if (newEmailLower === currentEmailLower) {
-      // Email hasn't changed - exclude it from update
-      delete normalizedUpdateData.email;
-      devLog('[Email Check] Email unchanged - excluding from update');
-    }
-  }
+  // ⚠️ CRITICAL: Email is managed by Clerk and cannot be updated
+  // Always remove email from update data if somehow it got through
+  delete normalizedUpdateData.email;
 
   // Update audit fields
   normalizedUpdateData.updatedAt = new Date();
   normalizedUpdateData.updatedBy = user.userId;
 
+  // ✅ CRITICAL: Extract personal fields from all possible locations BEFORE any transformations
+  // Extract nationality from root level or personal.nationality
+  const nationalityValue = normalizedUpdateData.nationality ?? updateData.personal?.nationality;
+  const religionValue = normalizedUpdateData.religion ?? updateData.personal?.religion;
+  const maritalStatusValue = normalizedUpdateData.maritalStatus ?? updateData.personal?.maritalStatus;
+  const noOfChildrenValue = normalizedUpdateData.noOfChildren ?? updateData.personal?.noOfChildren;
+  const employmentOfSpouseValue = normalizedUpdateData.employmentOfSpouse ?? updateData.personal?.employmentOfSpouse;
+  const passportValue = normalizedUpdateData.passport ?? updateData.personal?.passport;
+
   // ✅ CRITICAL: Handle nested objects correctly
   // Remove nested contact (email, phone already at root)
   delete normalizedUpdateData.contact;
 
-  // Handle personal object: keep passport, religion, maritalStatus, employmentOfSpouse, noOfChildren
-  // but remove duplicated fields (gender, birthday, address) that are now at root level
+  // Remove nationality, religion, maritalStatus, etc from root level (they go in personal)
+  delete normalizedUpdateData.nationality;
+  delete normalizedUpdateData.religion;
+  delete normalizedUpdateData.maritalStatus;
+  delete normalizedUpdateData.noOfChildren;
+  delete normalizedUpdateData.employmentOfSpouse;
+  delete normalizedUpdateData.passport;
+
+  // ✅ CRITICAL: Build/merge personal object with extracted values
+  if (nationalityValue || religionValue || maritalStatusValue || noOfChildrenValue !== undefined || employmentOfSpouseValue || passportValue) {
+    if (!normalizedUpdateData.personal) {
+      normalizedUpdateData.personal = {};
+    }
+
+    if (nationalityValue) normalizedUpdateData.personal.nationality = nationalityValue;
+    if (religionValue) normalizedUpdateData.personal.religion = religionValue;
+    if (maritalStatusValue) normalizedUpdateData.personal.maritalStatus = maritalStatusValue;
+    if (noOfChildrenValue !== undefined) normalizedUpdateData.personal.noOfChildren = noOfChildrenValue;
+    if (employmentOfSpouseValue) normalizedUpdateData.personal.employmentOfSpouse = employmentOfSpouseValue;
+    if (passportValue) normalizedUpdateData.personal.passport = passportValue;
+  }
+
+  // Clean up the personal object - remove fields that are at root level
   if (normalizedUpdateData.personal && typeof normalizedUpdateData.personal === 'object') {
-    const cleanPersonal = { ...normalizedUpdateData.personal };
-    // Remove fields that have root-level equivalents
-    delete cleanPersonal.gender;
-    delete cleanPersonal.birthday;
-    delete cleanPersonal.address;
-    // Keep the cleaned personal object with passport, religion, maritalStatus, etc.
-    normalizedUpdateData.personal = cleanPersonal;
+    // Remove these from personal since they're kept at root level
+    delete normalizedUpdateData.personal.gender;
+    delete normalizedUpdateData.personal.birthday; // Old field name
+    delete normalizedUpdateData.personal.address; // Address is at root
+  }
+
+  // ✅ EMERGENCY CONTACT: Canonicalize to flat format (emergencyContact singular)
+  // If emergencyContacts (plural array) was sent, convert to flat emergencyContact
+  if (normalizedUpdateData.emergencyContacts !== undefined) {
+    const src = Array.isArray(normalizedUpdateData.emergencyContacts)
+      ? normalizedUpdateData.emergencyContacts[0]
+      : normalizedUpdateData.emergencyContacts;
+    if (src) {
+      const phoneArr = Array.isArray(src.phone) ? src.phone : src.phone ? [src.phone] : [];
+      normalizedUpdateData.emergencyContact = {
+        name: src.name || '',
+        relationship: src.relationship || '',
+        phone: phoneArr[0] || '',
+        phone2: phoneArr[1] || '',
+      };
+    }
+    delete normalizedUpdateData.emergencyContacts; // Remove old array field
+  }
+  // If emergencyContact was sent with phone as array, convert to string
+  if (normalizedUpdateData.emergencyContact && Array.isArray(normalizedUpdateData.emergencyContact.phone)) {
+    const phoneArr = normalizedUpdateData.emergencyContact.phone;
+    normalizedUpdateData.emergencyContact = {
+      ...normalizedUpdateData.emergencyContact,
+      phone: phoneArr[0] || '',
+      phone2: normalizedUpdateData.emergencyContact.phone2 || phoneArr[1] || '',
+    };
+  }
+
+  // ✅ BIO: Canonicalize to bio field only — stop writing to notes/about separately
+  // If 'about' was sent, store as bio and clear the old 'about' and 'notes' fields
+  if (normalizedUpdateData.about !== undefined) {
+    normalizedUpdateData.bio = normalizedUpdateData.about;
+    delete normalizedUpdateData.about;
+    delete normalizedUpdateData.notes;
+  }
+  if (normalizedUpdateData.notes !== undefined && normalizedUpdateData.bio === undefined) {
+    normalizedUpdateData.bio = normalizedUpdateData.notes;
+    delete normalizedUpdateData.notes;
   }
 
   // Update employee
@@ -1368,6 +1873,69 @@ export const updateEmployee = asyncHandler(async (req, res) => {
 
   // Get updated employee
   const updatedEmployee = await collections.employees.findOne({ _id: new ObjectId(id) });
+
+  // 🔐 CRITICAL: Sync Clerk lock status when employee status changes
+  // Handle both employmentStatus and status field (for backward compatibility)
+
+  // Get old status before update (prefer employmentStatus for consistency)
+  const oldStatus = employee.employmentStatus || employee.status;
+
+  // Determine which field was actually updated and use that for the new status
+  // This ensures we detect the change even when only one field is updated
+  let newStatus;
+  if (normalizedUpdateData.employmentStatus !== undefined) {
+    // employmentStatus was explicitly updated
+    newStatus = normalizedUpdateData.employmentStatus;
+  } else if (normalizedUpdateData.status !== undefined) {
+    // Only status was updated
+    newStatus = normalizedUpdateData.status;
+  } else {
+    // Neither status field was updated (edge case), use database value
+    newStatus = updatedEmployee.employmentStatus || updatedEmployee.status;
+  }
+
+  // Check if status field was explicitly updated or if employmentStatus was updated
+  const statusFieldUpdated = normalizedUpdateData.status !== undefined ||
+                             normalizedUpdateData.employmentStatus !== undefined;
+
+  // Also check if isActive changed to false - this should also lock the user
+  const isActiveChanged = normalizedUpdateData.isActive !== undefined &&
+                          employee.isActive !== updatedEmployee.isActive;
+
+  if ((statusFieldUpdated && oldStatus !== newStatus) || isActiveChanged) {
+    devLog('[Employee Controller] Status change detected - syncing with Clerk:', {
+      clerkUserId: employee.clerkUserId,
+      oldStatus,
+      newStatus,
+      oldIsActive: employee.isActive,
+      newIsActive: updatedEmployee.isActive
+    });
+
+    // Sync with Clerk if clerkUserId exists
+    // Pass the updated employee's isActive status so the function can make correct decision
+    if (employee.clerkUserId) {
+      try {
+        const syncResult = await employeeStatusService.syncClerkLockStatus(
+          employee.clerkUserId,
+          newStatus,
+          oldStatus,
+          updatedEmployee.isActive  // Pass isActive to determine lock/unlock
+        );
+
+        devLog('[Employee Controller] Clerk lock sync result:', syncResult);
+
+        if (!syncResult.success) {
+          devError('[Employee Controller] Clerk lock sync failed:', syncResult.message);
+          // Note: We continue with the update even if Clerk sync fails
+          // The employee status is still updated in the database
+        }
+      } catch (clerkError) {
+        devError('[Employee Controller] Error syncing Clerk lock status:', clerkError);
+        // Continue with the update even if Clerk sync fails
+      }
+    }
+  }
+
   const formattedEmployee = formatEmployeeDates(updatedEmployee);
 
   // Broadcast Socket.IO event
@@ -1405,12 +1973,29 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
+  // Lock user in Clerk if clerkUserId exists (prevent login while keeping account)
+  if (employee.clerkUserId) {
+    try {
+      devLog('[Employee Controller] Locking Clerk user for soft delete:', employee.clerkUserId);
+      const lockResult = await employeeStatusService.lockUserInClerk(employee.clerkUserId);
+      devLog('[Employee Controller] Clerk lock result:', lockResult);
+
+      // Note: We lock instead of delete to preserve the Clerk account
+      // If the employee needs to be restored later, we can just unlock
+    } catch (clerkError) {
+      devError('[Employee Controller] Failed to lock Clerk user:', clerkError);
+      // Continue with soft delete even if Clerk lock fails
+      // The employee record will still be marked as deleted
+    }
+  }
+
   // Soft delete - set isDeleted flag
   const result = await collections.employees.updateOne(
     { _id: new ObjectId(id) },
     {
       $set: {
         isDeleted: true,
+        isActive: false,  // Also set isActive to false
         deletedAt: new Date(),
         deletedBy: user.userId,
         updatedAt: new Date(),
@@ -1562,12 +2147,28 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
         { session }
       );
 
+      // Lock user in Clerk if clerkUserId exists (prevent login while keeping account)
+      if (employee.clerkUserId) {
+        try {
+          devLog('[Employee Controller] Locking Clerk user for reassign-delete:', employee.clerkUserId);
+          const lockResult = await employeeStatusService.lockUserInClerk(employee.clerkUserId);
+          devLog('[Employee Controller] Clerk lock result:', lockResult);
+
+          // Note: We lock instead of delete to preserve the Clerk account
+          // If the employee needs to be restored later, we can just unlock
+        } catch (clerkError) {
+          devError('[Employee Controller] Failed to lock Clerk user:', clerkError);
+          // Continue with soft delete even if Clerk lock fails
+        }
+      }
+
       // Soft delete employee
       const deleteResult = await collections.employees.updateOne(
         { _id: oldEmployeeId },
         {
           $set: {
             isDeleted: true,
+            isActive: false,  // Also set isActive to false
             deletedAt: new Date(),
             deletedBy: user.userId,
             updatedAt: new Date(),
@@ -1625,7 +2226,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   }
 
   // Remove sensitive fields
-  const { salary, bank, emergencyContacts, ...sanitizedEmployee } = employee;
+  const { salary, bankDetails, emergencyContacts, ...sanitizedEmployee } = employee;
   const formattedEmployee = formatEmployeeDates(sanitizedEmployee);
 
   // Assign default avatar if employee has no profile image
@@ -1673,7 +2274,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     'emergencyContact',
     'socialProfiles',
     'profileImage',
-    'avatarUrl', // Support frontend avatarUrl field
+    'avatarUrl'  // Support frontend avatarUrl field
   ];
 
   const sanitizedUpdate = {};
@@ -1687,6 +2288,33 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   if (sanitizedUpdate.avatarUrl !== undefined) {
     sanitizedUpdate.profileImage = sanitizedUpdate.avatarUrl;
     delete sanitizedUpdate.avatarUrl;
+  }
+
+  // ✅ Extract personal fields from root level and store in personal object
+  // These fields are returned flattened by GET endpoints but stored in personal subdocument
+  const nationalityValue = sanitizedUpdate.nationality;
+  const religionValue = sanitizedUpdate.religion;
+  const maritalStatusValue = sanitizedUpdate.maritalStatus;
+  const noOfChildrenValue = sanitizedUpdate.noOfChildren;
+  const passportValue = sanitizedUpdate.passport;
+
+  // Remove from root level (they go in personal)
+  delete sanitizedUpdate.nationality;
+  delete sanitizedUpdate.religion;
+  delete sanitizedUpdate.maritalStatus;
+  delete sanitizedUpdate.noOfChildren;
+  delete sanitizedUpdate.passport;
+
+  // Build personal object with extracted values
+  if (nationalityValue || religionValue || maritalStatusValue || noOfChildrenValue !== undefined || passportValue) {
+    sanitizedUpdate.personal = {
+      ...(employee.personal || {}), // Keep existing personal fields
+      ...(nationalityValue && { nationality: nationalityValue }),
+      ...(religionValue && { religion: religionValue }),
+      ...(maritalStatusValue && { maritalStatus: maritalStatusValue }),
+      ...(noOfChildrenValue !== undefined && { noOfChildren: noOfChildrenValue }),
+      ...(passportValue && { passport: passportValue })
+    };
   }
 
   const normalizedUpdate = normalizeEmployeeDates(sanitizedUpdate);
@@ -1764,51 +2392,49 @@ export const getEmployeeStatsByDepartment = asyncHandler(async (req, res) => {
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
-  const stats = await collections.employees
-    .aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true }, // Exclude soft-deleted records
-          status: 'Active',
-        },
-      },
-      {
-        $addFields: {
-          departmentObjId: {
-            $cond: {
-              if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
-              then: { $toObjectId: '$departmentId' },
-              else: null,
-            },
-          },
-        },
-      },
-      {
-        $lookup: {
-          from: 'departments',
-          localField: 'departmentObjId',
-          foreignField: '_id',
-          as: 'departmentInfo',
-        },
-      },
-      {
-        $unwind: {
-          path: '$departmentInfo',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $group: {
-          _id: '$departmentId',
-          departmentName: { $first: '$departmentInfo.department' },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { count: -1 },
-      },
-    ])
-    .toArray();
+  const stats = await collections.employees.aggregate([
+    {
+      $match: {
+        isDeleted: { $ne: true },  // Exclude soft-deleted records
+        status: 'Active'
+      }
+    },
+    {
+      $addFields: {
+        departmentObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+            then: { $toObjectId: '$departmentId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'departmentObjId',
+        foreignField: '_id',
+        as: 'departmentInfo'
+      }
+    },
+    {
+      $unwind: {
+        path: '$departmentInfo',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $group: {
+        _id: '$departmentId',
+        departmentName: { $first: '$departmentInfo.department' },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { count: -1 }
+    }
+  ]).toArray();
 
   return sendSuccess(res, stats, 'Employee statistics by department retrieved successfully');
 });
@@ -2036,6 +2662,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         contact: contact,
         account: {
           ...empData.account,
+          userName: empData.account?.userName,
           password: password,
           role: role,
         },
@@ -2045,6 +2672,15 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         updatedBy: user.userId,
         status: normalizeStatus(empData.status || 'Active'),
       };
+
+      // ✅ CRITICAL: Move nationality from root to personal.nationality for bulk upload
+      if (employeeToInsert.nationality !== undefined) {
+        if (!employeeToInsert.personal) {
+          employeeToInsert.personal = {};
+        }
+        employeeToInsert.personal.nationality = employeeToInsert.nationality;
+        delete employeeToInsert.nationality;
+      }
 
       const result = await collections.employees.insertOne(employeeToInsert);
 
@@ -2400,6 +3036,141 @@ export const serveEmployeeProfileImage = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Send login credentials email to employee (generates a new password)
+ * @route   POST /api/employees/:id/send-credentials
+ * @access  Private (HR / Admin)
+ */
+export const sendEmployeeCredentials = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const { id } = req.params;
+
+  devLog('[Employee Controller] sendEmployeeCredentials - employeeId:', id);
+
+  if (!ObjectId.isValid(id)) {
+    throw buildValidationError('id', 'Invalid employee ID');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const employee = await collections.employees.findOne({
+    _id: new ObjectId(id),
+    isDeleted: { $ne: true }
+  });
+
+  if (!employee) {
+    throw buildNotFoundError('Employee not found');
+  }
+
+  if (!employee.clerkUserId) {
+    throw buildValidationError('clerkUserId', 'Employee has no linked Clerk account. Cannot update credentials.');
+  }
+
+  // Generate fresh secure password
+  const newPassword = generateSecurePassword(12);
+
+  // Update Clerk (primary auth)
+  await clerkClient.users.updateUser(employee.clerkUserId, { password: newPassword });
+
+  // Update DB (plaintext reference — Clerk is the auth source)
+  await collections.employees.updateOne(
+    { _id: employee._id },
+    {
+      $set: {
+        'account.password': newPassword,
+        passwordChangedAt: new Date(),
+        updatedAt: new Date()
+      }
+    }
+  );
+
+  // Send credentials email
+  const loginLink = process.env.FRONTEND_URL || 'https://app.manage-rtc.com';
+  await sendEmployeeCredentialsEmail({
+    to: employee.email,
+    password: newPassword,
+    userName: employee.email,
+    loginLink,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    companyName: 'ManageRTC',
+  });
+
+  return sendSuccess(res, { email: employee.email }, `Credentials sent to ${employee.email} successfully`);
+});
+
+/**
+ * @desc    HR changes employee password (no current password required)
+ * @route   POST /api/employees/:id/change-password
+ * @access  Private (HR / Admin)
+ */
+export const changeEmployeePassword = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const { id } = req.params;
+  const { newPassword, confirmPassword } = req.body;
+
+  devLog('[Employee Controller] changeEmployeePassword - employeeId:', id);
+
+  if (!newPassword || !confirmPassword) {
+    throw buildValidationError('password', 'New password and confirm password are required');
+  }
+
+  if (newPassword !== confirmPassword) {
+    throw buildValidationError('confirmPassword', 'Passwords do not match');
+  }
+
+  if (newPassword.length < 6) {
+    throw buildValidationError('newPassword', 'Password must be at least 6 characters long');
+  }
+
+  if (!ObjectId.isValid(id)) {
+    throw buildValidationError('id', 'Invalid employee ID');
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const employee = await collections.employees.findOne({
+    _id: new ObjectId(id),
+    isDeleted: { $ne: true }
+  });
+
+  if (!employee) {
+    throw buildNotFoundError('Employee not found');
+  }
+
+  if (!employee.clerkUserId) {
+    throw buildValidationError('clerkUserId', 'Employee has no linked Clerk account. Cannot update password.');
+  }
+
+  // Update Clerk
+  try {
+    await clerkClient.users.updateUser(employee.clerkUserId, { password: newPassword });
+  } catch (clerkErr) {
+    devError('[changeEmployeePassword] Clerk update failed:', clerkErr.message);
+    throw buildValidationError('password', 'Failed to update password in authentication system. Please try again.');
+  }
+
+  // Update DB
+  await collections.employees.updateOne(
+    { _id: employee._id },
+    {
+      $set: {
+        'account.password': newPassword,
+        passwordChangedAt: new Date(),
+        updatedAt: new Date()
+      }
+    }
+  );
+
+  // Notify employee via email (non-fatal)
+  sendPasswordChangedEmail({
+    to: employee.email,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    companyName: 'ManageRTC',
+  }).catch(() => {});
+
+  return sendSuccess(res, { email: employee.email }, `Password updated for ${employee.firstName} ${employee.lastName} and notification sent`);
+});
+
 export default {
   getEmployees,
   getActiveEmployeesList,
@@ -2418,5 +3189,5 @@ export default {
   syncMyEmployeeRecord,
   uploadEmployeeProfileImage,
   deleteEmployeeProfileImage,
-  serveEmployeeProfileImage,
+  serveEmployeeProfileImage
 };

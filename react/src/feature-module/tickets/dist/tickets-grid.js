@@ -54,26 +54,26 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
     return r;
 };
 exports.__esModule = true;
+var jspdf_1 = require("jspdf");
 var react_1 = require("react");
-var react_router_dom_1 = require("react-router-dom");
-var imageWithBasePath_1 = require("../../core/common/imageWithBasePath");
-var all_routes_1 = require("../router/all_routes");
 var react_apexcharts_1 = require("react-apexcharts");
-var ticketGridModal_1 = require("../../core/modals/ticketGridModal");
+var react_router_dom_1 = require("react-router-dom");
+var XLSX = require("xlsx");
 var collapse_header_1 = require("../../core/common/collapse-header/collapse-header");
 var footer_1 = require("../../core/common/footer");
+var imageWithBasePath_1 = require("../../core/common/imageWithBasePath");
+var ticketGridModal_1 = require("../../core/modals/ticketGridModal");
 var SocketContext_1 = require("../../SocketContext");
-var jspdf_1 = require("jspdf");
-var XLSX = require("xlsx");
+var all_routes_1 = require("../router/all_routes");
 var TicketGrid = function () {
     var routes = all_routes_1.all_routes;
     var socket = SocketContext_1.useSocket();
     // State for dynamic data
     var _a = react_1.useState([]), ticketsList = _a[0], setTicketsList = _a[1];
     var _b = react_1.useState(true), loading = _b[0], setLoading = _b[1];
-    var _c = react_1.useState(1), currentPage = _c[0], setCurrentPage = _c[1];
-    var _d = react_1.useState(1), totalPages = _d[0], setTotalPages = _d[1];
-    var _e = react_1.useState(0), totalTickets = _e[0], setTotalTickets = _e[1];
+    var _c = react_1.useState(1), currentPage = _c[0], _setCurrentPage = _c[1];
+    var _d = react_1.useState(1), _totalPages = _d[0], setTotalPages = _d[1];
+    var _e = react_1.useState(0), _totalTickets = _e[0], setTotalTickets = _e[1];
     // State for dashboard statistics
     var _f = react_1.useState({
         newTickets: 0,
@@ -92,9 +92,9 @@ var TicketGrid = function () {
         status: '',
         sortBy: 'recently'
     }), filters = _h[0], setFilters = _h[1];
-    var _j = react_1.useState(false), exportLoading = _j[0], setExportLoading = _j[1];
+    var _j = react_1.useState(false), _exportLoading = _j[0], setExportLoading = _j[1];
     // State for edit/delete operations
-    var _k = react_1.useState(null), selectedTicket = _k[0], setSelectedTicket = _k[1];
+    var _k = react_1.useState(null), _selectedTicket = _k[0], setSelectedTicket = _k[1];
     // Set up socket listeners for tickets list response
     react_1.useEffect(function () {
         if (socket) {
@@ -231,7 +231,7 @@ var TicketGrid = function () {
         });
     };
     // Helper function to get priority badge class
-    var getPriorityBadgeClass = function (priority) {
+    var _getPriorityBadgeClass = function (priority) {
         switch (priority) {
             case 'High': return 'badge-danger';
             case 'Medium': return 'badge-warning';
@@ -241,7 +241,7 @@ var TicketGrid = function () {
         }
     };
     // Helper function to get status badge class
-    var getStatusBadgeClass = function (status) {
+    var _getStatusBadgeClass = function (status) {
         switch (status) {
             case 'New': return 'bg-outline-primary';
             case 'Open': return 'bg-outline-pink';
@@ -252,7 +252,7 @@ var TicketGrid = function () {
         }
     };
     // Helper function to format time ago
-    var getTimeAgo = function (date) {
+    var _getTimeAgo = function (date) {
         var now = new Date();
         var ticketDate = new Date(date);
         var diffInHours = Math.floor((now.getTime() - ticketDate.getTime()) / (1000 * 60 * 60));
@@ -267,7 +267,7 @@ var TicketGrid = function () {
     };
     // Handle PDF export
     var handleExportPDF = function () { return __awaiter(void 0, void 0, void 0, function () {
-        var doc_1, currentDate, currentTime, currentYear, primaryColor, secondaryColor, textColor_1, lightGray_1, borderColor, addCompanyLogo, logoAdded, yPosition_1, pageCount, i, error_1;
+        var doc_1, currentDate, currentTime, currentYear, _primaryColor, _secondaryColor, textColor_1, lightGray_1, _borderColor, addCompanyLogo, logoAdded, yPosition_1, pageCount, i, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -277,11 +277,11 @@ var TicketGrid = function () {
                     currentDate = new Date().toLocaleDateString();
                     currentTime = new Date().toLocaleTimeString();
                     currentYear = new Date().getFullYear();
-                    primaryColor = [242, 101, 34];
-                    secondaryColor = [59, 112, 128];
+                    _primaryColor = [242, 101, 34];
+                    _secondaryColor = [59, 112, 128];
                     textColor_1 = [33, 37, 41];
                     lightGray_1 = [248, 249, 250];
-                    borderColor = [222, 226, 230];
+                    _borderColor = [222, 226, 230];
                     addCompanyLogo = function () { return __awaiter(void 0, void 0, void 0, function () {
                         var logoPaths, _loop_1, _i, logoPaths_1, logoPath, state_1;
                         return __generator(this, function (_a) {
@@ -559,7 +559,7 @@ var TicketGrid = function () {
     var handleExportExcel = function () {
         try {
             setExportLoading(true);
-            var currentDate = new Date().toLocaleDateString();
+            var _currentDate = new Date().toLocaleDateString();
             var wb = XLSX.utils.book_new();
             // Prepare tickets data for Excel
             var ticketsDataForExcel = filteredTickets.map(function (ticket) {
@@ -636,59 +636,58 @@ var TicketGrid = function () {
                 default: return 'bg-outline-secondary';
             }
         };
-        return (react_1["default"].createElement("div", { key: ticket.ticketId, className: "col-xl-3 col-lg-4 col-md-6" },
-            react_1["default"].createElement("div", { className: "card" },
-                react_1["default"].createElement("div", { className: "card-body" },
-                    react_1["default"].createElement("div", { className: "d-flex justify-content-between align-items-start mb-2" },
-                        react_1["default"].createElement("div", { className: "form-check form-check-md" },
-                            react_1["default"].createElement("input", { className: "form-check-input", type: "checkbox" })),
-                        react_1["default"].createElement("div", null,
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId, className: "avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle" },
-                                react_1["default"].createElement(imageWithBasePath_1["default"], { src: ((_a = ticket.assignedTo) === null || _a === void 0 ? void 0 : _a.avatar) || "assets/img/profiles/avatar-01.jpg", className: "img-fluid h-auto w-auto", alt: "img" }))),
-                        react_1["default"].createElement("div", { className: "dropdown" },
-                            react_1["default"].createElement("button", { className: "btn btn-icon btn-sm rounded-circle", type: "button", "data-bs-toggle": "dropdown", "aria-expanded": "false" },
-                                react_1["default"].createElement("i", { className: "ti ti-dots-vertical" })),
-                            react_1["default"].createElement("ul", { className: "dropdown-menu dropdown-menu-end p-3" },
-                                react_1["default"].createElement("li", null,
-                                    react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#edit_ticket", onClick: function () { return handleEditTicket(ticket); } },
-                                        react_1["default"].createElement("i", { className: "ti ti-edit me-1" }),
+        return (React.createElement("div", { key: ticket.ticketId, className: "col-xl-3 col-lg-4 col-md-6" },
+            React.createElement("div", { className: "card" },
+                React.createElement("div", { className: "card-body" },
+                    React.createElement("div", { className: "d-flex justify-content-between align-items-start mb-2" },
+                        React.createElement("div", { className: "form-check form-check-md" },
+                            React.createElement("input", { className: "form-check-input", type: "checkbox" })),
+                        React.createElement("div", null,
+                            React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId, className: "avatar avatar-xl avatar-rounded border p-1 rounded-circle " + (ticket.assignedTo ? 'online border-primary' : ''), style: !ticket.assignedTo ? { opacity: 0.5, borderColor: '#dee2e6' } : {} },
+                                React.createElement(imageWithBasePath_1["default"], { src: ((_a = ticket.assignedTo) === null || _a === void 0 ? void 0 : _a.avatarUrl) || ((_b = ticket.assignedTo) === null || _b === void 0 ? void 0 : _b.avatar) || "assets/img/profiles/avatar-01.jpg", className: "img-fluid h-auto w-auto", alt: ticket.assignedTo ? "Assigned" : "Unassigned" }))),
+                        React.createElement("div", { className: "dropdown" },
+                            React.createElement("button", { className: "btn btn-icon btn-sm rounded-circle", type: "button", "data-bs-toggle": "dropdown", "aria-expanded": "false" },
+                                React.createElement("i", { className: "ti ti-dots-vertical" })),
+                            React.createElement("ul", { className: "dropdown-menu dropdown-menu-end p-3" },
+                                React.createElement("li", null,
+                                    React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#edit_ticket", onClick: function () { return handleEditTicket(ticket); } },
+                                        React.createElement("i", { className: "ti ti-edit me-1" }),
                                         "Edit")),
-                                react_1["default"].createElement("li", null,
-                                    react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#delete_modal", onClick: function () { return handleDeleteTicket(ticket); } },
-                                        react_1["default"].createElement("i", { className: "ti ti-trash me-1" }),
+                                React.createElement("li", null,
+                                    React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#delete_modal", onClick: function () { return handleDeleteTicket(ticket); } },
+                                        React.createElement("i", { className: "ti ti-trash me-1" }),
                                         "Delete"))))),
-                    react_1["default"].createElement("div", { className: "text-center mb-3" },
-                        react_1["default"].createElement("h6", { className: "mb-1" },
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId }, ticket.title || 'Untitled')),
-                        react_1["default"].createElement("span", { className: "badge bg-info-transparent fs-10 fw-medium" }, ticket.ticketId || 'N/A')),
-                    react_1["default"].createElement("div", { className: "d-flex flex-column" },
-                        react_1["default"].createElement("div", { className: "d-flex align-items-center justify-content-between mb-3" },
-                            react_1["default"].createElement("span", null, "Category"),
-                            react_1["default"].createElement("h6", { className: "fw-medium" }, ticket.category || 'N/A')),
-                        react_1["default"].createElement("div", { className: "d-flex align-items-center justify-content-between mb-3" },
-                            react_1["default"].createElement("span", null, "Status"),
-                            react_1["default"].createElement("span", { className: "badge " + getStatusBadgeClass(ticket.status) + " d-inline-flex align-items-center fs-10 fw-medium" },
-                                react_1["default"].createElement("i", { className: "ti ti-circle-filled fs-5 me-1" }),
+                    React.createElement("div", { className: "text-center mb-3" },
+                        React.createElement("h6", { className: "mb-1" },
+                            React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId }, ticket.title || 'Untitled')),
+                        React.createElement("span", { className: "badge bg-info-transparent fs-10 fw-medium" }, ticket.ticketId || 'N/A')),
+                    React.createElement("div", { className: "d-flex flex-column" },
+                        React.createElement("div", { className: "d-flex align-items-center justify-content-between mb-3" },
+                            React.createElement("span", null, "Category"),
+                            React.createElement("h6", { className: "fw-medium" }, ticket.category || 'N/A')),
+                        React.createElement("div", { className: "d-flex align-items-center justify-content-between mb-3" },
+                            React.createElement("span", null, "Status"),
+                            React.createElement("span", { className: "badge " + getStatusBadgeClass(ticket.status) + " d-inline-flex align-items-center fs-10 fw-medium" },
+                                React.createElement("i", { className: "ti ti-circle-filled fs-5 me-1" }),
                                 ticket.status || 'N/A')),
-                        react_1["default"].createElement("div", { className: "d-flex align-items-center justify-content-between" },
-                            react_1["default"].createElement("span", null, "Priority"),
-                            react_1["default"].createElement("span", { className: "badge " + getPriorityBadgeClass(ticket.priority) + " d-inline-flex align-items-center fs-10 fw-medium" },
-                                react_1["default"].createElement("i", { className: "ti ti-circle-filled fs-5 me-1" }),
+                        React.createElement("div", { className: "d-flex align-items-center justify-content-between" },
+                            React.createElement("span", null, "Priority"),
+                            React.createElement("span", { className: "badge " + getPriorityBadgeClass(ticket.priority) + " d-inline-flex align-items-center fs-10 fw-medium" },
+                                React.createElement("i", { className: "ti ti-circle-filled fs-5 me-1" }),
                                 ticket.priority || 'N/A'))),
-                    react_1["default"].createElement("div", { className: "d-flex align-items-center justify-content-between border-top pt-3 mt-3" },
-                        react_1["default"].createElement("div", null,
-                            react_1["default"].createElement("p", { className: "mb-1 fs-12" }, "Assigned To"),
-                            react_1["default"].createElement("div", { className: "d-flex align-items-center" },
-                                react_1["default"].createElement("span", { className: "avatar avatar-xs avatar-rounded me-2" },
-                                    react_1["default"].createElement(imageWithBasePath_1["default"], { src: ((_b = ticket.assignedTo) === null || _b === void 0 ? void 0 : _b.avatar) || "assets/img/profiles/avatar-01.jpg", alt: "Img" })),
-                                react_1["default"].createElement("h6", { className: "fw-normal" }, ((_c = ticket.assignedTo) === null || _c === void 0 ? void 0 : _c.firstName) && ((_d = ticket.assignedTo) === null || _d === void 0 ? void 0 : _d.lastName)
+                    React.createElement("div", { className: "d-flex align-items-center justify-content-between border-top pt-3 mt-3" },
+                        React.createElement("div", null,
+                            React.createElement("p", { className: "mb-1 fs-12" }, "Assigned To"),
+                            React.createElement("div", { className: "d-flex align-items-center" },
+                                React.createElement("span", { className: "avatar avatar-xs avatar-rounded me-2" }, ticket.assignedTo ? (React.createElement(imageWithBasePath_1["default"], { src: ticket.assignedTo.avatarUrl || ticket.assignedTo.avatar || "assets/img/profiles/avatar-01.jpg", alt: "Assigned" })) : (React.createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-01.jpg", alt: "Unassigned", style: { opacity: 0.5 } }))),
+                                React.createElement("h6", { className: "fw-normal" }, ((_c = ticket.assignedTo) === null || _c === void 0 ? void 0 : _c.firstName) && ((_d = ticket.assignedTo) === null || _d === void 0 ? void 0 : _d.lastName)
                                     ? ticket.assignedTo.firstName + " " + ticket.assignedTo.lastName
                                     : 'Unassigned'))),
-                        react_1["default"].createElement("div", { className: "icons-social d-flex align-items-center" },
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "avatar avatar-rounded avatar-sm bg-primary-transparent me-2" },
-                                react_1["default"].createElement("i", { className: "ti ti-message text-primary" })),
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "avatar avatar-rounded avatar-sm bg-light" },
-                                react_1["default"].createElement("i", { className: "ti ti-phone" }))))))));
+                        React.createElement("div", { className: "icons-social d-flex align-items-center" },
+                            React.createElement(react_router_dom_1.Link, { to: "#", className: "avatar avatar-rounded avatar-sm bg-primary-transparent me-2" },
+                                React.createElement("i", { className: "ti ti-message text-primary" })),
+                            React.createElement(react_router_dom_1.Link, { to: "#", className: "avatar avatar-rounded avatar-sm bg-light" },
+                                React.createElement("i", { className: "ti ti-phone" }))))))));
     };
     var Areachart = {
         series: [
@@ -1026,256 +1025,256 @@ var TicketGrid = function () {
             }
         }
     };
-    return (react_1["default"].createElement(react_1["default"].Fragment, null,
-        react_1["default"].createElement("div", { className: "page-wrapper" },
-            react_1["default"].createElement("div", { className: "content" },
-                react_1["default"].createElement("div", { className: "d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3" },
-                    react_1["default"].createElement("div", { className: "my-auto mb-2" },
-                        react_1["default"].createElement("h2", { className: "mb-1" }, "Tickets"),
-                        react_1["default"].createElement("nav", null,
-                            react_1["default"].createElement("ol", { className: "breadcrumb mb-0" },
-                                react_1["default"].createElement("li", { className: "breadcrumb-item" },
-                                    react_1["default"].createElement(react_router_dom_1.Link, { to: routes.adminDashboard },
-                                        react_1["default"].createElement("i", { className: "ti ti-smart-home" }))),
-                                react_1["default"].createElement("li", { className: "breadcrumb-item" }, "Employee"),
-                                react_1["default"].createElement("li", { className: "breadcrumb-item active", "aria-current": "page" }, "Tickets Grid")))),
-                    react_1["default"].createElement("div", { className: "d-flex my-xl-auto right-content align-items-center flex-wrap " },
-                        react_1["default"].createElement("div", { className: "me-2 mb-2" },
-                            react_1["default"].createElement("div", { className: "d-flex align-items-center border bg-white rounded p-1 me-2 icon-list" },
-                                react_1["default"].createElement(react_router_dom_1.Link, { to: routes.tickets, className: "btn btn-icon btn-sm me-1" },
-                                    react_1["default"].createElement("i", { className: "ti ti-list-tree" })),
-                                react_1["default"].createElement(react_router_dom_1.Link, { to: routes.ticketGrid, className: "btn btn-icon btn-sm active bg-primary text-white" },
-                                    react_1["default"].createElement("i", { className: "ti ti-layout-grid" })))),
-                        react_1["default"].createElement("div", { className: "me-2 mb-2" },
-                            react_1["default"].createElement("div", { className: "dropdown" },
-                                react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
-                                    react_1["default"].createElement("i", { className: "ti ti-file-export me-1" }),
+    return (React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "page-wrapper" },
+            React.createElement("div", { className: "content" },
+                React.createElement("div", { className: "d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3" },
+                    React.createElement("div", { className: "my-auto mb-2" },
+                        React.createElement("h2", { className: "mb-1" }, "Tickets"),
+                        React.createElement("nav", null,
+                            React.createElement("ol", { className: "breadcrumb mb-0" },
+                                React.createElement("li", { className: "breadcrumb-item" },
+                                    React.createElement(react_router_dom_1.Link, { to: routes.adminDashboard },
+                                        React.createElement("i", { className: "ti ti-smart-home" }))),
+                                React.createElement("li", { className: "breadcrumb-item" }, "Employee"),
+                                React.createElement("li", { className: "breadcrumb-item active", "aria-current": "page" }, "Tickets Grid")))),
+                    React.createElement("div", { className: "d-flex my-xl-auto right-content align-items-center flex-wrap " },
+                        React.createElement("div", { className: "me-2 mb-2" },
+                            React.createElement("div", { className: "d-flex align-items-center border bg-white rounded p-1 me-2 icon-list" },
+                                React.createElement(react_router_dom_1.Link, { to: routes.tickets, className: "btn btn-icon btn-sm me-1" },
+                                    React.createElement("i", { className: "ti ti-list-tree" })),
+                                React.createElement(react_router_dom_1.Link, { to: routes.ticketGrid, className: "btn btn-icon btn-sm active bg-primary text-white" },
+                                    React.createElement("i", { className: "ti ti-layout-grid" })))),
+                        React.createElement("div", { className: "me-2 mb-2" },
+                            React.createElement("div", { className: "dropdown" },
+                                React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
+                                    React.createElement("i", { className: "ti ti-file-export me-1" }),
                                     "Export"),
-                                react_1["default"].createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
-                                    react_1["default"].createElement("li", null,
-                                        react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                React.createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
+                                    React.createElement("li", null,
+                                        React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                 e.preventDefault();
                                                 handleExportPDF();
                                             } },
-                                            react_1["default"].createElement("i", { className: "ti ti-file-type-pdf me-1" }),
+                                            React.createElement("i", { className: "ti ti-file-type-pdf me-1" }),
                                             "Export as PDF")),
-                                    react_1["default"].createElement("li", null,
-                                        react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                    React.createElement("li", null,
+                                        React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                 e.preventDefault();
                                                 handleExportExcel();
                                             } },
-                                            react_1["default"].createElement("i", { className: "ti ti-file-type-xls me-1" }),
+                                            React.createElement("i", { className: "ti ti-file-type-xls me-1" }),
                                             "Export as Excel",
                                             " "))))),
-                        react_1["default"].createElement("div", { className: "mb-2" },
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", "data-bs-toggle": "modal", "data-bs-target": "#add_ticket", className: "btn btn-primary d-flex align-items-center" },
-                                react_1["default"].createElement("i", { className: "ti ti-circle-plus me-2" }),
+                        React.createElement("div", { className: "mb-2" },
+                            React.createElement(react_router_dom_1.Link, { to: "#", "data-bs-toggle": "modal", "data-bs-target": "#add_ticket", className: "btn btn-primary d-flex align-items-center" },
+                                React.createElement("i", { className: "ti ti-circle-plus me-2" }),
                                 "Add Ticket")),
-                        react_1["default"].createElement("div", { className: "head-icons ms-2" },
-                            react_1["default"].createElement(collapse_header_1["default"], null)))),
-                react_1["default"].createElement("div", { className: "row" },
-                    react_1["default"].createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
-                        react_1["default"].createElement("div", { className: "card flex-fill" },
-                            react_1["default"].createElement("div", { className: "card-body" },
-                                react_1["default"].createElement("div", { className: "row" },
-                                    react_1["default"].createElement("div", { className: "col-6 d-flex" },
-                                        react_1["default"].createElement("div", { className: "flex-fill" },
-                                            react_1["default"].createElement("div", { className: "border border-dashed border-primary rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
-                                                react_1["default"].createElement("span", { className: "avatar avatar-lg avatar-rounded bg-primary-transparent " },
-                                                    react_1["default"].createElement("i", { className: "ti ti-ticket fs-20" }))),
-                                            react_1["default"].createElement("p", { className: "fw-medium fs-12 mb-1" }, "New Tickets"),
-                                            react_1["default"].createElement("h4", null, loading ? '...' : ticketsStats.newTickets))),
-                                    react_1["default"].createElement("div", { className: "col-6 text-end d-flex" },
-                                        react_1["default"].createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
-                                            react_1["default"].createElement("span", { className: "badge bg-transparent-purple d-inline-flex align-items-center mb-3" },
-                                                react_1["default"].createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
+                        React.createElement("div", { className: "head-icons ms-2" },
+                            React.createElement(collapse_header_1["default"], null)))),
+                React.createElement("div", { className: "row" },
+                    React.createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
+                        React.createElement("div", { className: "card flex-fill" },
+                            React.createElement("div", { className: "card-body" },
+                                React.createElement("div", { className: "row" },
+                                    React.createElement("div", { className: "col-6 d-flex" },
+                                        React.createElement("div", { className: "flex-fill" },
+                                            React.createElement("div", { className: "border border-dashed border-primary rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
+                                                React.createElement("span", { className: "avatar avatar-lg avatar-rounded bg-primary-transparent " },
+                                                    React.createElement("i", { className: "ti ti-ticket fs-20" }))),
+                                            React.createElement("p", { className: "fw-medium fs-12 mb-1" }, "New Tickets"),
+                                            React.createElement("h4", null, loading ? '...' : ticketsStats.newTickets))),
+                                    React.createElement("div", { className: "col-6 text-end d-flex" },
+                                        React.createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
+                                            React.createElement("span", { className: "badge bg-transparent-purple d-inline-flex align-items-center mb-3" },
+                                                React.createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
                                                 loading ? '...' : "+" + ticketsStats.percentageChange + "%"),
-                                            react_1["default"].createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart), { series: [{
+                                            React.createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart), { series: [{
                                                             name: "Tickets",
                                                             data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                         }] }), series: [{
                                                         name: "Tickets",
                                                         data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                     }], type: "bar", height: 70 }))))))),
-                    react_1["default"].createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
-                        react_1["default"].createElement("div", { className: "card flex-fill" },
-                            react_1["default"].createElement("div", { className: "card-body" },
-                                react_1["default"].createElement("div", { className: "row" },
-                                    react_1["default"].createElement("div", { className: "col-6 d-flex" },
-                                        react_1["default"].createElement("div", { className: "flex-fill" },
-                                            react_1["default"].createElement("div", { className: "border border-dashed border-purple rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
-                                                react_1["default"].createElement("span", { className: "avatar avatar-lg avatar-rounded bg-transparent-purple" },
-                                                    react_1["default"].createElement("i", { className: "ti ti-folder-open fs-20" }))),
-                                            react_1["default"].createElement("p", { className: "fw-medium fs-12 mb-1" }, "Open Tickets"),
-                                            react_1["default"].createElement("h4", null, loading ? '...' : ticketsStats.openTickets))),
-                                    react_1["default"].createElement("div", { className: "col-6 text-end d-flex" },
-                                        react_1["default"].createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
-                                            react_1["default"].createElement("span", { className: "badge bg-transparent-dark text-dark d-inline-flex align-items-center mb-3" },
-                                                react_1["default"].createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
+                    React.createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
+                        React.createElement("div", { className: "card flex-fill" },
+                            React.createElement("div", { className: "card-body" },
+                                React.createElement("div", { className: "row" },
+                                    React.createElement("div", { className: "col-6 d-flex" },
+                                        React.createElement("div", { className: "flex-fill" },
+                                            React.createElement("div", { className: "border border-dashed border-purple rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
+                                                React.createElement("span", { className: "avatar avatar-lg avatar-rounded bg-transparent-purple" },
+                                                    React.createElement("i", { className: "ti ti-folder-open fs-20" }))),
+                                            React.createElement("p", { className: "fw-medium fs-12 mb-1" }, "Open Tickets"),
+                                            React.createElement("h4", null, loading ? '...' : ticketsStats.openTickets))),
+                                    React.createElement("div", { className: "col-6 text-end d-flex" },
+                                        React.createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
+                                            React.createElement("span", { className: "badge bg-transparent-dark text-dark d-inline-flex align-items-center mb-3" },
+                                                React.createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
                                                 loading ? '...' : "+" + ticketsStats.percentageChange + "%"),
-                                            react_1["default"].createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart1), { series: [{
+                                            React.createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart1), { series: [{
                                                             name: "Tickets",
                                                             data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                         }] }), series: [{
                                                         name: "Tickets",
                                                         data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                     }], type: "bar", height: 70 }))))))),
-                    react_1["default"].createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
-                        react_1["default"].createElement("div", { className: "card flex-fill" },
-                            react_1["default"].createElement("div", { className: "card-body" },
-                                react_1["default"].createElement("div", { className: "row" },
-                                    react_1["default"].createElement("div", { className: "col-6 d-flex" },
-                                        react_1["default"].createElement("div", { className: "flex-fill" },
-                                            react_1["default"].createElement("div", { className: "border border-dashed border-success rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
-                                                react_1["default"].createElement("span", { className: "avatar avatar-lg avatar-rounded bg-success-transparent" },
-                                                    react_1["default"].createElement("i", { className: "ti ti-checks fs-20" }))),
-                                            react_1["default"].createElement("p", { className: "fw-medium fs-12 mb-1" }, "Solved Tickets"),
-                                            react_1["default"].createElement("h4", null, loading ? '...' : ticketsStats.solvedTickets))),
-                                    react_1["default"].createElement("div", { className: "col-6 text-end d-flex" },
-                                        react_1["default"].createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
-                                            react_1["default"].createElement("span", { className: "badge bg-info-transparent d-inline-flex align-items-center mb-3" },
-                                                react_1["default"].createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
+                    React.createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
+                        React.createElement("div", { className: "card flex-fill" },
+                            React.createElement("div", { className: "card-body" },
+                                React.createElement("div", { className: "row" },
+                                    React.createElement("div", { className: "col-6 d-flex" },
+                                        React.createElement("div", { className: "flex-fill" },
+                                            React.createElement("div", { className: "border border-dashed border-success rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
+                                                React.createElement("span", { className: "avatar avatar-lg avatar-rounded bg-success-transparent" },
+                                                    React.createElement("i", { className: "ti ti-checks fs-20" }))),
+                                            React.createElement("p", { className: "fw-medium fs-12 mb-1" }, "Solved Tickets"),
+                                            React.createElement("h4", null, loading ? '...' : ticketsStats.solvedTickets))),
+                                    React.createElement("div", { className: "col-6 text-end d-flex" },
+                                        React.createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
+                                            React.createElement("span", { className: "badge bg-info-transparent d-inline-flex align-items-center mb-3" },
+                                                React.createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
                                                 loading ? '...' : "+" + ticketsStats.percentageChange + "%"),
-                                            react_1["default"].createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart2), { series: [{
+                                            React.createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart2), { series: [{
                                                             name: "Tickets",
                                                             data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                         }] }), series: [{
                                                         name: "Tickets",
                                                         data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                     }], type: "bar", height: 70 }))))))),
-                    react_1["default"].createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
-                        react_1["default"].createElement("div", { className: "card flex-fill" },
-                            react_1["default"].createElement("div", { className: "card-body" },
-                                react_1["default"].createElement("div", { className: "row" },
-                                    react_1["default"].createElement("div", { className: "col-6 d-flex" },
-                                        react_1["default"].createElement("div", { className: "flex-fill" },
-                                            react_1["default"].createElement("div", { className: "border border-dashed border-info rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
-                                                react_1["default"].createElement("span", { className: "avatar avatar-lg avatar-rounded bg-info-transparent" },
-                                                    react_1["default"].createElement("i", { className: "ti ti-progress-alert fs-20" }))),
-                                            react_1["default"].createElement("p", { className: "fw-medium fs-12 mb-1" }, "Pending Tickets"),
-                                            react_1["default"].createElement("h4", null, loading ? '...' : ticketsStats.pendingTickets))),
-                                    react_1["default"].createElement("div", { className: "col-6 text-end d-flex" },
-                                        react_1["default"].createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
-                                            react_1["default"].createElement("span", { className: "badge bg-secondary-transparent d-inline-flex align-items-center mb-3" },
-                                                react_1["default"].createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
+                    React.createElement("div", { className: "col-xl-3 col-md-6 d-flex" },
+                        React.createElement("div", { className: "card flex-fill" },
+                            React.createElement("div", { className: "card-body" },
+                                React.createElement("div", { className: "row" },
+                                    React.createElement("div", { className: "col-6 d-flex" },
+                                        React.createElement("div", { className: "flex-fill" },
+                                            React.createElement("div", { className: "border border-dashed border-info rounded-circle d-inline-flex align-items-center justify-content-center p-1 mb-3" },
+                                                React.createElement("span", { className: "avatar avatar-lg avatar-rounded bg-info-transparent" },
+                                                    React.createElement("i", { className: "ti ti-progress-alert fs-20" }))),
+                                            React.createElement("p", { className: "fw-medium fs-12 mb-1" }, "Pending Tickets"),
+                                            React.createElement("h4", null, loading ? '...' : ticketsStats.pendingTickets))),
+                                    React.createElement("div", { className: "col-6 text-end d-flex" },
+                                        React.createElement("div", { className: "d-flex flex-column justify-content-between align-items-end" },
+                                            React.createElement("span", { className: "badge bg-secondary-transparent d-inline-flex align-items-center mb-3" },
+                                                React.createElement("i", { className: "ti ti-arrow-wave-right-down me-1" }),
                                                 loading ? '...' : "+" + ticketsStats.percentageChange + "%"),
-                                            react_1["default"].createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart3), { series: [{
+                                            React.createElement(react_apexcharts_1["default"], { options: __assign(__assign({}, Areachart3), { series: [{
                                                             name: "Tickets",
                                                             data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                         }] }), series: [{
                                                         name: "Tickets",
                                                         data: ticketsStats.monthlyTrends || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                                                     }], type: "bar", height: 70 })))))))),
-                react_1["default"].createElement("div", { className: "card" },
-                    react_1["default"].createElement("div", { className: "card-body p-3" },
-                        react_1["default"].createElement("div", { className: "d-flex align-items-center justify-content-between flex-wrap row-gap-3" },
-                            react_1["default"].createElement("h5", null, "Ticket Grid"),
-                            react_1["default"].createElement("div", { className: "d-flex align-items-center flex-wrap row-gap-3" },
-                                react_1["default"].createElement("div", { className: "dropdown me-2" },
-                                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" }, filters.priority || 'Priority'),
-                                    react_1["default"].createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                React.createElement("div", { className: "card" },
+                    React.createElement("div", { className: "card-body p-3" },
+                        React.createElement("div", { className: "d-flex align-items-center justify-content-between flex-wrap row-gap-3" },
+                            React.createElement("h5", null, "Ticket Grid"),
+                            React.createElement("div", { className: "d-flex align-items-center flex-wrap row-gap-3" },
+                                React.createElement("div", { className: "dropdown me-2" },
+                                    React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" }, filters.priority || 'Priority'),
+                                    React.createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('priority', '');
                                                 } }, "All Priorities")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('priority', 'High');
                                                 } }, "High")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('priority', 'Low');
                                                 } }, "Low")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('priority', 'Medium');
                                                 } }, "Medium")))),
-                                react_1["default"].createElement("div", { className: "dropdown me-2" },
-                                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" }, filters.status || 'Select Status'),
-                                    react_1["default"].createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                React.createElement("div", { className: "dropdown me-2" },
+                                    React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" }, filters.status || 'Select Status'),
+                                    React.createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', '');
                                                 } }, "All Status")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', 'New');
                                                 } }, "New")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', 'Open');
                                                 } }, "Open")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', 'On Hold');
                                                 } }, "On Hold")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', 'Solved');
                                                 } }, "Solved")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('status', 'Closed');
                                                 } }, "Closed")))),
-                                react_1["default"].createElement("div", { className: "dropdown" },
-                                    react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
+                                React.createElement("div", { className: "dropdown" },
+                                    React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center", "data-bs-toggle": "dropdown" },
                                         "Sort By: ",
                                         filters.sortBy === 'recently' ? 'Recently Added' :
                                             filters.sortBy === 'ascending' ? 'Ascending' :
                                                 filters.sortBy === 'descending' ? 'Descending' :
                                                     filters.sortBy === 'lastMonth' ? 'Last Month' :
                                                         filters.sortBy === 'last7Days' ? 'Last 7 Days' : 'Recently Added'),
-                                    react_1["default"].createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                    React.createElement("ul", { className: "dropdown-menu  dropdown-menu-end p-3" },
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('sortBy', 'recently');
                                                 } }, "Recently Added")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('sortBy', 'ascending');
                                                 } }, "Ascending")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('sortBy', 'descending');
                                                 } }, "Descending")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('sortBy', 'lastMonth');
                                                 } }, "Last Month")),
-                                        react_1["default"].createElement("li", null,
-                                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
+                                        React.createElement("li", null,
+                                            React.createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-item rounded-1", onClick: function (e) {
                                                     e.preventDefault();
                                                     handleFilterChange('sortBy', 'last7Days');
                                                 } }, "Last 7 Days")))))))),
-                react_1["default"].createElement("div", { className: "row" },
-                    loading ? (react_1["default"].createElement("div", { className: "col-12 text-center" },
-                        react_1["default"].createElement("div", { className: "spinner-border", role: "status" },
-                            react_1["default"].createElement("span", { className: "visually-hidden" }, "Loading...")))) : filteredTickets.length > 0 ? (filteredTickets.map(function (ticket) { return renderTicketCard(ticket); })) : (react_1["default"].createElement("div", { className: "col-12 text-center" },
-                        react_1["default"].createElement("div", { className: "card" },
-                            react_1["default"].createElement("div", { className: "card-body text-center py-5" },
-                                react_1["default"].createElement("i", { className: "ti ti-ticket fs-48 text-muted mb-3" }),
-                                react_1["default"].createElement("h5", { className: "text-muted" }, "No tickets found"),
-                                react_1["default"].createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket."))))),
-                    react_1["default"].createElement("div", { className: "col-md-12" },
-                        react_1["default"].createElement("div", { className: "text-center mb-4" },
-                            react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-primary" },
-                                react_1["default"].createElement("i", { className: "ti ti-loader-3 me-1" }),
+                React.createElement("div", { className: "row" },
+                    loading ? (React.createElement("div", { className: "col-12 text-center" },
+                        React.createElement("div", { className: "spinner-border", role: "status" },
+                            React.createElement("span", { className: "visually-hidden" }, "Loading...")))) : filteredTickets.length > 0 ? (filteredTickets.map(function (ticket) { return renderTicketCard(ticket); })) : (React.createElement("div", { className: "col-12 text-center" },
+                        React.createElement("div", { className: "card" },
+                            React.createElement("div", { className: "card-body text-center py-5" },
+                                React.createElement("i", { className: "ti ti-ticket fs-48 text-muted mb-3" }),
+                                React.createElement("h5", { className: "text-muted" }, "No tickets found"),
+                                React.createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket."))))),
+                    React.createElement("div", { className: "col-md-12" },
+                        React.createElement("div", { className: "text-center mb-4" },
+                            React.createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-primary" },
+                                React.createElement("i", { className: "ti ti-loader-3 me-1" }),
                                 "Load More"))))),
-            react_1["default"].createElement(footer_1["default"], null)),
-        react_1["default"].createElement(ticketGridModal_1["default"], null)));
+            React.createElement(footer_1["default"], null)),
+        React.createElement(ticketGridModal_1["default"], null)));
 };
 exports["default"] = TicketGrid;

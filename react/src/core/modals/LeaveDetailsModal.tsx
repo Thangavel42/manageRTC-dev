@@ -1,6 +1,7 @@
-import React from "react";
 import dayjs from "dayjs";
+import React from "react";
 import { statusDisplayMap, type LeaveStatus } from "../../hooks/useLeaveREST";
+import ImageWithBasePath from "../common/imageWithBasePath";
 
 interface AuditTrailEntry {
   status: LeaveStatus;
@@ -17,6 +18,7 @@ interface Leave {
   employeeId?: string;
   employeeName?: string;
   leaveType: string;
+  leaveTypeName?: string;  // Display name from leaveTypes collection (e.g., "Annual Leave")
   startDate: string;
   endDate: string;
   duration: number;
@@ -47,6 +49,7 @@ interface Leave {
     originalName: string;
     url: string;
   }>;
+  statusHistory?: AuditTrailEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -55,17 +58,70 @@ interface LeaveDetailsModalProps {
   leave: Leave | null;
   modalId?: string;
   leaveTypeDisplayMap?: Record<string, string>;
+  employeeNameById?: Map<string, string>;
+  employeeDataById?: Map<string, { avatar?: string; avatarUrl?: string; profileImage?: string; role?: string; designation?: string; employeeId?: string }>;
+  onClose?: () => void;
+  onApprove?: (leave: Leave) => void;
+  onReject?: (leave: Leave) => void;
+  canApproveReject?: boolean;
 }
 
 const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
   leave,
   modalId = "view_leave_details",
-  leaveTypeDisplayMap = {}
+  leaveTypeDisplayMap = {},
+  employeeNameById = new Map(),
+  employeeDataById = new Map(),
+  onClose,
+  onApprove,
+  onReject,
+  canApproveReject = false
 }) => {
-  // Build audit trail from leave data
+  // Timeline Styles
+  const timelineStyles = `
+    .leave-timeline .timeline-item {
+      position: relative;
+      padding-bottom: 20px;
+      padding-left: 30px;
+    }
+    .leave-timeline .timeline-item:last-child {
+      padding-bottom: 0;
+    }
+    .leave-timeline .timeline-item:last-child .timeline-line {
+      display: none;
+    }
+    .leave-timeline .timeline-dot {
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      z-index: 1;
+      border: 2px solid white;
+      box-shadow: 0 0 0 2px #dee2e6;
+    }
+    .leave-timeline .timeline-line {
+      position: absolute;
+      left: 5px;
+      top: 14px;
+      width: 2px;
+      height: calc(100% + 6px);
+      background-color: #dee2e6;
+      z-index: 0;
+    }
+  `;
+
+  // Build audit trail from leave data if statusHistory doesn't exist
   const buildAuditTrail = (): AuditTrailEntry[] => {
     if (!leave) return [];
 
+    // If statusHistory exists, use it
+    if (leave.statusHistory && leave.statusHistory.length > 0) {
+      return leave.statusHistory;
+    }
+
+    // Otherwise, construct from available data
     const trail: AuditTrailEntry[] = [];
 
     // Initial request
@@ -114,11 +170,39 @@ const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
 
   const auditTrail = buildAuditTrail();
 
-  const getStatusBadge = (status: LeaveStatus) => {
+  // Format date helper
+  const formatDate = (date: string | Date) => {
+    if (!date) return "-";
+    return dayjs(date).format("DD MMM YYYY");
+  };
+
+  // Map semantic color names to CSS color values
+  const colorMap: Record<string, { bg: string; text: string }> = {
+    warning: { bg: '#fff3cd', text: '#856404' },
+    success: { bg: '#d4edda', text: '#155724' },
+    danger: { bg: '#f8d7da', text: '#721c24' },
+    info: { bg: '#d1ecf1', text: '#0c5460' },
+    default: { bg: '#f8f9fa', text: '#6c757d' },
+  };
+
+  // Status Badge Component
+  const StatusBadge = ({ status }: { status: LeaveStatus }) => {
     const config = statusDisplayMap[status] || statusDisplayMap.pending;
+    const resolved = colorMap[config.color] || colorMap.default;
+
     return (
-      <span className={`badge ${config.badgeClass} d-inline-flex align-items-center`}>
-        <i className="ti ti-point-filled me-1" />
+      <span
+        className="badge d-inline-flex align-items-center"
+        style={{
+          fontSize: '12px',
+          fontWeight: '500',
+          padding: '4px 10px',
+          minWidth: '80px',
+          backgroundColor: resolved.bg,
+          color: resolved.text
+        }}
+      >
+        <i className="ti ti-point-filled me-1" style={{ fontSize: '10px' }} />
         {config.label}
       </span>
     );
@@ -126,7 +210,7 @@ const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
 
   if (!leave) {
     return (
-      <div className="modal fade" id={modalId}>
+      <div className="modal fade" id={modalId} tabIndex={-1}>
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -136,11 +220,12 @@ const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
+                onClick={onClose}
               >
                 <i className="ti ti-x" />
               </button>
             </div>
-            <div className="modal-body pb-0">
+            <div className="modal-body">
               <div className="text-center py-5">
                 <p className="text-muted">No leave selected</p>
               </div>
@@ -148,8 +233,9 @@ const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-light px-4"
                 data-bs-dismiss="modal"
+                onClick={onClose}
               >
                 Close
               </button>
@@ -161,320 +247,224 @@ const LeaveDetailsModal: React.FC<LeaveDetailsModalProps> = ({
   }
 
   return (
-    <div className="modal fade" id={modalId}>
-      <div className="modal-dialog modal-dialog-centered modal-xl">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h4 className="modal-title">Leave Request Details</h4>
-            <button
-              type="button"
-              className="btn-close custom-btn-close"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            >
-              <i className="ti ti-x" />
-            </button>
-          </div>
-          <div className="modal-body pb-0">
-            <div className="row">
-              {/* Employee & Leave Type Header */}
-              <div className="col-md-12 mb-4">
-                <div className="d-flex align-items-center justify-content-between">
-                  <div className="d-flex align-items-center">
-                    <div className="avatar avatar-lg bg-primary-transparent rounded me-3">
-                      <i className="ti ti-user fs-24 text-primary" />
-                    </div>
-                    <div>
-                      <h5 className="mb-1">{leave.employeeName || 'Unknown Employee'}</h5>
-                      <p className="text-muted mb-0">
-                        {leaveTypeDisplayMap[leave.leaveType] || leave.leaveType}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    {getStatusBadge(leave.finalStatus || leave.status)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="col-md-6">
-                {/* Leave Details Card */}
-                <div className="card bg-light-300 border-0 mb-3">
-                  <div className="card-header bg-transparent border-0 py-2">
-                    <h6 className="mb-0">Leave Information</h6>
-                  </div>
-                  <div className="card-body">
-                    <div className="row">
-                      {/* Leave Type */}
-                      <div className="col-md-12 mb-3">
-                        <label className="form-label text-muted mb-1">Leave Type</label>
-                        <p className="fw-medium mb-0">
-                          <span className="badge badge-soft-info d-inline-flex align-items-center">
-                            <i className="ti ti-tag me-1" />
-                            {leaveTypeDisplayMap[leave.leaveType] || leave.leaveType}
-                          </span>
-                        </p>
-                      </div>
-
-                      {/* Start Date */}
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label text-muted mb-1">Start Date</label>
-                        <p className="fw-medium mb-0">
-                          <i className="ti ti-calendar me-1 text-success" />
-                          {dayjs(leave.startDate).format("DD MMMM YYYY")}
-                        </p>
-                      </div>
-
-                      {/* End Date */}
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label text-muted mb-1">End Date</label>
-                        <p className="fw-medium mb-0">
-                          <i className="ti ti-calendar me-1 text-danger" />
-                          {dayjs(leave.endDate).format("DD MMMM YYYY")}
-                        </p>
-                      </div>
-
-                      {/* Duration */}
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label text-muted mb-1">Total Days</label>
-                        <p className="fw-medium mb-0">
-                          <i className="ti ti-clock me-1 text-warning" />
-                          {leave.duration || leave.totalDays || leave.workingDays || 0} days
-                        </p>
-                      </div>
-
-                      {/* Applied On */}
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label text-muted mb-1">Applied On</label>
-                        <p className="fw-medium mb-0">
-                          <i className="ti ti-calendar-event me-1 text-info" />
-                          {dayjs(leave.createdAt).format("DD MMMM YYYY, HH:mm")}
-                        </p>
-                      </div>
-
-                      {/* Reason */}
-                      {leave.reason && (
-                        <div className="col-md-12 mb-0">
-                          <label className="form-label text-muted mb-1">Reason</label>
-                          <p className="mb-0">{leave.reason}</p>
+    <>
+      <style>{timelineStyles}</style>
+      <div className="modal fade" id={modalId} tabIndex={-1}>
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Leave Details</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={onClose}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {/* Leave Details Section */}
+              <div className="p-3 rounded border bg-light">
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Employee</p>
+                    <div className="d-flex align-items-center">
+                      <span className="avatar avatar-md me-2">
+                        {(() => {
+                          const empData = employeeDataById.get(leave.employeeId || '');
+                          const avatarUrl = empData?.avatarUrl || empData?.profileImage || empData?.avatar;
+                          if (avatarUrl) {
+                            return (
+                              <img
+                                src={avatarUrl}
+                                className="rounded-circle"
+                                alt="img"
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'assets/img/users/user-32.jpg'; }}
+                              />
+                            );
+                          }
+                          return (
+                            <ImageWithBasePath src="assets/img/users/user-32.jpg" className="rounded-circle" alt="img" />
+                          );
+                        })()}
+                      </span>
+                      <div>
+                        <div className="fw-semibold text-dark">
+                          {employeeNameById.get(leave.employeeId || '') || leave.employeeName || "Unknown"}
                         </div>
-                      )}
-
-                      {/* Detailed Reason */}
-                      {leave.detailedReason && leave.detailedReason !== leave.reason && (
-                        <div className="col-md-12 mb-0">
-                          <label className="form-label text-muted mb-1">Detailed Reason</label>
-                          <p className="mb-0 text-muted">{leave.detailedReason}</p>
+                        <div className="fs-12 text-muted">
+                          {(() => {
+                            const empData = employeeDataById.get(leave.employeeId || '');
+                            const rawDesignation = empData?.designation;
+                            const designationStr = typeof rawDesignation === 'object' && rawDesignation !== null
+                              ? (rawDesignation as any).designation || (rawDesignation as any).name || ''
+                              : rawDesignation;
+                            const roleOrDesignation = empData?.role || designationStr;
+                            const empId = empData?.employeeId || leave.employeeId;
+                            return (
+                              <>
+                                {roleOrDesignation && <span className="badge bg-light text-dark me-1">{String(roleOrDesignation)}</span>}
+                                <span className="text-muted">{empId || '-'}</span>
+                              </>
+                            );
+                          })()}
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="col-md-6">
-                {/* Status & Approval Card */}
-                <div className="card bg-light-300 border-0 mb-3">
-                  <div className="card-header bg-transparent border-0 py-2">
-                    <h6 className="mb-0">Approval Status</h6>
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Reporting Manager</p>
+                    <div className="fw-semibold text-dark">
+                      {leave.reportingManagerName || "-"}
+                    </div>
                   </div>
-                  <div className="card-body">
-                    <div className="row">
-                      {/* Reporting Manager */}
-                      {leave.reportingManagerName && (
-                        <div className="col-md-12 mb-3">
-                          <label className="form-label text-muted mb-1">Reporting Manager</label>
-                          <p className="fw-medium mb-0">
-                            <i className="ti ti-user-check me-1 text-primary" />
-                            {leave.reportingManagerName}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Manager Status */}
-                      <div className="col-md-12 mb-3">
-                        <label className="form-label text-muted mb-1">Manager Status</label>
-                        <p className="mb-0">
-                          {getStatusBadge(leave.managerStatus || 'pending')}
-                        </p>
-                      </div>
-
-                      {/* HR Status */}
-                      {leave.hrStatus && (
-                        <div className="col-md-12 mb-3">
-                          <label className="form-label text-muted mb-1">HR Status</label>
-                          <p className="mb-0">
-                            {getStatusBadge(leave.hrStatus)}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Final Status */}
-                      <div className="col-md-12 mb-3">
-                        <label className="form-label text-muted mb-1">Final Status</label>
-                        <p className="mb-0">
-                          {getStatusBadge(leave.finalStatus || leave.status)}
-                        </p>
-                      </div>
-
-                      {/* Approved By */}
-                      {leave.approvedByName && (
-                        <div className="col-md-12 mb-3">
-                          <label className="form-label text-muted mb-1">Approved By</label>
-                          <p className="fw-medium mb-0">
-                            <i className="ti ti-check me-1 text-success" />
-                            {leave.approvedByName}
-                          </p>
-                          {leave.approvedAt && (
-                            <p className="text-muted small mb-0">
-                              {dayjs(leave.approvedAt).format("DD MMMM YYYY, HH:mm")}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Rejected By */}
-                      {leave.rejectedByName && (
-                        <div className="col-md-12 mb-3">
-                          <label className="form-label text-muted mb-1">Rejected By</label>
-                          <p className="fw-medium mb-0">
-                            <i className="ti ti-x me-1 text-danger" />
-                            {leave.rejectedByName}
-                          </p>
-                          {leave.rejectedAt && (
-                            <p className="text-muted small mb-0">
-                              {dayjs(leave.rejectedAt).format("DD MMMM YYYY, HH:mm")}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Approval Comments */}
-                      {leave.approvalComments && (
-                        <div className="col-md-12 mb-3">
-                          <label className="form-label text-muted mb-1">Approval Comments</label>
-                          <p className="mb-0 text-success">
-                            <i className="ti ti-message me-1" />
-                            {leave.approvalComments}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Rejection Reason */}
-                      {leave.rejectionReason && (
-                        <div className="col-md-12 mb-0">
-                          <label className="form-label text-muted mb-1">Rejection Reason</label>
-                          <p className="mb-0 text-danger">
-                            <i className="ti ti-alert-circle me-1" />
-                            {leave.rejectionReason}
-                          </p>
-                        </div>
-                      )}
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Leave Type</p>
+                    <div className="fw-semibold text-dark">
+                      {leave.leaveTypeName || leaveTypeDisplayMap[leave.leaveType?.toLowerCase?.()] || leave.leaveType}
+                    </div>
+                  </div>
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">No. of Days</p>
+                    <div className="fw-semibold text-dark">
+                      {leave.duration} Day{leave.duration > 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">From</p>
+                    <div className="fw-semibold text-dark">
+                      {formatDate(leave.startDate)}
+                    </div>
+                  </div>
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">To</p>
+                    <div className="fw-semibold text-dark">
+                      {formatDate(leave.endDate)}
+                    </div>
+                  </div>
+                  <div className="col-sm-6">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Status</p>
+                    <div className="d-inline-flex align-items-center gap-2">
+                      <StatusBadge status={leave.finalStatus || leave.status} />
+                    </div>
+                  </div>
+                  <div className="col-12">
+                    <p className="text-muted text-uppercase fs-12 mb-1">Reason</p>
+                    <div className="fw-semibold text-dark bg-white rounded p-2 border">
+                      {leave.reason || "-"}
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Audit Trail Section */}
-              <div className="col-md-12">
-                <div className="card bg-light-300 border-0 mb-3">
-                  <div className="card-header bg-transparent border-0 py-2">
-                    <h6 className="mb-0">
-                      <i className="ti ti-history me-2" />
-                      Audit Trail
-                    </h6>
-                  </div>
-                  <div className="card-body">
-                    {auditTrail.length > 0 ? (
-                      <div className="timeline">
-                        {auditTrail.map((entry, index) => (
-                          <div key={index} className="timeline-item">
-                            <div className="timeline-marker">
-                              <i className={`ti ti-point-filled ${
-                                entry.status === 'approved' ? 'text-success' :
-                                entry.status === 'rejected' ? 'text-danger' :
-                                entry.status === 'cancelled' ? 'text-secondary' :
-                                'text-warning'
-                              }`} />
+              <div className="mt-3 p-3 rounded border bg-light">
+                <h6 className="text-dark fw-semibold mb-3 d-flex align-items-center">
+                  <i className="ti ti-history me-2"></i>
+                  Audit Trail
+                </h6>
+                <div className="leave-timeline">
+                  {auditTrail && auditTrail.length > 0 ? (
+                    auditTrail.map((history: any, index: number) => {
+                      // Determine dot color based on status
+                      const dotColor =
+                        history.status === 'approved' ? '#4caf50' :
+                          history.status === 'rejected' ? '#f44336' :
+                            history.status === 'pending' ? '#ff9800' :
+                              history.status === 'cancelled' ? '#9e9e9e' :
+                                history.status === 'on-hold' ? '#2196f3' : '#9e9e9e';
+
+                      return (
+                        <div key={index} className="timeline-item position-relative">
+                          {/* Timeline Dot */}
+                          <div
+                            className="timeline-dot"
+                            style={{ backgroundColor: dotColor }}
+                          />
+                          {/* Timeline Line */}
+                          {index < auditTrail.length - 1 && (
+                            <div className="timeline-line" />
+                          )}
+                          {/* Timeline Content */}
+                          <div className="timeline-content">
+                            <div className="d-flex align-items-start justify-content-between mb-1">
+                              <h6 className="mb-0 fw-semibold text-dark" style={{ fontSize: '14px' }}>
+                                {history.status ? history.status.charAt(0).toUpperCase() + history.status.slice(1) : 'Unknown'}
+                              </h6>
+                              <small className="text-muted" style={{ fontSize: '12px' }}>
+                                {history.updatedAt || history.timestamp ? new Date(history.updatedAt || history.timestamp).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                }) : 'N/A'}
+                              </small>
                             </div>
-                            <div className="timeline-content">
-                              <div className="d-flex justify-content-between align-items-start">
-                                <div>
-                                  <p className="mb-1 fw-medium">
-                                    {entry.updatedByName}
-                                  </p>
-                                  {entry.comments && (
-                                    <p className="text-muted mb-0 small">{entry.comments}</p>
-                                  )}
-                                  {entry.rejectionReason && (
-                                    <p className="text-danger mb-0 small">
-                                      Reason: {entry.rejectionReason}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="text-end">
-                                  {getStatusBadge(entry.status)}
-                                  <p className="text-muted small mb-0 mt-1">
-                                    {dayjs(entry.updatedAt).format("DD MMM YYYY, HH:mm")}
-                                  </p>
-                                </div>
+                            {(history.updatedByName || history.changedBy) && (
+                              <div className="mb-1">
+                                <span className="text-muted" style={{ fontSize: '12px' }}>By: </span>
+                                <span className="text-primary fw-medium" style={{ fontSize: '12px' }}>
+                                  {history.updatedByName ||
+                                    (history.changedBy?.name || history.changedBy?.firstName
+                                      ? `${history.changedBy.firstName || ''} ${history.changedBy.lastName || ''}`.trim()
+                                      : 'System')}
+                                </span>
                               </div>
-                            </div>
+                            )}
+                            {(history.comments || history.rejectionReason || history.reason) && (
+                              <div className="text-dark bg-white rounded p-2 border" style={{ fontSize: '12px', lineHeight: '1.5' }}>
+                                <span className="text-muted">Note: </span>
+                                {history.comments || history.rejectionReason || history.reason}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-muted mb-0">No audit trail available</p>
-                    )}
-                  </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-3">
+                      <p className="text-muted mb-0" style={{ fontSize: '13px' }}>No audit trail available</p>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {/* Attachments (if any) */}
-              {leave.attachments && leave.attachments.length > 0 && (
-                <div className="col-md-12">
-                  <div className="card bg-light-300 border-0 mb-3">
-                    <div className="card-header bg-transparent border-0 py-2">
-                      <h6 className="mb-0">
-                        <i className="ti ti-paperclip me-2" />
-                        Attachments
-                      </h6>
-                    </div>
-                    <div className="card-body">
-                      <div className="row">
-                        {leave.attachments.map((attachment, index) => (
-                          <div key={index} className="col-md-6 mb-2">
-                            <a
-                              href={attachment.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="d-flex align-items-center p-2 bg-white rounded border"
-                            >
-                              <i className="ti ti-file me-2 text-primary" />
-                              <span className="text-truncate">{attachment.originalName || attachment.filename}</span>
-                              <i className="ti ti-external-link ms-auto text-muted small" />
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            </div>
+            <div className="modal-footer d-flex justify-content-end gap-3 flex-wrap">
+              <button
+                type="button"
+                className="btn btn-light px-4"
+                data-bs-dismiss="modal"
+                onClick={onClose}
+              >
+                Close
+              </button>
+              {canApproveReject && (leave.finalStatus || leave.status) === 'pending' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-danger px-4"
+                    onClick={() => onReject?.(leave)}
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success px-4"
+                    onClick={() => onApprove?.(leave)}
+                  >
+                    Approve
+                  </button>
+                </>
               )}
             </div>
           </div>
-          <div className="modal-footer">
-            <button
-              type="button"
-              className="btn btn-primary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
-          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

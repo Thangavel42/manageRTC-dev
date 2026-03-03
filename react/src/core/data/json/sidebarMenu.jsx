@@ -98,6 +98,11 @@ const useSidebarData = () => {
                   link: routes.superAdminModules,
                   base: 'modules',
                 },
+                {
+                  label: 'Pages',
+                  link: routes.superAdminPages,
+                  base: 'super-admin-pages',
+                },
                 // {
                 //   label: "Purchase Transaction",
                 //   link: routes.superAdminPurchaseTransaction,
@@ -415,14 +420,6 @@ const useSidebarData = () => {
               roles: ['superadmin'],
             },
             {
-              label: 'Pages',
-              link: routes.superAdminPages,
-              base: 'super-admin-pages',
-              submenu: false,
-              showSubRoute: false,
-              roles: ['superadmin'],
-            },
-            {
               label: 'Super Admins',
               link: routes.superAdminUsers,
               base: 'super-admin-users',
@@ -585,12 +582,6 @@ const useSidebarData = () => {
                   customSubmenuTwo: false,
                 },
 
-                {
-                  label: 'Timesheet',
-                  link: routes.timesheet,
-                  base: 'timesheet',
-                  customSubmenuTwo: false,
-                },
                 {
                   label: 'Shift & Schedule',
                   link: routes.scheduletiming,
@@ -764,6 +755,11 @@ const useSidebarData = () => {
                   label: 'Task Board',
                   link: routes.taskboard,
                   base: 'task-board',
+                },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
                 },
               ],
             },
@@ -2151,11 +2147,6 @@ const useSidebarData = () => {
               submenuItems: [
                 { label: 'Admin Dashboard', link: routes.adminDashboard, roles: ['admin'] },
                 {
-                  label: 'Employee Dashboard',
-                  link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
-                },
-                {
                   label: 'Deals Dashboard',
                   link: routes.dealsDashboard,
                   roles: ['admin', 'hr', 'manager', 'leads'],
@@ -2550,12 +2541,6 @@ const useSidebarData = () => {
                       showSubRoute: false,
                     },
                     {
-                      label: 'Leaves (Employee)',
-                      link: routes.leaveemployee,
-                      submenu: false,
-                      showSubRoute: false,
-                    },
-                    {
                       label: 'Team Leaves',
                       link: routes.leavemanager,
                       submenu: false,
@@ -2586,18 +2571,6 @@ const useSidebarData = () => {
                   label: 'Attendance (Admin)',
                   link: routes.attendanceadmin,
                   base: 'attendance-admin',
-                  customSubmenuTwo: false,
-                },
-                {
-                  label: 'My Attendance',
-                  link: routes.attendanceemployee,
-                  base: 'attendance-employee',
-                  customSubmenuTwo: false,
-                },
-                {
-                  label: 'Timesheet',
-                  link: routes.timesheet,
-                  base: 'timesheet',
                   customSubmenuTwo: false,
                 },
                 {
@@ -2773,6 +2746,11 @@ const useSidebarData = () => {
                   label: 'Task Board',
                   link: routes.taskboard,
                   base: 'task-board',
+                },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
                 },
               ],
             },
@@ -3121,7 +3099,7 @@ const useSidebarData = () => {
                 {
                   label: 'Employee Dashboard',
                   link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+                  roles: ['employee', 'hr', 'manager', 'leads'],
                 },
                 {
                   label: 'Deals Dashboard',
@@ -3384,12 +3362,6 @@ const useSidebarData = () => {
                   customSubmenuTwo: false,
                 },
                 {
-                  label: 'Timesheet',
-                  link: routes.timesheet,
-                  base: 'timesheet',
-                  customSubmenuTwo: false,
-                },
-                {
                   label: 'Shift & Schedule',
                   link: routes.scheduletiming,
                   base: 'shift-schedule',
@@ -3562,6 +3534,11 @@ const useSidebarData = () => {
                   label: 'Task Board',
                   link: routes.taskboard,
                   base: 'task-board',
+                },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
                 },
               ],
             },
@@ -3996,12 +3973,6 @@ const useSidebarData = () => {
                   customSubmenuTwo: false,
                 },
                 {
-                  label: 'Timesheet',
-                  link: routes.timesheet,
-                  base: 'timesheet',
-                  customSubmenuTwo: false,
-                },
-                {
                   label: 'Shift & Schedule',
                   link: routes.scheduletiming,
                   base: 'shift-schedule',
@@ -4171,6 +4142,11 @@ const useSidebarData = () => {
                 },
                 { label: 'Tasks', link: 'tasks', base: 'tasks' },
                 { label: 'Task Board', link: routes.taskboard, base: 'task-board' },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
+                },
               ],
             },
           ],
@@ -4504,16 +4480,6 @@ const useSidebarData = () => {
           separateRoute: false,
           submenuItems: [
             {
-              label: 'Time Sheet',
-              link: routes.timesheet,
-              submenu: false,
-              showSubRoute: false,
-              icon: 'file-time',
-              base: 'timesheet',
-              materialicons: 'schedule',
-              submenuItems: [],
-            },
-            {
               label: 'Leave Management',
               link: routes.leaveemployee,
               submenu: true,
@@ -4553,6 +4519,16 @@ const useSidebarData = () => {
               submenuItems: [],
             },
             {
+              label: 'Overtime',
+              link: routes.overtime,
+              submenu: false,
+              showSubRoute: false,
+              icon: 'clock',
+              base: 'overtime',
+              materialicons: 'more_time',
+              submenuItems: [],
+            },
+            {
               label: 'Holidays',
               link: routes.holidays,
               submenu: false,
@@ -4564,11 +4540,11 @@ const useSidebarData = () => {
             },
             {
               label: 'Policies',
-              link: routes.policies,
+              link: routes.policy,
               submenu: false,
               showSubRoute: false,
               icon: 'file-check',
-              base: 'policies',
+              base: 'policy',
               materialicons: 'policy',
               submenuItems: [],
             },
@@ -4635,6 +4611,11 @@ const useSidebarData = () => {
                 },
                 { label: 'Tasks', link: 'tasks', base: 'tasks' },
                 { label: 'Task Board', link: routes.taskboard, base: 'task-board' },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
+                },
               ],
             },
           ],
@@ -4802,7 +4783,7 @@ const useSidebarData = () => {
                 {
                   label: 'Employee Dashboard',
                   link: routes.employeeDashboard,
-                  roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+                  roles: ['employee', 'hr', 'manager', 'leads'],
                 },
                 {
                   label: 'Deals Dashboard',
@@ -5298,12 +5279,6 @@ const useSidebarData = () => {
                 },
 
                 {
-                  label: 'Timesheet',
-                  link: routes.timesheet,
-                  base: 'timesheet',
-                  customSubmenuTwo: false,
-                },
-                {
                   label: 'Shift & Schedule',
                   link: routes.scheduletiming,
                   base: 'shift-schedule',
@@ -5456,6 +5431,11 @@ const useSidebarData = () => {
                   label: 'Task Board',
                   link: routes.taskboard,
                   base: 'task-board',
+                },
+                {
+                  label: 'Timesheet',
+                  link: routes.timesheet,
+                  base: 'timesheet',
                 },
               ],
             },

@@ -7,14 +7,64 @@ import CommonSelect from "../../../../core/common/commonSelect";
 import Table from "../../../../core/common/dataTable/index";
 import PredefinedDateRanges from "../../../../core/common/datePicker";
 import Footer from "../../../../core/common/footer";
-import { statusDisplayMap, useLeaveREST, type LeaveBalance, type LeaveStatus, type LeaveType } from "../../../../hooks/useLeaveREST";
+import LeaveDetailsModal from "../../../../core/modals/LeaveDetailsModal";
+import { useAuth } from "../../../../hooks/useAuth";
+import { useAutoReloadActions } from "../../../../hooks/useAutoReload";
+import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
+import { statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveTypeCode } from "../../../../hooks/useLeaveREST";
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
+import { useSocket } from "../../../../SocketContext";
 import { all_routes } from "../../../router/all_routes";
 
 // Loading spinner component
 const LoadingSpinner = () => (
   <div style={{ textAlign: 'center', padding: '50px' }}>
     <Spin size="large" />
+  </div>
+);
+
+// Skeleton Loader Components
+const StatCardSkeleton = () => (
+  <div className="card border border-light shadow-sm">
+    <div className="card-body p-3">
+      <div className="skeleton-text skeleton-stat-label mb-2"></div>
+      <div className="skeleton-text skeleton-stat-value"></div>
+    </div>
+  </div>
+);
+
+const TableRowSkeleton = () => (
+  <tr>
+    <td><div className="skeleton-text skeleton-leave-type"></div></td>
+    <td><div className="skeleton-text skeleton-manager"></div></td>
+    <td><div className="skeleton-text skeleton-date"></div></td>
+    <td><div className="skeleton-text skeleton-date"></div></td>
+    <td><div className="skeleton-text skeleton-days"></div></td>
+    <td><div className="skeleton-badge"></div></td>
+    <td><div className="skeleton-actions"></div></td>
+  </tr>
+);
+
+const TableSkeleton = () => (
+  <div className="table-responsive">
+    <table className="table datanew">
+      <thead>
+        <tr>
+          <th>Leave Type</th>
+          <th>Reporting Manager</th>
+          <th>From</th>
+          <th>To</th>
+          <th>No of Days</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <TableRowSkeleton key={i} />
+        ))}
+      </tbody>
+    </table>
   </div>
 );
 
@@ -42,25 +92,6 @@ const StatusBadge = ({ status }: { status: LeaveStatus }) => {
       }}
     >
       {config.label}
-    </span>
-  );
-};
-
-// Leave type badge component
-const LeaveTypeBadge = ({ leaveType, leaveTypeDisplayMap }: { leaveType: string; leaveTypeDisplayMap: Record<string, string> }) => {
-  const displayType = leaveTypeDisplayMap[leaveType] || leaveType;
-  return (
-    <span className="fs-14 fw-medium d-flex align-items-center">
-      {displayType}
-      <Link
-        to="#"
-        className="ms-2"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        title="Leave details"
-      >
-        <i className="ti ti-info-circle text-info" />
-      </Link>
     </span>
   );
 };
@@ -95,7 +126,22 @@ const calculateLeaveDays = (startDate: any, endDate: any, session: string): numb
 const LeaveEmployee = () => {
   // API hook for employee's leaves
   const { leaves, loading, fetchMyLeaves, cancelLeave, getLeaveBalance, createLeave, updateLeave, leaveTypeDisplayMap } = useLeaveREST();
-  const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
+  const { activeOptions, fetchActiveLeaveTypes, loading: leaveTypesLoading } = useLeaveTypesREST();
+  const socket = useSocket();
+  const { employeeId, isLoaded, isSignedIn, role } = useAuth();
+  const { employees, fetchEmployees, fetchActiveEmployeesList, loading: employeesLoading } = useEmployeesREST({ autoFetch: false });
+
+  // Loading states
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
+  // Auto-reload hook for refetching after actions
+  const { refetchAfterAction } = useAutoReloadActions({
+    fetchFn: () => {
+      fetchMyLeaves();
+      fetchBalanceData();
+    },
+    debug: true,
+  });
 
   // Local state for balance - Initialize with empty state, will be populated from API
   // Backend types: sick, casual, earned, maternity, paternity, bereavement, compensatory, unpaid, special
@@ -150,16 +196,56 @@ const LeaveEmployee = () => {
 
   const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
 
-  // Fetch employee leaves on mount
+  // Fetch employee leaves on mount (gated on auth readiness)
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     fetchMyLeaves();
     // Also fetch balance
     fetchBalanceData();
-  }, []);
+    // Fetch employee data to get avatar and role
+    if (employeeId) {
+      if (['admin', 'hr', 'superadmin', 'manager'].includes(role)) {
+        fetchEmployees({ status: 'Active' });
+      } else {
+        fetchActiveEmployeesList();
+      }
+    }
+  }, [isLoaded, isSignedIn, employeeId, role, fetchEmployees, fetchActiveEmployeesList]);
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     fetchActiveLeaveTypes();
-  }, [fetchActiveLeaveTypes]);
+  }, [isLoaded, isSignedIn, fetchActiveLeaveTypes]);
+
+  // Get current employee data for avatar and role
+  const currentEmployee = useMemo(() => {
+    return employees.find(emp => emp.employeeId === employeeId);
+  }, [employees, employeeId]);
+
+  // Employee name map for LeaveDetailsModal
+  const employeeNameById = useMemo(() => {
+    const entries = employees.map((emp): [string, string] => [
+      emp.employeeId,
+      `${emp.firstName} ${emp.lastName}`.trim(),
+    ]);
+    return new Map<string, string>(entries);
+  }, [employees]);
+
+  // Employee data map for avatar, role, etc.
+  const employeeDataMap = useMemo(() => {
+    const map = new Map<string, { avatar?: string; avatarUrl?: string; profileImage?: string; role?: string; designation?: string; employeeId?: string }>();
+    employees.forEach(emp => {
+      map.set(emp.employeeId, {
+        avatar: emp.avatar,
+        avatarUrl: emp.avatarUrl || emp.profileImage,
+        profileImage: emp.profileImage,
+        role: emp.role,
+        designation: emp.designation,
+        employeeId: emp.employeeId,
+      });
+    });
+    return map;
+  }, [employees]);
 
   useEffect(() => {
     if (!addFormData.leaveType && addFormData.session) {
@@ -184,17 +270,55 @@ const LeaveEmployee = () => {
 
   // Fetch balance data - directly uses backend types (sick, casual, earned, etc.)
   const fetchBalanceData = async () => {
-    const balanceData = await getLeaveBalance();
-    console.log('[fetchBalanceData] API Response:', balanceData);
-    console.log('[fetchBalanceData] Response keys:', balanceData ? Object.keys(balanceData) : 'null');
-    if (balanceData && typeof balanceData === 'object' && 'earned' in balanceData) {
-      console.log('[fetchBalanceData] earned balance:', (balanceData as Record<string, LeaveBalance>).earned);
-    } else {
-      console.log('[fetchBalanceData] earned balance: not available');
-    }
+    try {
+      setBalanceLoading(true);
+      const balanceData = await getLeaveBalance();
+      console.log('[fetchBalanceData] API Response received, type:', typeof balanceData);
+      console.log('[fetchBalanceData] Response:', balanceData);
 
-    if (balanceData && typeof balanceData === 'object') {
-      console.log('[fetchBalanceData] Setting balances:', balanceData);
+      if (!balanceData) {
+        console.error('[fetchBalanceData] API returned null/undefined');
+        message.error('Failed to load leave balance. Please refresh the page.');
+        setBalanceLoading(false);
+        return;
+      }
+
+      if (Array.isArray(balanceData)) {
+        console.error('[fetchBalanceData] Received array instead of object:', balanceData);
+        message.error('Invalid balance data format received');
+        setBalanceLoading(false);
+        return;
+      }
+
+      if (typeof balanceData !== 'object') {
+        console.error('[fetchBalanceData] Received non-object data:', typeof balanceData);
+        message.error('Invalid balance data format received');
+        setBalanceLoading(false);
+        return;
+      }
+
+      // Log specific balance values for debugging
+      const keys = Object.keys(balanceData);
+      console.log('[fetchBalanceData] Balance keys:', keys);
+
+      if ('earned' in balanceData) {
+        console.log('[fetchBalanceData] earned balance:', balanceData.earned);
+      }
+      if ('sick' in balanceData) {
+        console.log('[fetchBalanceData] sick balance:', balanceData.sick);
+      }
+
+      // Check if data has expected structure
+      const hasValidData = keys.some(key => {
+        const item = balanceData[key];
+        return item && typeof item === 'object' && 'balance' in item;
+      });
+
+      if (!hasValidData) {
+        console.warn('[fetchBalanceData] No valid balance items found');
+      }
+
+      console.log('[fetchBalanceData] Setting balances state with', keys.length, 'items');
       // getLeaveBalance already returns response.data which is the balances object
       setBalances(balanceData as Record<string, {
         total: number;
@@ -204,26 +328,58 @@ const LeaveEmployee = () => {
         customPolicyId?: string;
         customPolicyName?: string;
       }>);
-    } else {
-      console.error('[fetchBalanceData] Invalid balance data received:', balanceData);
+      setBalanceLoading(false);
+    } catch (error) {
+      console.error('[fetchBalanceData] Error fetching balance:', error);
+      message.error('Failed to fetch leave balance');
+      setBalanceLoading(false);
     }
   };
 
+  // Re-fetch balance when the manager approves this employee's leave (real-time update)
+  useEffect(() => {
+    if (!socket) return;
+    const handleBalanceRefresh = () => {
+      fetchBalanceData();
+      fetchMyLeaves();
+    };
+    socket.on('leave:balance_updated', handleBalanceRefresh);
+    socket.on('leave:approved', handleBalanceRefresh);
+    return () => {
+      socket.off('leave:balance_updated', handleBalanceRefresh);
+      socket.off('leave:approved', handleBalanceRefresh);
+    };
+  }, [socket]);
+
   // Transform leaves for table display
-  const data = leaves.map((leave) => ({
-    key: leave._id,
-    _id: leave._id,
-    LeaveType: leave.leaveType,
-    From: formatDate(leave.startDate),
-    To: formatDate(leave.endDate),
-    NoOfDays: leave.duration === 0.5 ? 'Half Day (0.5)' : `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
-    ReportingManager: leave.reportingManagerName || "-",
-    ManagerStatus: (leave.managerStatus || 'pending').toLowerCase() as LeaveStatus,
-    Status: (leave.finalStatus || leave.status || 'pending').toLowerCase() as LeaveStatus,
-    Roll: "Employee", // Should come from employee data
-    Image: "user-32.jpg", // Default image
-    rawLeave: leave,
-  }));
+  const data = leaves.map((leave) => {
+    // Get avatar from current employee data
+    const avatarUrl = currentEmployee?.avatarUrl || currentEmployee?.profileImage || currentEmployee?.avatar;
+    // Get role or designation from current employee data
+    // designation may be a populated MongoDB object with a .designation string field
+    const rawDesignation = currentEmployee?.designation;
+    const designationStr = typeof rawDesignation === 'object' && rawDesignation !== null
+      ? (rawDesignation as any).designation || (rawDesignation as any).name || ''
+      : rawDesignation;
+    const roleOrDesignation = currentEmployee?.role || designationStr || "Employee";
+
+    return {
+      key: leave._id,
+      _id: leave._id,
+      LeaveType: leave.leaveType,      // Code for backward compatibility
+      LeaveTypeName: leave.leaveTypeName, // Display name from backend (ObjectId system)
+      From: formatDate(leave.startDate),
+      To: formatDate(leave.endDate),
+      NoOfDays: leave.duration === 0.5 ? 'Half Day (0.5)' : `${leave.duration} Day${leave.duration > 1 ? 's' : ''}`,
+      ReportingManager: leave.reportingManagerName || "-",
+      ManagerStatus: (leave.managerStatus || 'pending').toLowerCase() as LeaveStatus,
+      Status: (leave.finalStatus || leave.status || 'pending').toLowerCase() as LeaveStatus,
+      Role: roleOrDesignation, // Fixed: "Roll" -> "Role", fetched from employee data
+      Image: avatarUrl || "user-32.jpg", // Use employee avatar or default
+      EmpId: leave.employeeId || employeeId || "-", // Add EmpId column
+      rawLeave: leave,
+    };
+  });
 
   // Helper function to format dates
   function formatDate(dateString: string): string {
@@ -236,9 +392,31 @@ const LeaveEmployee = () => {
     const reason = prompt("Please enter cancellation reason (optional):");
     const success = await cancelLeave(leaveId, reason || "Cancelled by employee");
     if (success) {
-      fetchMyLeaves(); // Refresh list
-      fetchBalanceData(); // Refresh balance
+      refetchAfterAction(); // Refresh list and balance
     }
+  };
+
+  // Open leave details modal
+  const openLeaveDetailsModal = (leave: any) => {
+    setSelectedLeave(leave);
+    // Use setTimeout to ensure React state update is flushed before Bootstrap opens modal
+    setTimeout(() => {
+      const modalEl = document.getElementById('view_leave_details');
+      if (modalEl) {
+        const modal = new (window as any).bootstrap.Modal(modalEl);
+        modal.show();
+      }
+    }, 0);
+  };
+
+  // Close leave details modal
+  const closeLeaveDetailsModal = () => {
+    const modalEl = document.getElementById('view_leave_details');
+    if (modalEl) {
+      const modal = (window as any).bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
+    setSelectedLeave(null);
   };
 
   // Helper to clear a single field error when the user edits it
@@ -254,7 +432,7 @@ const LeaveEmployee = () => {
     if (!addFormData.startDate) errors.startDate = 'From date is required';
     if (!addFormData.endDate) errors.endDate = 'To date is required';
     if (addFormData.startDate && addFormData.endDate &&
-        dayjs(addFormData.endDate).isBefore(dayjs(addFormData.startDate), 'day')) {
+      dayjs(addFormData.endDate).isBefore(dayjs(addFormData.startDate), 'day')) {
       errors.endDate = 'To date must be on or after From date';
     }
     if (!addFormData.session) errors.session = 'Day type is required';
@@ -295,9 +473,8 @@ const LeaveEmployee = () => {
         const modal = (window as any).bootstrap.Modal.getInstance(modalEl);
         if (modal) modal.hide();
       }
-      // Refresh data
-      fetchMyLeaves();
-      fetchBalanceData();
+      // Refresh data using auto-reload
+      refetchAfterAction();
     }
   };
 
@@ -354,17 +531,33 @@ const LeaveEmployee = () => {
         const modal = (window as any).bootstrap.Modal.getInstance(modalEl);
         if (modal) modal.hide();
       }
-      // Refresh data
-      fetchMyLeaves();
-      fetchBalanceData();
+      // Refresh data using auto-reload
+      refetchAfterAction();
     }
   };
   const columns = [
     {
       title: "Leave Type",
       dataIndex: "LeaveType",
-      render: (leaveType: string) => <LeaveTypeBadge leaveType={leaveType} leaveTypeDisplayMap={leaveTypeDisplayMap} />,
-      sorter: (a: any, b: any) => a.LeaveType.length - b.LeaveType.length,
+      render: (leaveType: string, record: any) => {
+        // Use leaveTypeName from backend (ObjectId system) with fallback to map for backward compatibility
+        const displayName = record.LeaveTypeName || leaveTypeDisplayMap[leaveType?.toLowerCase?.()] || leaveType;
+        return (
+          <span className="fs-14 fw-medium d-flex align-items-center">
+            {displayName}
+            <Link
+              to="#"
+              className="ms-2"
+              data-bs-toggle="tooltip"
+              data-bs-placement="right"
+              title="Leave details"
+            >
+              <i className="ti ti-info-circle text-info" />
+            </Link>
+          </span>
+        );
+      },
+      sorter: (a: any, b: any) => (a.LeaveTypeName || '').localeCompare(b.LeaveTypeName || ''),
     },
     {
       title: "Reporting Manager",
@@ -385,12 +578,6 @@ const LeaveEmployee = () => {
       title: "No of Days",
       dataIndex: "NoOfDays",
       sorter: (a: any, b: any) => a.NoOfDays.length - b.NoOfDays.length,
-    },
-    {
-      title: "Manager Status",
-      dataIndex: "ManagerStatus",
-      render: (status: LeaveStatus) => <StatusBadge status={status} />,
-      sorter: (a: any, b: any) => a.ManagerStatus.localeCompare(b.ManagerStatus),
     },
     {
       title: "Status",
@@ -418,10 +605,8 @@ const LeaveEmployee = () => {
           <Link
             to="#"
             className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#leave_details"
-            onClick={() => setSelectedLeave(record.rawLeave)}
+            title="View Details"
+            onClick={(e) => { e.preventDefault(); openLeaveDetailsModal(record.rawLeave); }}
           >
             <i className="ti ti-eye" />
           </Link>
@@ -430,13 +615,11 @@ const LeaveEmployee = () => {
     },
   ];
 
-  // Dropdown options with proper backend values
-  const leavetype = [
+  // Dynamic leave type filter options built from active leave types in database
+  const leaveTypeFilterOptions = useMemo(() => [
     { value: "", label: "All Types" },
-    { value: "sick", label: "Medical Leave" },
-    { value: "casual", label: "Casual Leave" },
-    { value: "earned", label: "Annual Leave" },
-  ];
+    ...activeOptions.map(option => ({ value: option.value.toLowerCase(), label: String(option.label) })),
+  ], [activeOptions]);
 
   const statusOptions = [
     { value: "", label: "All Status" },
@@ -453,22 +636,22 @@ const LeaveEmployee = () => {
   ], []);
 
   const leaveTypeOptions = useMemo(() => {
-    const fallbackOptions = Object.entries(leaveTypeDisplayMap).map(([value, label]) => ({ value, label }));
+    // Use activeOptions directly - value is now ObjectId (from backend), label is display name
     const apiOptions = activeOptions.length
-      ? activeOptions.map(option => ({ value: option.value.toLowerCase(), label: String(option.label) }))
-      : fallbackOptions;
+      ? activeOptions.map(option => ({ value: option.value, label: String(option.label) }))
+      : [];
     return [{ value: "", label: "Select Leave Type" }, ...apiOptions];
-  }, [activeOptions, leaveTypeDisplayMap]);
+  }, [activeOptions]);
 
   // Filter handlers
   const handleStatusFilter = (status: LeaveStatus) => {
     // Re-fetch with status filter
-    fetchMyLeaves({ status });
+    fetchMyLeaves({ status }).then(() => fetchBalanceData());
   };
 
-  const handleLeaveTypeFilter = (leaveType: LeaveType) => {
+  const handleLeaveTypeFilter = (leaveType: string) => {
     // Re-fetch with leave type filter
-    fetchMyLeaves({ leaveType });
+    fetchMyLeaves({ leaveType: leaveType as LeaveTypeCode }).then(() => fetchBalanceData());
   };
 
   // Calculate stats from leaves data
@@ -488,8 +671,6 @@ const LeaveEmployee = () => {
     return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
 
-  const selectedManagerStatus = (selectedLeave?.managerStatus || 'pending').toLowerCase() as LeaveStatus;
-
   // Build dynamic balance display configuration from active leave types
   // Maps leave type code (lowercase) to display properties from database
   const BALANCE_DISPLAY_CONFIG = useMemo(() => {
@@ -508,7 +689,8 @@ const LeaveEmployee = () => {
 
     // Build config from active leave types from database
     const config = activeOptions.map((option) => {
-      const code = option.value.toLowerCase();
+      // Use option.code (provided by backend) instead of option.value (which is now ObjectId)
+      const code = (option.code || '').toLowerCase();
       const fallback = defaultConfig[code] || {
         label: option.label,
         icon: 'ti ti-calendar',
@@ -526,7 +708,8 @@ const LeaveEmployee = () => {
         badgeClass: fallback.badgeClass,
         // Additional properties from database
         code: code,
-        name: option.label
+        name: option.label,
+        leaveTypeId: option.value // ObjectId for future reference
       };
     });
 
@@ -535,6 +718,75 @@ const LeaveEmployee = () => {
 
   return (
     <>
+      {/* Skeleton Loader Styles */}
+      <style>{`
+        /* Skeleton Loader Styles */
+        .skeleton-text {
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          border-radius: 4px;
+          height: 16px;
+        }
+
+        .skeleton-badge {
+          width: 150px;
+          height: 24px;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-actions {
+          width: 80px;
+          height: 20px;
+          border-radius: 4px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-stat-label {
+          width: 120px;
+          height: 14px;
+        }
+
+        .skeleton-stat-value {
+          width: 80px;
+          height: 28px;
+        }
+
+        .skeleton-leave-type {
+          width: 100px;
+          height: 14px;
+        }
+
+        .skeleton-emp-id {
+          width: 80px;
+          height: 14px;
+        }
+
+        .skeleton-manager {
+          width: 120px;
+          height: 14px;
+        }
+
+        .skeleton-date {
+          width: 90px;
+          height: 14px;
+        }
+
+        .skeleton-days {
+          width: 60px;
+          height: 14px;
+        }
+
+        @keyframes skeleton-loading {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
       {/* Page Wrapper */}
       <div className="page-wrapper">
         <div className="content">
@@ -583,18 +835,21 @@ const LeaveEmployee = () => {
                   </ul>
                 </div>
               </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_leaves"
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Apply Leave
-                </Link>
-              </div>
+              {/* Hide Add Leave button for admin role - admins cannot apply leaves */}
+              {role !== 'admin' && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    data-bs-toggle="modal"
+                    data-inert={true}
+                    data-bs-target="#add_leaves"
+                    className="btn btn-primary d-flex align-items-center"
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Leave
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2">
                 <CollapseHeader />
               </div>
@@ -603,24 +858,58 @@ const LeaveEmployee = () => {
           {/* /Breadcrumb */}
           {/* Leaves Info - Dynamic balance cards from database */}
           <div className="row">
-            {BALANCE_DISPLAY_CONFIG.map((config) => {
-              const balance = balances[config.key];
-              // Show all active leave types from database
-              // Display balance data, or show zeros if no balance exists yet
-              const total = balance?.total ?? 0;
-              const used = balance?.used ?? 0;
-              const remaining = balance?.balance ?? 0;
-              const hasCustomPolicy = balance?.hasCustomPolicy || false;
-              const customPolicyName = balance?.customPolicyName;
+            {balanceLoading ? (
+              <>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="col-xl-3 col-md-6">
+                    <StatCardSkeleton />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                {BALANCE_DISPLAY_CONFIG.map((config) => {
+                  const balance = balances[config.key];
+                  // Show all active leave types from database
+                  // Display balance data, or show zeros if no balance exists yet
+                  const total = balance?.total ?? 0;
+                  const used = balance?.used ?? 0;
+                  const remaining = balance?.balance ?? 0;
+                  const hasCustomPolicy = balance?.hasCustomPolicy || false;
+                  const customPolicyName = balance?.customPolicyName;
 
-              return (
-                <div key={config.key} className="col-xl-3 col-md-6">
-                  <div className={`card ${config.cardClass}`}>
-                    <div className="card-body">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="text-start">
-                          <div className="d-flex align-items-center gap-2 mb-1">
-                            <p className="mb-0">{config.label}</p>
+                  // Debug: Log if balance is undefined or zero unexpectedly
+                  if (!balance && config.key) {
+                    console.warn(`[LeaveEmployee] No balance data found for "${config.key}". Available keys:`, Object.keys(balances));
+                  }
+
+                  // Calculate percentage of remaining leaves
+                  const percentage = total > 0 ? (remaining / total) * 100 : 0;
+
+                  // Determine status based on percentage
+                  let statusBadge = { text: '', color: '', bgColor: '' };
+                  let borderColor = 'border-light';
+
+                  if (percentage >= 80) {
+                    statusBadge = { text: 'Available', color: 'text-success', bgColor: 'bg-success-transparent' };
+                    borderColor = 'border-success';
+                  } else if (percentage >= 30) {
+                    statusBadge = { text: 'Limited', color: 'text-warning', bgColor: 'bg-warning-transparent' };
+                    borderColor = 'border-warning';
+                  } else if (percentage > 0) {
+                    statusBadge = { text: 'Low', color: 'text-danger', bgColor: 'bg-danger-transparent' };
+                    borderColor = 'border-danger';
+                  } else {
+                    statusBadge = { text: 'Exhausted', color: 'text-danger', bgColor: 'bg-danger-transparent' };
+                    borderColor = 'border-danger';
+                  }
+
+                  return (
+                    <div key={config.key} className="col-xl-3 col-md-6">
+                      <div className={`card ${borderColor} shadow-sm`} style={{ borderLeft: '3px solid' }}>
+                        <div className="card-body p-3">
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <p className="mb-0 text-muted fs-13">{config.label}</p>
                             {hasCustomPolicy && (
                               <span
                                 className="badge bg-primary-transparent text-primary fs-10"
@@ -630,38 +919,27 @@ const LeaveEmployee = () => {
                               </span>
                             )}
                           </div>
-                          <h4>{used}</h4>
-                        </div>
-                        <div className="d-flex">
-                          <div className="flex-shrink-0 me-2">
-                            <span className="avatar avatar-md d-flex">
-                              <i className={`${config.icon} fs-32`} />
+                          <div className="d-flex align-items-center justify-content-between">
+                            <h4 className="mb-0 fw-semibold">{remaining} <span className="text-muted fw-normal">/ {total}</span></h4>
+                            <span className={`badge ${statusBadge.bgColor} ${statusBadge.color} fs-10 fw-medium`}>
+                              {statusBadge.text}
                             </span>
                           </div>
+                          {hasCustomPolicy && customPolicyName && (
+                            <div className="mt-2 pt-2 border-top">
+                              <small className="text-muted d-flex align-items-center fs-11">
+                                <i className="ti ti-info-circle text-primary me-1"></i>
+                                Custom Policy: {total} days/year ({customPolicyName})
+                              </small>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <span className={`badge ${config.badgeClass}`}>
-                        Remaining Leaves : {remaining}
-                        {hasCustomPolicy && (
-                          <span className="ms-1 text-primary">
-                            <i className="ti ti-info-circle me-1" title={`Custom Policy: ${customPolicyName || 'N/A'} (${total} days/year)`}></i>
-                          </span>
-                        )}
-                      </span>
-                      {hasCustomPolicy && (
-                        <div className="mt-2">
-                          <small className="text-muted">
-                            <i className="ti ti-discount-check text-primary me-1"></i>
-                            Custom Policy: <strong>{total} days/year</strong>
-                            {customPolicyName && ` (${customPolicyName})`}
-                          </small>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </>
+            )}
           </div>
           {/* /Leaves Info */}
           {/* Leaves list */}
@@ -694,14 +972,14 @@ const LeaveEmployee = () => {
                     Leave Type
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    {leavetype.map((option) => (
+                    {leaveTypeFilterOptions.map((option) => (
                       <li key={option.value}>
                         <Link
                           to="#"
                           className="dropdown-item rounded-1"
                           onClick={(e) => {
                             e.preventDefault();
-                            handleLeaveTypeFilter(option.value as LeaveType);
+                            handleLeaveTypeFilter(option.value);
                           }}
                         >
                           {option.label}
@@ -823,9 +1101,9 @@ const LeaveEmployee = () => {
             </div>
             <div className="card-body p-0">
               {loading ? (
-                <LoadingSpinner />
+                <TableSkeleton />
               ) : (
-                <Table dataSource={data} columns={columns} Selection={true} />
+                <Table dataSource={data} columns={columns} Selection={true} rowId="_id" />
               )}
             </div>
           </div>
@@ -839,7 +1117,7 @@ const LeaveEmployee = () => {
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
-              <h4 className="modal-title">Apply Leave</h4>
+              <h4 className="modal-title">Add Leave</h4>
               <button
                 type="button"
                 className="btn-close custom-btn-close"
@@ -1075,7 +1353,7 @@ const LeaveEmployee = () => {
                   className="btn btn-primary"
                   onClick={handleAddLeaveSubmit}
                 >
-                  Apply Leave
+                  Add Leave
                 </button>
               </div>
             </form>
@@ -1285,83 +1563,15 @@ const LeaveEmployee = () => {
       </div>
       {/* /Edit Leaves */}
       {/* Leave Details Modal */}
-      <div className="modal fade" id="leave_details" tabIndex={-1}>
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Leave Details</h4>
-              <button
-                type="button"
-                className="btn-close custom-btn-close"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-                onClick={() => setSelectedLeave(null)}
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {selectedLeave ? (
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <div className="border rounded p-3 h-100">
-                      <p className="text-muted text-uppercase fs-12 mb-1">Leave Type</p>
-                      <div className="fw-semibold mb-3">
-                        {leaveTypeDisplayMap[selectedLeave.leaveType] || selectedLeave.leaveType}
-                      </div>
-                      <div className="row g-3">
-                        <div className="col-6">
-                          <p className="text-muted text-uppercase fs-12 mb-1">From</p>
-                          <div className="fw-medium">{formatDate(selectedLeave.startDate)}</div>
-                        </div>
-                        <div className="col-6">
-                          <p className="text-muted text-uppercase fs-12 mb-1">To</p>
-                          <div className="fw-medium">{formatDate(selectedLeave.endDate)}</div>
-                        </div>
-                        <div className="col-12">
-                          <p className="text-muted text-uppercase fs-12 mb-1">No. of Days</p>
-                          <div className="fw-medium">
-                            {`${selectedLeave.duration} Day${selectedLeave.duration > 1 ? 's' : ''}`}
-                          </div>
-                        </div>
-                        <div className="col-12">
-                          <p className="text-muted text-uppercase fs-12 mb-1">Reason</p>
-                          <div className="fw-medium text-break" style={{ minHeight: '48px' }}>
-                            {selectedLeave.reason || '—'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="border rounded p-3 h-100">
-                      <p className="text-muted text-uppercase fs-12 mb-1">Reporting Manager</p>
-                      <div className="fw-semibold mb-2">{selectedLeave.reportingManagerName || '-'}</div>
-                      <div className="d-flex align-items-center">
-                        <span className="text-muted me-2">Status:</span>
-                        <StatusBadge status={selectedManagerStatus} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-muted">No leave selected.</div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-light"
-                data-bs-dismiss="modal"
-                onClick={() => setSelectedLeave(null)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Leave Details Modal */}
+      <LeaveDetailsModal
+        leave={selectedLeave}
+        modalId="view_leave_details"
+        leaveTypeDisplayMap={leaveTypeDisplayMap}
+        employeeNameById={employeeNameById}
+        employeeDataById={employeeDataMap}
+        onClose={closeLeaveDetailsModal}
+        canApproveReject={false}
+      />
     </>
   );
 };

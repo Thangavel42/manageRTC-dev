@@ -1,20 +1,18 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
-import { useJobs, Job } from "../../../hooks/useJobs";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import { Job, useJobs } from "../../../hooks/useJobs";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
 
 import AddJob from "./add_job";
-import EditJob from "./edit_job";
 import DeleteJob from "./delete_job";
-import { message } from "antd";
+import EditJob from "./edit_job";
 
 
 const JobGrid = () => {
-  const socket = useSocket() as Socket | null;
+  const _socket = useSocket() as Socket | null;
 
   // State management using the custom hook
   const {
@@ -29,7 +27,7 @@ const JobGrid = () => {
   } = useJobs();
 
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
-  
+
   // Filter states
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -41,7 +39,7 @@ const JobGrid = () => {
   // Extract unique categories and types for filters
   const [categories, setCategories] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [_selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   // Initialize data fetch
   useEffect(() => {
@@ -57,7 +55,7 @@ const JobGrid = () => {
           .map(j => j.category)
           .filter((category): category is string => Boolean(category))
       ));
-      
+
       const uniqueTypes = Array.from(new Set(
         jobs
           .map(j => j.type)
@@ -121,11 +119,11 @@ const JobGrid = () => {
         const description = job.description?.toLowerCase() || '';
         const skills = job.skills?.join(' ').toLowerCase() || '';
         const location = `${job.location?.city || ''} ${job.location?.state || ''} ${job.location?.country || ''}`.toLowerCase();
-        
+
         return title.includes(query) ||
-               description.includes(query) ||
-               skills.includes(query) ||
-               location.includes(query);
+          description.includes(query) ||
+          skills.includes(query) ||
+          location.includes(query);
       });
     }
 
@@ -134,7 +132,7 @@ const JobGrid = () => {
       result.sort((a, b) => {
         const dateA = new Date(a.createdAt);
         const dateB = new Date(b.createdAt);
-        
+
         switch (selectedSort) {
           case "title_asc":
             return a.title.localeCompare(b.title);
@@ -538,19 +536,18 @@ const JobGrid = () => {
                     data-bs-toggle="dropdown"
                   >
                     {selectedSort
-                      ? `Sort: ${
-                          selectedSort === "title_asc"
-                            ? "A-Z"
-                            : selectedSort === "title_desc"
-                            ? "Z-A"
-                            : selectedSort === "date_recent"
+                      ? `Sort: ${selectedSort === "title_asc"
+                        ? "A-Z"
+                        : selectedSort === "title_desc"
+                          ? "Z-A"
+                          : selectedSort === "date_recent"
                             ? "Recent"
                             : selectedSort === "date_oldest"
-                            ? "Oldest"
-                            : selectedSort === "salary_high"
-                            ? "High Salary"
-                            : "Low Salary"
-                        }`
+                              ? "Oldest"
+                              : selectedSort === "salary_high"
+                                ? "High Salary"
+                                : "Low Salary"
+                      }`
                       : "Sort By"}
                   </Link>
                   <div className="dropdown-menu dropdown-menu-end p-3">
@@ -631,19 +628,19 @@ const JobGrid = () => {
                   searchQuery ||
                   dateRange.start ||
                   dateRange.end) && (
-                  <div className="mb-3">
-                    <Link
-                      to="#"
-                      className="btn btn-outline-danger"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleClearFilters();
-                      }}
-                    >
-                      Clear Filters
-                    </Link>
-                  </div>
-                )}
+                    <div className="mb-3">
+                      <Link
+                        to="#"
+                        className="btn btn-outline-danger"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleClearFilters();
+                        }}
+                      >
+                        Clear Filters
+                      </Link>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -661,15 +658,15 @@ const JobGrid = () => {
                     searchQuery ||
                     dateRange.start ||
                     dateRange.end) && (
-                    <div className="text-muted small">
-                      Filters applied:
-                      {selectedStatus && ` Status: ${selectedStatus}`}
-                      {selectedCategory && ` Category: ${selectedCategory}`}
-                      {selectedType && ` Type: ${selectedType}`}
-                      {selectedSort && ` Sort: ${selectedSort}`}
-                      {searchQuery && ` Search: "${searchQuery}"`}
-                    </div>
-                  )}
+                      <div className="text-muted small">
+                        Filters applied:
+                        {selectedStatus && ` Status: ${selectedStatus}`}
+                        {selectedCategory && ` Category: ${selectedCategory}`}
+                        {selectedType && ` Type: ${selectedType}`}
+                        {selectedSort && ` Sort: ${selectedSort}`}
+                        {searchQuery && ` Search: "${searchQuery}"`}
+                      </div>
+                    )}
                 </div>
               )}
 
@@ -761,11 +758,11 @@ const JobGrid = () => {
                                 {job.appliedCount || 0} Applicants
                               </span>
                             </div>
-                            
+
                             <div className="d-flex align-items-center mb-2">
                               <i className="ti ti-map-pin me-2 text-muted"></i>
                               <span className="fs-13 text-muted">
-                                {job.location?.city && job.location?.state && job.location?.country 
+                                {job.location?.city && job.location?.state && job.location?.country
                                   ? `${job.location.city}, ${job.location.state}, ${job.location.country}`
                                   : "Location not specified"}
                               </span>
@@ -816,7 +813,7 @@ const JobGrid = () => {
                           {job.description && (
                             <div className="mb-3">
                               <p className="text-muted fs-13 mb-0">
-                                {job.description.length > 100 
+                                {job.description.length > 100
                                   ? `${job.description.substring(0, 100)}...`
                                   : job.description}
                               </p>
@@ -859,7 +856,7 @@ const JobGrid = () => {
       <EditJob />
       <DeleteJob />
     </>
-    
+
   );
 };
 

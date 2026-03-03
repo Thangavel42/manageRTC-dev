@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
-import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Table from "../../core/common/dataTable/index";
-import PerformanceIndicatorModal from "../../core/modals/performanceIndicatorModal";
 import Footer from "../../core/common/footer";
+import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import PerformanceIndicatorModal from "../../core/modals/performanceIndicatorModal";
 import performanceIndicatorService from "../../core/services/performance/performanceIndicator.service";
+import { resolveDesignation } from "../../utils/designationUtils";
+import { all_routes } from "../router/all_routes";
 
 const PerformanceIndicator = () => {
   const routes = all_routes;
@@ -58,16 +59,16 @@ const PerformanceIndicator = () => {
     {
       title: "Designation",
       dataIndex: "designation",
-      render: (text: string) => (
+      render: (text: any) => (
         <div className="d-flex align-items-center file-name-icon">
           <div className="ms-2">
             <h6 className="fw-medium">
-              <Link to="#">{text}</Link>
+              <Link to="#">{resolveDesignation(text)}</Link>
             </h6>
           </div>
         </div>
       ),
-      sorter: (a: any, b: any) => a.designation.localeCompare(b.designation),
+      sorter: (a: any, b: any) => resolveDesignation(a.designation).localeCompare(resolveDesignation(b.designation)),
     },
     {
       title: "Department",

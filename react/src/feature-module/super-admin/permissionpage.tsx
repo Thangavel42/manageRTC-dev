@@ -126,7 +126,7 @@ const PermissionPage = () => {
   const [categoryTree, setCategoryTree] = useState<CategoryTree[]>([]); // Hierarchical permissions
   const [permissionsMap, setPermissionsMap] = useState<Map<string, AssignedPermissionData>>(new Map()); // Assigned permissions
   const [mandatoryPermissions, setMandatoryPermissions] = useState<MandatoryPermission[]>([]); // Loaded from API
-  const [originalPermissions, setOriginalPermissions] = useState<Map<string, AssignedPermissionData>>(new Map()); // Original permissions for dirty check
+  const [_originalPermissions, setOriginalPermissions] = useState<Map<string, AssignedPermissionData>>(new Map()); // Original permissions for dirty check
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // Track unsaved changes
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedL1, setExpandedL1] = useState<Set<string>>(new Set());
@@ -466,8 +466,8 @@ const PermissionPage = () => {
 
   const hasAnyAction = (actions: PermissionAction): boolean => {
     return actions.all || actions.read || actions.create || actions.write ||
-           actions.delete || actions.import || actions.export ||
-           actions.approve || actions.assign;
+      actions.delete || actions.import || actions.export ||
+      actions.approve || actions.assign;
   };
 
   const getPermissionActions = (pageId: string): PermissionAction => {

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
 import L from "leaflet";
+import { useEffect } from "react";
 import "../../../../node_modules/leaflet/dist/leaflet.css";
 
 const Leaflet = () => {
@@ -17,7 +17,7 @@ const Leaflet = () => {
   useEffect(() => {
     // Initialize the map
     const shapesmap = L.map("map1").setView([51.505, -0.09], 13);
-    
+
     // Add tile layer (OpenStreetMap)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap",
@@ -32,10 +32,10 @@ const Leaflet = () => {
     });
 
     // Add a marker with the custom icon
-    const marker = L.marker([51.5, -0.09], { icon: customIcon }).addTo(shapesmap);
+    const _marker = L.marker([51.5, -0.09], { icon: customIcon }).addTo(shapesmap);
 
     // Add a circle to the map
-    const circle = L.circle([51.508, -0.11], {
+    const _circle = L.circle([51.508, -0.11], {
       color: "#d77cf7",
       fillColor: "#d77cf7",
       fillOpacity: 0.5,
@@ -43,7 +43,7 @@ const Leaflet = () => {
     }).addTo(shapesmap);
 
     // Add a polygon to the map
-    const polygon = L.polygon(
+    const _polygon = L.polygon(
       [
         [51.509, -0.08],
         [51.503, -0.06],
@@ -107,7 +107,7 @@ const Leaflet = () => {
     polygon.bindPopup("I am a polygon.");
 
     // Add a standalone popup
-    const popup = L.popup()
+    const _popup = L.popup()
       .setLatLng([51.513, -0.09])
       .setContent("I am a standalone popup.")
       .openOn(popupmap);
@@ -120,13 +120,13 @@ const Leaflet = () => {
 
   useEffect(() => {
     const customicon = L.map("map-custom-icon").setView([51.505, -0.09], 13);
-    
+
     // Adding tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: "© OpenStreetMap",
     }).addTo(customicon);
-    
+
     // // Circle
     // L.circle([51.508, -0.11], {
     //   color: "#ffc102",
@@ -134,7 +134,7 @@ const Leaflet = () => {
     //   fillOpacity: 0.5,
     //   radius: 500,
     // }).addTo(customicon);
-  
+
     // Custom Icon
     const greenIcon = L.icon({
       iconUrl: "assets/img/logo.svg", // Path to your SVG file
@@ -142,10 +142,10 @@ const Leaflet = () => {
       iconAnchor: [22, 94], // Anchor point of the icon
       popupAnchor: [-3, -76], // Point where the popup opens relative to the anchor
     });
-  
+
     // Add the custom marker to the map
     L.marker([51.5, -0.09], { icon: greenIcon }).addTo(customicon);
-  
+
     // Cleanup on component unmount
     return () => {
       customicon.remove();
@@ -155,34 +155,34 @@ const Leaflet = () => {
   useEffect(() => {
     // Initialize the map
     const geomap = L.map("interactive-map").setView([37.8, -96], 4);
-  
+
     // Add tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(geomap);
-  
+
     // Function to get color based on density
-    function getColor(d:any) {
+    function getColor(d: any) {
       return d > 1000
         ? "#800026"
         : d > 500
-        ? "#BD0026"
-        : d > 200
-        ? "#E31A1C"
-        : d > 100
-        ? "#FC4E2A"
-        : d > 50
-        ? "#FD8D3C"
-        : d > 20
-        ? "#FEB24C"
-        : d > 10
-        ? "#FED976"
-        : "#FFEDA0";
+          ? "#BD0026"
+          : d > 200
+            ? "#E31A1C"
+            : d > 100
+              ? "#FC4E2A"
+              : d > 50
+                ? "#FD8D3C"
+                : d > 20
+                  ? "#FEB24C"
+                  : d > 10
+                    ? "#FED976"
+                    : "#FFEDA0";
     }
-  
+
     // Style function for GeoJSON layers
-    function style(feature:any) {
+    function _style(feature: any) {
       return {
         fillColor: getColor(feature.properties.density),
         weight: 2,
@@ -192,110 +192,110 @@ const Leaflet = () => {
         fillOpacity: 0.7,
       };
     }
-  
+
     // Highlight feature on hover
-    function highlightFeature(e:any) {
+    function highlightFeature(e: any) {
       const layer = e.target;
-  
+
       layer.setStyle({
         weight: 5,
         color: "#666",
         dashArray: "",
         fillOpacity: 0.7,
       });
-  
+
       if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
         layer.bringToFront();
       }
     }
-  
+
     // Reset highlight on mouseout
-    function resetHighlight(e:any) {
-    //   geojson.resetStyle(e.target);
+    function resetHighlight(e: any) {
+      //   geojson.resetStyle(e.target);
     }
-  
+
     // Zoom to feature on click
-    function zoomToFeature(e:any) {
+    function zoomToFeature(e: any) {
       geomap.fitBounds(e.target.getBounds());
     }
-  
+
     // Add event listeners for interactivity
-    function onEachFeature(feature:any, layer:any) {
+    function _onEachFeature(feature: any, layer: any) {
       layer.on({
         mouseover: highlightFeature,
         mouseout: resetHighlight,
         click: zoomToFeature,
       });
     }
-  
+
     // // Add GeoJSON data to the map
     // const geojson = L.geoJson(statesData, {
     //   style: style,
     //   onEachFeature: onEachFeature,
     // }).addTo(geomap);
-  
+
     // Cleanup on unmount
     return () => {
       geomap.remove();
     };
   }, []);
 
-//   useEffect(() => {
-//     const geomap = L.map("interactive-map").setView([51.505, -0.09], 13);
-//     var tiles = L.tileLayer(
-//       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-//       {
-//         maxZoom: 18,
-//         attribution:
-//           '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-//       }
-//     ).addTo(geomap);
-//     function getColor(d: number) {
-//       return d > 1000
-//         ? "#800026"
-//         : d > 500
-//         ? "#BD0026"
-//         : d > 200
-//         ? "#E31A1C"
-//         : d > 100
-//         ? "#FC4E2A"
-//         : d > 50
-//         ? "#FD8D3C"
-//         : d > 20
-//         ? "#FEB24C"
-//         : d > 10
-//         ? "#FED976"
-//         : "#FFEDA0";
-//     }
-//     function style(feature: { properties: { density: any } }) {
-//       return {
-//         fillColor: getColor(feature.properties.density),
-//         weight: 2,
-//         opacity: 1,
-//         color: "white",
-//         dashArray: "3",
-//         fillOpacity: 0.7,
-//         // fillColor: '#fff'
-//       };
-//     }
-//     // L.geoJson(statesData, { style: style }).addTo(geomap);
-//     function highlightFeature(e: { target: any }) {
-//       var layer = e.target;
-//       layer.setStyle({
-//         weight: 5,
-//         color: "#666",
-//         dashArray: "",
-//         fillOpacity: 0.7,
-//       });
-//       if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-//         layer.bringToFront();
-//       }
-//     }
+  //   useEffect(() => {
+  //     const geomap = L.map("interactive-map").setView([51.505, -0.09], 13);
+  //     var tiles = L.tileLayer(
+  //       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  //       {
+  //         maxZoom: 18,
+  //         attribution:
+  //           '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  //       }
+  //     ).addTo(geomap);
+  //     function getColor(d: number) {
+  //       return d > 1000
+  //         ? "#800026"
+  //         : d > 500
+  //         ? "#BD0026"
+  //         : d > 200
+  //         ? "#E31A1C"
+  //         : d > 100
+  //         ? "#FC4E2A"
+  //         : d > 50
+  //         ? "#FD8D3C"
+  //         : d > 20
+  //         ? "#FEB24C"
+  //         : d > 10
+  //         ? "#FED976"
+  //         : "#FFEDA0";
+  //     }
+  //     function style(feature: { properties: { density: any } }) {
+  //       return {
+  //         fillColor: getColor(feature.properties.density),
+  //         weight: 2,
+  //         opacity: 1,
+  //         color: "white",
+  //         dashArray: "3",
+  //         fillOpacity: 0.7,
+  //         // fillColor: '#fff'
+  //       };
+  //     }
+  //     // L.geoJson(statesData, { style: style }).addTo(geomap);
+  //     function highlightFeature(e: { target: any }) {
+  //       var layer = e.target;
+  //       layer.setStyle({
+  //         weight: 5,
+  //         color: "#666",
+  //         dashArray: "",
+  //         fillOpacity: 0.7,
+  //       });
+  //       if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+  //         layer.bringToFront();
+  //       }
+  //     }
 
-//     return () => {
-//       geomap.remove();
-//     };
-//   }, []);
+  //     return () => {
+  //       geomap.remove();
+  //     };
+  //   }, []);
 
   return (
     <div className="page-wrapper cardhead">

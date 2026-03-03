@@ -2,24 +2,66 @@ import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
 
-const uri =
-  process.env.MONGODB_URI || 'mongodb+srv://admin:AdMin-2025@cluster0.iooxltd.mongodb.net/';
+const uri = process.env.MONGODB_URI;
+if (!uri) throw new Error('MONGODB_URI is not set in environment variables');
 
-const client = new MongoClient(uri);
+const client = new MongoClient(uri, {
+  serverSelectionTimeoutMS: 10000,
+  connectTimeoutMS: 10000,
+});
 let isConnected = false;
 let isMongooseConnected = false;
 
 export { client };
 
+// Helper function to provide detailed error messages
+const handleConnectionError = (error, clientType) => {
+  const errorMsg = error.message || '';
+  const errorCode = error.code || '';
+
+  let troubleshootingTips = [];
+
+  if (errorCode === 'ECONNREFUSED' || errorMsg.includes('querySrv') || errorMsg.includes('ENOTFOUND')) {
+    troubleshootingTips.push('❌ Cannot connect to MongoDB Atlas cluster');
+    troubleshootingTips.push('');
+    troubleshootingTips.push('Possible causes:');
+    troubleshootingTips.push('1. MongoDB Atlas cluster is PAUSED (common in free tier after inactivity)');
+    troubleshootingTips.push('   → Go to https://cloud.mongodb.com/ and resume your cluster');
+    troubleshootingTips.push('');
+    troubleshootingTips.push('2. IP Address not whitelisted in MongoDB Atlas');
+    troubleshootingTips.push('   → Go to Security → Network Access');
+    troubleshootingTips.push('   → Add your current IP or use 0.0.0.0/0 (for testing only)');
+    troubleshootingTips.push('');
+    troubleshootingTips.push('3. DNS/Network issue');
+    troubleshootingTips.push('   → Check your internet connection');
+    troubleshootingTips.push('   → Try disabling VPN if connected');
+    troubleshootingTips.push('   → Check if firewall is blocking MongoDB ports (27017)');
+  } else if (errorMsg.includes('authentication') || errorMsg.includes('AuthenticationFailed')) {
+    troubleshootingTips.push('❌ Authentication failed');
+    troubleshootingTips.push('');
+    troubleshootingTips.push('Possible causes:');
+    troubleshootingTips.push('1. Incorrect username or password');
+    troubleshootingTips.push('2. Special characters in password not URL-encoded');
+    troubleshootingTips.push('3. Database user not created in MongoDB Atlas');
+  } else {
+    troubleshootingTips.push('❌ Unexpected MongoDB connection error');
+  }
+
+  logger.error(`Database Connection Error (${clientType})`, { error: errorMsg });
+  console.error('\n' + troubleshootingTips.join('\n'));
+}
+
 export const connectDB = async () => {
   // Connect MongoDB native client
   if (!isConnected) {
     try {
+      console.log('Connecting to MongoDB (Native Client)...');
       await client.connect();
       isConnected = true;
       logger.info('Connected to MongoDB (Native Client)');
+      console.log('✅ MongoDB Native Client connected successfully');
     } catch (error) {
-      logger.error('Database Connection Error (Native Client)', { error: error.message });
+      handleConnectionError(error, 'Native Client');
       throw error;
     }
   }
@@ -31,14 +73,16 @@ export const connectDB = async () => {
       // For multi-tenant, we'll connect to a default database and use discriminators
       const defaultDbName = process.env.MONGODB_DATABASE || 'AmasQIS';
 
+      console.log(`Connecting to MongoDB (Mongoose) - Database: ${defaultDbName}...`);
       await mongoose.connect(uri, {
         dbName: defaultDbName,
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
         maxPoolSize: 10,
       });
       isMongooseConnected = true;
       logger.info(`Connected to MongoDB (Mongoose) - Database: ${defaultDbName}`);
+      console.log(`✅ MongoDB Mongoose connected successfully to database: ${defaultDbName}`);
 
       // Handle connection events
       mongoose.connection.on('error', (err) => {
@@ -55,7 +99,7 @@ export const connectDB = async () => {
         isMongooseConnected = true;
       });
     } catch (error) {
-      logger.error('Database Connection Error (Mongoose)', { error: error.message });
+      handleConnectionError(error, 'Mongoose');
       throw error;
     }
   }
@@ -88,6 +132,7 @@ export const getTenantCollections = (tenantDbName) => {
     tasks: db.collection('tasks'),
     taskstatus: db.collection('taskstatus'),
     attendance: db.collection('attendance'),
+    attendanceAudit: db.collection('attendanceAudit'), // Phase 3: Attendance audit logging
     departments: db.collection('departments'),
     leaves: db.collection('leaves'),
     leaveRequests: db.collection('leaves'),
@@ -151,6 +196,13 @@ export const getTenantCollections = (tenantDbName) => {
     // Overtime
     overtimeRequests: db.collection('overtimeRequests'),
 
+    // Timesheets
+    weeklyTimesheets: db.collection('weeklyTimesheets'),
+    timesheetEntries: db.collection('timesheetEntries'),
+
+    // Audit Logs
+    auditLogs: db.collection('auditLogs'),
+
     // invoice section
     addInvoices: db.collection('invoices'),
 
@@ -172,7 +224,6 @@ export const getTenantCollections = (tenantDbName) => {
     //profile collection
     profile: db.collection('profile'),
     tickets: db.collection('tickets'),
-    ticketCategories: db.collection('ticketCategories'),
     // jobs collection
     jobs: db.collection('jobs'),
     candidates: db.collection('candidates'),
@@ -183,6 +234,9 @@ export const getTenantCollections = (tenantDbName) => {
     subcontracts: db.collection('subcontracts'),
     // Project contracts (worker assignments)
     projectcontracts: db.collection('projectcontracts'),
+
+    // Change Requests (employee-submitted requests for HR approval)
+    changeRequests: db.collection('changeRequests'),
   };
 };
 
@@ -201,5 +255,6 @@ export const getsuperadminCollections = () => {
     trainers: db.collection('trainers'),
     trainings: db.collection('trainings'),
     ticketCategories: db.collection('ticketCategories'),
+    companyChangeRequestsCollection: db.collection('companyChangeRequests'),
   };
 };

@@ -1,26 +1,12 @@
-import React, { useEffect } from "react";
 import {
-  Bar,
-  Line,
-  Doughnut,
-  Pie,
-  Radar,
-  Scatter,
-  PolarArea,
-} from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
+  ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, LineElement, PointElement, Title,
+  Tooltip
 } from "chart.js";
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import {
+  Bar, Doughnut, Line, Pie, PolarArea, Radar,
+  Scatter
+} from "react-chartjs-2";
 import Footer from "../../../core/common/footer";
 
 // Register the necessary components for Chart.js
@@ -251,7 +237,7 @@ const ChartJSExample = () => {
           {/* /Polar Area Chart */}
         </div>
       </div>
-      
+
       <Footer />
     </div>
   );

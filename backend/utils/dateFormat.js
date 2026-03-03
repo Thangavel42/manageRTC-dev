@@ -7,8 +7,26 @@ import { DateTime } from 'luxon';
 export const DATE_FORMAT_DDMMYYYY = 'dd-MM-yyyy';
 
 export const isValidDDMMYYYY = (value) => {
-  if (!value || typeof value !== 'string') return false;
-  return DateTime.fromFormat(value.trim(), DATE_FORMAT_DDMMYYYY, { zone: 'utc' }).isValid;
+  if (!value) return false;
+
+  // If it's a Date object, it's valid
+  if (value instanceof Date) return true;
+
+  // If it's not a string, return false
+  if (typeof value !== 'string') return false;
+
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  // Try DD-MM-YYYY format
+  const fromFormat = DateTime.fromFormat(trimmed, DATE_FORMAT_DDMMYYYY, { zone: 'utc' });
+  if (fromFormat.isValid) return true;
+
+  // Try ISO format (ISO 8601 strings from MongoDB)
+  const fromIso = DateTime.fromISO(trimmed, { zone: 'utc' });
+  if (fromIso.isValid) return true;
+
+  return false;
 };
 
 export const parseDDMMYYYY = (value) => {

@@ -11,6 +11,7 @@ import { extractUser, sendCreated, sendSuccess } from '../../utils/apiResponse.j
 import logger from '../../utils/logger.js';
 import { getSocketIO, broadcastTimesheetEvents } from '../../utils/socketBroadcaster.js';
 import { withTransactionRetry } from '../../utils/transactionHelper.js';
+import auditLogService from '../../services/audit/auditLog.service.js';
 
 /**
  * Helper function to check if user has required role
@@ -18,6 +19,177 @@ import { withTransactionRetry } from '../../utils/transactionHelper.js';
 const ensureRole = (user, allowedRoles = []) => {
   const role = user?.role?.toLowerCase();
   return allowedRoles.includes(role);
+};
+
+/**
+ * PHASE 3 FIX: Helper function to get employee's shift overtime threshold
+ * Fetches the employee's assigned shift and returns the overtime threshold
+ * Returns default 8 hours if no shift is assigned or shift doesn't specify threshold
+ */
+const getEmployeeOvertimeThreshold = async (collections, employee) => {
+  try {
+    if (!employee.shiftId) {
+      logger.debug('[Timesheet Controller] No shift assigned to employee, using default 8 hours');
+      return 8; // Default threshold
+    }
+
+    const shift = await collections.shifts.findOne({
+      _id: new ObjectId(employee.shiftId),
+      isDeleted: { $ne: true }
+    });
+
+    if (!shift) {
+      logger.warn(`[Timesheet Controller] Shift not found for employee ${employee.employeeId}, using default 8 hours`);
+      return 8; // Default threshold
+    }
+
+    // Check if overtime is enabled and get threshold
+    if (shift.overtime?.enabled === false) {
+      // Overtime disabled, use a high threshold or return 0 for no overtime
+      return 999; // Effectively no overtime calculation
+    }
+
+    const threshold = shift.overtime?.threshold || shift.minHoursForFullDay || 8;
+    logger.debug(`[Timesheet Controller] Using shift-based overtime threshold: ${threshold} hours for employee ${employee.employeeId}`);
+    return threshold;
+
+  } catch (error) {
+    logger.error('[Timesheet Controller] Error fetching shift for overtime calculation:', error);
+    return 8; // Fallback to default on error
+  }
+};
+
+/**
+ * PHASE 4: Helper function to validate timesheet entries against attendance records
+ * Compares reported hours with actual clock-in/clock-out hours
+ * Returns validation result with warnings and discrepancies
+ *
+ * @param {object} collections - Tenant collections
+ * @param {string} employeeId - Employee ID
+ * @param {Array} entries - Timesheet entries to validate
+ * @returns {object} Validation result with warnings and discrepancies
+ */
+const validateTimesheetAgainstAttendance = async (collections, employeeId, entries) => {
+  const validationResults = {
+    isValid: true,
+    warnings: [],
+    discrepancies: [],
+    missingAttendance: [],
+    totalReportedHours: 0,
+    totalAttendanceHours: 0
+  };
+
+  try {
+    for (const entry of entries) {
+      const entryDate = new Date(entry.date);
+      const dayStart = new Date(entryDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(entryDate);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      // Find attendance record for this date
+      const attendance = await collections.attendance.findOne({
+        employeeId,
+        date: { $gte: dayStart, $lte: dayEnd },
+        isDeleted: { $ne: true }
+      });
+
+      const reportedHours = entry.hours || 0;
+      validationResults.totalReportedHours += reportedHours;
+
+      if (!attendance) {
+        // No attendance record found
+        validationResults.warnings.push({
+          date: entry.date,
+          type: 'no_attendance',
+          message: `No attendance record found for ${entry.date.toISOString().split('T')[0]}`,
+          reportedHours,
+          attendanceHours: 0
+        });
+        validationResults.missingAttendance.push({
+          date: entry.date,
+          reportedHours
+        });
+        continue;
+      }
+
+      const attendanceHours = attendance.hoursWorked || 0;
+      validationResults.totalAttendanceHours += attendanceHours;
+
+      // Calculate discrepancy (allow 10% tolerance)
+      const tolerance = Math.max(0.5, attendanceHours * 0.1); // 10% or 0.5 hours minimum
+      const difference = Math.abs(reportedHours - attendanceHours);
+
+      // Check for significant discrepancy
+      if (difference > tolerance) {
+        validationResults.discrepancies.push({
+          date: entry.date,
+          reportedHours,
+          attendanceHours,
+          difference: Number(difference.toFixed(2)),
+          percentage: Number(((difference / attendanceHours) * 100).toFixed(1)),
+          clockIn: attendance.clockIn?.time,
+          clockOut: attendance.clockOut?.time,
+          status: attendance.status
+        });
+
+        // Check if discrepancy is too large (>25% or >2 hours)
+        if (difference > 2 || (attendanceHours > 0 && difference / attendanceHours > 0.25)) {
+          validationResults.isValid = false;
+          validationResults.warnings.push({
+            date: entry.date,
+            type: 'large_discrepancy',
+            message: `Significant discrepancy on ${entry.date.toISOString().split('T')[0]}: Reported ${reportedHours}h, Attendance shows ${attendanceHours}h`,
+            reportedHours,
+            attendanceHours,
+            difference: Number(difference.toFixed(2))
+          });
+        }
+      }
+
+      // Check if claiming hours while on leave
+      if (attendance.status === 'on-leave' && reportedHours > 0) {
+        validationResults.warnings.push({
+          date: entry.date,
+          type: 'leave_claim',
+          message: `Claiming hours while marked as 'on-leave' for ${entry.date.toISOString().split('T')[0]}`,
+          reportedHours,
+          attendanceStatus: attendance.status,
+          leaveType: attendance.leaveType
+        });
+      }
+
+      // Check if claiming hours while absent
+      if (attendance.status === 'absent' && reportedHours > 0) {
+        validationResults.warnings.push({
+          date: entry.date,
+          type: 'absent_claim',
+          message: `Claiming hours while marked as 'absent' for ${entry.date.toISOString().split('T')[0]}`,
+          reportedHours,
+          attendanceStatus: attendance.status
+        });
+      }
+    }
+
+    logger.debug(`[Timesheet Validation] Validation complete:`, {
+      isValid: validationResults.isValid,
+      warningCount: validationResults.warnings.length,
+      discrepancyCount: validationResults.discrepancies.length,
+      reportedTotal: validationResults.totalReportedHours,
+      attendanceTotal: validationResults.totalAttendanceHours
+    });
+
+    return validationResults;
+
+  } catch (error) {
+    logger.error('[Timesheet Validation] Error validating against attendance:', error);
+    // Don't fail on validation error - log and continue
+    validationResults.warnings.push({
+      type: 'validation_error',
+      message: 'Unable to validate against attendance records. Please check manually.'
+    });
+    return validationResults;
+  }
 };
 
 /**
@@ -278,15 +450,50 @@ export const createTimesheet = asyncHandler(async (req, res) => {
       });
     }
 
+    // PHASE 4: Validate timesheet entries against attendance records
+    const validationResult = await validateTimesheetAgainstAttendance(
+      collections,
+      employee.employeeId,
+      entries
+    );
+
+    // If validation found serious issues, return warnings but allow submission with flag
+    if (!validationResult.isValid) {
+      logger.warn(`[Timesheet Controller] Timesheet validation failed for employee ${employee.employeeId}:`, {
+        discrepancies: validationResult.discrepancies,
+        warnings: validationResult.warnings
+      });
+
+      // Return with warnings - client can decide whether to proceed
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Timesheet validation failed. Please review the discrepancies.',
+          code: 'TIMESHEET_VALIDATION_FAILED'
+        },
+        validation: {
+          isValid: validationResult.isValid,
+          warnings: validationResult.warnings,
+          discrepancies: validationResult.discrepancies,
+          canOverride: ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])
+        }
+      });
+    }
+
     // Calculate hours breakdown
     let totalHours = 0;
     let totalRegularHours = 0;
     let totalOvertimeHours = 0;
 
+    // PHASE 3 FIX: Get employee's shift-based overtime threshold
+    const overtimeThreshold = await getEmployeeOvertimeThreshold(collections, employee);
+    logger.debug(`[Timesheet Controller] Using overtime threshold: ${overtimeThreshold} hours for employee ${employee.employeeId}`);
+
     const processedEntries = entries.map(entry => {
       const hours = entry.hours || 0;
-      const regularHours = Math.min(hours, 8);
-      const overtimeHours = Math.max(0, hours - 8);
+      // PHASE 3 FIX: Use shift-based threshold instead of hardcoded 8 hours
+      const regularHours = Math.min(hours, overtimeThreshold);
+      const overtimeHours = Math.max(0, hours - overtimeThreshold);
 
       totalHours += hours;
       totalRegularHours += regularHours;
@@ -313,6 +520,16 @@ export const createTimesheet = asyncHandler(async (req, res) => {
       status: 'draft',
       notes: notes || '',
       companyId: user.companyId,
+      // PHASE 4: Add validation metadata
+      validation: {
+        isValid: validationResult.isValid,
+        hasWarnings: validationResult.warnings.length > 0,
+        warningCount: validationResult.warnings.length,
+        discrepancies: validationResult.discrepancies,
+        reportedTotal: validationResult.totalReportedHours,
+        attendanceTotal: validationResult.totalAttendanceHours,
+        validatedAt: new Date()
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
       updatedBy: user.userId
@@ -376,15 +593,54 @@ export const updateTimesheet = asyncHandler(async (req, res) => {
       return sendForbidden(res, 'Timesheet cannot be edited in current state or you lack permission');
     }
 
+    // PHASE 4: Validate timesheet entries against attendance records
+    const validationResult = await validateTimesheetAgainstAttendance(
+      collections,
+      timesheet.employeeId,
+      entries
+    );
+
+    // If validation found serious issues, return warnings but allow submission with flag
+    if (!validationResult.isValid) {
+      logger.warn(`[Timesheet Controller] Timesheet validation failed on update for employee ${timesheet.employeeId}:`, {
+        discrepancies: validationResult.discrepancies,
+        warnings: validationResult.warnings
+      });
+
+      // Return with warnings - client can decide whether to proceed
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Timesheet validation failed. Please review the discrepancies.',
+          code: 'TIMESHEET_VALIDATION_FAILED'
+        },
+        validation: {
+          isValid: validationResult.isValid,
+          warnings: validationResult.warnings,
+          discrepancies: validationResult.discrepancies,
+          canOverride: ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])
+        }
+      });
+    }
+
     // Recalculate hours
     let totalHours = 0;
     let totalRegularHours = 0;
     let totalOvertimeHours = 0;
 
+    // PHASE 3 FIX: Get employee's shift-based overtime threshold
+    // Fetch employee record to get shiftId
+    const employee = await collections.employees.findOne({
+      _id: timesheet.employee,
+      isDeleted: { $ne: true }
+    });
+    const overtimeThreshold = await getEmployeeOvertimeThreshold(collections, employee);
+
     const processedEntries = entries.map(entry => {
       const hours = entry.hours || 0;
-      const regularHours = Math.min(hours, 8);
-      const overtimeHours = Math.max(0, hours - 8);
+      // PHASE 3 FIX: Use shift-based threshold instead of hardcoded 8 hours
+      const regularHours = Math.min(hours, overtimeThreshold);
+      const overtimeHours = Math.max(0, hours - overtimeThreshold);
 
       totalHours += hours;
       totalRegularHours += regularHours;
@@ -404,6 +660,16 @@ export const updateTimesheet = asyncHandler(async (req, res) => {
       totalRegularHours,
       totalOvertimeHours,
       notes: notes || timesheet.notes,
+      // PHASE 4: Update validation metadata
+      validation: {
+        isValid: validationResult.isValid,
+        hasWarnings: validationResult.warnings.length > 0,
+        warningCount: validationResult.warnings.length,
+        discrepancies: validationResult.discrepancies,
+        reportedTotal: validationResult.totalReportedHours,
+        attendanceTotal: validationResult.totalAttendanceHours,
+        validatedAt: new Date()
+      },
       updatedAt: new Date(),
       updatedBy: user.userId
     };
@@ -472,6 +738,23 @@ export const submitTimesheet = asyncHandler(async (req, res) => {
       });
     }
 
+    // PHASE 4: Check validation status before allowing submission
+    if (timesheet.validation && !timesheet.validation.isValid) {
+      // Employees cannot submit timesheets with validation failures
+      if (!ensureRole(user, ['admin', 'hr', 'manager', 'superadmin'])) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Cannot submit timesheet with validation discrepancies. Please contact HR or Admin.',
+            code: 'TIMESHEET_HAS_DISCREPANCIES'
+          },
+          validation: timesheet.validation
+        });
+      }
+      // Admins/HR can override with warning
+      logger.warn(`[Timesheet Controller] Timesheet ${id} submitted with validation overrides by ${user.role}`);
+    }
+
     // Check if timesheet has entries
     if (!timesheet.entries || timesheet.entries.length === 0) {
       return res.status(400).json({
@@ -521,7 +804,7 @@ export const submitTimesheet = asyncHandler(async (req, res) => {
 export const approveTimesheet = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
-    const { comments } = req.body;
+    const { comments, overrideValidation } = req.body;
     const user = extractUser(req);
 
     // Role check: Only admin, hr, manager can approve
@@ -546,12 +829,27 @@ export const approveTimesheet = asyncHandler(async (req, res) => {
         throw new Error(`Cannot approve timesheet in current state: ${timesheet.status}`);
       }
 
+      // PHASE 4: Check validation status before approval
+      if (timesheet.validation && !timesheet.validation.isValid && !overrideValidation) {
+        throw new Error(
+          'Cannot approve timesheet with validation discrepancies. ' +
+          'Please review the discrepancies and use overrideValidation=true to approve anyway.'
+        );
+      }
+
+      // Log override if used
+      if (timesheet.validation && !timesheet.validation.isValid && overrideValidation) {
+        logger.warn(`[Timesheet Controller] Timesheet ${id} approved with validation override by ${user.userId}`);
+      }
+
       // Update timesheet within transaction
       const updateData = {
         status: 'approved',
         approvedBy: user.userId,
         approvedAt: new Date(),
         approvalComments: comments || '',
+        // PHASE 4: Mark if validation was overridden
+        validationOverride: overrideValidation || false,
         updatedAt: new Date(),
         updatedBy: user.userId
       };
@@ -574,6 +872,15 @@ export const approveTimesheet = asyncHandler(async (req, res) => {
     if (io) {
       broadcastTimesheetEvents.approved(io, user.companyId, result);
     }
+
+    // Log to comprehensive audit service
+    await auditLogService.logTimesheetAction(
+      user.companyId,
+      'TIMESHEET_APPROVED',
+      result,
+      user,
+      req
+    );
 
     return sendSuccess(res, null, 'Timesheet approved successfully');
 
@@ -662,6 +969,15 @@ export const rejectTimesheet = asyncHandler(async (req, res) => {
     if (io) {
       broadcastTimesheetEvents.rejected(io, user.companyId, result);
     }
+
+    // Log to comprehensive audit service
+    await auditLogService.logTimesheetAction(
+      user.companyId,
+      'TIMESHEET_REJECTED',
+      result,
+      user,
+      req
+    );
 
     return sendSuccess(res, null, 'Timesheet rejected successfully');
 

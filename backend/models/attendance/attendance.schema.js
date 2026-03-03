@@ -177,6 +177,18 @@ const attendanceSchema = new mongoose.Schema({
     ref: 'Shift'
   },
 
+  // PHASE 2 FIX: Timezone support for accurate time calculations
+  timezone: {
+    type: String,
+    default: 'UTC',
+    enum: [
+      'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+      'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+      'Asia/Kolkata', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Dubai',
+      'Australia/Sydney', 'Pacific/Auckland'
+    ]
+  },
+
   // Schedule details
   scheduledStart: Date,
   scheduledEnd: Date,
@@ -276,6 +288,14 @@ attendanceSchema.index({ date: 1, status: 1, isDeleted: 1 });
 // Phase 2.1: Added missing compound indexes for better query performance
 attendanceSchema.index({ employee: 1, date: 1, isDeleted: 1 });
 attendanceSchema.index({ companyId: 1, status: 1, isDeleted: 1 });
+// Phase 2: Additional indexes for attendance sync queries and lookups
+attendanceSchema.index({ companyId: 1, employeeId: 1, status: 1 });
+attendanceSchema.index({ companyId: 1, employeeId: 1, date: 1 });
+attendanceSchema.index({ companyId: 1, employeeId: 1, isDeleted: 1 });
+attendanceSchema.index({ companyId: 1, leaveId: 1 });
+attendanceSchema.index({ leaveId: 1, isDeleted: 1 });
+// Unique index to prevent duplicate attendance per employee per day (Phase 2 - High Priority Fix)
+attendanceSchema.index({ companyId: 1, employeeId: 1, date: 1 }, { unique: true, sparse: true });
 
 // Virtual for total duration
 attendanceSchema.virtual('totalDuration').get(function() {
@@ -299,11 +319,23 @@ attendanceSchema.virtual('workSession').get(function() {
 attendanceSchema.pre('save', async function(next) {
   // Calculate hours worked if both clock in and clock out are present
   if (this.clockIn?.time && this.clockOut?.time) {
-    const totalMs = this.clockOut.time - this.clockIn.time;
+    const clockInTime = new Date(this.clockIn.time);
+    const clockOutTime = new Date(this.clockOut.time);
+
+    // PHASE 2 FIX: Handle overnight shifts
+    let totalMs = clockOutTime - clockInTime;
+
+    // If clockOut is before clockIn, it's an overnight shift
+    // Add 24 hours to get the correct duration
+    if (totalMs < 0) {
+      totalMs += 24 * 60 * 60 * 1000; // Add 24 hours in milliseconds
+    }
+
     const totalHours = totalMs / (1000 * 60 * 60);
 
     // Subtract break duration
-    const workHours = totalHours - (this.breakDuration || 0) / 60;
+    const breakHours = (this.breakDuration || 0) / 60; // Convert minutes to hours
+    const workHours = totalHours - breakHours;
 
     this.hoursWorked = Math.max(0, workHours);
 

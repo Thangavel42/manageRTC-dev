@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { get, post, put, handleApiError } from '../services/api';
 import { message } from 'antd';
+import { useCallback, useState } from 'react';
+import { get, handleApiError, post, put } from '../services/api';
 
 export interface Profile {
   _id: string;
@@ -10,6 +10,7 @@ export interface Profile {
   firstName: string;
   lastName: string;
   email: string;
+  phoneCode?: string;
   phone?: string;
   dateOfBirth?: string | null;
   gender?: string;
@@ -17,7 +18,20 @@ export interface Profile {
   profileImage?: string;
   avatarUrl?: string;
 
-  // Personal Information (Passport, Nationality, etc.)
+  // ✅ Flattened fields from personal object (via backend aggregation pipeline)
+  // These are at root level in API responses but stored in personal in DB
+  passport?: {
+    number?: string;
+    expiryDate?: string | null;
+    country?: string;
+  };
+  nationality?: string;
+  religion?: string;
+  maritalStatus?: string;
+  employmentOfSpouse?: string;
+  noOfChildren?: number;
+
+  // Personal Information (nested in DB, flattened via aggregation)
   personal?: {
     passport?: {
       number?: string;
@@ -66,18 +80,21 @@ export interface Profile {
 
   // Bank Information
   bankDetails?: {
+    accountHolderName?: string;
     bankName?: string;
     accountNumber?: string;
     ifscCode?: string;
     branch?: string;
-    accountType?: 'Savings' | 'Current';
+    accountType?: 'Savings Account' | 'Salary Account' | 'NRI Account';
   };
 
   // Contact information
   emergencyContact?: {
     name: string;
     phone: string;
+    phone2?: string;
     relationship: string;
+    email?: string;
   };
   emergencyContacts?: Array<{ // Alternative format
     name: string;
@@ -292,6 +309,56 @@ export const useProfileRest = () => {
     }
   }, []);
 
+  // Send OTP to registered email for forgot-password flow
+  const sendForgotPasswordOtp = useCallback(async (): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await post<{ email: string }>('/user-profile/forgot-password/send-otp', {});
+      if (response.success) {
+        message.success('OTP sent to your registered email. Valid for 10 minutes.');
+        return true;
+      } else {
+        const errorMsg = response.error?.message || 'Failed to send OTP';
+        message.error(errorMsg);
+        setError(errorMsg);
+        return false;
+      }
+    } catch (err) {
+      const errorMsg = handleApiError(err);
+      message.error(`Failed to send OTP: ${errorMsg}`);
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Reset password using OTP (no current password required)
+  const resetForgotPassword = useCallback(async (data: { otp: string; newPassword: string; confirmPassword: string }): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await post<{ message: string }>('/user-profile/forgot-password/reset', data);
+      if (response.success) {
+        message.success('Password reset successfully!');
+        return true;
+      } else {
+        const errorMsg = response.error?.message || 'Failed to reset password';
+        message.error(errorMsg);
+        setError(errorMsg);
+        return false;
+      }
+    } catch (err) {
+      const errorMsg = handleApiError(err);
+      message.error(`Failed to reset password: ${errorMsg}`);
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     // Data
     currentUserProfile,
@@ -302,5 +369,7 @@ export const useProfileRest = () => {
     fetchCurrentUserProfile,
     updateCurrentUserProfile,
     changePassword,
+    sendForgotPasswordOtp,
+    resetForgotPassword,
   };
 };

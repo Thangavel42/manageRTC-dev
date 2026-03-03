@@ -1,9 +1,4 @@
-/**
- * Leave Ledger / Balance History Page
- * Shows complete audit trail of leave balance changes
- */
-
-import { DatePicker, Spin } from 'antd';
+import { DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,10 +10,68 @@ import { useAuth } from '../../../../hooks/useAuth';
 import { LedgerFilters, transactionTypeDisplayMap, useLeaveLedger } from '../../../../hooks/useLeaveLedger';
 import { useLeaveTypesREST } from '../../../../hooks/useLeaveTypesREST';
 import { all_routes } from '../../../router/all_routes';
+import { useAutoReloadActions } from '../../../../hooks/useAutoReload';
 
-const LoadingSpinner = () => (
-  <div style={{ textAlign: 'center', padding: '50px' }}>
-    <Spin size="large" />
+// Skeleton Loaders
+const BalanceCardSkeleton = () => (
+  <div className="col-xl-3 col-md-6 mb-3">
+    <div className="card border border-light shadow-sm">
+      <div className="card-body">
+        <style>{`
+          @keyframes skeleton-loading {
+            0% { background-color: #e0e0e0; }
+            50% { background-color: #f0f0f0; }
+            100% { background-color: #e0e0e0; }
+          }
+          .skeleton-text {
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+            border-radius: 4px;
+          }
+          .skeleton-balance-label {
+            width: 120px;
+            height: 14px;
+            margin-bottom: 8px;
+          }
+          .skeleton-balance-value {
+            width: 100px;
+            height: 32px;
+            margin-bottom: 4px;
+          }
+          .skeleton-balance-detail {
+            width: 180px;
+            height: 12px;
+          }
+          .skeleton-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+          }
+        `}</style>
+        <div className="d-flex align-items-center justify-content-between">
+          <div className="flex-grow-1">
+            <div className="skeleton-text skeleton-balance-label"></div>
+            <div className="skeleton-text skeleton-balance-value"></div>
+            <div className="skeleton-text skeleton-balance-detail"></div>
+          </div>
+          <div className="skeleton-text skeleton-icon"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const TableSkeleton = () => (
+  <div className="p-4">
+    <style>{`
+      .skeleton-table-row {
+        height: 60px;
+        margin-bottom: 8px;
+        border-radius: 4px;
+      }
+    `}</style>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <div key={i} className="skeleton-text skeleton-table-row"></div>
+    ))}
   </div>
 );
 
@@ -71,14 +124,29 @@ const LeaveLedger = () => {
     fetchMyBalanceSummary,
   } = useLeaveLedger();
 
+  // Auto-reload hook for refetching after actions
+  const { refetchAfterAction } = useAutoReloadActions({
+    fetchFn: () => {
+      fetchMyBalanceHistory();
+      fetchMyBalanceSummary();
+    },
+    debug: true,
+  });
+
   // Fetch active leave types from database
   const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
 
   // Create dynamic leave type display map from database
+  // Maps both ObjectId (new system) and code (legacy) to display name
   const leaveTypeDisplayMap = useMemo(() => {
     const map: Record<string, string> = {};
     activeOptions.forEach(option => {
-      map[option.value.toLowerCase()] = String(option.label);
+      // Map by ObjectId (new system) - primary key
+      map[option.value] = String(option.label);
+      // Map by code (legacy) - fallback for backward compatibility
+      if (option.code) {
+        map[option.code.toLowerCase()] = String(option.label);
+      }
     });
     return map;
   }, [activeOptions]);
@@ -98,12 +166,12 @@ const LeaveLedger = () => {
     fetchMyBalanceHistory(filters);
   }, [fetchActiveLeaveTypes]);
 
-  // Leave type filter options - fetched from database, converted to lowercase for ledger
+  // Leave type filter options - fetched from database, use ObjectId value
   const leaveTypeOptions = useMemo(() => {
     return [
       { value: '', label: 'All Types' },
       ...activeOptions.map((lt) => ({
-        value: lt.value.toLowerCase(), // Convert to lowercase for ledger API
+        value: lt.value, // ObjectId for filtering
         label: lt.label,
       }))
     ];
@@ -217,10 +285,6 @@ const LeaveLedger = () => {
     },
   ];
 
-  if (loading && transactions.length === 0) {
-    return <LoadingSpinner />;
-  }
-
   return (
     <>
       <div className="page-wrapper">
@@ -252,7 +316,7 @@ const LeaveLedger = () => {
           </div>
 
           {/* Balance Summary Cards */}
-          {summary && (
+          {summary ? (
             <div className="row mb-3">
               {Object.entries(summary).map(([leaveType, data]) => (
                 <div key={leaveType} className="col-xl-3 col-md-6 mb-3">
@@ -277,6 +341,12 @@ const LeaveLedger = () => {
                     </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="row mb-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <BalanceCardSkeleton key={i} />
               ))}
             </div>
           )}
@@ -334,17 +404,21 @@ const LeaveLedger = () => {
               <h5 className="mb-0">
                 Transaction History
                 <span className="badge bg-primary-transparent ms-2">
-                  {transactions.length} records
+                  {loading && transactions.length === 0 ? 0 : transactions.length} records
                 </span>
               </h5>
             </div>
             <div className="card-body p-0">
-              <div className="table-responsive">
-                <Table
-                  columns={columns}
-                  dataSource={tableData}
-                />
-              </div>
+              {loading && transactions.length === 0 ? (
+                <TableSkeleton />
+              ) : (
+                <div className="table-responsive">
+                  <Table
+                    columns={columns}
+                    dataSource={tableData}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

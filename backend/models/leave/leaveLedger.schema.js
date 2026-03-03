@@ -30,11 +30,18 @@ const leaveLedgerEntrySchema = new mongoose.Schema({
     index: true
   },
 
-  // Leave type for this transaction
+  // Leave type for this transaction (legacy string code for backward compatibility)
   leaveType: {
     type: String,
     required: true,
     enum: ['casual', 'sick', 'earned', 'compensatory', 'maternity', 'paternity', 'bereavement', 'unpaid', 'special'],
+    index: true
+  },
+
+  // Leave type ObjectId reference (modern approach - primary key for lookups)
+  leaveTypeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LeaveType',
     index: true
   },
 
@@ -161,9 +168,12 @@ const leaveLedgerEntrySchema = new mongoose.Schema({
 
 // Compound indexes for efficient queries
 leaveLedgerEntrySchema.index({ employeeId: 1, leaveType: 1, transactionDate: -1 });
+leaveLedgerEntrySchema.index({ employeeId: 1, leaveTypeId: 1, transactionDate: -1 });
 leaveLedgerEntrySchema.index({ companyId: 1, transactionDate: -1 });
 leaveLedgerEntrySchema.index({ employeeId: 1, financialYear: 1, leaveType: 1 });
+leaveLedgerEntrySchema.index({ employeeId: 1, financialYear: 1, leaveTypeId: 1 });
 leaveLedgerEntrySchema.index({ employeeId: 1, year: 1, month: 1, leaveType: 1 });
+leaveLedgerEntrySchema.index({ employeeId: 1, year: 1, month: 1, leaveTypeId: 1 });
 
 // Static method to create opening balance entry
 leaveLedgerEntrySchema.statics.createOpeningBalance = async function(employeeId, companyId, leaveType, balance, year, month) {

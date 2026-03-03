@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { all_routes } from '../../router/all_routes';
-import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
-import CommonSelect from '../../../core/common/commonSelect';
-import Footer from '../../../core/common/footer';
-import { useProfile, Profile, ProfileFilters } from '../../../hooks/useProfile';
-import { message, Modal, Table, Tag, Button, Space } from 'antd';
-import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import { Button, message, Modal, Space, Table, Tag } from 'antd';
 import { format } from 'date-fns';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import Footer from '../../../core/common/footer';
+import { Profile, ProfileFilters, useProfile } from '../../../hooks/useProfile';
+import { resolveDesignation } from '../../../utils/designationUtils';
+import { all_routes } from '../../router/all_routes';
 
 const ProfileManagement = () => {
   const route = all_routes;
@@ -38,13 +37,13 @@ const ProfileManagement = () => {
 
   // Filter profiles based on current filters
   const filteredProfiles = profiles.filter(profile => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       profile.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.employeeId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      profile.designation?.toLowerCase().includes(searchQuery.toLowerCase());
+      resolveDesignation(profile.designation).toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = selectedStatus === 'All' || profile.status === selectedStatus;
     const matchesDepartment = selectedDepartment === 'All' || profile.department === selectedDepartment;
@@ -195,7 +194,7 @@ const ProfileManagement = () => {
       title: 'Designation',
       dataIndex: 'designation',
       key: 'designation',
-      render: (designation: string) => designation || 'Not assigned'
+      render: (designation: any) => resolveDesignation(designation) || 'Not assigned'
     },
     {
       title: 'Role',

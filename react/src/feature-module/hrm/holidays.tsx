@@ -12,6 +12,7 @@ import Table from "../../core/common/dataTable/index";
 import Footer from "../../core/common/footer";
 import { closeModal, useModalCleanup } from "../../core/hooks/useModalCleanup";
 import HolidayDetailsModal from "../../core/modals/HolidayDetailsModal";
+import { useAuth } from "../../hooks/useAuth";
 import { useSocket } from "../../SocketContext";
 import { all_routes } from "../router/all_routes";
 // REST API Hook for Holidays
@@ -95,6 +96,9 @@ interface ValidationErrors {
 }
 
 const Holidays = () => {
+  const { role } = useAuth();
+  const canManageHolidays = ['admin', 'hr', 'superadmin'].includes(role);
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
@@ -895,25 +899,29 @@ const Holidays = () => {
           >
             <i className="ti ti-eye" />
           </Link>
-          <Link
-            to="#"
-            className="me-2"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#edit_holiday"
-            onClick={() => setEditingHoliday(holiday)}
-          >
-            <i className="ti ti-edit" />
-          </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal"
-            data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={() => setDeletingHoliday(holiday)}
-          >
-            <i className="ti ti-trash" />
-          </Link>
+          {canManageHolidays && (
+            <>
+              <Link
+                to="#"
+                className="me-2"
+                data-bs-toggle="modal"
+                data-inert={true}
+                data-bs-target="#edit_holiday"
+                onClick={() => setEditingHoliday(holiday)}
+              >
+                <i className="ti ti-edit" />
+              </Link>
+              <Link
+                to="#"
+                data-bs-toggle="modal"
+                data-inert={true}
+                data-bs-target="#delete_modal"
+                onClick={() => setDeletingHoliday(holiday)}
+              >
+                <i className="ti ti-trash" />
+              </Link>
+            </>
+          )}
         </div>
       ),
     },
@@ -965,30 +973,34 @@ const Holidays = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="mb-2 me-2">
-                <button
-                  onClick={() => {
-                    console.log("[Holiday Types] Opening Holiday Types modal");
-                    setShowTypesModal(true);
-                  }}
-                  className="btn btn-outline-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-tag me-2" />
-                  Types
-                </button>
-              </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_holiday"
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Holiday
-                </Link>
-              </div>
+              {canManageHolidays && (
+                <div className="mb-2 me-2">
+                  <button
+                    onClick={() => {
+                      console.log("[Holiday Types] Opening Holiday Types modal");
+                      setShowTypesModal(true);
+                    }}
+                    className="btn btn-outline-primary d-flex align-items-center"
+                  >
+                    <i className="ti ti-tag me-2" />
+                    Types
+                  </button>
+                </div>
+              )}
+              {canManageHolidays && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    data-bs-toggle="modal"
+                    data-inert={true}
+                    data-bs-target="#add_holiday"
+                    className="btn btn-primary d-flex align-items-center"
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Holiday
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2">
                 <CollapseHeader />
               </div>
@@ -1213,9 +1225,8 @@ const Holidays = () => {
                             </label>
                             <input
                               type="text"
-                              className={`form-control ${
-                                validationErrors[entry.id]?.title ? "is-invalid" : ""
-                              }`}
+                              className={`form-control ${validationErrors[entry.id]?.title ? "is-invalid" : ""
+                                }`}
                               placeholder="Enter holiday title"
                               value={entry.title}
                               onChange={(e) =>
@@ -1237,9 +1248,8 @@ const Holidays = () => {
                             </label>
                             <div className="input-icon-end position-relative">
                               <DatePicker
-                                className={`form-control datetimepicker ${
-                                  validationErrors[entry.id]?.date ? "is-invalid" : ""
-                                }`}
+                                className={`form-control datetimepicker ${validationErrors[entry.id]?.date ? "is-invalid" : ""
+                                  }`}
                                 format="DD-MM-YYYY"
                                 getPopupContainer={getModalContainer}
                                 placeholder="DD-MM-YYYY"
@@ -1267,9 +1277,8 @@ const Holidays = () => {
                               Status <span className="text-danger">*</span>
                             </label>
                             <CommonSelect
-                              className={`select ${
-                                validationErrors[entry.id]?.status ? "is-invalid" : ""
-                              }`}
+                              className={`select ${validationErrors[entry.id]?.status ? "is-invalid" : ""
+                                }`}
                               options={statusOptions}
                               defaultValue={statusOptions.find(opt => opt.value === entry.status)}
                               onChange={(option: any) => {
@@ -1292,9 +1301,8 @@ const Holidays = () => {
                               Type <span className="text-danger">*</span>
                             </label>
                             <CommonSelect
-                              className={`select ${
-                                validationErrors[entry.id]?.holidayTypeId ? "is-invalid" : ""
-                              }`}
+                              className={`select ${validationErrors[entry.id]?.holidayTypeId ? "is-invalid" : ""
+                                }`}
                               options={[
                                 { value: "", label: "Select Type" },
                                 ...holidayTypes.map((type) => ({
@@ -1411,9 +1419,8 @@ const Holidays = () => {
                     </label>
                     <input
                       type="text"
-                      className={`form-control ${
-                        editValidationErrors.title ? "is-invalid" : ""
-                      }`}
+                      className={`form-control ${editValidationErrors.title ? "is-invalid" : ""
+                        }`}
                       placeholder="Enter holiday title"
                       value={editTitle}
                       onChange={(e) => {
@@ -1436,9 +1443,8 @@ const Holidays = () => {
                     </label>
                     <div className="input-icon-end position-relative">
                       <DatePicker
-                        className={`form-control datetimepicker ${
-                          editValidationErrors.date ? "is-invalid" : ""
-                        }`}
+                        className={`form-control datetimepicker ${editValidationErrors.date ? "is-invalid" : ""
+                          }`}
                         format="DD-MM-YYYY"
                         getPopupContainer={getModalContainer}
                         placeholder="DD-MM-YYYY"
@@ -1467,9 +1473,8 @@ const Holidays = () => {
                       Status <span className="text-danger">*</span>
                     </label>
                     <CommonSelect
-                      className={`select ${
-                        editValidationErrors.status ? "is-invalid" : ""
-                      }`}
+                      className={`select ${editValidationErrors.status ? "is-invalid" : ""
+                        }`}
                       options={statusOptions}
                       defaultValue={statusOptions.find(opt => opt.value === editStatus)}
                       onChange={(option: any) => {
@@ -1493,9 +1498,8 @@ const Holidays = () => {
                       Type <span className="text-danger">*</span>
                     </label>
                     <CommonSelect
-                      className={`select ${
-                        editValidationErrors.holidayTypeId ? "is-invalid" : ""
-                      }`}
+                      className={`select ${editValidationErrors.holidayTypeId ? "is-invalid" : ""
+                        }`}
                       options={[
                         { value: "", label: "Select Type" },
                         ...holidayTypes.map((type) => ({
@@ -1660,9 +1664,8 @@ const Holidays = () => {
                                     <i className="ti ti-tag text-primary" />
                                     <input
                                       type="text"
-                                      className={`form-control form-control-sm ${
-                                        editTypeValidationError ? "is-invalid" : ""
-                                      }`}
+                                      className={`form-control form-control-sm ${editTypeValidationError ? "is-invalid" : ""
+                                        }`}
                                       value={editingTypeName}
                                       onChange={(e) => {
                                         setEditingTypeName(e.target.value);
@@ -1777,9 +1780,8 @@ const Holidays = () => {
                         <div className="d-flex gap-2">
                           <input
                             type="text"
-                            className={`form-control ${
-                              typeValidationError ? "is-invalid" : ""
-                            }`}
+                            className={`form-control ${typeValidationError ? "is-invalid" : ""
+                              }`}
                             placeholder="Enter type name (e.g., Festival, Optional)"
                             value={newTypeName}
                             onChange={(e) => {

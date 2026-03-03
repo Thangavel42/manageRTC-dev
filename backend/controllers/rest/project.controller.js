@@ -62,9 +62,9 @@ export const getProjects = asyncHandler(async (req, res) => {
   devLog('[getProjects] User employeeId:', user.employeeId);
   devLog('[getProjects] Initial filter:', JSON.stringify(filter));
 
-  // For employee role, filter projects where they are assigned as team member, leader, or manager (case-insensitive)
-  if (user.role?.toLowerCase() === 'employee') {
-    devLog('[getProjects] Employee role detected, applying filter');
+  // For employee/manager/leads roles, filter projects where they are assigned as team member, leader, or manager
+  if (['employee', 'manager', 'leads'].includes(user.role?.toLowerCase())) {
+    devLog('[getProjects] Restricted role detected, applying assignment filter');
     const collections = getTenantCollections(user.companyId);
 
     // Find employee's MongoDB _id using their employeeId or clerkUserId
@@ -710,9 +710,26 @@ export const getMyProjects = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(parseInt(limit) || 50);
 
+  const empIdStr = employee._id.toString();
+
   const result = projects.map((project) => {
     const proj = project.toObject ? project.toObject() : project;
     proj.isOverdue = project.isOverdue;
+
+    // Determine user's role in this project (after populate, entries are objects with _id)
+    const pmIds = (project.projectManager || []).map(p =>
+      (p && p._id ? p._id : p)?.toString()
+    );
+    const tlIds = (project.teamLeader || []).map(p =>
+      (p && p._id ? p._id : p)?.toString()
+    );
+    if (pmIds.includes(empIdStr)) {
+      proj.userRole = 'projectManager';
+    } else if (tlIds.includes(empIdStr)) {
+      proj.userRole = 'teamLeader';
+    } else {
+      proj.userRole = 'teamMember';
+    }
     return proj;
   });
 

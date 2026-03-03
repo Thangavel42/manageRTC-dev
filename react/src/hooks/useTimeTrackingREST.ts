@@ -1,10 +1,10 @@
 /**
  * Time Tracking REST API Hook
  * Provides time tracking functionality via REST API
+ * Pure REST - No Socket.IO dependency
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from '../SocketContext';
+import { useState, useCallback, useRef } from 'react';
 import { message } from 'antd';
 import { get, post, put, del, buildParams, ApiResponse } from '../services/api';
 
@@ -47,6 +47,7 @@ export interface TimeEntry {
     lastName?: string;
     employeeId?: string;
     userId?: string;
+    avatar?: string | null;
   };
 }
 
@@ -96,12 +97,14 @@ export interface TimeTrackingStats {
  * Time Tracking REST API Hook
  */
 export const useTimeTrackingREST = () => {
-  const socket = useSocket();
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [stats, setStats] = useState<TimeTrackingStats | null>(null);
   const [timesheet, setTimesheet] = useState<TimesheetData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Store current filters for re-fetching after mutations (ref avoids causing re-renders/loop)
+  const currentFiltersRef = useRef<TimeEntryFilters>({ page: 1, limit: 50 });
 
   /**
    * Fetch time entries with optional filters
@@ -115,11 +118,39 @@ export const useTimeTrackingREST = () => {
 
       if (response.success && response.data) {
         setTimeEntries(response.data);
+        currentFiltersRef.current = { ...currentFiltersRef.current, ...filters };
       } else {
         throw new Error(response.error?.message || 'Failed to fetch time entries');
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch time entries';
+      setError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Fetch time entries for Project Managers / Team Leaders
+   * Hits the same GET /timetracking endpoint — backend scopes results to PM/TL's managed projects automatically.
+   * Use instead of fetchTimeEntries when the caller is a PM or TL (not admin/hr).
+   */
+  const fetchManagedTimeEntries = useCallback(async (filters: TimeEntryFilters = {}) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = buildParams(filters);
+      const response: ApiResponse<TimeEntry[]> = await get('/timetracking', { params });
+
+      if (response.success && response.data) {
+        setTimeEntries(response.data);
+        currentFiltersRef.current = { ...currentFiltersRef.current, ...filters };
+      } else {
+        throw new Error(response.error?.message || 'Failed to fetch managed time entries');
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch managed time entries';
       setError(errorMessage);
       message.error(errorMessage);
     } finally {
@@ -271,6 +302,7 @@ export const useTimeTrackingREST = () => {
 
       if (response.success && response.data) {
         message.success('Time entry created successfully!');
+        // Manually add to state since we don't use Socket.IO
         setTimeEntries(prev => [...prev, response.data!]);
         return true;
       }
@@ -291,6 +323,7 @@ export const useTimeTrackingREST = () => {
 
       if (response.success && response.data) {
         message.success('Time entry updated successfully!');
+        // Manually update state since we don't use Socket.IO
         setTimeEntries(prev =>
           prev.map(entry => (entry._id === timeEntryId ? { ...entry, ...response.data! } : entry))
         );
@@ -313,6 +346,7 @@ export const useTimeTrackingREST = () => {
 
       if (response.success) {
         message.success('Time entry deleted successfully!');
+        // Manually remove from state since we don't use Socket.IO
         setTimeEntries(prev => prev.filter(entry => entry._id !== timeEntryId));
         return true;
       }
@@ -394,59 +428,7 @@ export const useTimeTrackingREST = () => {
     }
   }, []);
 
-  // Socket.IO real-time listeners
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleTimeEntryCreated = (data: TimeEntry) => {
-      console.log('[useTimeTrackingREST] Time entry created via broadcast:', data);
-      setTimeEntries(prev => [...prev, data]);
-    };
-
-    const handleTimeEntryUpdated = (data: TimeEntry) => {
-      console.log('[useTimeTrackingREST] Time entry updated via broadcast:', data);
-      setTimeEntries(prev =>
-        prev.map(entry => (entry._id === data._id ? { ...entry, ...data } : entry))
-      );
-    };
-
-    const handleTimesheetSubmitted = (data: { submittedCount: number }) => {
-      console.log('[useTimeTrackingREST] Timesheet submitted via broadcast:', data);
-      // Update status of all draft entries to submitted
-      setTimeEntries(prev =>
-        prev.map(entry => (entry.status === 'Draft' ? { ...entry, status: 'Submitted' as const } : entry))
-      );
-    };
-
-    const handleTimesheetApproved = (data: { approvedCount: number }) => {
-      console.log('[useTimeTrackingREST] Timesheet approved via broadcast:', data);
-    };
-
-    const handleTimesheetRejected = (data: { rejectedCount: number; reason?: string }) => {
-      console.log('[useTimeTrackingREST] Timesheet rejected via broadcast:', data);
-    };
-
-    const handleTimeEntryDeleted = (data: { timeEntryId: string }) => {
-      console.log('[useTimeTrackingREST] Time entry deleted via broadcast:', data);
-      setTimeEntries(prev => prev.filter(entry => entry.timeEntryId !== data.timeEntryId));
-    };
-
-    socket.on('timeentry:created', handleTimeEntryCreated);
-    socket.on('timeentry:updated', handleTimeEntryUpdated);
-    socket.on('timesheet:submitted', handleTimesheetSubmitted);
-    socket.on('timesheet:approved', handleTimesheetApproved);
-    socket.on('timesheet:rejected', handleTimesheetRejected);
-    socket.on('timeentry:deleted', handleTimeEntryDeleted);
-
-    return () => {
-      socket.off('timeentry:created', handleTimeEntryCreated);
-      socket.off('timeentry:updated', handleTimeEntryUpdated);
-      socket.off('timesheet:submitted', handleTimesheetSubmitted);
-      socket.off('timesheet:approved', handleTimesheetApproved);
-      socket.off('timesheet:rejected', handleTimesheetRejected);
-      socket.off('timeentry:deleted', handleTimeEntryDeleted);
-    };
-  }, [socket]);
+  // No Socket.IO listeners - using pure REST with manual state updates
 
   return {
     timeEntries,
@@ -455,6 +437,7 @@ export const useTimeTrackingREST = () => {
     loading,
     error,
     fetchTimeEntries,
+    fetchManagedTimeEntries,
     fetchStats,
     getTimeEntryById,
     getTimeEntriesByUser,

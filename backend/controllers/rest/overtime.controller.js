@@ -21,6 +21,7 @@ import {
 } from '../../utils/apiResponse.js';
 import { broadcastOvertimeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 import logger from '../../utils/logger.js';
+import auditLogService from '../../services/audit/auditLog.service.js';
 
 /**
  * Helper: Get employee by clerk user ID
@@ -350,11 +351,65 @@ export const approveOvertimeRequest = asyncHandler(async (req, res) => {
   // Get updated overtime request
   const updatedRequest = await collections.overtimeRequests.findOne({ _id: new ObjectId(id) });
 
+  // PHASE 3 FIX: Sync approved overtime with attendance record
+  try {
+    // Find attendance record for the overtime date
+    const overtimeDate = new Date(updatedRequest.date);
+    const dayStart = new Date(overtimeDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(overtimeDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const attendanceRecord = await collections.attendance.findOne({
+      companyId: user.companyId,
+      employeeId: updatedRequest.employeeId,
+      date: { $gte: dayStart, $lte: dayEnd },
+      isDeleted: { $ne: true }
+    });
+
+    if (attendanceRecord) {
+      // Update attendance with overtime hours
+      const currentOvertime = attendanceRecord.overtimeHours || 0;
+      const additionalOvertime = approvedHours || updatedRequest.requestedHours;
+
+      await collections.attendance.updateOne(
+        { _id: attendanceRecord._id },
+        {
+          $set: {
+            overtimeHours: additionalOvertime, // Use approved overtime hours
+            notes: attendanceRecord.notes ?
+              `${attendanceRecord.notes} | Overtime approved: ${additionalOvertime}h` :
+              `Overtime approved: ${additionalOvertime}h`,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      logger.info(`[Overtime Controller] Synced overtime to attendance record ${attendanceRecord._id}: ${additionalOvertime} hours`);
+    } else {
+      // No attendance record exists - log warning but don't fail
+      logger.warn(`[Overtime Controller] No attendance record found for employee ${updatedRequest.employeeId} on ${updatedRequest.date}`);
+    }
+  } catch (attendanceError) {
+    // Log error but don't fail the overtime approval
+    logger.error('[Overtime Controller] Error syncing overtime to attendance:', attendanceError);
+  }
+
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
   if (io) {
     broadcastOvertimeEvents.approved(io, user.companyId, updatedRequest, user.userId);
   }
+
+  // Log to comprehensive audit service
+  await auditLogService.logOvertimeAction(
+    user.companyId,
+    'OVERTIME_APPROVED',
+    { ...updatedRequest, before: overtimeRequest, after: updatedRequest },
+    user,
+    req,
+    auditLogService.calculateChanges(overtimeRequest, updatedRequest)
+  );
 
   return sendSuccess(res, updatedRequest, 'Overtime request approved successfully');
 });
@@ -416,6 +471,16 @@ export const rejectOvertimeRequest = asyncHandler(async (req, res) => {
 
   // Get updated overtime request
   const updatedRequest = await collections.overtimeRequests.findOne({ _id: new ObjectId(id) });
+
+  // Log to comprehensive audit service
+  await auditLogService.logOvertimeAction(
+    user.companyId,
+    'OVERTIME_REJECTED',
+    { ...updatedRequest, before: overtimeRequest, after: updatedRequest },
+    user,
+    req,
+    auditLogService.calculateChanges(overtimeRequest, updatedRequest)
+  );
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);

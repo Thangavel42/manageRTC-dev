@@ -1,21 +1,18 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import Table from "../../../core/common/dataTable/index";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import CommonSelect from "../../../core/common/commonSelect";
 import { DatePicker, message, Spin } from "antd";
+import { useEffect, useState } from "react";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
-import PredefinedDateRanges from "../../../core/common/datePicker";
+import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
+import Table from "../../../core/common/dataTable/index";
+import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
-import {
-  useOvertimeREST,
-  statusDisplayMap,
-  type OvertimeStatus,
-  type OvertimeRequest
-} from "../../../hooks/useOvertimeREST";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { useAuth } from "../../../hooks/useAuth";
 import { useEmployeesREST } from "../../../hooks/useEmployeesREST";
+import {
+  statusDisplayMap, useOvertimeREST, type OvertimeStatus
+} from "../../../hooks/useOvertimeREST";
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -38,11 +35,17 @@ const StatusBadge = ({ status }: { status: OvertimeStatus }) => {
 };
 
 const OverTime = () => {
+  // Role-based access control
+  const { role } = useAuth();
+  const isEmployeeOrManager = ['employee', 'manager'].includes(role);
+  const canManageOvertime = ['admin', 'hr', 'superadmin'].includes(role);
+
   // API hooks
   const {
     overtimeRequests,
     loading,
     fetchOvertimeRequests,
+    fetchMyOvertimeRequests,
     createOvertimeRequest,
     approveOvertimeRequest,
     rejectOvertimeRequest,
@@ -92,15 +95,23 @@ const OverTime = () => {
     reason: ''
   });
 
-  // Fetch employees on mount
+  // Fetch employees on mount (only for admin/hr/superadmin)
   useEffect(() => {
-    fetchEmployees({ status: 'Active' });
-  }, []);
+    if (canManageOvertime) {
+      fetchEmployees({ status: 'Active' });
+    }
+  }, [canManageOvertime]);
 
   // Fetch overtime requests on mount and when filters change
   useEffect(() => {
-    fetchOvertimeRequests(filters);
-  }, [filters]);
+    if (isEmployeeOrManager) {
+      // Employees/Managers only see their own overtime requests
+      fetchMyOvertimeRequests(filters);
+    } else {
+      // Admin/HR see all overtime requests
+      fetchOvertimeRequests(filters);
+    }
+  }, [filters, isEmployeeOrManager]);
 
   // Transform overtime requests for table display
   const data = overtimeRequests.map((ot) => ({
@@ -133,11 +144,20 @@ const OverTime = () => {
     { value: "rejected", label: "Rejected" },
   ];
 
+  // Helper function to refresh data based on role
+  const refreshData = () => {
+    if (isEmployeeOrManager) {
+      fetchMyOvertimeRequests(filters);
+    } else {
+      fetchOvertimeRequests(filters);
+    }
+  };
+
   // Handler functions
   const handleApprove = async (overtimeId: string) => {
     const success = await approveOvertimeRequest(overtimeId, "Approved");
     if (success) {
-      fetchOvertimeRequests(filters);
+      refreshData();
     }
   };
 
@@ -153,7 +173,7 @@ const OverTime = () => {
     if (rejectModal.overtimeId && rejectModal.reason.trim()) {
       const success = await rejectOvertimeRequest(rejectModal.overtimeId, rejectModal.reason);
       if (success) {
-        fetchOvertimeRequests(filters);
+        refreshData();
       }
       setRejectModal({ show: false, overtimeId: null, reason: '' });
     }
@@ -167,7 +187,7 @@ const OverTime = () => {
     if (window.confirm("Are you sure you want to delete this overtime request?")) {
       const success = await deleteOvertimeRequest(overtimeId);
       if (success) {
-        fetchOvertimeRequests(filters);
+        refreshData();
       }
     }
   };
@@ -211,7 +231,7 @@ const OverTime = () => {
         if (modal) modal.hide();
       }
       // Refresh data
-      fetchOvertimeRequests(filters);
+      refreshData();
     }
   };
 
@@ -261,7 +281,7 @@ const OverTime = () => {
         if (modal) modal.hide();
       }
       // Refresh data
-      fetchOvertimeRequests(filters);
+      refreshData();
     }
   };
 
@@ -368,7 +388,7 @@ const OverTime = () => {
       dataIndex: "actions",
       render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
-          {record.Status === 'pending' && (
+          {canManageOvertime && record.Status === 'pending' && (
             <>
               <Link
                 to="#"

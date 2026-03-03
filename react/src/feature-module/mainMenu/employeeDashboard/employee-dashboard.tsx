@@ -1,27 +1,23 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { all_routes } from "../../router/all_routes";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
-import ReactApexChart from "react-apexcharts";
-import CircleProgressSmall from "./circleProgressSmall";
-import CircleProgress from "./circleProgress";
-import { Calendar } from "primereact/calendar";
-import { DatePicker } from "antd";
-import CommonSelect from "../../../core/common/commonSelect";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useAuth, useUser } from "@clerk/clerk-react";
-import { attendance } from "../../../core/common/selectoption/selectoption";
-import io from "socket.io-client";
+import { useUser } from "@clerk/clerk-react";
 import { ApexOptions } from "apexcharts";
-import RequestModals from "../../../core/modals/requestModal";
 import CryptoJS from "crypto-js";
-import { DateTime } from "luxon";
-import { current } from "immer";
 import jsPDF from "jspdf";
+import { DateTime } from "luxon";
+import { useEffect, useState } from "react";
+import ReactApexChart from "react-apexcharts";
+import { Link } from "react-router-dom";
+import "slick-carousel/slick/slick-theme.css";
+import "slick-carousel/slick/slick.css";
 import * as XLSX from "xlsx";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import RequestModals from "../../../core/modals/requestModal";
+import { useEmployeeDashboardREST } from "../../../hooks/useEmployeeDashboardREST";
+import { resolveDesignation } from "../../../utils/designationUtils";
+import { all_routes } from "../../router/all_routes";
+import CircleProgress from "./circleProgress";
+import CircleProgressSmall from "./circleProgressSmall";
 
 interface DashboardData {
   employeeDetails?: {
@@ -131,6 +127,14 @@ interface DashboardData {
     avatarUrl?: string;
     role?: string;
   }>;
+  nextHoliday?: {
+    title: string;
+    date: string;
+  } | null;
+  leavePolicy?: {
+    count: number;
+    lastUpdated: string | null;
+  } | null;
 }
 
 type TaskUpdatePayload = {
@@ -140,7 +144,7 @@ type TaskUpdatePayload = {
   status?: string;
 };
 
-const ENCRYPTION_KEY = "your-strong-encryption-key";
+const ENCRYPTION_KEY = process.env.REACT_APP_ENCRYPTION_KEY || "your-strong-encryption-key";
 const leaveType = [
   { value: "Select", label: "Select" },
   { value: "Sick Leave", label: "Medical Leave" },
@@ -150,11 +154,26 @@ const leaveType = [
 const EmployeeDashboard = () => {
   const routes = all_routes;
   const { user, isLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
-  const [socket, setSocket] = useState<any>(null);
-  const [dashboardData, setDashboardData] = useState<DashboardData>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    dashboardData,
+    setDashboardData,
+    loading,
+    error,
+    fetchDashboard,
+    fetchAttendanceStats,
+    fetchLeaveStats,
+    fetchWorkingHours,
+    fetchProjects,
+    fetchTasks,
+    fetchPerformance,
+    fetchSkills,
+    fetchMeetings,
+    updateTask: updateTaskREST,
+    punchIn: punchInREST,
+    punchOut: punchOutREST,
+    startBreak: startBreakREST,
+    endBreak: endBreakREST,
+  } = useEmployeeDashboardREST();
   const [year, setYear] = useState(new Date().getFullYear());
   const [isPunchIn, setIsPunchIn] = useState(false);
   const [isOnBreak, setIsOnBreak] = useState(false);
@@ -184,13 +203,8 @@ const EmployeeDashboard = () => {
   const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
   const handleYearChangeAll = (year: number) => {
-    console.log(`[YEAR FILTER] Year changed to: ${year}`);
     setYear(year);
-    if (socket) {
-      socket.emit("employee/dashboard/get-all-data", { year });
-    } else {
-      console.log("socket not found");
-    }
+    fetchDashboard(year);
   };
 
   // export function
@@ -224,7 +238,7 @@ const EmployeeDashboard = () => {
           yPosition
         );
         yPosition += 8;
-        doc.text(`Designation: ${employee.designation}`, 20, yPosition);
+        doc.text(`Designation: ${resolveDesignation(employee.designation)}`, 20, yPosition);
         yPosition += 8;
         doc.text(`Email: ${employee.contact.email}`, 20, yPosition);
         yPosition += 8;
@@ -378,8 +392,7 @@ const EmployeeDashboard = () => {
 
       // Save the PDF
       doc.save(
-        `employee-dashboard-${
-          employee?.firstName || "report"
+        `employee-dashboard-${employee?.firstName || "report"
         }-${currentDate.replace(/\//g, "-")}.pdf`
       );
     } catch (error) {
@@ -399,7 +412,7 @@ const EmployeeDashboard = () => {
           ["Employee Information", ""],
           ["FirstName", dashboardData.employeeDetails.firstName],
           ["LastName", dashboardData.employeeDetails.lastName],
-          ["Designation", dashboardData.employeeDetails.designation],
+          ["Designation", resolveDesignation(dashboardData.employeeDetails.designation)],
           ["Email", dashboardData.employeeDetails.contact.email],
           ["Phone", dashboardData.employeeDetails.contact.phone],
           ["Report Office", dashboardData.employeeDetails.reportOffice],
@@ -560,9 +573,8 @@ const EmployeeDashboard = () => {
       }
 
       // Save the Excel file
-      const fileName = `employee-dashboard-${
-        dashboardData.employeeDetails?.firstName || "report"
-      }-${currentDate.replace(/\//g, "-")}.xlsx`;
+      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.firstName || "report"
+        }-${currentDate.replace(/\//g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error("Error generating Excel:", error);
@@ -570,432 +582,20 @@ const EmployeeDashboard = () => {
     }
   };
 
+  // Fetch all dashboard data on mount via REST
   useEffect(() => {
-    let isMounted = true;
-    let currentSocket: any = null;
-
-    const initSocket = async () => {
-      try {
-        console.log("Initializing socket connection...");
-        const token = await getToken();
-        console.log("Token obtained, creating socket...");
-        setLoading(true);
-
-        if (!isMounted) return;
-        const backendurl = process.env.REACT_APP_BACKEND_URL;
-        currentSocket = io(backendurl, {
-          auth: { token },
-          timeout: 20000,
-        });
-
-        const timeoutId = setTimeout(() => {
-          if (loading && isMounted) {
-            console.warn("Dashboard loading timeout - showing fallback");
-            setError("Dashboard loading timed out. Please refresh the page.");
-            setLoading(false);
-          }
-        }, 30000);
-
-        currentSocket.on("connect", () => {
-          console.log("Connected to admin dashboard");
-          console.log("Requesting dashboard data...");
-          currentSocket.emit("employee/dashboard/get-all-data");
-        });
-
-        currentSocket.on(
-          "employee/dashboard/get-all-data-response",
-          (response: any) => {
-            console.log("Received dashboard data response:", response);
-            clearTimeout(timeoutId);
-            if (!isMounted) return;
-            if (response.done) {
-              console.log("Dashboard data loaded successfully");
-              setDashboardData(response.data);
-              setLoading(false);
-            } else {
-              console.error("Dashboard data error:", response.error);
-              setError(response.error || "Failed to fetch dashboard data");
-              setLoading(false);
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-attendance-stats-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              console.log("Attendance data", response);
-              setDashboardData((prev) => ({
-                ...prev,
-                attendanceStats: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-leave-stats-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                leaveStats: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-projects-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              console.log(response);
-              setDashboardData((prev) => ({
-                ...prev,
-                projects: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-tasks-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                tasks: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/update-task-response",
-          (response: any) => {
-            if (!isMounted) return;
-            console.log(response);
-
-            if (response.done) {
-              if (currentSocket) {
-                currentSocket.emit("employee/dashboard/get-tasks");
-              }
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-skills-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                skills: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-meetings-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                meetings: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/get-performance-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              console.log(response);
-              setDashboardData((prev) => ({
-                ...(prev ?? {}),
-                performance: response.data,
-              }));
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/punch-in-response",
-          (response: {
-            done: boolean;
-            data?: {
-              punchIn: string;
-              overtimeRequestStatus?: string;
-              overtimeHours?: number;
-            };
-            error?: string;
-          }) => {
-            if (!isMounted) return;
-
-            if (response?.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                workingHoursStats: {
-                  ...prev.workingHoursStats,
-                  today: {
-                    ...prev.workingHoursStats?.today,
-                    punchIn: response.data?.punchIn || new Date().toISOString(),
-                    overtimeRequestStatus: response.data?.overtimeRequestStatus,
-                    expectedOvertimeHours: response.data?.overtimeHours ?? 0,
-                  },
-                  thisWeek: prev.workingHoursStats?.thisWeek,
-                  thisMonth: prev.workingHoursStats?.thisMonth,
-                },
-              }));
-
-              setIsPunchIn(true);
-              const punchInTime =
-                response.data?.punchIn || new Date().toISOString();
-              setCheckInTime(punchInTime);
-
-              const breakDetails: Array<{
-                breakStartTime: string;
-                breakEndTime: string;
-              }> = [];
-              const encryptedBreaks = encryptValue(
-                JSON.stringify(breakDetails)
-              );
-              localStorage.setItem("encryptedBreakDetails", encryptedBreaks);
-              localStorage.setItem(
-                "encryptedPunchInTime",
-                encryptValue(punchInTime)
-              );
-
-              setBreakDetails(breakDetails);
-              setPunchInError(null);
-            } else {
-              console.warn("[PunchIn] Failed:", response?.error);
-              setPunchInError(response?.error ?? "Punch-in failed.");
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/punch-out-response",
-          (response: any) => {
-            console.log("Hello3");
-
-            if (!isMounted) return;
-            if (response?.done) {
-              console.log("Hello2");
-
-              localStorage.removeItem("encryptedPunchInTime");
-              localStorage.removeItem("encryptedBreakDetails");
-              setIsPunchIn(false);
-              setCheckInTime(null);
-              setBreakDetails([]);
-              setIsOnBreak(false);
-              setPunchOutError(null);
-              currentSocket.emit("employee/dashboard/working-hours-stats");
-            } else {
-              console.warn("[PunchOUT] Failed:", response?.error);
-              setPunchOutError(response?.error ?? "Punch-out failed.");
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/working-hours-stats-response",
-          (response: any) => {
-            if (!isMounted) return;
-
-            if (response?.done) {
-              console.log("Hello1");
-
-              setDashboardData((prev) => ({
-                ...prev,
-                workingHoursStats: {
-                  today: {
-                    ...prev?.workingHoursStats?.today,
-                    expectedHours: response.data.today.expectedHours,
-                    workedHours: response.data.today.workedHours,
-                    breakHours: response.data.today.breakHours,
-                    overtimeHours: response.data.today.overtimeHours,
-                  },
-                  thisWeek: {
-                    ...prev?.workingHoursStats?.thisWeek,
-                    expectedHours: response.data.thisWeek.expectedHours,
-                    workedHours: response.data.thisWeek.workedHours,
-                  },
-                  thisMonth: {
-                    ...prev?.workingHoursStats?.thisMonth,
-                    expectedHours: response.data.thisMonth.expectedHours,
-                    workedHours: response.data.thisMonth.workedHours,
-                    overtimeHours: response.data.thisMonth.overtimeHours,
-                    expectedOvertimeHours:
-                      response.data.thisMonth.expectedOvertimeHours,
-                  },
-                },
-              }));
-            } else {
-              console.error(
-                "Failed to load working hours stats:",
-                response?.error
-              );
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/start-break-response",
-          (response: any) => {
-            if (!isMounted) return;
-
-            let currentBreaks: Array<{
-              breakStartTime: string;
-              breakEndTime: string;
-            }> = [];
-            try {
-              const encrypted = localStorage.getItem("encryptedBreakDetails");
-              if (encrypted) {
-                const decryptedStr = decryptValue(encrypted);
-                if (decryptedStr) {
-                  currentBreaks = JSON.parse(decryptedStr);
-                }
-              }
-            } catch (error) {
-              console.error("Error reading or parsing break details:", error);
-              currentBreaks = [];
-            }
-            if (response?.done) {
-              const newBreak = {
-                breakStartTime:
-                  response.data?.breakStartTime || new Date().toISOString(),
-                breakEndTime: "",
-              };
-              const updatedBreaks = [...currentBreaks, newBreak];
-              setBreakDetails(updatedBreaks);
-              try {
-                const encryptedUpdatedBreaks = encryptValue(
-                  JSON.stringify(updatedBreaks)
-                );
-                localStorage.setItem(
-                  "encryptedBreakDetails",
-                  encryptedUpdatedBreaks
-                );
-              } catch (error) {
-                console.error(
-                  "Failed to encrypt and save break details:",
-                  error
-                );
-              }
-              setIsOnBreak(true);
-            } else {
-              console.warn("Break start failed:", response?.error);
-            }
-          }
-        );
-
-        currentSocket.on(
-          "employee/dashboard/end-break-response",
-          (response: any) => {
-            if (!isMounted) return;
-
-            if (response?.done) {
-              let breakDetails = [];
-              try {
-                const encrypted = localStorage.getItem("encryptedBreakDetails");
-                if (encrypted) {
-                  const decrypted = decryptValue(encrypted);
-                  breakDetails = decrypted ? JSON.parse(decrypted) : [];
-                }
-              } catch (err) {
-                console.error("Failed to decrypt break details", err);
-                breakDetails = [];
-              }
-              const breakEndTime = new Date().toISOString();
-              const lastBreak = breakDetails[breakDetails.length - 1];
-              if (lastBreak && !lastBreak.breakEndTime) {
-                lastBreak.breakEndTime = breakEndTime;
-                try {
-                  const encryptedUpdated = encryptValue(
-                    JSON.stringify(breakDetails)
-                  );
-                  localStorage.setItem(
-                    "encryptedBreakDetails",
-                    encryptedUpdated
-                  );
-                } catch (err) {
-                  console.error("Failed to encrypt or save break details", err);
-                }
-                setIsOnBreak(false);
-                setBreakDetails(breakDetails);
-                setEndBreakError(null);
-              } else {
-                console.warn("No open break session found to close.");
-                setEndBreakError("No open break session found to close.");
-              }
-            } else {
-              console.error(
-                "Break end failed:",
-                response?.error || "Unknown error"
-              );
-              setEndBreakError(response?.error ?? "Failed to end break.");
-            }
-          }
-        );
-
-        currentSocket.on("connect_error", (err: any) => {
-          console.error("Socket connection error:", err);
-          clearTimeout(timeoutId);
-          if (!isMounted) return;
-
-          setError("Failed to connect to server");
-          setLoading(false);
-        });
-
-        currentSocket.on("disconnect", (reason: any) => {
-          console.log("Socket disconnected:", reason);
-          clearTimeout(timeoutId);
-        });
-
-        if (isMounted) {
-          setSocket(currentSocket);
-        }
-      } catch (err) {
-        console.error("Failed to initialize socket:", err);
-        if (isMounted) {
-          setError("Failed to authenticate");
-          setLoading(false);
-        }
-      }
-    };
-
-    if (!socket) initSocket();
-
-    return () => {
-      isMounted = false;
-      if (currentSocket) {
-        console.log("Cleaning up socket connection...");
-        currentSocket.removeAllListeners();
-        currentSocket.disconnect();
-      }
-    };
+    fetchDashboard(year);
   }, []);
+
 
   // helper functions
   const baseHours = dashboardData?.workingHoursStats?.today?.expectedHours ?? 8;
   const overtimeHours =
     dashboardData?.workingHoursStats?.today?.expectedOvertimeHours ?? 0;
   const expectedHours = baseHours + overtimeHours;
-  // const expectedSeconds = expectedHours * 3600;
-  const expectedSeconds = 30;
+  const expectedSeconds = expectedHours * 3600;
   const punchInTimeUTC = checkInTime ?? null;
-  const timeZone = dashboardData?.employeeDetails?.timeZone || "Asia/Kolkata";
+  const timeZone = dashboardData?.employeeDetails?.timeZone || "UTC";
   const [leftover, setLeftover] = useState(() =>
     getLeftoverTimeObject(punchInTimeUTC, timeZone, expectedSeconds)
   );
@@ -1142,17 +742,38 @@ const EmployeeDashboard = () => {
       .toFormat(format);
   }
 
-  function handlePunchIn(
-    socket: any,
-    setPunchInError: (v: string | null) => void
-  ) {
-    console.log("[PunchIn] Called");
-    if (!socket || !socket.connected) {
-      console.error("Socket not connected");
-      setPunchInError("Unable to connect to server.");
-      return;
+  async function handlePunchIn() {
+    setPunchInError(null);
+    const result = await punchInREST();
+    if (result.success && result.data) {
+      const punchInTime = result.data.punchIn || new Date().toISOString();
+      setDashboardData(prev => ({
+        ...prev,
+        workingHoursStats: {
+          ...prev.workingHoursStats,
+          today: {
+            ...prev.workingHoursStats?.today,
+            punchIn: punchInTime,
+            overtimeRequestStatus: result.data!.overtimeRequestStatus,
+            expectedOvertimeHours: result.data!.overtimeHours ?? 0,
+            expectedHours: prev.workingHoursStats?.today?.expectedHours ?? 8,
+            workedHours: prev.workingHoursStats?.today?.workedHours ?? 0,
+            breakHours: prev.workingHoursStats?.today?.breakHours ?? 0,
+            overtimeHours: prev.workingHoursStats?.today?.overtimeHours ?? 0,
+          },
+          thisWeek: prev.workingHoursStats?.thisWeek ?? { expectedHours: 0, workedHours: 0 },
+          thisMonth: prev.workingHoursStats?.thisMonth ?? { expectedHours: 0, workedHours: 0, overtimeHours: 0, expectedOvertimeHours: 0 },
+        },
+      }));
+      setIsPunchIn(true);
+      setCheckInTime(punchInTime);
+      const emptyBreaks: { breakStartTime: string; breakEndTime: string }[] = [];
+      localStorage.setItem("encryptedBreakDetails", encryptValue(JSON.stringify(emptyBreaks)));
+      localStorage.setItem("encryptedPunchInTime", encryptValue(punchInTime));
+      setBreakDetails(emptyBreaks);
+    } else {
+      setPunchInError(result.error ?? "Punch-in failed.");
     }
-    socket.emit("employee/dashboard/punch-in");
   }
 
   let time;
@@ -1161,39 +782,62 @@ const EmployeeDashboard = () => {
     time = decryptValue(encTime);
   }
 
-  function handleBreakStart(socket: any) {
-    if (!socket || !socket.connected) {
-      console.error("Socket not connected");
-      return;
+  async function handleBreakStart() {
+    const result = await startBreakREST();
+    if (result.success && result.data) {
+      const newBreak = { breakStartTime: result.data.breakStartTime || new Date().toISOString(), breakEndTime: "" };
+      let currentBreaks: { breakStartTime: string; breakEndTime: string }[] = [];
+      try {
+        const enc = localStorage.getItem("encryptedBreakDetails");
+        if (enc) currentBreaks = JSON.parse(decryptValue(enc) || "[]");
+      } catch (_) { }
+      const updated = [...currentBreaks, newBreak];
+      setBreakDetails(updated);
+      localStorage.setItem("encryptedBreakDetails", encryptValue(JSON.stringify(updated)));
+      setIsOnBreak(true);
     }
-    socket.emit("employee/dashboard/start-break");
   }
 
-  function handleEndBreak(
-    socket: any,
-    setEndBreakError: (v: string | null) => void
-  ) {
-    console.log("[EndBreak] Called");
-    if (!socket || !socket.connected) {
-      console.error("Socket not connected");
-      setEndBreakError("Unable to connect to server.");
-      return;
+  async function handleEndBreak() {
+    const result = await endBreakREST();
+    if (result.success) {
+      let bds: { breakStartTime: string; breakEndTime: string }[] = [];
+      try {
+        const enc = localStorage.getItem("encryptedBreakDetails");
+        if (enc) bds = JSON.parse(decryptValue(enc) || "[]");
+      } catch (_) { }
+      const last = bds[bds.length - 1];
+      if (last && !last.breakEndTime) {
+        last.breakEndTime = new Date().toISOString();
+        localStorage.setItem("encryptedBreakDetails", encryptValue(JSON.stringify(bds)));
+        setBreakDetails(bds);
+        setIsOnBreak(false);
+        setEndBreakError(null);
+      }
+    } else {
+      setEndBreakError(result.error ?? "Failed to end break.");
     }
-    socket.emit("employee/dashboard/end-break");
   }
 
   const handlePunchOut = async () => {
     if (punchOutInitiated || isPunchingOut) return;
     setIsPunchingOut(true);
-    try {
-      setPunchOutInitiated(true);
-      socket.emit("employee/dashboard/punch-out");
-    } catch (error) {
-      console.error("Punch-out error:", error);
+    setPunchOutInitiated(true);
+    const result = await punchOutREST();
+    if (result.success) {
+      localStorage.removeItem("encryptedPunchInTime");
+      localStorage.removeItem("encryptedBreakDetails");
+      setIsPunchIn(false);
+      setCheckInTime(null);
+      setBreakDetails([]);
+      setIsOnBreak(false);
+      setPunchOutError(null);
+      await fetchWorkingHours();
+    } else {
+      setPunchOutError(result.error ?? "Punch-out failed.");
       setPunchOutInitiated(false);
-    } finally {
-      setIsPunchingOut(false);
     }
+    setIsPunchingOut(false);
   };
 
   function pad(value: number): string {
@@ -1284,32 +928,9 @@ const EmployeeDashboard = () => {
     };
   }
 
-  const handleTaskUpdate = (
-    {
-      taskId,
-      updateData,
-    }: {
-      taskId: string;
-      updateData: { checked?: boolean; starred?: boolean; status?: string };
-    },
-    socket: any
-  ) => {
-    if (!taskId) {
-      console.error("Missing task ID");
-      return;
-    }
-    if (!socket) {
-      console.error("Socket not connected");
-      return;
-    }
-
-    const payload = {
-      taskId,
-      updateData,
-    };
-
-    socket.emit("employee/dashboard/update-task", payload);
-    console.log("Emitted update", payload);
+  const handleTaskUpdate = ({ taskId, updateData }: { taskId: string; updateData: { checked?: boolean; starred?: boolean; status?: string } }) => {
+    if (!taskId) return;
+    updateTaskREST(taskId, updateData);
   };
 
   //New Chart
@@ -1387,37 +1008,28 @@ const EmployeeDashboard = () => {
 
   const handleMeetingFilterChange = (filter: "today" | "month" | "year") => {
     setFilters((prev) => ({ ...prev, meetings: filter }));
-    socket.emit("employee/dashboard/get-meetings", { filter: filter });
+    fetchMeetings(filter);
   };
 
   const handleProjectFilterChange = (filter: "all" | "ongoing") => {
     setFilters((prev) => ({ ...prev, projects: filter }));
-    socket.emit("employee/dashboard/get-projects", { filter: filter });
+    fetchProjects(filter);
   };
 
   const handleTaskChange = (filter: "all" | "ongoing") => {
     setFilters((prev) => ({ ...prev, tasks: filter }));
-    socket.emit("employee/dashboard/get-tasks", { filter: filter });
+    fetchTasks(filter);
   };
+
   const handleYearChange = (widget: string, year: number) => {
-    console.log(`[YEAR FILTER] ${widget}: ${year}`);
-    setFilters((prev) => ({
-      ...prev,
-      [widget]: year,
-    }));
-    if (socket) {
-      const payload = { year: Number(year) };
-      if (widget === "attendanceStats") {
-        console.log("[SOCKET EMIT] Payload:", payload);
-        socket.emit("employee/dashboard/get-attendance-stats", payload);
-        socket.emit("employee/dashboard/get-leave-stats", payload);
-      }
-      if (widget === "performance") {
-        socket.emit("employee/dashboard/get-performance", payload);
-      }
-      if (widget === "skills") {
-        socket.emit("employee/dashboard/get-skills", payload);
-      }
+    setFilters((prev) => ({ ...prev, [widget]: year }));
+    if (widget === "attendanceStats") {
+      fetchAttendanceStats(year);
+      fetchLeaveStats(year);
+    } else if (widget === "performance") {
+      fetchPerformance(year);
+    } else if (widget === "skills") {
+      fetchSkills(year);
     }
   };
   if (loading || !isLoaded) {
@@ -1554,7 +1166,7 @@ const EmployeeDashboard = () => {
                       <ImageWithBasePath
                         src={
                           dashboardData?.employeeDetails?.avatar ||
-                          "/assets/img/users/user-01.jpg"
+                          "/assets/img/profiles/profile.png"
                         }
                         alt="Img"
                         isLink={Boolean(dashboardData?.employeeDetails?.avatar)}
@@ -1567,7 +1179,7 @@ const EmployeeDashboard = () => {
                       </h5>
                       <div className="d-flex align-items-center">
                         <p className="text-white fs-12 mb-0">
-                          {dashboardData?.employeeDetails?.designation}
+                          {resolveDesignation(dashboardData?.employeeDetails?.designation)}
                         </p>
                         <span className="mx-1">
                           <i className="ti ti-point-filled text-primary" />
@@ -1829,9 +1441,9 @@ const EmployeeDashboard = () => {
                           leftover.isTimerExpired
                             ? "Auto-Punched Out"
                             : `Punch In at ${convertUtcToTimeZone(
-                                checkInTime,
-                                dashboardData?.employeeDetails?.timeZone || ""
-                              )}`
+                              checkInTime,
+                              dashboardData?.employeeDetails?.timeZone || ""
+                            )}`
                           // `Punch In at ${checkInTime}`
                         }
                       </h6>
@@ -1842,7 +1454,7 @@ const EmployeeDashboard = () => {
                         <Link
                           to="#"
                           className="btn btn-success w-100"
-                          onClick={() => handlePunchIn(socket, setPunchInError)}
+                          onClick={() => handlePunchIn()}
                         >
                           Punch In
                         </Link>
@@ -1856,9 +1468,8 @@ const EmployeeDashboard = () => {
                     ) : (
                       <>
                         <button
-                          className={`btn btn-danger w-100 mb-2 ${
-                            isPunchingOut ? "disabled" : ""
-                          }`}
+                          className={`btn btn-danger w-100 mb-2 ${isPunchingOut ? "disabled" : ""
+                            }`}
                           disabled={
                             !(
                               leftover.hrs === 0 &&
@@ -1882,16 +1493,14 @@ const EmployeeDashboard = () => {
                         {!isOnBreak ? (
                           <button
                             className="btn btn-warning w-100"
-                            onClick={() => handleBreakStart(socket)}
+                            onClick={() => handleBreakStart()}
                           >
                             Start Break
                           </button>
                         ) : (
                           <button
                             className="btn btn-outline-secondary w-100"
-                            onClick={() =>
-                              handleEndBreak(socket, setEndBreakError)
-                            }
+                            onClick={() => handleEndBreak()}
                           >
                             Resume Work
                           </button>
@@ -2023,14 +1632,14 @@ const EmployeeDashboard = () => {
                         <h2 className="mb-2">
                           {
                             dashboardData?.workingHoursStats?.thisMonth
-                              ?.overtimeHours
+                              ?.overtimeHours ?? 0
                           }{" "}
                           /{" "}
                           <span className="fs-20 text-gray-5">
                             {" "}
                             {
                               dashboardData?.workingHoursStats?.thisMonth
-                                ?.overtimeHours
+                                ?.expectedOvertimeHours ?? 0
                             }
                           </span>
                         </h2>
@@ -2206,7 +1815,7 @@ const EmployeeDashboard = () => {
                                   <img
                                     src={
                                       project.leadDetails?.avatarUrl ||
-                                      "assets/img/users/user-placeholder.jpg"
+                                      "/assets/img/profiles/profile.png"
                                     }
                                     className="img-fluid rounded-circle"
                                     alt="lead"
@@ -2216,7 +1825,7 @@ const EmployeeDashboard = () => {
                                   <h6 className="fw-normal">
                                     <Link to="#">
                                       {project.leadDetails?.firstName &&
-                                      project.leadDetails?.lastName
+                                        project.leadDetails?.lastName
                                         ? `${project.leadDetails.firstName} ${project.leadDetails.lastName}`
                                         : "lead"}
                                     </Link>
@@ -2271,7 +1880,7 @@ const EmployeeDashboard = () => {
                                           className="border border-white"
                                           src={
                                             avatarUrl ||
-                                            "assets/img/profiles/avatar-31.jpg"
+                                            "/assets/img/profiles/profile.png"
                                           }
                                           alt="member"
                                         />
@@ -2362,8 +1971,7 @@ const EmployeeDashboard = () => {
                                           updateData: {
                                             checked: e.target.checked,
                                           },
-                                        },
-                                        socket
+                                        }
                                       )
                                     }
                                   />
@@ -2377,8 +1985,7 @@ const EmployeeDashboard = () => {
                                       {
                                         taskId: task._id,
                                         updateData: { starred: !task.starred },
-                                      },
-                                      socket
+                                      }
                                     )
                                   }
                                   onKeyPress={(e) => {
@@ -2389,18 +1996,16 @@ const EmployeeDashboard = () => {
                                           updateData: {
                                             starred: !task.starred,
                                           },
-                                        },
-                                        socket
+                                        }
                                       );
                                     }
                                   }}
                                 >
                                   <i
-                                    className={`ti ${
-                                      task.starred
-                                        ? "ti-star-filled filled"
-                                        : "ti-star"
-                                    }`}
+                                    className={`ti ${task.starred
+                                      ? "ti-star-filled filled"
+                                      : "ti-star"
+                                      }`}
                                     aria-label={
                                       task.starred ? "Unstar task" : "Star task"
                                     }
@@ -2511,7 +2116,7 @@ const EmployeeDashboard = () => {
                       <span>vs last years</span>
                     </div> */}
                     {performance_chart2_series.length === months.length &&
-                    performance_chart2_series.length > 0 ? (
+                      performance_chart2_series.length > 0 ? (
                       <ReactApexChart
                         options={{
                           ...performance_chart2_options,
@@ -2620,14 +2225,14 @@ const EmployeeDashboard = () => {
                     <div className="text-center">
                       <h5 className="text-white mb-4">Team Birthday</h5>
                       {dashboardData?.birthdays &&
-                      dashboardData?.birthdays.length > 0 ? (
+                        dashboardData?.birthdays.length > 0 ? (
                         dashboardData?.birthdays.map((birthday) => (
                           <div key={birthday._id} className="mb-4">
                             <span className="avatar avatar-xl avatar-rounded mb-2">
                               <ImageWithBasePath
                                 src={
                                   birthday.avatarUrl ||
-                                  "assets/img/users/default-avatar.jpg"
+                                  "/assets/img/profiles/profile.png"
                                 }
                                 alt={birthday.name}
                               />
@@ -2655,7 +2260,11 @@ const EmployeeDashboard = () => {
                   <div className="card-body d-flex align-items-center justify-content-between p-3">
                     <div>
                       <h5 className="text-white mb-1">Leave Policy</h5>
-                      <p className="text-white">Last Updated : Today</p>
+                      <p className="text-white">
+                        {dashboardData?.leavePolicy?.lastUpdated
+                          ? `Last Updated : ${new Date(dashboardData.leavePolicy.lastUpdated).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                          : "No policies available"}
+                      </p>
                     </div>
                     <Link to="#" className="btn btn-white btn-sm px-3">
                       View All
@@ -2666,10 +2275,14 @@ const EmployeeDashboard = () => {
                   <div className="card-body d-flex align-items-center justify-content-between p-3">
                     <div>
                       <h5 className="mb-1">Next Holiday</h5>
-                      <p className="text-gray-9">Diwali, 15 Sep 2025</p>
+                      <p className="text-gray-9">
+                        {dashboardData?.nextHoliday
+                          ? `${dashboardData.nextHoliday.title}, ${new Date(dashboardData.nextHoliday.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                          : "No upcoming holidays"}
+                      </p>
                     </div>
                     <Link
-                      to="holidays.html"
+                      to={routes.adminDashboard}
                       className="btn btn-white btn-sm px-3"
                     >
                       View All
@@ -2709,7 +2322,7 @@ const EmployeeDashboard = () => {
                           <img
                             src={
                               member.avatar ||
-                              "assets/img/profiles/avatar-31.jpg"
+                              "/assets/img/profiles/profile.png"
                             }
                             className="rounded-circle border border-2"
                             alt={`${member.firstName}'s avatar`}
@@ -2779,7 +2392,7 @@ const EmployeeDashboard = () => {
                         <ImageWithBasePath
                           src={
                             notification.avatar ||
-                            "assets/img/profiles/avatar-31.jpg"
+                            "/assets/img/profiles/profile.png"
                           }
                           className="rounded-circle border border-2"
                           alt="Avatar"
@@ -2823,8 +2436,8 @@ const EmployeeDashboard = () => {
                           {filters.meetings === "today"
                             ? "Today"
                             : filters.meetings === "month"
-                            ? "This Month"
-                            : "This Year"}
+                              ? "This Month"
+                              : "This Year"}
                         </span>
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
@@ -2921,11 +2534,7 @@ const EmployeeDashboard = () => {
       </div>
       <RequestModals
         onLeaveRequestCreated={() => {
-          if (socket) {
-            socket?.emit("employee/dashboard/get-all-data", {
-              year: currentYear,
-            });
-          }
+          fetchDashboard(currentYear);
         }}
         mode="employee"
         remainingEmployeeLeaves={calculateRemainingLeaves()}

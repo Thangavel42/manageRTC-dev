@@ -3,6 +3,8 @@ import { ObjectId } from "mongodb";
 import { getTenantCollections } from "../../config/db.js";
 import { validateEmployeeLifecycle } from "../../utils/employeeLifecycleValidator.js";
 
+const ACTIVE_RESIGNATION_STATUSES = new Set(["pending", "approved", "on_notice", "resigned"]);
+
 const normalizeStatus = (status) => {
   if (!status) return "Active";
   const normalized = status.toLowerCase();
@@ -451,9 +453,7 @@ const addResignation = async (companyId, form, actor) => {
       "employeeId",
       "departmentId",
       "reportingManagerId",
-      "reason",
-      "resignationDate",
-      "noticeDate"
+      "reason"
     ];
     for (const k of required) {
       if (!form[k]) throw new Error(`Missing field: ${k}`);
@@ -467,27 +467,36 @@ const addResignation = async (companyId, form, actor) => {
       throw new Error("Reason cannot exceed 500 characters");
     }
 
-    const resignationDateYmd = toYMDStr(form.resignationDate);
-    const noticeDateYmd = toYMDStr(form.noticeDate);
+    const hasNoticeDate = Boolean(form.noticeDate);
+    const hasResignationDate = Boolean(form.resignationDate);
 
-    if (!resignationDateYmd) {
+    if (hasNoticeDate !== hasResignationDate) {
+      throw new Error("Both notice date and resignation date are required together");
+    }
+
+    const resignationDateYmd = hasResignationDate ? toYMDStr(form.resignationDate) : null;
+    const noticeDateYmd = hasNoticeDate ? toYMDStr(form.noticeDate) : null;
+
+    if (hasResignationDate && !resignationDateYmd) {
       throw new Error("Invalid resignation date format");
     }
 
-    if (!noticeDateYmd) {
+    if (hasNoticeDate && !noticeDateYmd) {
       throw new Error("Invalid notice date format");
     }
 
-    const resignationDate = DateTime.fromFormat(resignationDateYmd, "yyyy-MM-dd", { zone: "utc" });
-    const noticeDate = DateTime.fromFormat(noticeDateYmd, "yyyy-MM-dd", { zone: "utc" });
+    if (resignationDateYmd && noticeDateYmd) {
+      const resignationDate = DateTime.fromFormat(resignationDateYmd, "yyyy-MM-dd", { zone: "utc" });
+      const noticeDate = DateTime.fromFormat(noticeDateYmd, "yyyy-MM-dd", { zone: "utc" });
 
-    if (resignationDate < noticeDate) {
-      throw new Error("Resignation date must be on or after notice date");
-    }
+      if (resignationDate < noticeDate) {
+        throw new Error("Resignation date must be on or after notice date");
+      }
 
-    const today = DateTime.utc().startOf("day");
-    if (resignationDate < today) {
-      throw new Error("Resignation date cannot be before today");
+      const today = DateTime.utc().startOf("day");
+      if (resignationDate < today) {
+        throw new Error("Resignation date cannot be before today");
+      }
     }
 
     // Validate that employeeId is a valid ObjectId string
@@ -519,6 +528,24 @@ const addResignation = async (companyId, form, actor) => {
       if (currentEmployee._id.toString() !== form.employeeId) {
         throw new Error("Employees can only submit their own resignation");
       }
+    }
+
+    // Prevent duplicate active resignations (backend guard even if controller skipped)
+    const activeExisting = await collection.resignation.findOne({
+      employeeId: form.employeeId,
+      $or: [
+        { finalStatus: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } },
+        { resignationStatus: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } },
+        { status: { $in: Array.from(ACTIVE_RESIGNATION_STATUSES) } }
+      ]
+    });
+
+    if (activeExisting) {
+      return {
+        done: false,
+        message: "Resignation already applied.",
+        errors: { employeeId: "Active resignation exists" }
+      };
     }
 
     // Verify employee exists
@@ -587,12 +614,13 @@ const addResignation = async (companyId, form, actor) => {
       departmentId: form.departmentId,
       reportingManagerId: form.reportingManagerId,
       reportingManagerName: `${reportingManager.firstName || ""} ${reportingManager.lastName || ""}`.trim(),
-      resignationDate: resignationDateYmd,
-      noticeDate: noticeDateYmd,
+      resignationDate: resignationDateYmd || null,
+      noticeDate: noticeDateYmd || null,
       reason: String(form.reason).trim(),
       status: "pending",
+      finalStatus: "pending",
       resignationStatus: "pending", // Workflow status: pending, on_notice, rejected, resigned
-      effectiveDate: resignationDateYmd,
+      effectiveDate: resignationDateYmd || null,
       approvedBy: null,
       approvedAt: null,
       resignationId: new ObjectId().toHexString(),
@@ -940,6 +968,7 @@ const approveResignation = async (companyId, resignationId, actor) => {
       {
         $set: {
           resignationStatus: "on_notice",
+          finalStatus: "on_notice",
           status: "on_notice",
           approvedBy: actor?.userId || null,
           approvedAt: new Date()
@@ -1033,6 +1062,7 @@ const rejectResignation = async (companyId, resignationId, actor, reason) => {
       {
         $set: {
           resignationStatus: "rejected",
+          finalStatus: "rejected",
           status: "rejected",
           rejectedBy: actor?.userId || null,
           rejectedAt: new Date(),
@@ -1101,7 +1131,7 @@ const processResignationEffectiveDate = async (companyId, resignationId) => {
     // Update resignation status to processed
     await collection.resignation.updateOne(
       { resignationId },
-      { $set: { processedAt: new Date(), resignationStatus: "resigned", status: "resigned" } }
+      { $set: { processedAt: new Date(), resignationStatus: "resigned", finalStatus: "resigned", status: "resigned" } }
     );
 
     console.log(`[Resignation Service] Processed resignation ${resignationId}, employee status updated to 'Resigned'`);
@@ -1138,7 +1168,7 @@ const processDueResignations = async (companyId) => {
 
       await collection.resignation.updateOne(
         { resignationId: resignation.resignationId },
-        { $set: { processedAt: new Date(), resignationStatus: "resigned", status: "resigned" } }
+        { $set: { processedAt: new Date(), resignationStatus: "resigned", finalStatus: "resigned", status: "resigned" } }
       );
 
       processed += 1;

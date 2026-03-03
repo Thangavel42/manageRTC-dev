@@ -5,34 +5,41 @@
 
 import express from 'express';
 import resignationController from '../../controllers/rest/resignation.controller.js';
-import { authenticate, requireRole } from '../../middleware/auth.js';
+import { authenticate, requireEmployeeActive, requireRole } from '../../middleware/auth.js';
 import { commonSchemas, resignationSchemas, validateBody, validateParams, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate);
+// All routes require authentication AND active employee status
+router.use(authenticate, requireEmployeeActive);
 
 /**
  * @route   GET /api/resignations/stats
  * @desc    Get resignation statistics
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Superadmin, Manager, Employee)
  */
-router.get('/stats', requireRole('admin', 'hr', 'superadmin'), resignationController.getStats);
+router.get('/stats', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignationController.getStats);
 
 /**
  * @route   GET /api/resignations/departments
  * @desc    Get departments for resignation filter
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Superadmin, Manager, Employee)
  */
-router.get('/departments', requireRole('admin', 'hr', 'superadmin'), resignationController.getResignationDepartments);
+router.get('/departments', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignationController.getResignationDepartments);
 
 /**
  * @route   GET /api/resignations/employees/:departmentId
  * @desc    Get employees by department
- * @access  Private (Admin, HR, Superadmin)
+ * @access  Private (Admin, HR, Superadmin, Manager, Employee)
  */
-router.get('/employees/:departmentId', requireRole('admin', 'hr', 'superadmin'), resignationController.getEmployeesByDepartmentId);
+router.get('/employees/:departmentId', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignationController.getEmployeesByDepartmentId);
+
+/**
+ * @route   GET /api/resignations/check-status
+ * @desc    Check if current employee can apply for resignation
+ * @access  Private (Admin, HR, Manager, Employee)
+ */
+router.get('/check-status', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignationController.checkResignationStatus);
 
 /**
  * @route   GET /api/resignations

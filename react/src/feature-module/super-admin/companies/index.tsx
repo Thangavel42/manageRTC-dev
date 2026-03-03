@@ -1,22 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import { companies_details } from "../../../core/data/json/companiesdetails";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import Table from "../../../core/common/dataTable/index";
-import CommonSelect from "../../../core/common/commonSelect";
 import { DatePicker } from "antd";
-import ReactApexChart from "react-apexcharts";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useSuperadminCompaniesREST } from "../../../hooks/useSuperadminCompaniesREST";
-import "react-toastify/dist/ReactToastify.css";
+import moment from "moment";
 import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { ToastContainer, toast } from "react-toastify";
-import moment from "moment";
+import { Link } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
+import Table from "../../../core/common/dataTable/index";
+import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { companies_details } from "../../../core/data/json/companiesdetails";
+import { useSuperadminCompaniesREST } from "../../../hooks/useSuperadminCompaniesREST";
+import { all_routes } from "../../router/all_routes";
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -27,11 +26,11 @@ const Companies = () => {
     companies,
     stats,
     companyDetails,
-    packagesLoading,
-    companiesLoading,
-    statsLoading,
-    detailsLoading,
-    editDetailsLoading,
+    packagesLoading: _packagesLoading,
+    companiesLoading: _companiesLoading,
+    statsLoading: _statsLoading,
+    detailsLoading: _detailsLoading,
+    editDetailsLoading: _editDetailsLoading,
     fetchPackages,
     fetchCompanies,
     fetchStats,
@@ -46,12 +45,12 @@ const Companies = () => {
   const [deleteplan, setdeleteplan] = useState<any>([]);
   const [deleteLoader, setdeleteLoader] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const data = companies_details;
+  const _data = companies_details;
   const [viewcompanyloader, setviewcompanyloader] = useState(false);
   const [editcompanyloader, seteditcompanyloader] = useState(false);
   const [isLoadingediting, setisLoadingediting] = useState(false);
 
-  type companydetail = {
+  type CompanyDetailType = {
     name: string;
     email: string;
     status: string;
@@ -68,7 +67,7 @@ const Companies = () => {
     logo: string;
   };
 
-  const [companydetail, setcompanydetail] = useState<companydetail>({
+  const [companydetail, setcompanydetail] = useState<CompanyDetailType>({
     name: "Bytecamp Technologies",
     email: "contact@bytecamp.in",
     status: "Active",
@@ -158,9 +157,8 @@ const Companies = () => {
       dataIndex: "Status",
       render: (text: string, record: any) => (
         <span
-          className={`badge ${
-            text === "Active" ? "badge-success" : "badge-danger"
-          } d-inline-flex align-items-center badge-xs`}
+          className={`badge ${text === "Active" ? "badge-success" : "badge-danger"
+            } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
           {text}
@@ -209,7 +207,7 @@ const Companies = () => {
       ),
     },
   ];
-  const [passwordVisibility, setPasswordVisibility] = useState({
+  const [_passwordVisibility, _setPasswordVisibility] = useState({
     password: false,
     confirmPassword: false,
   });
@@ -221,8 +219,8 @@ const Companies = () => {
     location: null,
   });
 
-  const togglePasswordVisibility = (field: PasswordField) => {
-    setPasswordVisibility((prevState) => ({
+  const _togglePasswordVisibility = (field: PasswordField) => {
+    _setPasswordVisibility((prevState) => ({
       ...prevState,
       [field]: !prevState[field],
     }));
@@ -245,7 +243,7 @@ const Companies = () => {
     { value: "USD", label: "USD" },
     { value: "Euro", label: "Euro" },
   ];
-  const language = [
+  const _language = [
     { value: "English", label: "English" },
     { value: "Arabic", label: "Arabic" },
   ];
@@ -260,7 +258,7 @@ const Companies = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [imageupload, setimageupload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [inputKey, setInputKey] = useState(Date.now());
+  const [inputKey, _setInputKey] = useState(Date.now());
   const [tableLoading, settableLoading] = useState(true);
   const defaultAllTimeStart = moment.utc("1970-01-01T00:00:00Z").toISOString();
   const defaultAllTimeEnd = moment.utc().toISOString();
@@ -331,41 +329,41 @@ const Companies = () => {
   // Validate form fields
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    
+
     if (!formData.name.trim()) {
       errors.name = "Company name is required";
     }
-    
+
     if (!formData.email.trim()) {
       errors.email = "Email address is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = "Please enter a valid email address";
     }
-    
+
     if (!formData.domain.trim()) {
       errors.domain = "Sub domain URL is required";
     }
-    
+
     if (!formData.phone.trim()) {
       errors.phone = "Phone number is required";
     }
-    
+
     if (!formData.website.trim()) {
       errors.website = "Website is required";
     }
-    
+
     if (!formData.address.trim()) {
       errors.address = "Address is required";
     }
-    
+
     if (!formData.plan_id) {
       errors.plan_id = "Please select a plan";
     }
-    
+
     if (!logo) {
       errors.logo = "Company logo is required";
     }
-    
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -484,7 +482,7 @@ const Companies = () => {
       ...prevState,
       [name]: type === "checkbox" ? checked : processedValue,
     }));
-    
+
     // Clear error when user starts typing
     clearFieldError(name);
   };
@@ -505,7 +503,7 @@ const Companies = () => {
       ...prevState,
       [name]: selectedOption.value,
     }));
-    
+
     // Clear error when user selects an option
     clearFieldError(name);
   };
@@ -624,7 +622,7 @@ const Companies = () => {
       }
     });
 
-    if (logo == null || logo == undefined || logo.trim() == "") {
+    if (logo === null || logo === undefined || logo.trim() === "") {
       hasError = true;
       toast.error("Please upload a Logo.");
     }
@@ -706,7 +704,7 @@ const Companies = () => {
     return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
 
-  const [totalChart] = React.useState<any>({
+  const [_totalChart] = React.useState<any>({
     series: [
       {
         name: "Messages",
@@ -800,7 +798,7 @@ const Companies = () => {
       },
     },
   });
-  const [activeChart] = React.useState<any>({
+  const [_activeChart] = React.useState<any>({
     series: [
       {
         name: "Active Company",
@@ -894,7 +892,7 @@ const Companies = () => {
       },
     },
   });
-  const [inactiveChart] = React.useState<any>({
+  const [_inactiveChart] = React.useState<any>({
     series: [
       {
         name: "Inactive Company",
@@ -988,7 +986,7 @@ const Companies = () => {
       },
     },
   });
-  const [locationChart] = React.useState<any>({
+  const [_locationChart] = React.useState<any>({
     series: [
       {
         name: "Inactive Company",
@@ -1304,9 +1302,8 @@ const Companies = () => {
                             data-bs-dismiss={
                               confirmText === "DELETE" ? "modal" : undefined
                             }
-                            className={`btn btn-danger ${
-                              confirmText !== "DELETE" ? "disabled" : ""
-                            }`}
+                            className={`btn btn-danger ${confirmText !== "DELETE" ? "disabled" : ""
+                              }`}
                             onClick={
                               confirmText === "DELETE"
                                 ? DeletePlan
@@ -2464,11 +2461,10 @@ const Companies = () => {
                           </div>
                         </div>
                         <span
-                          className={`badge ${
-                            companydetail.status === "Active"
+                          className={`badge ${companydetail.status === "Active"
                               ? "badge-success"
                               : "badge-danger"
-                          }`}
+                            }`}
                         >
                           <i className="ti ti-point-filled" />
                           {companydetail.status}
@@ -2516,16 +2512,16 @@ const Companies = () => {
                           <div className="col-md-4">
                             <div className="mb-3">
                               <p className="fs-12 mb-0">Address</p>
-                                <p className="text-gray-9">
-                                 {(() => {
-                                   if (typeof companydetail.address === 'object' && companydetail.address !== null) {
-                                     const addr = companydetail.address as any;
-                                     const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
-                                     return parts.length > 0 ? parts.join(', ') : '-';
-                                   }
-                                   return companydetail.address || '-';
-                                 })()}
-                                </p>
+                              <p className="text-gray-9">
+                                {(() => {
+                                  if (typeof companydetail.address === 'object' && companydetail.address !== null) {
+                                    const addr = companydetail.address as any;
+                                    const parts = [addr?.street, addr?.city, addr?.state, addr?.country, addr?.zipCode].filter(Boolean);
+                                    return parts.length > 0 ? parts.join(', ') : '-';
+                                  }
+                                  return companydetail.address || '-';
+                                })()}
+                              </p>
                             </div>
                           </div>
                         </div>

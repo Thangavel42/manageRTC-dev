@@ -44,6 +44,12 @@ export interface ResignationStats {
   resigned?: number;
 }
 
+export interface ResignationEligibility {
+  canApply: boolean;
+  status: string;
+  message?: string;
+}
+
 export interface ResignationFilters {
   type?: 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thismonth' | 'lastmonth' | 'thisyear' | 'alltime';
   startDate?: string;
@@ -142,6 +148,40 @@ export const useResignationsREST = () => {
       const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to create resignation';
       message.error(errorMessage);
       return false;
+    }
+  }, []);
+
+  /**
+   * Check if current employee can apply for resignation
+   * REST API: GET /api/resignations/check-status
+   */
+  const checkResignationEligibility = useCallback(async (): Promise<ResignationEligibility | null> => {
+    try {
+      const response: ApiResponse<ResignationEligibility> = await get('/resignations/check-status');
+
+      if (response.success && response.data) {
+        return response.data;
+      }
+
+      // If backend returns validation in error shape
+      if (response.error?.message) {
+        return {
+          canApply: false,
+          status: 'unknown',
+          message: response.error.message,
+        };
+      }
+
+      throw new Error('Failed to check resignation status');
+    } catch (err: any) {
+      // For 400/403 responses, surface the server message but keep structured data
+      const status = err.response?.data?.status || err.response?.data?.data?.status || 'unknown';
+      const messageText = err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Resignation already applied.';
+      return {
+        canApply: false,
+        status: typeof status === 'string' ? status : 'unknown',
+        message: messageText,
+      };
     }
   }, []);
 
@@ -322,6 +362,7 @@ export const useResignationsREST = () => {
     approveResignation,
     rejectResignation,
     processResignation,
+    checkResignationEligibility,
     fetchDepartments,
     fetchEmployeesByDepartment
   };
