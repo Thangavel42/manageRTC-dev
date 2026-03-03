@@ -683,8 +683,8 @@ export const HorizontalSidebarData = [
               },
               {
                 menuValue: 'Candidates',
-                route: routes.candidatesGrid,
-                base: 'candidates-grid',
+                route: routes.candidates,
+                base: 'candidates',
               },
               {
                 menuValue: 'Referrals',

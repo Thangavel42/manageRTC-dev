@@ -207,9 +207,7 @@ import SubContractList from '../projects/subcontract/subcontractlist';
 import Task from '../projects/task/task';
 import TaskBoard from '../projects/task/task-board';
 import TaskDetails from '../projects/task/taskdetails';
-import CandidateGrid from '../recruitment/candidates/candidategrid';
-import CandidateKanban from '../recruitment/candidates/candidatekanban';
-import CandidatesList from '../recruitment/candidates/candidatelist';
+import Candidates from '../recruitment/candidates/candidates';
 import JobGrid from '../recruitment/jobs/jobgrid';
 import JobList from '../recruitment/jobs/joblist';
 import RefferalList from '../recruitment/refferal/refferallist';
@@ -1605,20 +1603,8 @@ export const publicRoutes = [
     roles: ['admin', 'hr', 'manager', 'superadmin'],
   },
   {
-    path: routes.candidatesGrid,
-    element: <CandidateGrid />,
-    route: Route,
-    roles: ['admin', 'hr', 'manager', 'superadmin'],
-  },
-  {
-    path: routes.candidateslist,
-    element: <CandidatesList />,
-    route: Route,
-    roles: ['admin', 'hr', 'manager', 'superadmin'],
-  },
-  {
-    path: routes.candidateskanban,
-    element: <CandidateKanban />,
+    path: routes.candidates,
+    element: <Candidates />,
     route: Route,
     roles: ['admin', 'hr', 'manager', 'superadmin'],
   },
