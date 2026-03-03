@@ -137,12 +137,22 @@ export const useSuperadminCompaniesREST = (): UseSuperadminCompaniesReturn => {
       throw new Error('Authentication token not available');
     }
 
+    // If body is a plain object (not FormData or string), JSON.stringify it
+    let processedBody = options.body;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (options.body && !(options.body instanceof FormData) && typeof options.body !== 'string') {
+      processedBody = JSON.stringify(options.body);
+      headers['Content-Type'] = 'application/json';
+    }
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...options.headers,
-      },
+      headers,
+      body: processedBody,
     });
 
     const result = await response.json();

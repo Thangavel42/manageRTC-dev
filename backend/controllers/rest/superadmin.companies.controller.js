@@ -44,6 +44,17 @@ export const addCompany = async (req, res) => {
   try {
     const userId = req.user?.userId;
 
+    console.log('[addCompany Controller] Request body:', req.body);
+    console.log('[addCompany Controller] User ID:', userId);
+
+    // Validate request body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Request body is empty or invalid'
+      });
+    }
+
     const result = await companiesService.addCompany(req.body, userId);
 
     if (!result.done) {
@@ -202,9 +213,20 @@ export const updateCompany = async (req, res) => {
   try {
     const { id } = req.params;
 
+    console.log('[updateCompany Controller] Request body:', req.body);
+    console.log('[updateCompany Controller] Company ID:', id);
+
+    // Validate request body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Request body is empty or invalid'
+      });
+    }
+
     const result = await companiesService.updateCompany({
       ...req.body,
-      _id: id
+      id: id  // Use 'id' instead of '_id' to match service expectation
     });
 
     if (!result.done) {

@@ -25,7 +25,7 @@ export const HorizontalSidebarData = [
             menuValue: 'Employee Dashboard',
             route: routes.employeeDashboard,
             base: 'employee',
-            roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+            roles: ['employee', 'hr', 'manager', 'leads'],
           },
           {
             menuValue: 'Deals Dashboard',

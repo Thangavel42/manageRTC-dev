@@ -5,9 +5,9 @@
  * Real-time updates via Socket.IO event listeners
  */
 
-import { useState, useCallback, useEffect } from 'react';
 import { message } from 'antd';
-import { get, post, put, del, buildParams, ApiResponse } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiResponse, buildParams, del, get, patch, post, put } from '../services/api';
 import { useSocket } from '../SocketContext';
 
 /**
@@ -233,7 +233,7 @@ export const useLeaveTypesREST = () => {
       if (response.success && response.data) {
         message.success('Leave type updated successfully!');
         setLeaveTypes(prev =>
-          prev.map(lt => lt.leaveTypeId === leaveTypeId ? { ...lt, ...transformLeaveTypeData(response.data!) } : lt)
+          prev.map(lt => (lt._id === leaveTypeId || lt.leaveTypeId === leaveTypeId) ? { ...lt, ...transformLeaveTypeData(response.data!) } : lt)
         );
         return true;
       }
@@ -255,12 +255,12 @@ export const useLeaveTypesREST = () => {
     setLoading(true);
     setError(null);
     try {
-      const response: ApiResponse<LeaveType> = await put(`/leave-types/${leaveTypeId}/toggle`, {});
+      const response: ApiResponse<LeaveType> = await patch(`/leave-types/${leaveTypeId}/toggle`, {});
 
       if (response.success && response.data) {
         message.success(`Leave type ${response.data.isActive ? 'activated' : 'deactivated'} successfully!`);
         setLeaveTypes(prev =>
-          prev.map(lt => lt.leaveTypeId === leaveTypeId ? { ...lt, ...transformLeaveTypeData(response.data!) } : lt)
+          prev.map(lt => (lt._id === leaveTypeId || lt.leaveTypeId === leaveTypeId) ? { ...lt, ...transformLeaveTypeData(response.data!) } : lt)
         );
         return true;
       }
