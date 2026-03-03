@@ -1,13 +1,12 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useSocket } from '../SocketContext';
 import { message } from 'antd';
-import { Socket } from 'socket.io-client';
+import { useCallback, useState } from 'react';
+import { ApiResponse, del, get, patch, post, put } from '../services/api';
 
 export interface Candidate {
   _id: string;
   applicationNumber?: string;
   companyId: string;
-  
+
   // Personal Information
   personalInfo?: {
     firstName?: string;
@@ -26,7 +25,7 @@ export interface Candidate {
     linkedinProfile?: string;
     portfolio?: string;
   };
-  
+
   // Professional Information
   professionalInfo?: {
     currentRole?: string;
@@ -40,18 +39,40 @@ export interface Candidate {
     certifications?: string[];
     languages?: string[];
   };
-  
+
   // Application Information
   applicationInfo?: {
     appliedRole?: string;
     appliedDate?: string;
     recruiterId?: string;
-    recruiterName?: string;
     source?: string;
     referredBy?: string;
     jobId?: string;
+    // Populated fields from backend aggregation
+    appliedRoleDetails?: {
+      _id?: string;
+      designation?: string;
+      department?: string;
+      status?: string;
+    };
+    recruiterDetails?: {
+      _id?: string;
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      employeeId?: string;
+      email?: string;
+    };
+    referredByDetails?: {
+      _id?: string;
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      employeeId?: string;
+      email?: string;
+    };
   };
-  
+
   // Documents
   documents?: {
     resume?: string;
@@ -59,7 +80,7 @@ export interface Candidate {
     portfolio?: string;
     others?: string[];
   };
-  
+
   // Ratings
   ratings?: {
     technical?: number;
@@ -67,14 +88,14 @@ export interface Candidate {
     cultural?: number;
     overall?: number;
   };
-  
+
   // Interview Information
   interviewInfo?: {
     rounds?: any[];
     feedback?: any[];
     nextInterviewDate?: string | null;
   };
-  
+
   // Status and Timeline
   status: string;
   timeline?: Array<{
@@ -83,10 +104,10 @@ export interface Candidate {
     notes: string;
     updatedBy: string;
   }>;
-  
+
   // Generated fields
   fullName: string;
-  
+
   // Metadata
   createdAt: string;
   updatedAt: string;
@@ -124,7 +145,6 @@ export interface CandidateFilters {
 }
 
 export const useCandidates = () => {
-  const socket = useSocket() as Socket | null;
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [stats, setStats] = useState<CandidateStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -132,386 +152,343 @@ export const useCandidates = () => {
   const [exporting, setExporting] = useState(false);
 
   // Fetch all candidate data (candidates + stats)
-  const fetchAllData = useCallback((filters: CandidateFilters = {}) => {
-    if (!socket) {
-      console.warn('[useCandidates] Socket not available');
-      return;
-    }
-
+  const fetchAllData = useCallback(async (filters: CandidateFilters = {}) => {
     setLoading(true);
     setError(null);
-    console.log('[useCandidates] Fetching all candidate data with filters:', filters);
-    socket.emit('candidate:getAllData', filters);
-  }, [socket]);
+    try {
+      console.log('[useCandidates] Fetching all candidate data with filters:', filters);
+      const response: ApiResponse = await get('/candidates/all-data', { params: filters });
 
-  // Create candidate
-  const createCandidate = useCallback(async (candidateData: Partial<Candidate>): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Creating candidate:', candidateData);
-      socket.emit('candidate:create', candidateData);
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Candidate create response received:', response);
-        if (response.done) {
-          console.log('[useCandidates] Candidate created successfully:', response.data);
-          message.success('Candidate created successfully!');
-          fetchAllData(); // Refresh data
-          resolve(true);
-        } else {
-          console.error('[useCandidates] Failed to create candidate:', response.error);
-          message.error(`Failed to create candidate: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('candidate:create-response', handleResponse);
-      };
-
-      socket.on('candidate:create-response', handleResponse);
-    });
-  }, [socket, fetchAllData]);
-
-  // Update candidate
-  const updateCandidate = useCallback(async (candidateId: string, updateData: Partial<Candidate>): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Updating candidate:', { candidateId, updateData });
-      socket.emit('candidate:update', { _id: candidateId, ...updateData });
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Candidate update response received:', response);
-        if (response.done) {
-          console.log('[useCandidates] Candidate updated successfully:', response.data);
-          message.success('Candidate updated successfully!');
-          fetchAllData(); // Refresh data
-          resolve(true);
-        } else {
-          console.error('[useCandidates] Failed to update candidate:', response.error);
-          message.error(`Failed to update candidate: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('candidate:update-response', handleResponse);
-      };
-
-      socket.on('candidate:update-response', handleResponse);
-    });
-  }, [socket, fetchAllData]);
-
-  // Delete candidate
-  const deleteCandidate = useCallback(async (candidateId: string): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Deleting candidate:', candidateId);
-      socket.emit('candidate:delete', candidateId);
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Candidate delete response received:', response);
-        if (response.done) {
-          console.log('[useCandidates] Candidate deleted successfully:', response.data);
-          message.success('Candidate deleted successfully!');
-          fetchAllData(); // Refresh data
-          resolve(true);
-        } else {
-          console.error('[useCandidates] Failed to delete candidate:', response.error);
-          message.error(`Failed to delete candidate: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('candidate:delete-response', handleResponse);
-      };
-
-      socket.on('candidate:delete-response', handleResponse);
-    });
-  }, [socket, fetchAllData]);
-
-  // Get candidate by ID
-  const getCandidateById = useCallback(async (candidateId: string): Promise<Candidate | null> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return null;
-    }
-
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Getting candidate by ID:', candidateId);
-      socket.emit('candidate:getById', candidateId);
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Candidate getById response received:', response);
-        if (response.done) {
-          console.log('[useCandidates] Candidate retrieved successfully:', response.data);
-          resolve(response.data);
-        } else {
-          console.error('[useCandidates] Failed to get candidate:', response.error);
-          message.error(`Failed to get candidate: ${response.error}`);
-          resolve(null);
-        }
-        socket.off('candidate:getById-response', handleResponse);
-      };
-
-      socket.on('candidate:getById-response', handleResponse);
-    });
-  }, [socket]);
-
-  // Update candidate status
-  const updateCandidateStatus = useCallback(async (candidateId: string, status: string, notes?: string): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Updating candidate status:', { candidateId, status, notes });
-      socket.emit('candidate:updateStatus', { candidateId, status, notes });
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Candidate status update response received:', response);
-        if (response.done) {
-          console.log('[useCandidates] Candidate status updated successfully:', response.data);
-          message.success(`Status updated to ${status}!`);
-          fetchAllData(); // Refresh data
-          resolve(true);
-        } else {
-          console.error('[useCandidates] Failed to update candidate status:', response.error);
-          message.error(`Failed to update status: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('candidate:updateStatus-response', handleResponse);
-      };
-
-      socket.on('candidate:updateStatus-response', handleResponse);
-    });
-  }, [socket, fetchAllData]);
-
-  // Filter candidates
-  const filterCandidates = useCallback((filters: CandidateFilters) => {
-    console.log('[useCandidates] Filtering candidates with:', filters);
-    fetchAllData(filters);
-  }, [fetchAllData]);
-
-  // Search candidates
-  const searchCandidates = useCallback((searchQuery: string) => {
-    console.log('[useCandidates] Searching candidates with:', searchQuery);
-    const filters: CandidateFilters = { search: searchQuery };
-    fetchAllData(filters);
-  }, [fetchAllData]);
-
-  // Set up socket listeners
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleGetAllDataResponse = (response: any) => {
-      console.log('[useCandidates] getAllData response received:', response);
-      setLoading(false);
-      if (response.done) {
+      if (response.success && response.data) {
         console.log('[useCandidates] Candidates data received:', response.data.candidates);
         console.log('[useCandidates] Stats data received:', response.data.stats);
         setCandidates(response.data.candidates || []);
         setStats(response.data.stats || {});
         setError(null);
-      } else {
-        console.error('[useCandidates] Failed to get candidates data:', response.error);
-        setError(response.error);
-        setCandidates([]);
-        setStats(null);
       }
-    };
+    } catch (err: any) {
+      const errorData = err.response?.data?.error;
+      const errorMessage =
+        typeof errorData === 'string'
+          ? errorData
+          : errorData?.message ||
+            err.response?.data?.message ||
+            err.message ||
+            'Failed to fetch candidates';
+      console.error('[useCandidates] Failed to get candidates data:', errorMessage);
+      setError(errorMessage);
+      setCandidates([]);
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    // Listen for real-time updates
-    const handleCandidateCreated = (response: any) => {
-      if (response.done && response.data) {
-        console.log('[useCandidates] Candidate created via broadcast:', response.data);
-        fetchAllData();
+  // Create candidate
+  const createCandidate = useCallback(
+    async (candidateData: Partial<Candidate>): Promise<boolean> => {
+      try {
+        console.log('[useCandidates] Creating candidate:', candidateData);
+        const response: ApiResponse = await post('/candidates', candidateData);
+
+        if (response.success) {
+          console.log('[useCandidates] Candidate created successfully:', response.data);
+          message.success('Candidate created successfully!');
+          // Don't refresh here - let parent components handle refresh via event
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        const errorData = err.response?.data?.error;
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              'Failed to create candidate';
+        console.error('[useCandidates] Failed to create candidate:', errorMessage);
+        message.error(`Failed to create candidate: ${errorMessage}`);
+        return false;
       }
-    };
+    },
+    []
+  );
 
-    const handleCandidateUpdated = (response: any) => {
-      if (response.done && response.data) {
-        console.log('[useCandidates] Candidate updated via broadcast:', response.data);
-        fetchAllData();
+  // Update candidate
+  const updateCandidate = useCallback(
+    async (candidateId: string, updateData: Partial<Candidate>): Promise<boolean> => {
+      try {
+        console.log('[useCandidates] Updating candidate:', { candidateId, updateData });
+        const response: ApiResponse = await put(`/candidates/${candidateId}`, updateData);
+
+        if (response.success) {
+          console.log('[useCandidates] Candidate updated successfully:', response.data);
+          message.success('Candidate updated successfully!');
+          await fetchAllData(); // Refresh data
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        const errorData = err.response?.data?.error;
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              'Failed to update candidate';
+        console.error('[useCandidates] Failed to update candidate:', errorMessage);
+        message.error(`Failed to update candidate: ${errorMessage}`);
+        return false;
       }
-    };
+    },
+    [fetchAllData]
+  );
 
-    const handleCandidateDeleted = (response: any) => {
-      if (response.done && response.data) {
-        console.log('[useCandidates] Candidate deleted via broadcast:', response.data);
-        fetchAllData();
+  // Delete candidate
+  const deleteCandidate = useCallback(
+    async (candidateId: string): Promise<boolean> => {
+      try {
+        console.log('[useCandidates] Deleting candidate:', candidateId);
+        const response: ApiResponse = await del(`/candidates/${candidateId}`);
+
+        if (response.success) {
+          console.log('[useCandidates] Candidate deleted successfully:', response.data);
+          message.success('Candidate deleted successfully!');
+          await fetchAllData(); // Refresh data
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        const errorData = err.response?.data?.error;
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              'Failed to delete candidate';
+        console.error('[useCandidates] Failed to delete candidate:', errorMessage);
+        message.error(`Failed to delete candidate: ${errorMessage}`);
+        return false;
       }
-    };
+    },
+    [fetchAllData]
+  );
 
-    const handleStatusUpdated = (response: any) => {
-      if (response.done && response.data) {
-        console.log('[useCandidates] Candidate status updated via broadcast:', response.data);
-        fetchAllData();
+  // Get candidate by ID
+  const getCandidateById = useCallback(async (candidateId: string): Promise<Candidate | null> => {
+    try {
+      console.log('[useCandidates] Getting candidate by ID:', candidateId);
+      const response: ApiResponse = await get(`/candidates/${candidateId}`);
+
+      if (response.success && response.data) {
+        console.log('[useCandidates] Candidate retrieved successfully:', response.data);
+        return response.data;
       }
-    };
+      return null;
+    } catch (err: any) {
+      const errorData = err.response?.data?.error;
+      const errorMessage =
+        typeof errorData === 'string'
+          ? errorData
+          : errorData?.message ||
+            err.response?.data?.message ||
+            err.message ||
+            'Failed to get candidate';
+      console.error('[useCandidates] Failed to get candidate:', errorMessage);
+      message.error(`Failed to get candidate: ${errorMessage}`);
+      return null;
+    }
+  }, []);
 
-    socket.on('candidate:getAllData-response', handleGetAllDataResponse);
-    socket.on('candidate:candidate-created', handleCandidateCreated);
-    socket.on('candidate:candidate-updated', handleCandidateUpdated);
-    socket.on('candidate:candidate-deleted', handleCandidateDeleted);
-    socket.on('candidate:status-updated', handleStatusUpdated);
+  // Update candidate status
+  const updateCandidateStatus = useCallback(
+    async (candidateId: string, status: string, notes?: string): Promise<boolean> => {
+      try {
+        console.log('[useCandidates] Updating candidate status:', { candidateId, status, notes });
+        const response: ApiResponse = await patch(`/candidates/${candidateId}/status`, {
+          status,
+          notes,
+        });
 
-    return () => {
-      socket.off('candidate:getAllData-response', handleGetAllDataResponse);
-      socket.off('candidate:candidate-created', handleCandidateCreated);
-      socket.off('candidate:candidate-updated', handleCandidateUpdated);
-      socket.off('candidate:candidate-deleted', handleCandidateDeleted);
-      socket.off('candidate:status-updated', handleStatusUpdated);
-    };
-  }, [socket, fetchAllData]);
+        if (response.success) {
+          console.log('[useCandidates] Candidate status updated successfully:', response.data);
+          message.success(`Status updated to ${status}!`);
+          await fetchAllData(); // Refresh data
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        const errorData = err.response?.data?.error;
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              'Failed to update status';
+        console.error('[useCandidates] Failed to update candidate status:', errorMessage);
+        message.error(`Failed to update status: ${errorMessage}`);
+        return false;
+      }
+    },
+    [fetchAllData]
+  );
+
+  // Filter candidates
+  const filterCandidates = useCallback(
+    (filters: CandidateFilters) => {
+      console.log('[useCandidates] Filtering candidates with:', filters);
+      fetchAllData(filters);
+    },
+    [fetchAllData]
+  );
+
+  // Search candidates
+  const searchCandidates = useCallback(
+    (searchQuery: string) => {
+      console.log('[useCandidates] Searching candidates with:', searchQuery);
+      const filters: CandidateFilters = { search: searchQuery };
+      fetchAllData(filters);
+    },
+    [fetchAllData]
+  );
 
   // Export candidates as PDF
   const exportPDF = useCallback(async () => {
-    if (!socket) {
-      message.error("Socket connection not available");
-      return;
-    }
-
     setExporting(true);
     try {
-      console.log("Starting PDF export...");
-      socket.emit("candidate:export-pdf");
+      console.log('Starting PDF export...');
+      const response: ApiResponse = await post('/candidates/export/pdf', {});
 
-      const handlePDFResponse = (response: any) => {
-        if (response.done) {
-          console.log("PDF generated successfully:", response.data.pdfUrl);
-          const link = document.createElement('a');
-          link.href = response.data.pdfUrl;
-          link.download = `candidates_${Date.now()}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          message.success("PDF exported successfully!");
-        } else {
-          console.error("PDF export failed:", response.error);
-          message.error(`PDF export failed: ${response.error}`);
-        }
-        setExporting(false);
-        socket.off("candidate:export-pdf-response", handlePDFResponse);
-      };
-
-      socket.on("candidate:export-pdf-response", handlePDFResponse);
-    } catch (error) {
-      console.error("Error exporting PDF:", error);
-      message.error("Failed to export PDF");
+      if (response.success && response.data.pdfUrl) {
+        console.log('PDF generated successfully:', response.data.pdfUrl);
+        const link = document.createElement('a');
+        link.href = response.data.pdfUrl;
+        link.download = `candidates_${Date.now()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        message.success('PDF exported successfully!');
+      }
+    } catch (err: any) {
+      const errorData = err.response?.data?.error;
+      const errorMessage =
+        typeof errorData === 'string'
+          ? errorData
+          : errorData?.message ||
+            err.response?.data?.message ||
+            err.message ||
+            'Failed to export PDF';
+      console.error('PDF export failed:', errorMessage);
+      message.error(`PDF export failed: ${errorMessage}`);
+    } finally {
       setExporting(false);
     }
-  }, [socket]);
+  }, []);
 
   // Export candidates as Excel
   const exportExcel = useCallback(async () => {
-    if (!socket) {
-      message.error("Socket connection not available");
-      return;
-    }
-
     setExporting(true);
     try {
-      console.log("Starting Excel export...");
-      socket.emit("candidate:export-excel");
+      console.log('Starting Excel export...');
+      const response: ApiResponse = await post('/candidates/export/excel', {});
 
-      const handleExcelResponse = (response: any) => {
-        if (response.done) {
-          console.log("Excel generated successfully:", response.data.excelUrl);
-          const link = document.createElement('a');
-          link.href = response.data.excelUrl;
-          link.download = `candidates_${Date.now()}.xlsx`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          message.success("Excel exported successfully!");
-        } else {
-          console.error("Excel export failed:", response.error);
-          message.error(`Excel export failed: ${response.error}`);
-        }
-        setExporting(false);
-        socket.off("candidate:export-excel-response", handleExcelResponse);
-      };
-
-      socket.on("candidate:export-excel-response", handleExcelResponse);
-    } catch (error) {
-      console.error("Error exporting Excel:", error);
-      message.error("Failed to export Excel");
+      if (response.success && response.data.excelUrl) {
+        console.log('Excel generated successfully:', response.data.excelUrl);
+        const link = document.createElement('a');
+        link.href = response.data.excelUrl;
+        link.download = `candidates_${Date.now()}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        message.success('Excel exported successfully!');
+      }
+    } catch (err: any) {
+      const errorData = err.response?.data?.error;
+      const errorMessage =
+        typeof errorData === 'string'
+          ? errorData
+          : errorData?.message ||
+            err.response?.data?.message ||
+            err.message ||
+            'Failed to export Excel';
+      console.error('Excel export failed:', errorMessage);
+      message.error(`Excel export failed: ${errorMessage}`);
+    } finally {
       setExporting(false);
     }
-  }, [socket]);
+  }, []);
 
   // Get candidates by status (for Kanban view)
-  const getCandidatesByStatus = useCallback((status: string) => {
-    if (!socket) {
-      console.warn('[useCandidates] Socket not available');
-      return;
-    }
-
-    console.log('[useCandidates] Getting candidates by status:', status);
-    socket.emit('candidate:getByStatus', status);
-  }, [socket]);
+  const getCandidatesByStatus = useCallback(
+    (status: string) => {
+      console.log('[useCandidates] Getting candidates by status:', status);
+      fetchAllData({ status });
+    },
+    [fetchAllData]
+  );
 
   // Get candidates by role
-  const getCandidatesByRole = useCallback((role: string) => {
-    if (!socket) {
-      console.warn('[useCandidates] Socket not available');
-      return;
-    }
-
-    console.log('[useCandidates] Getting candidates by role:', role);
-    socket.emit('candidate:getByRole', role);
-  }, [socket]);
+  const getCandidatesByRole = useCallback(
+    (role: string) => {
+      console.log('[useCandidates] Getting candidates by role:', role);
+      fetchAllData({ appliedRole: role });
+    },
+    [fetchAllData]
+  );
 
   // Get candidates by experience level
-  const getCandidatesByExperience = useCallback((experienceLevel: string) => {
-    if (!socket) {
-      console.warn('[useCandidates] Socket not available');
-      return;
-    }
-
-    console.log('[useCandidates] Getting candidates by experience:', experienceLevel);
-    socket.emit('candidate:getByExperience', experienceLevel);
-  }, [socket]);
+  const getCandidatesByExperience = useCallback(
+    (experienceLevel: string) => {
+      console.log('[useCandidates] Getting candidates by experience:', experienceLevel);
+      fetchAllData({ experienceLevel });
+    },
+    [fetchAllData]
+  );
 
   // Bulk update candidates
-  const bulkUpdateCandidates = useCallback(async (candidateIds: string[], action: string, data?: any): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
+  const bulkUpdateCandidates = useCallback(
+    async (candidateIds: string[], action: string, data?: any): Promise<boolean> => {
+      try {
+        console.log('[useCandidates] Bulk updating candidates:', { candidateIds, action, data });
+        const response: ApiResponse = await post('/candidates/bulk-update', {
+          candidateIds,
+          action,
+          ...data,
+        });
 
-    return new Promise((resolve) => {
-      console.log('[useCandidates] Bulk updating candidates:', { candidateIds, action, data });
-      socket.emit('candidate:bulkUpdate', { candidateIds, action, ...data });
-
-      const handleResponse = (response: any) => {
-        console.log('[useCandidates] Bulk update response received:', response);
-        if (response.done) {
+        if (response.success && response.data) {
           const { successCount, errorCount } = response.data;
-          console.log(`[useCandidates] Bulk update completed: ${successCount} success, ${errorCount} errors`);
+          console.log(
+            `[useCandidates] Bulk update completed: ${successCount} success, ${errorCount} errors`
+          );
           message.success(`Updated ${successCount} candidates successfully!`);
           if (errorCount > 0) {
             message.warning(`${errorCount} candidates failed to update`);
           }
-          fetchAllData(); // Refresh data
-          resolve(true);
-        } else {
-          console.error('[useCandidates] Failed to bulk update candidates:', response.error);
-          message.error(`Failed to bulk update candidates: ${response.error}`);
-          resolve(false);
+          await fetchAllData(); // Refresh data
+          return true;
         }
-        socket.off('candidate:bulkUpdate-response', handleResponse);
-      };
-
-      socket.on('candidate:bulkUpdate-response', handleResponse);
-    });
-  }, [socket, fetchAllData]);
+        return false;
+      } catch (err: any) {
+        const errorData = err.response?.data?.error;
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              'Failed to bulk update candidates';
+        console.error('[useCandidates] Failed to bulk update candidates:', errorMessage);
+        message.error(`Failed to bulk update candidates: ${errorMessage}`);
+        return false;
+      }
+    },
+    [fetchAllData]
+  );
 
   return {
     // Data
@@ -520,28 +497,28 @@ export const useCandidates = () => {
     loading,
     error,
     exporting,
-    
+
     // Core operations
     fetchAllData,
     createCandidate,
     updateCandidate,
     deleteCandidate,
     getCandidateById,
-    
+
     // Status management
     updateCandidateStatus,
-    
+
     // Filtering and search
     filterCandidates,
     searchCandidates,
     getCandidatesByStatus,
     getCandidatesByRole,
     getCandidatesByExperience,
-    
+
     // Export functionality
     exportPDF,
     exportExcel,
-    
+
     // Bulk operations
     bulkUpdateCandidates,
   };

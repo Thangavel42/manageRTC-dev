@@ -1,17 +1,13 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import Table from "../../../core/common/dataTable/index";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import CommonSelect from "../../../core/common/commonSelect";
-import { DatePicker, TimePicker, message } from "antd";
-import { OverlayTrigger, Tooltip } from "react-bootstrap";
-import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import Footer from "../../../core/common/footer";
+import { DatePicker, message } from "antd";
 import dayjs from "dayjs";
-import { useTimeTrackingREST, TimeEntry } from "../../../hooks/useTimeTrackingREST";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Table from "../../../core/common/dataTable/index";
+import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { useProjectsREST } from "../../../hooks/useProjectsREST";
+import { TimeEntry, useTimeTrackingREST } from "../../../hooks/useTimeTrackingREST";
 
 interface FormData {
   projectId: string;
@@ -105,7 +101,7 @@ const TimeSheet = () => {
       title: "Description",
       dataIndex: "description",
       render: (text: string) => (
-        <p className="fs-14 fw-medium text-gray-9" style={{ maxWidth: 250 }}>
+        <p className="fs-14 fw-medium text-gray-9" style={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {text || '-'}
         </p>
       ),
