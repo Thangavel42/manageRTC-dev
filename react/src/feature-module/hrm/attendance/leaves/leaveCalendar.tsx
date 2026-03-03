@@ -48,7 +48,7 @@ const LeaveCalendar = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  // Status filter removed - calendar only shows approved leaves
 
   // Fetch leaves on mount
   useEffect(() => {
@@ -139,10 +139,11 @@ const LeaveCalendar = () => {
 
     return leaves
       .filter(leave => {
+        // ONLY show approved leaves - calendar displays confirmed leaves only
+        if (leave.status !== 'approved') return false;
+        
         // Filter by type if selected
         if (filterType !== 'all' && leave.leaveType !== filterType) return false;
-        // Filter by status if selected
-        if (filterStatus !== 'all' && leave.status !== filterStatus) return false;
 
         // Check if leave overlaps with this date
         const leaveStart = dayjs(leave.startDate);
@@ -198,13 +199,6 @@ const LeaveCalendar = () => {
     { value: 'all', label: 'All Types' },
     ...activeOptions.map(option => ({ value: option.value.toLowerCase(), label: String(option.label) })),
   ], [activeOptions]);
-
-  const statusOptions = [
-    { value: 'all', label: 'All Status' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
 
   // Determine if any data is still loading
   const isLoading = loading || employeesLoading || leaveTypesLoading;
@@ -310,13 +304,6 @@ const LeaveCalendar = () => {
                     onChange={(option) => setFilterType(option.value)}
                   />
                 )}
-              </div>
-              <div className="me-3">
-                <CommonSelect
-                  className="select"
-                  options={statusOptions}
-                  onChange={(option) => setFilterStatus(option.value)}
-                />
               </div>
               <button
                 className="btn btn-white me-2"
