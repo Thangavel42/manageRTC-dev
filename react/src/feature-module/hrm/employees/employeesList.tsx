@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/clerk-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import { Socket } from "socket.io-client";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
@@ -21,6 +21,7 @@ import { Badge } from "antd";
 import AddEmployeeModal from "../../../core/modals/AddEmployeeModal";
 import { ChangeRequestsModal } from "../../../core/modals/ChangeRequestsModal";
 import EditEmployeeModal from "../../../core/modals/EditEmployeeModal";
+import { apiClient } from "../../../services/api";
 
 interface Department {
   _id: string;
@@ -197,6 +198,7 @@ const EmployeeList = () => {
     inactiveCount: 0,
     newJoinersCount: 0,
   });
+  const [exporting, setExporting] = useState(false);
 
   // Lifecycle status tracking for status dropdown control
   const [lifecycleStatus, setLifecycleStatus] = useState<{
@@ -770,6 +772,88 @@ const EmployeeList = () => {
     },
   ];
 
+  const visibleExportColumns = useMemo(
+    () => ["employeeId", "name", "email", "phone", "department", "role", "status"],
+    [],
+  );
+
+  const buildExportParams = useCallback(
+    (type: "pdf" | "excel") => {
+      const params: Record<string, string> = { type };
+
+      if (filters.departmentId) {
+        params.department = filters.departmentId;
+      }
+      if (filters.status) {
+        params.status = filters.status;
+      }
+      if (filters.startDate) {
+        params.fromDate = filters.startDate;
+      }
+      if (filters.endDate) {
+        params.toDate = filters.endDate;
+      }
+
+      const normalizedOrder =
+        sortOrder === "ascending" ? "asc" : sortOrder === "descending" ? "desc" : "";
+      if (normalizedOrder) {
+        params.sortBy = "fullName";
+        params.order = normalizedOrder;
+      }
+
+      if (visibleExportColumns.length > 0) {
+        params.columns = visibleExportColumns.join(",");
+      }
+
+      return params;
+    },
+    [filters.departmentId, filters.endDate, filters.startDate, filters.status, sortOrder, visibleExportColumns],
+  );
+
+  const exportEmployees = useCallback(
+    async (type: "pdf" | "excel") => {
+      try {
+        setExporting(true);
+        const params = buildExportParams(type);
+        const response = await apiClient.get(`/employees/export`, {
+          params,
+          responseType: "blob",
+        });
+
+        const contentType =
+          response.headers?.["content-type"] ||
+          (type === "pdf"
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        const blob = new Blob([response.data], { type: contentType });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", type === "pdf" ? "employees.pdf" : "employees.xlsx");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+
+        toast.success(`Employee ${type === "pdf" ? "PDF" : "Excel"} exported`);
+      } catch (err: any) {
+        console.error("Employee export failed:", err);
+        const message =
+          err?.response?.data?.error?.message ||
+          err?.message ||
+          "Failed to export employees";
+        toast.error(message);
+      } finally {
+        setExporting(false);
+      }
+    },
+    [buildExportParams],
+  );
+
+  const handleExportPDF = useCallback(() => exportEmployees("pdf"), [exportEmployees]);
+  const handleExportExcel = useCallback(() => exportEmployees("excel"), [exportEmployees]);
+
   const onSelectStatus = (status: string) => {
     if (!status) return;
     const nextStatus = status === "all" ? "" : status;
@@ -1081,16 +1165,28 @@ const EmployeeList = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={handleExportPDF}
+                        disabled={exporting}
+                        aria-busy={exporting}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
+                        {exporting ? "Preparing..." : "Export as PDF"}
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={handleExportExcel}
+                        disabled={exporting}
+                        aria-busy={exporting}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
-                      </Link>
+                        {exporting ? "Preparing..." : "Export as Excel"}
+                      </button>
                     </li>
                   </ul>
                 </div>
