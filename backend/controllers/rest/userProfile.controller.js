@@ -1177,6 +1177,16 @@ export const getAdminProfile = asyncHandler(async (req, res) => {
     adminRole: user.role
   };
 
+  // Get employee count for admin dashboard
+  let employeeCount = 0;
+  try {
+    const { getTenantCollections } = await import('../../config/db.js');
+    const tenantCollections = getTenantCollections(user.companyId);
+    employeeCount = await tenantCollections.employees.countDocuments({ isDeleted: { $ne: true } });
+  } catch (empErr) {
+    devError('[User Profile Controller] Error counting employees:', empErr.message);
+  }
+
   const profileData = {
     // Company Information
     companyId: company._id.toString(),
@@ -1185,16 +1195,49 @@ export const getAdminProfile = asyncHandler(async (req, res) => {
     domain: company.domain || null,
     email: company.email || adminInfo.adminEmail,
     phone: company.phone || null,
+    phone2: company.phone2 || null,
+    fax: company.fax || null,
     website: company.website || null,
     description: company.description || '',
+    address: company.address || null,
+    structuredAddress: company.structuredAddress || null,
     status: company.status || 'Active',
     createdAt: company.createdAt,
+
+    // Registration & Legal (Read-Only for admin)
+    registrationNumber: company.registrationNumber || null,
+    taxId: company.taxId || null,
+    taxIdType: company.taxIdType || null,
+    legalName: company.legalName || null,
+    legalEntityType: company.legalEntityType || null,
+    incorporationCountry: company.incorporationCountry || null,
+
+    // Industry & Classification (Read-Only for admin)
+    industry: company.industry || null,
+    subIndustry: company.subIndustry || null,
+    companySize: company.companySize || null,
+    companyType: company.companyType || null,
+
+    // Contact & Founder (Read-Only for admin)
+    contactPerson: company.contactPerson || null,
+    founderName: company.founderName || null,
+
+    // Social Links (Direct Edit for admin)
+    social: company.social || null,
+
+    // Billing (Request to Edit for admin)
+    billingEmail: company.billingEmail || null,
+    billingAddress: company.billingAddress || null,
 
     // Subscription Information
     subscription: subscriptionInfo,
 
     // Admin User Information
     admin: adminInfo,
+
+    // Stats
+    employeeCount,
+    userCount: company.userCount || 0,
 
     // For compatibility with profile components
     _id: company._id.toString(),
@@ -1236,14 +1279,30 @@ export const updateAdminProfile = asyncHandler(async (req, res) => {
 
   const { companiesCollection } = getsuperadminCollections();
 
-  // Fields that admin is allowed to update
-  const allowedFields = ['phone', 'website', 'description'];
+  // Tier 1: Fields that admin is allowed to directly update
+  const allowedFields = ['phone', 'phone2', 'fax', 'website', 'description'];
   const sanitizedUpdate = {};
 
   // Build update object with only allowed fields
   for (const field of allowedFields) {
     if (updateData[field] !== undefined) {
       sanitizedUpdate[field] = updateData[field];
+    }
+  }
+
+  // Handle social links (Tier 1 - Direct Edit)
+  if (updateData.social !== undefined && typeof updateData.social === 'object') {
+    const allowedSocialFields = ['linkedin', 'twitter', 'facebook', 'instagram'];
+    const sanitizedSocial = {};
+    for (const sf of allowedSocialFields) {
+      if (updateData.social[sf] !== undefined) {
+        sanitizedSocial[sf] = updateData.social[sf];
+      }
+    }
+    if (Object.keys(sanitizedSocial).length > 0) {
+      // Merge with existing social data
+      const company = await companiesCollection.findOne({ _id: new ObjectId(user.companyId) });
+      sanitizedUpdate.social = { ...(company?.social || {}), ...sanitizedSocial };
     }
   }
 

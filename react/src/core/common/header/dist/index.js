@@ -36,15 +36,18 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 exports.__esModule = true;
-var react_1 = require("react");
-var react_router_dom_1 = require("react-router-dom");
-var react_redux_1 = require("react-redux");
 var clerk_react_1 = require("@clerk/clerk-react");
+var react_1 = require("react");
+var react_redux_1 = require("react-redux");
+var react_router_dom_1 = require("react-router-dom");
+var all_routes_1 = require("../../../feature-module/router/all_routes");
+var useGlobalSearch_1 = require("../../../hooks/useGlobalSearch");
+var useUserProfileREST_1 = require("../../../hooks/useUserProfileREST");
+var horizontalSidebar_1 = require("../../data/json/horizontalSidebar");
+var sidebarSlice_1 = require("../../data/redux/sidebarSlice");
 var themeSettingSlice_1 = require("../../data/redux/themeSettingSlice");
 var imageWithBasePath_1 = require("../imageWithBasePath");
-var sidebarSlice_1 = require("../../data/redux/sidebarSlice");
-var all_routes_1 = require("../../../feature-module/router/all_routes");
-var horizontalSidebar_1 = require("../../data/json/horizontalSidebar");
+var SearchResultsDropdown_1 = require("../SearchResultsDropdown");
 require("./customclerk.css");
 var Header = function () {
     var routes = all_routes_1.all_routes;
@@ -54,8 +57,65 @@ var Header = function () {
     // Clerk authentication hooks
     var _a = clerk_react_1.useUser(), user = _a.user, isLoaded = _a.isLoaded, isSignedIn = _a.isSignedIn;
     var signOut = clerk_react_1.useClerk().signOut;
-    var _b = react_1.useState(""), subOpen = _b[0], setSubopen = _b[1];
-    var _c = react_1.useState(""), subsidebar = _c[0], setSubsidebar = _c[1];
+    // User profile REST hook for role-based data
+    var _b = useUserProfileREST_1.useUserProfileREST(), profile = _b.profile, profileLoading = _b.loading, isAdmin = _b.isAdmin, isHR = _b.isHR, isEmployee = _b.isEmployee, isSuperadmin = _b.isSuperadmin;
+    // Determine if user should access admin profile (admin or superadmin)
+    var canAccessAdminProfile = isAdmin || isSuperadmin;
+    var _c = react_1.useState(""), subOpen = _c[0], setSubopen = _c[1];
+    var _d = react_1.useState(""), subsidebar = _d[0], setSubsidebar = _d[1];
+    var _e = react_1.useState(""), searchTerm = _e[0], setSearchTerm = _e[1];
+    var _f = react_1.useState(false), searchDropdownOpen = _f[0], setSearchDropdownOpen = _f[1];
+    var searchInputRef = react_1.useRef(null);
+    var searchContainerRef = react_1.useRef(null);
+    // Global search hook
+    var _g = useGlobalSearch_1.useGlobalSearch(), search = _g.search, results = _g.results, isLoading = _g.isLoading;
+    // Debounced search with 300ms delay
+    react_1.useEffect(function () {
+        var timer = setTimeout(function () {
+            if (searchTerm.trim()) {
+                search(searchTerm);
+                setSearchDropdownOpen(true);
+            }
+            else {
+                setSearchDropdownOpen(false);
+            }
+        }, 300);
+        return function () { return clearTimeout(timer); };
+    }, [searchTerm, search]);
+    // Handle search - emit event for page-specific handling
+    var handleSearch = function (value) {
+        setSearchTerm(value);
+        // Dispatch custom event for page-specific search handling
+        window.dispatchEvent(new CustomEvent("globalSearch", { detail: { searchTerm: value, currentPage: Location.pathname } }));
+    };
+    // Close search dropdown when clicking outside
+    react_1.useEffect(function () {
+        var handleClickOutside = function (event) {
+            if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+                setSearchDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return function () {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+    // CTRL + / keyboard shortcut to focus search input
+    react_1.useEffect(function () {
+        var handleKeyDown = function (event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === "/") {
+                event.preventDefault();
+                if (searchInputRef.current) {
+                    searchInputRef.current.focus();
+                    searchInputRef.current.select();
+                }
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return function () {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
     // Get user details with fallbacks
     var getUserName = function () {
         if (!user)
@@ -79,8 +139,8 @@ var Header = function () {
     };
     var getUserImage = function () {
         if (!user)
-            return "assets/img/profiles/avatar-12.jpg";
-        return user.imageUrl || "assets/img/profiles/avatar-12.jpg";
+            return "assets/img/profiles/profile.png";
+        return user.imageUrl || "assets/img/profiles/profile.png";
     };
     var getUserRole = function () {
         var _a;
@@ -146,7 +206,7 @@ var Header = function () {
             dispatch(sidebarSlice_1.toggleMiniSidebar());
         }
     };
-    var _d = react_1.useState(false), isFullscreen = _d[0], setIsFullscreen = _d[1];
+    var _h = react_1.useState(false), isFullscreen = _h[0], setIsFullscreen = _h[1];
     var toggleFullscreen = function () {
         if (!isFullscreen) {
             if (document.documentElement.requestFullscreen) {
@@ -197,12 +257,19 @@ var Header = function () {
                         react_1["default"].createElement("div", { className: "me-auto d-flex align-items-center", id: "header-search" },
                             react_1["default"].createElement(react_router_dom_1.Link, { id: "toggle_btn", to: "#", onClick: handleToggleMiniSidebar, className: "btn btn-menubar me-1" },
                                 react_1["default"].createElement("i", { className: "ti ti-arrow-bar-to-left" })),
-                            react_1["default"].createElement("div", { className: "input-group input-group-flat d-inline-flex me-1" },
+                            react_1["default"].createElement("div", { className: "input-group input-group-flat d-inline-flex me-1", ref: searchContainerRef, style: { position: 'relative' } },
                                 react_1["default"].createElement("span", { className: "input-icon-addon" },
                                     react_1["default"].createElement("i", { className: "ti ti-search" })),
-                                react_1["default"].createElement("input", { type: "text", className: "form-control", placeholder: "Search in HRMS" }),
-                                react_1["default"].createElement("span", { className: "input-group-text" },
+                                react_1["default"].createElement("input", { ref: searchInputRef, type: "text", className: "form-control", placeholder: "Search in HRMS", value: searchTerm, onChange: function (e) { return handleSearch(e.target.value); }, onFocus: function () { return searchTerm.trim() && setSearchDropdownOpen(true); }, title: "Search across pages (CTRL + /)", autoComplete: "off" }),
+                                isLoading && (react_1["default"].createElement("span", { className: "input-group-text", style: { cursor: 'default' } },
+                                    react_1["default"].createElement("div", { className: "spinner-border spinner-border-sm", style: { width: '1rem', height: '1rem' }, role: "status" },
+                                        react_1["default"].createElement("span", { className: "sr-only" }, "Loading...")))),
+                                !isLoading && (react_1["default"].createElement("span", { className: "input-group-text" },
                                     react_1["default"].createElement("kbd", null, "CTRL + / "))),
+                                react_1["default"].createElement(SearchResultsDropdown_1["default"], { results: results, isLoading: isLoading, isOpen: searchDropdownOpen, searchTerm: searchTerm, onSelect: function () {
+                                        setSearchTerm("");
+                                        setSearchDropdownOpen(false);
+                                    } })),
                             react_1["default"].createElement("div", { className: "dropdown crm-dropdown" },
                                 react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-menubar me-1", "data-bs-toggle": "dropdown" },
                                     react_1["default"].createElement("i", { className: "ti ti-layout-grid" })),
@@ -413,28 +480,81 @@ var Header = function () {
                                         react_1["default"].createElement(react_router_dom_1.Link, { to: routes.activity, className: "btn btn-primary w-100" }, "View All")))),
                             react_1["default"].createElement("div", { className: "dropdown profile-dropdown" },
                                 react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "dropdown-toggle d-flex align-items-center", "data-bs-toggle": "dropdown" },
-                                    react_1["default"].createElement("span", { className: "avatar avatar-sm online" }, isSignedIn ? react_1["default"].createElement(clerk_react_1.UserButton, null) : react_1["default"].createElement(react_1["default"].Fragment, null))),
+                                    react_1["default"].createElement("span", { className: "avatar avatar-sm online" }, profileLoading ? (
+                                    // Loading spinner
+                                    react_1["default"].createElement("div", { className: "spinner-border spinner-border-sm", role: "status" },
+                                        react_1["default"].createElement("span", { className: "sr-only" }, "Loading..."))) : isAdmin && profile ? (
+                                    // Admin: Show company logo or fallback
+                                    profile.companyLogo ? (react_1["default"].createElement("img", { src: profile.companyLogo, alt: "Company", className: "img-fluid rounded-circle", onError: function (e) {
+                                            e.target.src = "assets/img/profiles/profile.png";
+                                        } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Company", className: "img-fluid rounded-circle" }))) : (isHR || isEmployee) && profile ? (
+                                    // HR/Employee: Show profile image or fallback
+                                    profile.profileImage ? (react_1["default"].createElement("img", { src: profile.profileImage, alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
+                                            e.target.src = "assets/img/profiles/profile.png";
+                                        } })) : isSignedIn && (user === null || user === void 0 ? void 0 : user.imageUrl) ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
+                                            e.target.src = "assets/img/profiles/profile.png";
+                                        } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Profile", className: "img-fluid rounded-circle" }))) : isSignedIn && (user === null || user === void 0 ? void 0 : user.imageUrl) ? (
+                                    // Fallback: Show Clerk user image
+                                    react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
+                                            e.target.src = "assets/img/profiles/profile.png";
+                                        } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Profile", className: "img-fluid rounded-circle" })))),
                                 react_1["default"].createElement("div", { className: "dropdown-menu shadow-none" },
                                     react_1["default"].createElement("div", { className: "card mb-0" },
                                         react_1["default"].createElement("div", { className: "card-header" },
                                             react_1["default"].createElement("div", { className: "d-flex align-items-center" },
-                                                react_1["default"].createElement("span", { className: "avatar avatar-lg me-2 avatar-rounded" }, isSignedIn && user ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", onError: function (e) {
-                                                        // Fallback to default image if user image fails to load
-                                                        e.target.src =
-                                                            "assets/img/profiles/avatar-12.jpg";
-                                                    } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-12.jpg", alt: "img" }))),
-                                                react_1["default"].createElement("div", null,
+                                                react_1["default"].createElement("span", { className: "avatar avatar-lg me-2 avatar-rounded" }, profileLoading ? (
+                                                // Loading spinner
+                                                react_1["default"].createElement("div", { className: "spinner-border spinner-border-sm", role: "status" },
+                                                    react_1["default"].createElement("span", { className: "sr-only" }, "Loading..."))) : isAdmin && profile ? (
+                                                // Admin: Show company logo or fallback
+                                                profile.companyLogo ? (react_1["default"].createElement("img", { src: profile.companyLogo, alt: "Company Logo", className: "img-fluid rounded-circle", onError: function (e) {
+                                                        e.target.src = "assets/img/profiles/profile.png";
+                                                    } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Company", className: "img-fluid rounded-circle" }))) : (isHR || isEmployee) && profile ? (
+                                                // HR/Employee: Show profile image or fallback
+                                                profile.profileImage ? (react_1["default"].createElement("img", { src: profile.profileImage, alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
+                                                        e.target.src = "assets/img/profiles/profile.png";
+                                                    } })) : isSignedIn && (user === null || user === void 0 ? void 0 : user.imageUrl) ? (react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", className: "img-fluid rounded-circle", onError: function (e) {
+                                                        e.target.src = "assets/img/profiles/profile.png";
+                                                    } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Profile", className: "img-fluid rounded-circle" }))) : isSignedIn && user ? (
+                                                // Fallback: Show Clerk user image
+                                                react_1["default"].createElement("img", { src: getUserImage(), alt: "Profile", onError: function (e) {
+                                                        e.target.src = "assets/img/profiles/profile.png";
+                                                    } })) : (react_1["default"].createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/profile.png", alt: "Profile", className: "img-fluid rounded-circle" }))),
+                                                react_1["default"].createElement("div", null, profileLoading ? (react_1["default"].createElement(react_1["default"].Fragment, null,
+                                                    react_1["default"].createElement("h5", { className: "mb-0" }, "Loading..."),
+                                                    react_1["default"].createElement("p", { className: "fs-12 fw-medium mb-0" }, "Please wait"))) : isAdmin && profile ? (
+                                                // Admin: Display company information
+                                                react_1["default"].createElement(react_1["default"].Fragment, null,
+                                                    react_1["default"].createElement("h5", { className: "mb-0" }, profile.companyName || 'Company'),
+                                                    react_1["default"].createElement("p", { className: "fs-12 fw-medium mb-0" }, profile.email || 'No email'),
+                                                    react_1["default"].createElement("p", { className: "fs-10 text-muted mb-0" }, "Role: Admin"),
+                                                    react_1["default"].createElement("p", { className: "fs-10 text-muted mt-0 mb-0" },
+                                                        "CId: ",
+                                                        profile.companyId || 'N/A'))) : (isHR || isEmployee) && profile ? (
+                                                // HR/Employee: Display employee information
+                                                react_1["default"].createElement(react_1["default"].Fragment, null,
+                                                    react_1["default"].createElement("h5", { className: "mb-0" },
+                                                        profile.firstName || '',
+                                                        " ",
+                                                        profile.lastName || ''),
+                                                    react_1["default"].createElement("p", { className: "fs-12 fw-medium mb-0" }, profile.email || 'No email'),
+                                                    react_1["default"].createElement("p", { className: "fs-10 text-muted mb-0" },
+                                                        "Role: ",
+                                                        isHR ? 'HR' : 'Employee'),
+                                                    react_1["default"].createElement("p", { className: "fs-10 text-muted mt-0 mb-0" },
+                                                        "Emp ID: ",
+                                                        profile.employeeId || 'N/A'))) : (
+                                                // Fallback: Display Clerk user data
+                                                react_1["default"].createElement(react_1["default"].Fragment, null,
                                                     react_1["default"].createElement("h5", { className: "mb-0" }, getUserName()),
                                                     react_1["default"].createElement("p", { className: "fs-12 fw-medium mb-0" }, getUserEmail()),
                                                     isSignedIn && user ? (react_1["default"].createElement(react_1["default"].Fragment, null,
                                                         react_1["default"].createElement("p", { className: "fs-10 text-muted mb-0" },
                                                             "Role: ",
                                                             getUserRole()),
-                                                        react_1["default"].createElement("p", { className: "fs-10 text-muted mt-0 mb-0" },
-                                                            "CId: ",
-                                                            getCompanyId()))) : null))),
+                                                        react_1["default"].createElement("p", { className: "fs-10 text-muted mt-0 mb-0" }, getUserRole() === 'admin' ? "CId: " + getCompanyId() : "Emp ID: N/A"))) : null))))),
                                         react_1["default"].createElement("div", { className: "card-body" },
-                                            react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item d-inline-flex align-items-center p-0 py-2", to: routes.profile },
+                                            react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item d-inline-flex align-items-center p-0 py-2", to: canAccessAdminProfile ? routes.adminProfile : routes.profile },
                                                 react_1["default"].createElement("i", { className: "ti ti-user-circle me-1" }),
                                                 "My Profile"),
                                             react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item d-inline-flex align-items-center p-0 py-2", to: routes.bussinessSettings },
@@ -461,7 +581,7 @@ var Header = function () {
                     react_1["default"].createElement(react_router_dom_1.Link, { to: "#", className: "nav-link dropdown-toggle", "data-bs-toggle": "dropdown", "aria-expanded": "false" },
                         react_1["default"].createElement("i", { className: "fa fa-ellipsis-v" })),
                     react_1["default"].createElement("div", { className: "dropdown-menu dropdown-menu-end" },
-                        react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: routes.profile }, "My Profile"),
+                        react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: isAdmin ? routes.adminProfile : routes.profile }, "My Profile"),
                         react_1["default"].createElement(react_router_dom_1.Link, { className: "dropdown-item", to: routes.profilesettings }, "Settings"),
                         react_1["default"].createElement("button", { className: "dropdown-item btn btn-link text-start", onClick: handleSignOut, style: { border: "none", background: "none", width: "100%" } }, "Logout")))))));
 };

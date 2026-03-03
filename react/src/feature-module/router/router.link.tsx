@@ -293,6 +293,7 @@ import Promotion from '../hrm/promotion';
 import Resignation from '../hrm/resignation';
 import Termination from '../hrm/termination';
 import Companies from '../super-admin/companies';
+import CompanyDetailsPage from '../super-admin/companies/company-details';
 import Domain from '../super-admin/domin';
 import { default as PackageGrid, default as Packages } from '../super-admin/packages/packagelist';
 import PurchaseTransaction from '../super-admin/purchase-transaction';
@@ -1452,7 +1453,7 @@ export const publicRoutes = [
   {
     path: routes.adminProfile,
     element: <AdminProfilePage />,
-    roles: ['admin'],
+    roles: ['admin', 'superadmin'],
   },
   {
     path: routes.gallery,
@@ -1978,6 +1979,12 @@ export const publicRoutes = [
   {
     path: routes.superAdminCompanies,
     element: <Companies />,
+    route: Route,
+    roles: ['superadmin'],
+  },
+  {
+    path: routes.superAdminCompanyDetails,
+    element: <CompanyDetailsPage />,
     route: Route,
     roles: ['superadmin'],
   },

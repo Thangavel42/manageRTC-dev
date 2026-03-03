@@ -26,7 +26,10 @@ const Header = (): JSX.Element => {
   const { signOut } = useClerk();
 
   // User profile REST hook for role-based data
-  const { profile, loading: profileLoading, isAdmin, isHR, isEmployee } = useUserProfileREST();
+  const { profile, loading: profileLoading, isAdmin, isHR, isEmployee, isSuperadmin } = useUserProfileREST();
+
+  // Determine if user should access admin profile (admin or superadmin)
+  const canAccessAdminProfile = isAdmin || isSuperadmin;
 
   const [subOpen, setSubopen] = useState<any>("");
   const [subsidebar, setSubsidebar] = useState("");
@@ -183,13 +186,13 @@ const Header = (): JSX.Element => {
   const toggleFullscreen = () => {
     if (!isFullscreen) {
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch((err) => {});
+        document.documentElement.requestFullscreen().catch((err) => { });
         setIsFullscreen(true);
       }
     } else {
       if (document.exitFullscreen) {
         if (document.fullscreenElement) {
-          document.exitFullscreen().catch((err) => {});
+          document.exitFullscreen().catch((err) => { });
         }
         setIsFullscreen(false);
       }
@@ -414,12 +417,11 @@ const Header = (): JSX.Element => {
                               <Link
                                 to="#"
                                 className={`
-                                  ${
-                                    data?.subMenus
-                                      ?.map((link: any) => link?.route)
-                                      .includes(Location.pathname)
-                                      ? "active"
-                                      : ""
+                                  ${data?.subMenus
+                                    ?.map((link: any) => link?.route)
+                                    .includes(Location.pathname)
+                                    ? "active"
+                                    : ""
                                   } ${subOpen === data.menuValue ? "subdrop" : ""}`}
                                 onClick={() => toggleSidebar(data.menuValue)}
                               >
@@ -446,18 +448,16 @@ const Header = (): JSX.Element => {
                                   >
                                     <Link
                                       to={subMenu?.route || "#"}
-                                      className={`${
-                                        subMenu?.subMenusTwo
-                                          ?.map((link: any) => link?.route)
-                                          .includes(Location.pathname) ||
+                                      className={`${subMenu?.subMenusTwo
+                                        ?.map((link: any) => link?.route)
+                                        .includes(Location.pathname) ||
                                         subMenu?.route === Location.pathname
-                                          ? "active"
-                                          : ""
-                                      } ${
-                                        subsidebar === subMenu.menuValue
+                                        ? "active"
+                                        : ""
+                                        } ${subsidebar === subMenu.menuValue
                                           ? "subdrop"
                                           : ""
-                                      }`}
+                                        }`}
                                       onClick={() =>
                                         toggleSubsidebar(subMenu.menuValue)
                                       }
@@ -485,7 +485,7 @@ const Header = (): JSX.Element => {
                                                 <Link
                                                   className={
                                                     subMenuTwo.route ===
-                                                    Location.pathname
+                                                      Location.pathname
                                                       ? "active"
                                                       : ""
                                                   }
@@ -956,7 +956,7 @@ const Header = (): JSX.Element => {
                       <div className="card-body">
                         <Link
                           className="dropdown-item d-inline-flex align-items-center p-0 py-2"
-                          to={routes.profile}
+                          to={canAccessAdminProfile ? routes.adminProfile : routes.profile}
                         >
                           <i className="ti ti-user-circle me-1"></i>My Profile
                         </Link>
@@ -1017,7 +1017,7 @@ const Header = (): JSX.Element => {
               <i className="fa fa-ellipsis-v"></i>
             </Link>
             <div className="dropdown-menu dropdown-menu-end">
-              <Link className="dropdown-item" to={routes.profile}>
+              <Link className="dropdown-item" to={isAdmin ? routes.adminProfile : routes.profile}>
                 My Profile
               </Link>
               <Link className="dropdown-item" to={routes.profilesettings}>
