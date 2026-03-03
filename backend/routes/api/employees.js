@@ -12,7 +12,9 @@ import {
     checkLifecycleStatus,
     createEmployee,
     deleteEmployee,
-    deleteEmployeeProfileImage, getActiveEmployeesList, getEmployeeById,
+    deleteEmployeeProfileImage,
+    exportEmployees,
+    getActiveEmployeesList, getEmployeeById,
     getEmployeeReportees,
     getEmployees, getEmployeeStatsByDepartment,
     getMyProfile,
@@ -119,6 +121,15 @@ router.post(
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),
   checkLifecycleStatus
+);
+
+// Export employees (PDF/Excel)
+router.get(
+  '/export',
+  authenticate,
+  requireCompany,
+  requireRole('admin', 'hr', 'superadmin'),
+  exportEmployees
 );
 
 // Create new employee

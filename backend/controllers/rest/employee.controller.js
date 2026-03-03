@@ -5,7 +5,9 @@
  */
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
+import ExcelJS from 'exceljs';
 import { ObjectId } from 'mongodb';
+import PDFDocument from 'pdfkit';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
@@ -13,8 +15,8 @@ import {
     buildNotFoundError,
     buildValidationError
 } from '../../middleware/errorHandler.js';
-import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
+import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
     buildPagination,
     extractUser,
@@ -185,6 +187,47 @@ const formatEmployeeDates = (employee) => {
   }
 
   return formatted;
+};
+
+const DEFAULT_EXPORT_COLUMNS = ['employeeId', 'name', 'email', 'phone', 'department', 'role', 'status'];
+
+const parseQueryDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+      const [day, month, year] = value.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const getInclusiveEndDate = (value) => {
+  if (!value) return null;
+  const end = new Date(value);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
+const resolveHrDepartmentId = async (collections, employeeId) => {
+  if (!employeeId) return null;
+
+  const baseFilter = { isDeleted: { $ne: true } };
+
+  if (ObjectId.isValid(employeeId)) {
+    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId), ...baseFilter });
+    if (employee?.departmentId) {
+      return employee.departmentId;
+    }
+  }
+
+  const employeeByCode = await collections.employees.findOne({ employeeId, ...baseFilter });
+  return employeeByCode?.departmentId || null;
 };
 
 /**
@@ -577,6 +620,269 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const pagination = buildPagination(pageNum, limitNum, total);
 
   return sendSuccess(res, formattedEmployees, 'Employees retrieved successfully', 200, pagination);
+});
+
+/**
+ * @desc    Export employees as PDF or Excel with filters
+ * @route   GET /api/employees/export
+ * @access  Private (Admin, HR, Superadmin)
+ */
+export const exportEmployees = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const {
+    type = 'pdf',
+    department,
+    status,
+    fromDate,
+    toDate,
+    sortBy,
+    order,
+    columns
+  } = req.query || {};
+
+  const exportType = String(type).toLowerCase();
+  if (!['pdf', 'excel'].includes(exportType)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_EXPORT_TYPE',
+        message: 'Export type must be pdf or excel'
+      }
+    });
+  }
+
+  if (!['admin', 'hr', 'superadmin'].includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'NOT_AUTHORIZED',
+        message: 'Not authorized to export employees'
+      }
+    });
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const filter = { isDeleted: { $ne: true } };
+
+  if (status && status !== 'none') {
+    filter.status = status;
+  }
+
+  if (user.role === 'hr') {
+    const hrDepartmentId = await resolveHrDepartmentId(collections, user.employeeId);
+    if (!hrDepartmentId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'NOT_AUTHORIZED',
+          message: 'HR user department not found for export'
+        }
+      });
+    }
+    filter.departmentId = hrDepartmentId;
+  } else if (department && department !== 'none') {
+    filter.departmentId = department;
+  }
+
+  const start = parseQueryDate(fromDate);
+  const end = getInclusiveEndDate(parseQueryDate(toDate));
+  if (start && end) {
+    filter.createdAt = { $gte: start, $lte: end };
+  }
+
+  const normalizedOrder = (order || '').toString().toLowerCase();
+  const sortField = sortBy === 'name' || sortBy === 'fullName' ? 'fullName' : sortBy || 'createdAt';
+  const sortDirection = normalizedOrder === 'desc' ? -1 : 1;
+  const sortObj = { [sortField]: sortDirection };
+
+  const selectedColumns =
+    typeof columns === 'string' && columns.trim() !== ''
+      ? columns
+          .split(',')
+          .map((col) => col.trim())
+          .filter((col) => DEFAULT_EXPORT_COLUMNS.includes(col))
+      : DEFAULT_EXPORT_COLUMNS;
+  const exportColumns = selectedColumns.length > 0 ? selectedColumns : DEFAULT_EXPORT_COLUMNS;
+
+  const pipeline = [
+    { $match: filter },
+    {
+      $addFields: {
+        departmentObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+            then: { $toObjectId: '$departmentId' },
+            else: null
+          }
+        },
+        designationObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
+            then: { $toObjectId: '$designationId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'departmentObjId',
+        foreignField: '_id',
+        as: 'departmentInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'designations',
+        localField: 'designationObjId',
+        foreignField: '_id',
+        as: 'designationInfo'
+      }
+    },
+    {
+      $addFields: {
+        department: { $arrayElemAt: ['$departmentInfo', 0] },
+        designation: { $arrayElemAt: ['$designationInfo', 0] },
+        fullName: {
+          $ifNull: [
+            '$fullName',
+            {
+              $concat: [
+                { $ifNull: ['$firstName', ''] },
+                ' ',
+                { $ifNull: ['$lastName', ''] }
+              ]
+            }
+          ]
+        },
+        contactEmail: '$contact.email',
+        contactPhone: '$contact.phone'
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        employeeId: 1,
+        firstName: 1,
+        lastName: 1,
+        fullName: 1,
+        email: 1,
+        phone: 1,
+        contactEmail: 1,
+        contactPhone: 1,
+        departmentId: 1,
+        department: 1,
+        designation: 1,
+        role: 1,
+        account: 1,
+        status: 1,
+        createdAt: 1
+      }
+    },
+    { $sort: sortObj }
+  ];
+
+  const employees = await collections.employees.aggregate(pipeline).toArray();
+  const normalizedEmployees = employees.map((emp) => ({
+    ...emp,
+    status: normalizeStatus(emp.status)
+  }));
+
+  const columnDefinitions = {
+    employeeId: {
+      header: 'Employee ID',
+      width: 16,
+      getValue: (emp) => emp.employeeId || ''
+    },
+    name: {
+      header: 'Name',
+      width: 26,
+      getValue: (emp) => (emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`).trim()
+    },
+    email: {
+      header: 'Email',
+      width: 30,
+      getValue: (emp) => emp.email || emp.contactEmail || ''
+    },
+    phone: {
+      header: 'Phone',
+      width: 18,
+      getValue: (emp) => {
+        const phoneVal = emp.phone || emp.contactPhone;
+        if (Array.isArray(phoneVal)) {
+          return phoneVal.filter(Boolean).join(', ');
+        }
+        return phoneVal || '';
+      }
+    },
+    department: {
+      header: 'Department',
+      width: 22,
+      getValue: (emp) => emp.department?.department || emp.department?.name || ''
+    },
+    role: {
+      header: 'Role',
+      width: 18,
+      getValue: (emp) => emp.account?.role || emp.role || ''
+    },
+    status: {
+      header: 'Status',
+      width: 14,
+      getValue: (emp) => normalizeStatus(emp.status)
+    }
+  };
+
+  if (exportType === 'excel') {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Employees');
+
+    worksheet.columns = exportColumns.map((key) => ({
+      header: columnDefinitions[key].header,
+      key,
+      width: columnDefinitions[key].width
+    }));
+
+    normalizedEmployees.forEach((emp) => {
+      const row = {};
+      exportColumns.forEach((key) => {
+        row[key] = columnDefinitions[key].getValue(emp);
+      });
+      worksheet.addRow(row);
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="employees.xlsx"');
+
+    await workbook.xlsx.write(res);
+    return res.end();
+  }
+
+  // Default to PDF export
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="employees.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  doc.pipe(res);
+
+  doc.fontSize(16).text('Employee List', { align: 'center' });
+  doc.moveDown();
+
+  normalizedEmployees.forEach((emp, index) => {
+    exportColumns.forEach((key) => {
+      const value = columnDefinitions[key].getValue(emp) || '-';
+      doc.fontSize(11).text(`${columnDefinitions[key].header}: ${value}`);
+    });
+
+    if (index < normalizedEmployees.length - 1) {
+      doc.moveDown();
+    }
+  });
+
+  doc.end();
 });
 
 /**
@@ -2724,5 +3030,6 @@ export default {
   deleteEmployeeProfileImage,
   serveEmployeeProfileImage,
   sendEmployeeCredentials,
+  exportEmployees,
   changeEmployeePassword,
 };
