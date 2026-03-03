@@ -5,8 +5,8 @@
  * Includes account number masking for security in view mode
  */
 
-import React, { useState } from 'react';
 import { Button } from 'antd';
+import React, { useState } from 'react';
 import CommonSelect from '../../../../core/common/commonSelect';
 import { PermissionField } from '../../../../core/components/PermissionField';
 import { ChangeRequestModal } from '../../../../core/modals/ChangeRequestModal';
@@ -17,7 +17,7 @@ export interface BankInfo {
   accountNumber?: string;
   ifscCode?: string;
   branch?: string;
-  accountType?: 'Savings' | 'Current';
+  accountType?: 'Savings Account' | 'Salary Account' | 'NRI Account';
 }
 
 interface BankInfoSectionProps {
@@ -32,8 +32,9 @@ interface BankInfoSectionProps {
 // Account Type Options
 const accountTypeOptions = [
   { value: 'Select', label: 'Select' },
-  { value: 'Savings', label: 'Savings' },
-  { value: 'Current', label: 'Current' }
+  { value: 'Savings Account', label: 'Savings Account' },
+  { value: 'Salary Account', label: 'Salary Account' },
+  { value: 'NRI Account', label: 'NRI Account' }
 ];
 
 /**

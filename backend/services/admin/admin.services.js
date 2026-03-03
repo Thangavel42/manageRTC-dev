@@ -390,18 +390,21 @@ export const getEmployeeStatus = async (
     // Get date filter for employee creation
     const dateFilter = getDateFilter(filter);
     const yearFilter = getYearFilter(year);
-    const employeeMatchFilter = { status: "Active" };
+
+    // Filter for distribution breakdown (can include date/year filter)
+    const distributionMatchFilter = { isDeleted: { $ne: true } };
 
     if (dateFilter) {
-      employeeMatchFilter.createdAt = dateFilter;
+      distributionMatchFilter.createdAt = dateFilter;
     } else if (yearFilter) {
-      employeeMatchFilter.createdAt = yearFilter;
+      distributionMatchFilter.createdAt = yearFilter;
     }
 
-    const [statusData, topPerformer] = await Promise.all([
+    const [statusData, topPerformer, totalEmployees] = await Promise.all([
+      // Get employment type distribution
       collections.employees
         .aggregate([
-          { $match: employeeMatchFilter },
+          { $match: distributionMatchFilter },
           {
             $group: {
               _id: "$employmentType",
@@ -411,15 +414,15 @@ export const getEmployeeStatus = async (
         ])
         .toArray(),
 
+      // Get top performer (from active employees)
       collections.employees.findOne(
-        { status: "Active" },
+        { status: "Active", isDeleted: { $ne: true } },
         { sort: { performance: -1 } }
       ),
-    ]);
 
-    const totalEmployees = await collections.employees.countDocuments(
-      employeeMatchFilter
-    );
+      // Get TOTAL employee count (all employees, excluding soft-deleted)
+      collections.employees.countDocuments({ isDeleted: { $ne: true } })
+    ]);
 
     const statusDistribution = statusData.reduce((acc, curr) => {
       acc[curr._id || "Other"] = curr.count;
@@ -434,8 +437,8 @@ export const getEmployeeStatus = async (
         topPerformer: topPerformer
           ? {
               name: `${topPerformer.firstName} ${topPerformer.lastName}`,
-              position: topPerformer.position,
-              performance: topPerformer.performance || 95,
+              position: topPerformer.position || 'Employee',
+              performance: topPerformer.performance || null,
               avatar:
                 topPerformer.avatar || "assets/img/profiles/avatar-24.jpg",
             }
@@ -1155,13 +1158,18 @@ export const getProjectsData = async (
         {
           $project: {
             id: { $toString: "$_id" },
+            projectId: 1,
             name: 1,
-            hours: 1,
-            totalHours: 1,
+            hours: { $ifNull: ["$hours", 0] },
+            totalHours: { $ifNull: ["$totalHours", 100] },
             deadline: 1,
             priority: 1,
             progress: {
-              $multiply: [{ $divide: ["$hours", "$totalHours"] }, 100],
+              $cond: {
+                if: { $eq: [{ $ifNull: ["$totalHours", 0] }, 0] },
+                then: 0,
+                else: { $multiply: [{ $divide: [{ $ifNull: ["$hours", 0] }, { $ifNull: ["$totalHours", 100] }] }, 100] }
+              }
             },
             team: {
               $map: {

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { useBatchesREST } from "../../hooks/useBatchesREST";
 import { useDepartmentsREST } from "../../hooks/useDepartmentsREST";
 import { useDesignationsREST } from "../../hooks/useDesignationsREST";
+import { useEmailChange } from "../../hooks/useEmailChange";
 import { useEmployeesREST } from "../../hooks/useEmployeesREST";
 import { useShiftsREST } from "../../hooks/useShiftsREST";
 import CommonSelect from "../common/commonSelect";
@@ -203,14 +204,16 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const { departments, fetchDepartments } = useDepartmentsREST();
   const { designations, fetchDesignations } = useDesignationsREST();
   const { batches, fetchBatches } = useBatchesREST();
-  const { shifts: allShifts } = useShiftsREST();
-  const { createEmployee, checkEmailAvailability, fetchActiveEmployeesList, employees } = useEmployeesREST();
+  const { shifts: allShifts, defaultShift, fetchDefaultShift } = useShiftsREST();
+  const { createEmployee, fetchActiveEmployeesList, employees } = useEmployeesREST();
+  const emailChange = useEmailChange();
 
   // Load departments, batches, and employees on mount
   useEffect(() => {
     fetchDepartments();
     fetchBatches();
     fetchActiveEmployeesList();
+    fetchDefaultShift();
     // Load countries for address dropdown
     GetCountries().then((result: any) => {
       setCountries(result);
@@ -233,8 +236,14 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     return `${name}${id}${departmentText}`;
   }, [department]);
 
+  // Special constant for self-reporting
+  const SELF_REPORTING = 'SELF_REPORTING';
+
   // Sync managers from employees (all active employees)
   useEffect(() => {
+    // Always include "Self Reporting" option
+    const selfReportingOption = { value: SELF_REPORTING, label: 'Self Reporting (Reports to themselves)' };
+
     if (employees && employees.length > 0) {
       const managersList = employees
         .filter((emp: any) => (emp.status || '').toLowerCase() === 'active')
@@ -242,7 +251,10 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           value: emp._id,
           label: getEmployeeOptionLabel(emp),
         }));
-      setManagers([{ value: '', label: 'Select Reporting Manager' }, ...managersList]);
+      setManagers([{ value: '', label: 'Select Reporting Manager' }, selfReportingOption, ...managersList]);
+    } else {
+      // When no employees exist (first user scenario), only show Self Reporting option
+      setManagers([{ value: '', label: 'Select Reporting Manager' }, selfReportingOption]);
     }
   }, [employees, department, getEmployeeOptionLabel]);
 
@@ -278,7 +290,9 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     if (allShifts || batches) {
       const directShifts = allShifts?.map((shift: any) => ({
         value: shift._id,
-        label: shift.shiftName || shift.name,
+        label: shift.isDefault
+          ? `${shift.shiftName || shift.name} (Default)`
+          : (shift.shiftName || shift.name),
         type: 'shift' as const,
         data: shift
       })) || [{ value: '', label: 'Select Shift', type: 'shift' as const }];
@@ -296,6 +310,19 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       });
     }
   }, [allShifts, batches]);
+
+  // Auto-select default shift when modal opens or when default shift is fetched
+  useEffect(() => {
+    // Only auto-select if no shift is currently selected and a default shift exists
+    if (defaultShift && !selectedShiftAssignment.type && !formData.shiftId && !formData.batchId) {
+      setSelectedShiftAssignment({ type: 'shift', value: defaultShift._id });
+      setFormData((prev) => ({
+        ...prev,
+        shiftId: defaultShift._id,
+        batchId: '',
+      }));
+    }
+  }, [defaultShift]);
 
   // Initialize form data from props if provided
   useEffect(() => {
@@ -321,13 +348,28 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   };
 
   const handleResetFormData = () => {
-    setFormData(initialFormDataState());
+    const newFormData = initialFormDataState();
+
+    // Pre-fill with default shift if available
+    if (defaultShift) {
+      newFormData.shiftId = defaultShift._id;
+      newFormData.batchId = '';
+    }
+
+    setFormData(newFormData);
     setFieldErrors({});
     setSelectedDepartment("");
     setSelectedDesignation("");
     setIsDesignationDisabled(true);
     setLoadingDesignations(false);
-    setSelectedShiftAssignment({ type: null, value: '' });
+
+    // Reset to default shift selection
+    if (defaultShift) {
+      setSelectedShiftAssignment({ type: 'shift', value: defaultShift._id });
+    } else {
+      setSelectedShiftAssignment({ type: null, value: '' });
+    }
+
     setEmailValidation({ checking: false, available: false, error: '' });
     setEmailTouched(false);
     if (emailCheckTimeoutRef.current) {
@@ -385,18 +427,29 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
     const runAvailabilityCheck = async () => {
       try {
-        const available = await checkEmailAvailability(trimmed);
-        if (available) {
+        // Use useEmailChange hook which checks both Clerk and Database
+        const result = await emailChange.checkEmailAvailability(trimmed);
+
+        if (result && result.available && result.valid) {
           setEmailValidation({ checking: false, available: true, error: "" });
           setFieldErrors((prev) => {
             const { email, ...rest } = prev;
             return rest;
           });
-        } else {
-          setEmailValidation({ checking: false, available: false, error: "Email is already registered" });
+        } else if (result) {
+          // Email is not available - show the message from the API
+          const errorMessage = result.message || "This email is already registered. Please use a different email.";
+          setEmailValidation({ checking: false, available: false, error: errorMessage });
           setFieldErrors((prev) => ({
             ...prev,
-            email: "This email is already registered. Please use a different email.",
+            email: errorMessage,
+          }));
+        } else {
+          // API call failed
+          setEmailValidation({ checking: false, available: false, error: "Failed to check availability" });
+          setFieldErrors((prev) => ({
+            ...prev,
+            email: "Failed to check email availability",
           }));
         }
       } catch (err) {
@@ -560,10 +613,22 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     if (!formData.account.role) errors.role = "Role is required";
     if (!formData.departmentId) errors.departmentId = "Department is required";
     if (!formData.designationId) errors.designationId = "Designation is required";
+    if (!formData.reportingTo) errors.reportingTo = "Reporting Manager is required";
     if (!formData.dateOfJoining) errors.dateOfJoining = "Date of joining is required";
     if (!formData.gender) errors.gender = "Gender is required";
     if (!formData.dateOfBirth) errors.birthday = "Date of birth is required";
     if (!formData.personal?.nationality?.trim()) errors.nationality = "Nationality is required";
+
+    // Address fields validation
+    if (!formData.address?.street?.trim()) errors.street = "Street address is required";
+    if (!formData.address?.city?.trim()) errors.city = "City is required";
+    if (!formData.address?.country?.trim()) errors.country = "Country is required";
+    if (!formData.address?.state?.trim()) errors.state = "State is required";
+    if (!formData.address?.postalCode?.trim()) {
+      errors.postalCode = "Postal code is required";
+    } else if (!/^[a-zA-Z0-9\s-]{3,10}$/.test(formData.address.postalCode.trim())) {
+      errors.postalCode = "Please enter a valid postal code";
+    }
 
     // Passport expiry date is required only if passport number is filled
     if (formData.personal?.passport?.number?.trim() && !formData.personal?.passport?.expiryDate) {
@@ -609,16 +674,24 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       return;
     }
 
-    // Async validation for email availability
+    // Async validation for email availability (checks both Clerk and Database)
     setIsValidating(true);
     try {
-      const isEmailAvailable = await checkEmailAvailability(formData.email);
-      if (!isEmailAvailable) {
+      const emailResult = await emailChange.checkEmailAvailability(formData.email.trim());
+
+      if (!emailResult) {
+        toast.error("Failed to validate email. Please try again.");
+        setIsValidating(false);
+        return;
+      }
+
+      if (!emailResult.available || !emailResult.valid) {
+        const errorMessage = emailResult.message || "This email is already registered. Please use a different email.";
         setFieldErrors((prev) => ({
           ...prev,
-          email: "This email is already registered. Please use a different email."
+          email: errorMessage
         }));
-        toast.error("This email is already registered. Please use a different email.");
+        toast.error(errorMessage);
         setIsValidating(false);
         return;
       }
@@ -637,8 +710,23 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       // Remove fields not allowed in backend validation schema
       // Note: shiftId and batchId are now saved with the employee
 
-      // Remove reportingTo if it's empty (optional field)
-      if (!payload.reportingTo || payload.reportingTo.trim() === '') {
+      // Clean personal object to only include fields managed in this modal
+      // This prevents validation errors for fields not present in the UI
+      if (payload.personal) {
+        payload.personal = {
+          nationality: payload.personal.nationality || "",
+          passport: {
+            number: payload.personal.passport?.number || "",
+            expiryDate: payload.personal.passport?.expiryDate || null,
+            country: payload.personal.passport?.country || ""
+          }
+        };
+      }
+
+      // Handle Self Reporting - set special flag for backend to handle
+      // The backend will set reportingTo to the employee's own _id after creation
+      if (payload.reportingTo === 'SELF_REPORTING') {
+        payload.selfReporting = true;
         delete payload.reportingTo;
       }
 
@@ -989,46 +1077,50 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Address</label>
                       <div className="mb-3">
-                        <label className="form-label">Street</label>
+                        <label className="form-label">Street <span className="text-danger"> *</span></label>
                         <input
                           type="text"
-                          className="form-control"
+                          className={`form-control ${fieldErrors.street ? "is-invalid" : ""}`}
                           placeholder="Enter street address"
                           name="street"
                           value={formData.address?.street || ""}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setFormData((prev) => ({
                               ...prev,
                               address: { ...prev.address, street: e.target.value },
-                            }))
-                          }
+                            }));
+                            clearFieldError("street");
+                          }}
                         />
+                        {fieldErrors.street && <div className="invalid-feedback d-block">{fieldErrors.street}</div>}
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">City</label>
+                            <label className="form-label">City <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.city ? "is-invalid" : ""}`}
                               placeholder="Enter city"
                               name="city"
                               value={formData.address?.city || ""}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setFormData((prev) => ({
                                   ...prev,
                                   address: { ...prev.address, city: e.target.value },
-                                }))
-                              }
+                                }));
+                                clearFieldError("city");
+                              }}
                             />
+                            {fieldErrors.city && <div className="invalid-feedback d-block">{fieldErrors.city}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Country</label>
+                            <label className="form-label">Country <span className="text-danger"> *</span></label>
                             <div className="input-icon-end position-relative">
                               <select
-                                className="form-select"
+                                className={`form-select ${fieldErrors.country ? "is-invalid" : ""}`}
                                 value={selectedCountryId || ""}
                                 onChange={(e) => {
                                   const countryId = e.target.value ? parseInt(e.target.value) : null;
@@ -1038,6 +1130,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                     ...prev,
                                     address: { ...prev.address, country: selectedCountry?.name || "", state: "" },
                                   }));
+                                  clearFieldError("country");
                                   // Load states for selected country
                                   if (countryId) {
                                     GetState(countryId).then((result: any) => {
@@ -1059,24 +1152,26 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                 <i className="ti ti-chevron-down text-gray-7" />
                               </span>
                             </div>
+                            {fieldErrors.country && <div className="invalid-feedback d-block">{fieldErrors.country}</div>}
                           </div>
                         </div>
                       </div>
                       <div className="row">
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">State</label>
+                            <label className="form-label">State <span className="text-danger"> *</span></label>
                             <div className="input-icon-end position-relative">
                               <select
-                                className="form-select"
+                                className={`form-select ${fieldErrors.state ? "is-invalid" : ""}`}
                                 value={formData.address?.state || ""}
                                 disabled={!selectedCountryId}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData((prev) => ({
                                     ...prev,
                                     address: { ...prev.address, state: e.target.value },
-                                  }))
-                                }
+                                  }));
+                                  clearFieldError("state");
+                                }}
                               >
                                 <option value="">Select State</option>
                                 {states.map((state) => (
@@ -1089,24 +1184,27 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                                 <i className="ti ti-chevron-down text-gray-7" />
                               </span>
                             </div>
+                            {fieldErrors.state && <div className="invalid-feedback d-block">{fieldErrors.state}</div>}
                           </div>
                         </div>
                         <div className="col-md-6">
                           <div className="mb-3">
-                            <label className="form-label">Postal Code</label>
+                            <label className="form-label">Postal Code <span className="text-danger"> *</span></label>
                             <input
                               type="text"
-                              className="form-control"
+                              className={`form-control ${fieldErrors.postalCode ? "is-invalid" : ""}`}
                               placeholder="Enter postal code"
                               name="postalCode"
                               value={formData.address?.postalCode || ""}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setFormData((prev) => ({
                                   ...prev,
                                   address: { ...prev.address, postalCode: e.target.value },
-                                }))
-                              }
+                                }));
+                                clearFieldError("postalCode");
+                              }}
                             />
+                            {fieldErrors.postalCode && <div className="invalid-feedback d-block">{fieldErrors.postalCode}</div>}
                           </div>
                         </div>
                       </div>
@@ -1269,17 +1367,19 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Reporting Manager <span className="text-muted">(Optional)</span></label>
+                      <label className="form-label">Reporting Manager <span className="text-danger">*</span></label>
                       <CommonSelect
-                        className="select"
+                        className={`select ${fieldErrors.reportingTo ? 'is-invalid' : ''}`}
                         options={managers}
                         defaultValue={managers.find((opt) => opt.value === formData.reportingTo)}
                         onChange={(option: any) => {
                           if (option) {
                             setFormData((prev) => ({ ...prev, reportingTo: option.value }));
+                            clearFieldError('reportingTo');
                           }
                         }}
                       />
+                      {fieldErrors.reportingTo && <div className="invalid-feedback d-block">{fieldErrors.reportingTo}</div>}
                     </div>
                   </div>
                   <div className="col-md-6">

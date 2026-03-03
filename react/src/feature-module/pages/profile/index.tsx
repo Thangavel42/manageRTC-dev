@@ -544,7 +544,7 @@ const BasicInfoSection: React.FC<{
                 {profile.phone && (
                   <span className="text-muted">
                     <i className="ti ti-phone me-1" />
-                    {profile.phone}
+                    {profile.phoneCode ? `${profile.phoneCode} ${profile.phone}` : profile.phone}
                   </span>
                 )}
               </div>
@@ -1131,11 +1131,12 @@ const BankInfoSection: React.FC<{ formData: any; isEditing: boolean; onChange: (
             <select
               className="form-control"
               name="bankDetails.accountType"
-              value={formData.bankDetails?.accountType || 'Savings'}
+              value={formData.bankDetails?.accountType || 'Savings Account'}
               onChange={onChange}
             >
-              <option value="Savings">Savings</option>
-              <option value="Current">Current</option>
+              <option value="Savings Account">Savings Account</option>
+              <option value="Salary Account">Salary Account</option>
+              <option value="NRI Account">NRI Account</option>
             </select>
           </div>
         </div>
@@ -1699,7 +1700,7 @@ const WorkInfoSection: React.FC<{ workInfo: any; currentUserProfile: any; }> = (
       <InfoRow label="Role" value={formatRole(currentUserProfile?.role)} />
       <InfoRow label="Employee ID" value={currentUserProfile?.employeeId} />
       <InfoRow label="Department" value={currentUserProfile?.department} />
-      <InfoRow label="Designation" value={currentUserProfile?.designation} />
+      <InfoRow label="Designation" value={resolveDesignation(currentUserProfile?.designation)} />
       <InfoRow label="Employment Type" value={currentUserProfile?.employmentType} />
       <InfoRow label="Joining Date" value={currentUserProfile?.joiningDate ? new Date(currentUserProfile.joiningDate).toLocaleDateString() : undefined} />
       <InfoRow label="Work Location" value={currentUserProfile?.workLocation || workInfo?.workMode} />
@@ -2405,7 +2406,7 @@ const ProfilePage = () => {
           accountNumber: currentUserProfile.bankDetails?.accountNumber || '',
           ifscCode: currentUserProfile.bankDetails?.ifscCode || '',
           branch: currentUserProfile.bankDetails?.branch || '',
-          accountType: currentUserProfile.bankDetails?.accountType || 'Savings'
+          accountType: currentUserProfile.bankDetails?.accountType || 'Savings Account'
         }
       });
       setProfilePhoto(currentUserProfile.profilePhoto || null);
@@ -2581,7 +2582,7 @@ const ProfilePage = () => {
           accountNumber: currentUserProfile.bankDetails?.accountNumber || '',
           ifscCode: currentUserProfile.bankDetails?.ifscCode || '',
           branch: currentUserProfile.bankDetails?.branch || '',
-          accountType: currentUserProfile.bankDetails?.accountType || 'Savings'
+          accountType: currentUserProfile.bankDetails?.accountType || 'Savings Account'
         }
       });
     }
@@ -2699,7 +2700,7 @@ const ProfilePage = () => {
               accountNumber: '',
               ifscCode: '',
               branch: '',
-              accountType: 'Savings'
+              accountType: 'Savings Account'
             }
           }));
         }

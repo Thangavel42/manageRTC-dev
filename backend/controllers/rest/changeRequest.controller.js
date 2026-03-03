@@ -21,24 +21,22 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildForbiddenError,
-  buildNotFoundError,
-  buildValidationError,
+    asyncHandler,
+    buildForbiddenError,
+    buildNotFoundError,
+    buildValidationError,
 } from '../../middleware/errorHandler.js';
 import {
-  buildPagination,
-  extractUser,
-  sendCreated,
-  sendSuccess,
+    buildChangeRequestDocument,
+    updateRequestStatus
+} from '../../models/changeRequest/changeRequest.schema.js';
+import {
+    buildPagination,
+    extractUser,
+    sendCreated,
+    sendSuccess,
 } from '../../utils/apiResponse.js';
 import logger from '../../utils/logger.js';
-import {
-  buildChangeRequestDocument,
-  CHANGE_REQUEST_TYPES,
-  FIELD_STATUSES,
-  updateRequestStatus,
-} from '../../models/changeRequest/changeRequest.schema.js';
 
 // Fields that are allowed to be changed via change request
 const ALLOWED_CHANGE_FIELDS = {
@@ -151,6 +149,24 @@ export const createChangeRequest = asyncHandler(async (req, res) => {
       if (!fieldData.newValue.bankName || !fieldData.newValue.accountNumber ||
           !fieldData.newValue.ifscCode || !fieldData.newValue.branch) {
         throw buildValidationError('fields.newValue', 'Bank details must include: bankName, accountNumber, ifscCode, and branch');
+      }
+      // Validate bank name length
+      if (fieldData.newValue.bankName.trim().length < 3) {
+        throw buildValidationError('fields.newValue.bankName', 'Bank name must be at least 3 characters');
+      }
+      // Validate account number format (8-18 digits only)
+      const cleanAccountNumber = fieldData.newValue.accountNumber.replace(/[\s-]/g, '');
+      if (!/^\d{8,18}$/.test(cleanAccountNumber)) {
+        throw buildValidationError('fields.newValue.accountNumber', 'Account number must be 8-18 digits');
+      }
+      // Validate IFSC code format (4 letters + 0 + 6 alphanumeric)
+      const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscPattern.test(fieldData.newValue.ifscCode.toUpperCase())) {
+        throw buildValidationError('fields.newValue.ifscCode', 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric');
+      }
+      // Validate branch length
+      if (fieldData.newValue.branch.trim().length < 2) {
+        throw buildValidationError('fields.newValue.branch', 'Branch name must be at least 2 characters');
       }
     }
     if (fieldData.field === 'address' && typeof fieldData.newValue === 'object') {

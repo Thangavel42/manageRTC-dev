@@ -278,8 +278,8 @@ import Permission from '../userManagement/permission';
 import RolesPermissions from '../userManagement/rolesPermissions';
 
 import Invoices from '../finance-accounts/sales/invoices';
-import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import AttendanceEmployee from '../hrm/attendance/attendance_employee';
+import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import BatchesList from '../hrm/attendance/batchesList';
 import LeaveAdmin from '../hrm/attendance/leaves/leaveAdmin';
 import LeaveCalendar from '../hrm/attendance/leaves/leaveCalendar';
@@ -326,7 +326,7 @@ export const publicRoutes = [
     path: routes.employeeDashboard,
     element: <EmployeeDashboard />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+    roles: ['employee', 'hr', 'manager', 'leads'],
   },
   {
     path: routes.leadsDashboard,
@@ -1829,7 +1829,7 @@ export const publicRoutes = [
     path: routes.leaveemployee,
     element: <LeaveEmployee />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'superadmin'],
+    roles: ['employee', 'hr', 'manager', 'superadmin'],
   },
   {
     path: routes.leavemanager,
@@ -1865,7 +1865,7 @@ export const publicRoutes = [
     path: routes.attendanceemployee,
     element: <AttendanceEmployee />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'superadmin'],
+    roles: ['employee', 'hr', 'manager', 'superadmin'],
   },
   {
     path: routes.timesheet,

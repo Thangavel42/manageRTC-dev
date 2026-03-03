@@ -82,6 +82,7 @@ import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
 import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
 import rbacRolesRoutes from "./routes/api/rbac/roles.js";
 import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
+import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
 import superadminRoutes from "./routes/api/superadmin.routes.js";
 import debugRoutes from "./routes/debug/auth-debug.js";
 
@@ -275,6 +276,9 @@ const initializeServer = async () => {
     // Superadmin Routes
     app.use('/api/superadmin', superadminCompaniesRoutes);
     app.use('/api/superadmin/users', superadminRoutes);
+
+    // Company Change Request Routes (Admin → Superadmin approval flow)
+    app.use('/api/company-change-requests', companyChangeRequestRoutes);
 
     // Company Pages Routes (module-based sidebar filtering)
     app.use("/api/company", companyPagesRoutes);
