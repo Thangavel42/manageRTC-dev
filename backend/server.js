@@ -11,7 +11,6 @@ import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
-import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { attachRequestId } from './middleware/auth.js';
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
@@ -20,6 +19,7 @@ import goalTrackingRoutes from './routes/performance/goalTracking.routes.js';
 import goalTypeRoutes from './routes/performance/goalType.routes.js';
 import socialFeedRoutes from './routes/socialfeed.routes.js';
 import ticketRoutes from './routes/tickets.routes.js';
+import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { socketHandler } from './socket/index.js';
 
 // Swagger/OpenAPI Documentation
@@ -75,6 +75,7 @@ import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
 // RBAC Routes
 import adminUsersRoutes from './routes/api/admin.users.js';
+import companyChangeRequestRoutes from './routes/api/companyChangeRequest.js';
 import companyPagesRoutes from './routes/api/companyPages.routes.js';
 import rbacModulesRoutes from './routes/api/rbac/modules.js';
 import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';
@@ -85,18 +86,6 @@ import rbacRolesRoutes from './routes/api/rbac/roles.js';
 import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
 import superadminRoutes from './routes/api/superadmin.routes.js';
 import debugRoutes from './routes/debug/auth-debug.js';
-import adminUsersRoutes from "./routes/api/admin.users.js";
-import companyPagesRoutes from "./routes/api/companyPages.routes.js";
-import rbacModulesRoutes from "./routes/api/rbac/modules.js";
-import rbacPageCategoriesRoutes from "./routes/api/rbac/pageCategories.routes.js";
-import rbacPagesRoutes from "./routes/api/rbac/pages.js";
-import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
-import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
-import rbacRolesRoutes from "./routes/api/rbac/roles.js";
-import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
-import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
-import superadminRoutes from "./routes/api/superadmin.routes.js";
-import debugRoutes from "./routes/debug/auth-debug.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
