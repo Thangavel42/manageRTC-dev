@@ -1822,7 +1822,7 @@ export const publicRoutes = [
     path: routes.leavemanager,
     element: <LeaveManager />,
     route: Route,
-    roles: ['manager', 'admin', 'hr', 'superadmin'],
+    roles: ['employee', 'manager', 'admin', 'hr', 'superadmin', 'leads'], // All roles can access, but page validates reporting manager status
   },
   {
     path: routes.leaveCalendar,

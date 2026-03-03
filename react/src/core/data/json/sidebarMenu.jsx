@@ -4480,6 +4480,16 @@ const useSidebarData = () => {
           separateRoute: false,
           submenuItems: [
             {
+              label: 'Holidays',
+              link: routes.holidays,
+              submenu: false,
+              showSubRoute: false,
+              icon: 'sun',
+              base: 'holidays',
+              materialicons: 'beach_access',
+              submenuItems: [],
+            },
+            {
               label: 'Leave Management',
               link: routes.leaveemployee,
               submenu: true,
@@ -4491,6 +4501,12 @@ const useSidebarData = () => {
                 {
                   label: 'Leaves',
                   link: routes.leaveemployee,
+                  submenu: false,
+                  showSubRoute: false,
+                },
+                {
+                  label: 'Team Leaves',
+                  link: routes.leavemanager,
                   submenu: false,
                   showSubRoute: false,
                 },
@@ -4526,16 +4542,6 @@ const useSidebarData = () => {
               icon: 'clock',
               base: 'overtime',
               materialicons: 'more_time',
-              submenuItems: [],
-            },
-            {
-              label: 'Holidays',
-              link: routes.holidays,
-              submenu: false,
-              showSubRoute: false,
-              icon: 'sun',
-              base: 'holidays',
-              materialicons: 'beach_access',
               submenuItems: [],
             },
             {

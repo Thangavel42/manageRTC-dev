@@ -141,7 +141,7 @@ const LeaveCalendar = () => {
       .filter(leave => {
         // ONLY show approved leaves - calendar displays confirmed leaves only
         if (leave.status !== 'approved') return false;
-        
+
         // Filter by type if selected
         if (filterType !== 'all' && leave.leaveType !== filterType) return false;
 
@@ -412,22 +412,32 @@ const LeaveCalendar = () => {
                               </div>
                             )}
 
-                            {/* Event dots */}
-                            <div className="event-dots">
-                              {events.slice(0, 4).map((event, idx) => (
-                                <div
-                                  key={idx}
-                                  className="event-dot"
-                                  title={`${event.leave.leaveTypeName || leaveTypeDisplayMap[event.leave.leaveType] || event.leave.leaveType} - ${event.leave.status}`}
-                                  style={{
-                                    backgroundColor: event.backgroundColor,
-                                    borderColor: event.borderColor,
-                                  }}
-                                />
-                              ))}
-                              {events.length > 4 && (
-                                <div className="event-dot-more" title={`+${events.length - 4} more`}>
-                                  +{events.length - 4}
+                            {/* Employee names - show max 2, then "X more" */}
+                            <div className="employee-names">
+                              {events.slice(0, 2).map((event, idx) => {
+                                const empData = employeeDataMap.get(event.leave.employeeId || '');
+                                const employeeName = empData ? `${empData.firstName} ${empData.lastName}`.trim() : (event.leave.employeeName || 'Employee');
+                                const colors = getLeaveTypeColor(event.leave.leaveType);
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="employee-name-chip"
+                                    title={`${employeeName} - ${event.leave.leaveTypeName || leaveTypeDisplayMap[event.leave.leaveType] || event.leave.leaveType}`}
+                                    style={{
+                                      backgroundColor: colors.bg,
+                                      borderLeft: `3px solid ${colors.border}`,
+                                      color: colors.text,
+                                    }}
+                                  >
+                                    <i className="ti ti-user" style={{ fontSize: '8px', marginRight: '3px' }}></i>
+                                    {employeeName.split(' ')[0]}
+                                  </div>
+                                );
+                              })}
+                              {events.length > 2 && (
+                                <div className="more-employees-chip" title={`${events.length - 2} more employee(s) on leave`}>
+                                  +{events.length - 2} more
                                 </div>
                               )}
                             </div>
@@ -516,8 +526,12 @@ const LeaveCalendar = () => {
                                     </div>
                                     <div className="event-details">
                                       <div className="event-employee">
-                                        {employeeName}
-                                        <span className="event-role"> ({roleOrDesignation})</span>
+                                        <div style={{ fontWeight: '600', fontSize: '11px' }}>
+                                          {employeeName.length > 20 ? `${employeeName.substring(0, 17)}...` : employeeName}
+                                        </div>
+                                        <span className="event-role" style={{ fontSize: '9px' }}>
+                                          {roleOrDesignation.length > 15 ? `${roleOrDesignation.substring(0, 12)}...` : roleOrDesignation}
+                                        </span>
                                       </div>
                                       <div className="event-status">
                                         {getStatusStyle(event.leave.status)}
@@ -616,9 +630,9 @@ const LeaveCalendar = () => {
                                       </div>
                                     </div>
                                     <span className={`badge shadow-sm ${event.leave.status === 'approved' ? 'bg-success' :
-                                        event.leave.status === 'rejected' ? 'bg-danger' :
-                                          event.leave.status === 'pending' ? 'bg-warning' :
-                                            'bg-secondary'
+                                      event.leave.status === 'rejected' ? 'bg-danger' :
+                                        event.leave.status === 'pending' ? 'bg-warning' :
+                                          'bg-secondary'
                                       }`}>
                                       {event.leave.status.charAt(0).toUpperCase() + event.leave.status.slice(1)}
                                     </span>
@@ -898,36 +912,48 @@ const LeaveCalendar = () => {
           display: inline-block;
         }
 
-        .event-dots {
+        .employee-names {
           display: flex;
-          flex-wrap: wrap;
-          gap: 4px;
+          flex-direction: column;
+          gap: 3px;
           margin-top: 6px;
         }
 
-        .event-dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          border: 2px solid;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          transition: transform 0.2s;
-        }
-
-        .event-dot:hover {
-          transform: scale(1.3);
-        }
-
-        .event-dot-more {
-          font-size: 8px;
-          padding: 2px 4px;
-          border-radius: 8px;
-          background-color: #6c757d;
-          color: white;
+        .employee-name-chip {
+          font-size: 9px;
+          padding: 3px 6px;
+          border-radius: 4px;
           font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+          transition: all 0.2s;
           display: flex;
           align-items: center;
-          justify-content: center;
+        }
+
+        .employee-name-chip:hover {
+          transform: translateX(2px);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+
+        .more-employees-chip {
+          font-size: 8px;
+          padding: 3px 6px;
+          border-radius: 4px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          font-weight: 700;
+          text-align: center;
+          box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .more-employees-chip:hover {
+          transform: scale(1.05);
+          box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
         }
 
         .calendar-footer {
@@ -1067,12 +1093,17 @@ const LeaveCalendar = () => {
           font-size: 10px;
           opacity: 0.9;
           font-weight: 500;
+          max-width: 85%;
+          overflow: hidden;
         }
 
         .event-role {
           font-size: 9px;
-          opacity: 0.7;
+          opacity: 0.8;
           font-style: italic;
+          display: block;
+          margin-top: 2px;
+          color: inherit;
         }
 
         .event-status {
@@ -1120,6 +1151,16 @@ const LeaveCalendar = () => {
             padding: 2px 4px;
           }
 
+          .employee-name-chip {
+            font-size: 8px;
+            padding: 2px 4px;
+          }
+
+          .more-employees-chip {
+            font-size: 7px;
+            padding: 2px 4px;
+          }
+
           .event-dot {
             width: 6px;
             height: 6px;
@@ -1128,6 +1169,23 @@ const LeaveCalendar = () => {
           .weekday {
             font-size: 11px;
             padding: 10px 6px;
+          }
+
+          .week-event {
+            padding: 8px;
+            font-size: 10px;
+          }
+
+          .event-type {
+            font-size: 10px;
+          }
+
+          .event-employee {
+            font-size: 9px;
+          }
+
+          .event-role {
+            font-size: 8px;
           }
         }
       `}</style>

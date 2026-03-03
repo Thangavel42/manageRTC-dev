@@ -1,25 +1,38 @@
-import React, { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import React, { useEffect, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import ImageWithBasePath from "../imageWithBasePath";
-import "../../../style/icon/tabler-icons/webfont/tabler-icons.css";
-import { setExpandMenu } from "../../data/redux/sidebarSlice";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  resetAllMode,
-  setDataLayout,
-} from "../../data/redux/themeSettingSlice";
-import usePreviousRoute from "./usePreviousRoute";
-import useSidebarData from "../../data/json/sidebarMenu";
+import { Link, useLocation } from "react-router-dom";
 import { useCompanyPages } from "../../../contexts/CompanyPagesContext";
+import { all_routes } from "../../../feature-module/router/all_routes";
+import { useIsReportingManager } from "../../../hooks/useIsReportingManager";
+import "../../../style/icon/tabler-icons/webfont/tabler-icons.css";
+import useSidebarData from "../../data/json/sidebarMenu";
+import { setExpandMenu } from "../../data/redux/sidebarSlice";
+import {
+  setDataLayout
+} from "../../data/redux/themeSettingSlice";
+import ImageWithBasePath from "../imageWithBasePath";
+import usePreviousRoute from "./usePreviousRoute";
 
 const Sidebar = () => {
   const Location = useLocation();
   const { user } = useUser();
   const { isRouteEnabled, allEnabled, isLoading: isMenuLoading } = useCompanyPages();
+  const { isReportingManager, reporteeCount, loading: checkingManagerStatus } = useIsReportingManager();
 
   const SidebarDataTest = useSidebarData();
+
+  // Debug: Log reporting manager status
+  useEffect(() => {
+    console.log('[Sidebar] Reporting Manager Status:', {
+      isReportingManager,
+      reporteeCount,
+      checkingManagerStatus,
+      userId: user?.id,
+      userRole: user?.publicMetadata?.role,
+    });
+  }, [isReportingManager, reporteeCount, checkingManagerStatus, user]);
 
   // Get current user role
   const getUserRole = (): string => {
@@ -51,6 +64,30 @@ const Sidebar = () => {
     });
 
     return hasAccessResult;
+  };
+
+  /**
+   * Check if a menu item should be visible.
+   * Special handling for "Team Leaves" - only show if user is a reporting manager.
+   * @param item Menu item object with link property
+   * @returns true if item should be shown, false otherwise
+   */
+  const shouldShowMenuItem = (item: any): boolean => {
+    // Special check for Team Leaves menu item
+    if (item.link === all_routes.leavemanager) {
+      console.log('[Sidebar shouldShowMenuItem] Team Leaves check:', {
+        isReportingManager,
+        checkingManagerStatus,
+        reporteeCount,
+        willShow: checkingManagerStatus || isReportingManager
+      });
+      // While checking manager status, show the menu item (will be checked on page load)
+      if (checkingManagerStatus) return true;
+      // Hide if user is not a reporting manager
+      return isReportingManager;
+    }
+    // For all other menu items, show by default (role check handled elsewhere)
+    return true;
   };
 
   /**
@@ -222,11 +259,11 @@ const Sidebar = () => {
             </h6>
             <p className="fs-10">
               {(user?.publicMetadata?.role as string)?.toLowerCase() === "admin" ? "Admin" :
-               (user?.publicMetadata?.role as string)?.toLowerCase() === "hr" ? "HR" :
-               (user?.publicMetadata?.role as string)?.toLowerCase() === "superadmin" ? "Super Admin" :
-               (user?.publicMetadata?.role as string)?.toLowerCase() === "manager" ? "Manager" :
-               (user?.publicMetadata?.role as string)?.toLowerCase() === "leads" ? "Leads" :
-               "Employee"}
+                (user?.publicMetadata?.role as string)?.toLowerCase() === "hr" ? "HR" :
+                  (user?.publicMetadata?.role as string)?.toLowerCase() === "superadmin" ? "Super Admin" :
+                    (user?.publicMetadata?.role as string)?.toLowerCase() === "manager" ? "Manager" :
+                      (user?.publicMetadata?.role as string)?.toLowerCase() === "leads" ? "Leads" :
+                        "Employee"}
             </p>
           </div>
           <div className="sidebar-nav mb-3">
@@ -267,11 +304,11 @@ const Sidebar = () => {
               </h6>
               <p className="fs-10">
                 {(user?.publicMetadata?.role as string)?.toLowerCase() === "admin" ? "Admin" :
-                 (user?.publicMetadata?.role as string)?.toLowerCase() === "hr" ? "HR" :
-                 (user?.publicMetadata?.role as string)?.toLowerCase() === "superadmin" ? "Super Admin" :
-                 (user?.publicMetadata?.role as string)?.toLowerCase() === "manager" ? "Manager" :
-                 (user?.publicMetadata?.role as string)?.toLowerCase() === "leads" ? "Leads" :
-                 "Employee"}
+                  (user?.publicMetadata?.role as string)?.toLowerCase() === "hr" ? "HR" :
+                    (user?.publicMetadata?.role as string)?.toLowerCase() === "superadmin" ? "Super Admin" :
+                      (user?.publicMetadata?.role as string)?.toLowerCase() === "manager" ? "Manager" :
+                        (user?.publicMetadata?.role as string)?.toLowerCase() === "leads" ? "Leads" :
+                          "Employee"}
               </p>
             </div>
           </div>
@@ -347,176 +384,169 @@ const Sidebar = () => {
                   `}</style>
                 </ul>
               ) : (
-              <ul>
-                {SidebarDataTest?.map((mainLabel, index) => {
-                  const enabledItems = mainLabel?.submenuItems?.filter((title: any) => isMenuEnabled(title));
-                  if (!allEnabled && (!enabledItems || enabledItems.length === 0)) return null;
-                  return (
-                  <React.Fragment key={`main-${index}`}>
-                    <li className="menu-title">
-                      <span>{mainLabel?.tittle}</span>
-                    </li>
-                    <li>
-                      <ul>
-                        {enabledItems?.map((title: any, i) => {
-                          let link_array: any = [];
-                          if ("submenuItems" in title) {
-                            title.submenuItems?.forEach((link: any) => {
-                              link_array.push(link?.link);
-                              if (link?.submenu && "submenuItems" in link) {
-                                link.submenuItems?.forEach((item: any) => {
-                                  link_array.push(item?.link);
+                <ul>
+                  {SidebarDataTest?.map((mainLabel, index) => {
+                    const enabledItems = mainLabel?.submenuItems?.filter((title: any) => isMenuEnabled(title));
+                    if (!allEnabled && (!enabledItems || enabledItems.length === 0)) return null;
+                    return (
+                      <React.Fragment key={`main-${index}`}>
+                        <li className="menu-title">
+                          <span>{mainLabel?.tittle}</span>
+                        </li>
+                        <li>
+                          <ul>
+                            {enabledItems?.map((title: any, i) => {
+                              let link_array: any = [];
+                              if ("submenuItems" in title) {
+                                title.submenuItems?.forEach((link: any) => {
+                                  link_array.push(link?.link);
+                                  if (link?.submenu && "submenuItems" in link) {
+                                    link.submenuItems?.forEach((item: any) => {
+                                      link_array.push(item?.link);
+                                    });
+                                  }
                                 });
                               }
-                            });
-                          }
-                          title.links = link_array;
+                              title.links = link_array;
 
-                          return (
-                            <li className="submenu" key={`title-${i}`}>
-                              <Link
-                                to={title?.submenu ? "#" : title?.link}
-                                onClick={() =>
-                                  handleClick(
-                                    title?.label,
-                                    title?.themeSetting,
-                                    getLayoutClass(title?.label)
-                                  )
-                                }
-                                className={`${
-                                  subOpen === title?.label ? "subdrop" : ""
-                                } ${
-                                  title?.links?.includes(Location.pathname)
-                                    ? "active"
-                                    : ""
-                                } ${
-                                  title?.submenuItems
-                                    ?.map((link: any) => link?.link)
-                                    .includes(Location.pathname) ||
-                                  title?.link === Location.pathname
-                                    ? "active"
-                                    : ""
-                                }`}
-                              >
-                                <i className={`ti ti-${title.icon}`}></i>
-                                <span>{title?.label}</span>
-                                {title?.dot && (
-                                  <span className="badge badge-danger fs-10 fw-medium text-white p-1">
-                                    Hot
-                                  </span>
-                                )}
-                                <span
-                                  className={title?.submenu ? "menu-arrow" : ""}
-                                />
-                              </Link>
-                              {title?.submenu !== false &&
-                                subOpen === title?.label && (
-                                  <ul
-                                    style={{
-                                      display:
-                                        subOpen === title?.label
-                                          ? "block"
-                                          : "none",
-                                    }}
+                              return (
+                                <li className="submenu" key={`title-${i}`}>
+                                  <Link
+                                    to={title?.submenu ? "#" : title?.link}
+                                    onClick={() =>
+                                      handleClick(
+                                        title?.label,
+                                        title?.themeSetting,
+                                        getLayoutClass(title?.label)
+                                      )
+                                    }
+                                    className={`${subOpen === title?.label ? "subdrop" : ""
+                                      } ${title?.links?.includes(Location.pathname)
+                                        ? "active"
+                                        : ""
+                                      } ${title?.submenuItems
+                                        ?.map((link: any) => link?.link)
+                                        .includes(Location.pathname) ||
+                                        title?.link === Location.pathname
+                                        ? "active"
+                                        : ""
+                                      }`}
                                   >
-                                    {title?.submenuItems?.filter((item: any) => hasAccess(item?.roles) && isMenuEnabled(item)).map(
-                                      (item: any, j: any) => (
-                                        <li
-                                          className={
-                                            item?.submenuItems
-                                              ? "submenu submenu-two"
-                                              : ""
-                                          }
-                                          key={`item-${j}`}
-                                        >
-                                          <Link
-                                            to={
-                                              item?.submenu ? "#" : item?.link
-                                            }
-                                            className={`${
-                                              item?.submenuItems
-                                                ?.map((link: any) => link?.link)
-                                                .includes(Location.pathname) ||
-                                              item?.link === Location.pathname
-                                                ? "active"
-                                                : ""
-                                            } ${
-                                              subsidebar === item?.label
-                                                ? "subdrop"
-                                                : ""
-                                            }`}
-                                            onClick={() => {
-                                              toggleSubsidebar(item?.label);
-                                            }}
-                                          >
-                                            {item?.label}
-                                            <span
+                                    <i className={`ti ti-${title.icon}`}></i>
+                                    <span>{title?.label}</span>
+                                    {title?.dot && (
+                                      <span className="badge badge-danger fs-10 fw-medium text-white p-1">
+                                        Hot
+                                      </span>
+                                    )}
+                                    <span
+                                      className={title?.submenu ? "menu-arrow" : ""}
+                                    />
+                                  </Link>
+                                  {title?.submenu !== false &&
+                                    subOpen === title?.label && (
+                                      <ul
+                                        style={{
+                                          display:
+                                            subOpen === title?.label
+                                              ? "block"
+                                              : "none",
+                                        }}
+                                      >
+                                        {title?.submenuItems?.filter((item: any) => hasAccess(item?.roles) && isMenuEnabled(item) && shouldShowMenuItem(item)).map(
+                                          (item: any, j: any) => (
+                                            <li
                                               className={
-                                                item?.submenu
-                                                  ? "menu-arrow"
+                                                item?.submenuItems
+                                                  ? "submenu submenu-two"
                                                   : ""
                                               }
-                                            />
-                                          </Link>
-                                          {item?.submenuItems ? (
-                                            <ul
-                                              style={{
-                                                display:
-                                                  subsidebar === item?.label
-                                                    ? "block"
-                                                    : "none",
-                                              }}
+                                              key={`item-${j}`}
                                             >
-                                              {item?.submenuItems?.filter((items: any) => hasAccess(items?.roles) && isMenuEnabled(items)).map(
-                                                (items: any, k: any) => (
-                                                  <li key={`submenu-item-${k}`}>
-                                                    <Link
-                                                      to={
-                                                        items?.submenu
-                                                          ? "#"
-                                                          : items?.link
-                                                      }
-                                                      className={`${
-                                                        subsidebar ===
-                                                        items?.label
-                                                          ? "submenu-two subdrop"
-                                                          : "submenu-two"
-                                                      } ${
-                                                        items?.submenuItems
-                                                          ?.map(
-                                                            (link: any) =>
-                                                              link.link
-                                                          )
-                                                          .includes(
-                                                            Location.pathname
-                                                          ) ||
-                                                        items?.link ===
-                                                          Location.pathname
-                                                          ? "active"
-                                                          : ""
-                                                      }`}
-                                                    >
-                                                      {items?.label}
-                                                    </Link>
-                                                  </li>
-                                                )
-                                              )}
-                                            </ul>
-                                          ) : null}
-                                        </li>
-                                      )
+                                              <Link
+                                                to={
+                                                  item?.submenu ? "#" : item?.link
+                                                }
+                                                className={`${item?.submenuItems
+                                                  ?.map((link: any) => link?.link)
+                                                  .includes(Location.pathname) ||
+                                                  item?.link === Location.pathname
+                                                  ? "active"
+                                                  : ""
+                                                  } ${subsidebar === item?.label
+                                                    ? "subdrop"
+                                                    : ""
+                                                  }`}
+                                                onClick={() => {
+                                                  toggleSubsidebar(item?.label);
+                                                }}
+                                              >
+                                                {item?.label}
+                                                <span
+                                                  className={
+                                                    item?.submenu
+                                                      ? "menu-arrow"
+                                                      : ""
+                                                  }
+                                                />
+                                              </Link>
+                                              {item?.submenuItems ? (
+                                                <ul
+                                                  style={{
+                                                    display:
+                                                      subsidebar === item?.label
+                                                        ? "block"
+                                                        : "none",
+                                                  }}
+                                                >
+                                                  {item?.submenuItems?.filter((items: any) => hasAccess(items?.roles) && isMenuEnabled(items) && shouldShowMenuItem(items)).map(
+                                                    (items: any, k: any) => (
+                                                      <li key={`submenu-item-${k}`}>
+                                                        <Link
+                                                          to={
+                                                            items?.submenu
+                                                              ? "#"
+                                                              : items?.link
+                                                          }
+                                                          className={`${subsidebar ===
+                                                            items?.label
+                                                            ? "submenu-two subdrop"
+                                                            : "submenu-two"
+                                                            } ${items?.submenuItems
+                                                              ?.map(
+                                                                (link: any) =>
+                                                                  link.link
+                                                              )
+                                                              .includes(
+                                                                Location.pathname
+                                                              ) ||
+                                                              items?.link ===
+                                                              Location.pathname
+                                                              ? "active"
+                                                              : ""
+                                                            }`}
+                                                        >
+                                                          {items?.label}
+                                                        </Link>
+                                                      </li>
+                                                    )
+                                                  )}
+                                                </ul>
+                                              ) : null}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
                                     )}
-                                  </ul>
-                                )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </li>
-                  </React.Fragment>
-                  );
-                })}
-              </ul>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </li>
+                      </React.Fragment>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </div>
