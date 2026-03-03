@@ -1,12 +1,15 @@
 import { DatePicker, message } from "antd";
 import dayjs from "dayjs";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { useAuth } from "../../../hooks/useAuth";
+import { Employee, useEmployeesREST } from "../../../hooks/useEmployeesREST";
 import { useProjectsREST } from "../../../hooks/useProjectsREST";
+import { Task, useTasksREST } from "../../../hooks/useTasksREST";
 import { TimeEntry, useTimeTrackingREST } from "../../../hooks/useTimeTrackingREST";
 import { useUserProfileREST } from "../../../hooks/useUserProfileREST";
 
@@ -21,26 +24,47 @@ interface FormData {
 }
 
 const TimeSheet = () => {
+  // Auth & Role detection
+  const { role, employeeId, userId: clerkUserId } = useAuth();
+
   // API Hooks
   const {
     timeEntries,
     loading,
     error,
     fetchTimeEntries,
+    fetchManagedTimeEntries,
+    getTimeEntriesByUser,
     createTimeEntry,
     updateTimeEntry,
-    deleteTimeEntry
+    deleteTimeEntry,
+    submitTimesheet,
+    approveTimesheet,
+    rejectTimesheet,
+    stats,
+    fetchStats
   } = useTimeTrackingREST();
 
-  const { projects, fetchProjects } = useProjectsREST();
+  const { projects, fetchProjects, getMyProjects } = useProjectsREST();
   const { profile, isAdmin, isHR } = useUserProfileREST();
+  const { employees, fetchEmployees, fetchActiveEmployeesList } = useEmployeesREST({ autoFetch: false });
+  const { tasks, fetchTasks } = useTasksREST();
+
+  // PM/TL detection from getMyProjects() which adds userRole field
+  const [myManagedProjects, setMyManagedProjects] = useState<any[]>([]);
+  const isProjectManager = myManagedProjects.some(p => p.userRole === 'projectManager');
+  const isTeamLeader = myManagedProjects.some(p => p.userRole === 'teamLeader');
+  const isProjectLevelManager = isProjectManager || isTeamLeader;
 
   // State
   const [selectedProject, setSelectedProject] = useState<string>("");
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<TimeEntry | null>(null);
   const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
+  const [taskOptions, setTaskOptions] = useState<{ value: string; label: string }[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     projectId: "",
     taskId: "",
@@ -50,6 +74,138 @@ const TimeSheet = () => {
     billable: false,
     billRate: ""
   });
+
+  // Workflow state
+  const [submitting, setSubmitting] = useState(false);
+  const [approving, setApproving] = useState<string | null>(null);
+  const [rejectEntryId, setRejectEntryId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Track if initial data load is complete
+  const initialLoadDone = useRef(false);
+
+  // Load PM/TL projects via getMyProjects() which adds userRole field
+  useEffect(() => {
+    const loadManagedProjects = async () => {
+      try {
+        await getMyProjects();
+        // getMyProjects will populate `projects` state with userRole field
+      } catch (error) {
+        console.error('Failed to load managed projects:', error);
+      }
+    };
+    loadManagedProjects();
+  }, [getMyProjects]);
+
+  // Populate myManagedProjects from projects state after getMyProjects() returns
+  useEffect(() => {
+    if (projects.length > 0) {
+      const managed = projects.filter(
+        (p: any) => p.userRole === 'projectManager' || p.userRole === 'teamLeader'
+      );
+      setMyManagedProjects(managed);
+
+      // If we discovered PM/TL status, reset initialLoadDone to allow proper data fetch
+      if (managed.length > 0 && !initialLoadDone.current) {
+        // PM/TL status detected, will trigger re-fetch in next effect
+      }
+    }
+  }, [projects]);
+
+  // Initial data load after role detection is complete
+  useEffect(() => {
+    // Wait for profile to be loaded (which gives us isAdmin, isHR)
+    if (!profile) return;
+
+    // For non-admin/HR, wait for projects to load first to detect PM/TL status
+    if (!isAdmin && !isHR && projects.length === 0) return;
+
+    // Check if we already loaded the correct data
+    const currentRole = isAdmin || isHR ? 'admin' : isProjectLevelManager ? 'manager' : 'employee';
+    const hasLoadedKey = `loaded_${currentRole}`;
+
+    if (initialLoadDone.current && (window as any)[hasLoadedKey]) {
+      return; // Already loaded for this role
+    }
+
+    // Now we can safely load data based on role
+    const loadInitialData = async () => {
+      const filters: any = { page: 1, limit: 50 };
+
+      if (isAdmin || isHR) {
+        await fetchTimeEntries(filters);
+        await fetchStats();
+        await fetchEmployees({ status: 'Active' } as any);
+        (window as any).loaded_admin = true;
+      } else if (isProjectLevelManager) {
+        await fetchManagedTimeEntries(filters);
+        await fetchStats();
+        await fetchActiveEmployeesList();
+        (window as any).loaded_manager = true;
+      } else {
+        // Regular employee - use their employeeId or clerkUserId
+        const userId = employeeId || clerkUserId || (profile as any)?._id;
+        if (userId) {
+          await getTimeEntriesByUser(userId, filters);
+          await fetchStats();
+          (window as any).loaded_employee = true;
+        }
+      }
+
+      initialLoadDone.current = true;
+    };
+
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, projects, isAdmin, isHR, isProjectLevelManager]);
+
+  // Load tasks when project changes in form
+  useEffect(() => {
+    if (!formData.projectId) {
+      setTaskOptions([]);
+      return;
+    }
+    setLoadingTasks(true);
+    const loadTasks = async () => {
+      const filters: any = { project: formData.projectId, limit: 100 };
+
+      // Check if user is PM/TL for this selected project
+      const isManagerForThisProject = myManagedProjects.some(
+        p => p._id === formData.projectId || p._id?.toString() === formData.projectId
+      );
+
+      if (!isManagerForThisProject && !isAdmin && !isHR) {
+        // Regular team member: filter tasks by their assignments only
+        if (employeeId) {
+          filters.assignee = employeeId;
+        }
+      }
+
+      try {
+        await fetchTasks(filters);
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+      } finally {
+        setLoadingTasks(false);
+      }
+    };
+    loadTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.projectId, myManagedProjects, isAdmin, isHR, employeeId]);
+
+  // Convert tasks to options when tasks change
+  useEffect(() => {
+    if (tasks && tasks.length > 0) {
+      const options = tasks.map((task: Task) => ({
+        value: task._id,
+        label: `${task.title} (${task.status || 'No Status'})`
+      }));
+      setTaskOptions(options);
+    } else {
+      setTaskOptions([]);
+    }
+  }, [tasks]);
 
   // Check if current user is a regular team member (not lead/manager)
   const isRegularTeamMember = useMemo(() => {
@@ -85,29 +241,10 @@ const TimeSheet = () => {
     }
 
     const currentUserId = (profile as any)?._id || (profile as any)?.userId || (profile as any)?.employeeId;
-    if (!currentUserId || !projects || projects.length === 0) {
-      // If no user ID or projects, show only own entries
-      return timeEntries.filter(entry =>
-        entry.userId === currentUserId || entry.createdBy === currentUserId
-      );
-    }
 
-    // Find all projects where current user is Team Lead or Project Manager
-    const managedProjectIds = projects
-      .filter(project => {
-        const isTeamLeader = project.teamLeader?.some(leadId =>
-          leadId === currentUserId || leadId === (profile as any).employeeId
-        );
-        const isProjectManager = project.projectManager?.some(managerId =>
-          managerId === currentUserId || managerId === (profile as any).employeeId
-        );
-        return isTeamLeader || isProjectManager;
-      })
-      .map(project => project._id);
-
-    // If user is Team Lead or Project Manager of any projects
-    if (managedProjectIds.length > 0) {
-      // Show entries from managed projects only
+    // PM/TL: use myManagedProjects (already computed from getMyProjects userRole field)
+    if (myManagedProjects.length > 0) {
+      const managedProjectIds = myManagedProjects.map(p => p._id);
       return timeEntries.filter(entry => {
         // Show entries that belong to managed projects
         if (managedProjectIds.includes(entry.projectId)) {
@@ -125,13 +262,44 @@ const TimeSheet = () => {
     return timeEntries.filter(entry =>
       entry.userId === currentUserId || entry.createdBy === currentUserId
     );
-  }, [timeEntries, profile, projects, isAdmin, isHR]);
+  }, [timeEntries, profile, myManagedProjects, isAdmin, isHR]);
 
-  // Fetch data on mount
+  // Helper: Re-fetch entries with current filters (used after submit/approve/reject)
+  const refetchEntries = useCallback(async () => {
+    const filters: any = { page: 1, limit: 50, ...dateRange };
+    if (selectedProject) filters.projectId = selectedProject;
+    if (selectedEmployee) filters.employeeId = selectedEmployee;
+
+    if (isAdmin || isHR) {
+      await fetchTimeEntries(filters);
+    } else if (isProjectLevelManager) {
+      await fetchManagedTimeEntries(filters);
+    } else {
+      // Regular employee - use their employeeId or clerkUserId
+      const userId = employeeId || clerkUserId || (profile as any)?._id;
+      if (userId) {
+        await getTimeEntriesByUser(userId, filters);
+      }
+    }
+    await fetchStats();
+  }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, isProjectLevelManager,
+    fetchTimeEntries, fetchManagedTimeEntries, getTimeEntriesByUser, fetchStats]);
+
+  // Apply status filter to entries
+  const displayedEntries = useMemo(() => {
+    if (statusFilter === 'all') return filteredTimeEntries;
+    return filteredTimeEntries.filter(e => e.status === statusFilter);
+  }, [filteredTimeEntries, statusFilter]);
+
+  // Fetch data when filters change (after initial load is complete)
   useEffect(() => {
-    fetchProjects();
-    fetchTimeEntries({ page: 1, limit: 50, ...dateRange });
-  }, [dateRange]);
+    // Only refetch if initial load is done
+    if (!initialLoadDone.current) return;
+
+    // Refetch when any filter changes
+    refetchEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, selectedProject, selectedEmployee]);
 
   // Build table columns
   const columns = useMemo(() => {
@@ -233,43 +401,164 @@ const TimeSheet = () => {
       {
         title: "Actions",
         dataIndex: "actions",
-        render: (_: any, record: TimeEntry) => (
-          <div className="action-icon d-inline-flex">
-            <Link
-              to="#"
-              className="me-2"
-              onClick={() => setViewingEntry(record)}
-              data-bs-toggle="modal"
-              data-inert={true}
-              data-bs-target="#view_timesheet"
-            >
-              <i className="ti ti-eye" />
-            </Link>
-            <Link
-              to="#"
-              className="me-2"
-              onClick={() => handleEdit(record)}
-              data-bs-toggle="modal"
-              data-inert={true}
-              data-bs-target="#edit_timesheet"
-            >
-              <i className="ti ti-edit" />
-            </Link>
-            <Link
-              to="#"
-              onClick={() => setDeleteEntryId(record._id)}
-              data-bs-toggle="modal"
-              data-inert={true}
-              data-bs-target="#delete_modal"
-            >
-              <i className="ti ti-trash" />
-            </Link>
-          </div>
-        ),
+        render: (_: any, record: TimeEntry) => {
+          const currentUserId = employeeId || clerkUserId || (profile as any)?._id;
+          const entryOwnerId = record.userId || record.createdBy;
+          const isOwnEntry = currentUserId && currentUserId === entryOwnerId;
+          const isDraft = record.status === 'Draft';
+          const isSubmitted = record.status === 'Submitted';
+          const canApprove = canApproveEntry(record);
+          const isNotAdmin = role !== 'admin';
+
+          return (
+            <div className="action-icon d-inline-flex align-items-center">
+              {/* Submit button for own draft entries (not for admin) */}
+              {isDraft && isOwnEntry && isNotAdmin && (
+                <button
+                  onClick={() => handleSubmitSingle(record._id)}
+                  disabled={submitting}
+                  className="btn btn-sm btn-outline-primary me-2 d-inline-flex align-items-center"
+                  title="Submit for approval"
+                >
+                  <i className="ti ti-send fs-16" />
+                </button>
+              )}
+
+              {/* Approve button for PM/TL on submitted entries they can approve */}
+              {isSubmitted && canApprove && (
+                <button
+                  onClick={() => handleApprove(record.userId || record.createdBy, record._id)}
+                  disabled={approving === record._id}
+                  className="btn btn-sm btn-success me-2 d-inline-flex align-items-center"
+                  title="Approve timesheet"
+                >
+                  {approving === record._id ? (
+                    <span className="spinner-border spinner-border-sm" />
+                  ) : (
+                    <i className="ti ti-check fs-16" />
+                  )}
+                </button>
+              )}
+
+              {/* Reject button for PM/TL on submitted entries they can approve */}
+              {isSubmitted && canApprove && (
+                <button
+                  onClick={() => setRejectEntryId(record._id)}
+                  data-bs-toggle="modal"
+                  data-inert={true}
+                  data-bs-target="#reject_modal"
+                  className="btn btn-sm btn-danger me-2 d-inline-flex align-items-center"
+                  title="Reject timesheet"
+                >
+                  <i className="ti ti-x fs-16" />
+                </button>
+              )}
+
+              {/* View button - always available */}
+              <Link
+                to="#"
+                className="me-2"
+                onClick={() => setViewingEntry(record)}
+                data-bs-toggle="modal"
+                data-inert={true}
+                data-bs-target="#view_timesheet"
+                title="View details"
+              >
+                <i className="ti ti-eye" />
+              </Link>
+
+              {/* Edit button - only for own draft entries (not for admin) */}
+              {isDraft && isOwnEntry && isNotAdmin && (
+                <Link
+                  to="#"
+                  className="me-2"
+                  onClick={() => handleEdit(record)}
+                  data-bs-toggle="modal"
+                  data-inert={true}
+                  data-bs-target="#edit_timesheet"
+                  title="Edit entry"
+                >
+                  <i className="ti ti-edit" />
+                </Link>
+              )}
+
+              {/* Delete button - only for own draft entries (not for admin) */}
+              {isDraft && isOwnEntry && isNotAdmin && (
+                <Link
+                  to="#"
+                  onClick={() => setDeleteEntryId(record._id)}
+                  data-bs-toggle="modal"
+                  data-inert={true}
+                  data-bs-target="#delete_modal"
+                  title="Delete entry"
+                >
+                  <i className="ti ti-trash" />
+                </Link>
+              )}
+            </div>
+          );
+        },
       }];
 
     return allColumns;
   }, [isRegularTeamMember]);
+
+  /**
+   * Approval Hierarchy Decision Logic:
+   *
+   * TIER 1: Project Manager (Top Tier)
+   * - Can approve ANYONE including themselves (self-approval enabled)
+   * - Full approval authority over their managed project entries
+   *
+   * TIER 2: Team Lead (Middle Tier)
+   * - Can approve team members but NOT themselves
+   * - Their own entries require Project Manager approval
+   *
+   * TIER 3: Team Member (Bottom Tier)
+   * - Cannot approve anyone
+   * - Requires Team Lead or Project Manager approval
+   *
+   * EXCLUDED: Admin/HR
+   * - Cannot approve timesheet entries (view-only access)
+   * - Approval is project-management responsibility only
+   */
+  const canApproveEntry = useCallback((entry: TimeEntry): boolean => {
+    // Only PM/TL can approve (NOT Admin/HR per user requirement)
+    if (!isProjectLevelManager) return false;
+
+    // Entry must be in "Submitted" status
+    if (entry.status !== 'Submitted') return false;
+
+    // Check if this entry belongs to one of my managed projects
+    const entryProjectId = entry.projectId?.toString();
+    const isManagedProject = myManagedProjects.some(
+      p => p._id?.toString() === entryProjectId
+    );
+    if (!isManagedProject) return false;
+
+    // Get current user's ID for ownership check
+    const currentUserId = employeeId || clerkUserId || (profile as any)?._id;
+    const entryOwnerId = entry.userId || entry.createdBy;
+    const isOwnEntry = currentUserId && currentUserId === entryOwnerId;
+
+    // Get the specific project to check user's role in it
+    const projectForThisEntry = myManagedProjects.find(
+      p => p._id?.toString() === entryProjectId
+    );
+
+    // TIER 1: Project Manager - Can approve all including self
+    if (projectForThisEntry?.userRole === 'projectManager') {
+      return true; // PM self-approval enabled
+    }
+
+    // TIER 2: Team Lead - Can approve others but not self
+    else if (projectForThisEntry?.userRole === 'teamLeader') {
+      return !isOwnEntry; // TL requires PM approval for their own entries
+    }
+
+    // TIER 3: Team Member - Cannot approve anyone (returns false)
+    return false;
+  }, [isProjectLevelManager, myManagedProjects, employeeId, clerkUserId, profile]);
 
   // Build project options for dropdowns
   const projectOptions = useMemo(() => {
@@ -335,8 +624,16 @@ const TimeSheet = () => {
     e.preventDefault();
 
     // Validation
+    if (role === 'admin') {
+      message.error('Admin users cannot create or edit timesheet entries');
+      return;
+    }
     if (!formData.projectId) {
       message.error('Please select a project');
+      return;
+    }
+    if (!formData.taskId) {
+      message.error('Please select a task');
       return;
     }
     if (!formData.description || formData.description.trim().length < 5) {
@@ -407,9 +704,112 @@ const TimeSheet = () => {
     }
   };
 
+  // Handle Submit All Drafts
+  const handleSubmitAll = async () => {
+    const draftEntries = displayedEntries.filter(e => e.status === 'Draft');
+    if (draftEntries.length === 0) {
+      message.info('No draft entries to submit');
+      return;
+    }
+    const draftIds = draftEntries.map(e => e._id);
+    setSubmitting(true);
+    try {
+      const success = await submitTimesheet(draftIds);
+      if (success) {
+        await refetchEntries();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Submit Single Entry
+  const handleSubmitSingle = async (entryId: string) => {
+    setSubmitting(true);
+    try {
+      const success = await submitTimesheet([entryId]);
+      if (success) {
+        await refetchEntries();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Approve Entry
+  const handleApprove = async (userId: string, entryId: string) => {
+    setApproving(entryId);
+    try {
+      const success = await approveTimesheet(userId, [entryId]);
+      if (success) {
+        await refetchEntries();
+      }
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  // Handle Reject Entry (after modal confirmation)
+  const handleRejectConfirm = async () => {
+    if (!rejectEntryId || !rejectReason.trim()) {
+      message.error('Please provide a rejection reason');
+      return;
+    }
+    try {
+      const entry = displayedEntries.find(e => e._id === rejectEntryId);
+      if (!entry) return;
+
+      const success = await rejectTimesheet(entry.userId || entry.createdBy, [rejectEntryId], rejectReason);
+      if (success) {
+        setRejectEntryId(null);
+        setRejectReason('');
+        // Close modal
+        const modalElement = document.getElementById('reject_modal');
+        const bootstrapModal = (window as any).bootstrap;
+        if (bootstrapModal && modalElement) {
+          const modal = bootstrapModal.Modal.getInstance(modalElement);
+          if (modal) modal.hide();
+        }
+        await refetchEntries();
+      }
+    } catch (error) {
+      console.error('Reject failed:', error);
+    }
+  };
+
+  // Handle employee filter change
+  const handleEmployeeFilter = (employeeId: string) => {
+    setSelectedEmployee(employeeId);
+  };
+
   // Calculate total hours for display (use filtered entries)
-  const totalHours = filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
-  const billableHours = filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  const totalHours = stats?.totalHours ?? filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  const billableHours = stats?.billableHours ?? filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+
+  // Status counts from API or local calculation
+  const totalEntriesCount = stats?.totalEntries ?? filteredTimeEntries.length;
+  const draftCount = stats?.draftEntries ?? filteredTimeEntries.filter(e => e.status === 'Draft').length;
+  const submittedCount = stats?.submittedEntries ?? filteredTimeEntries.filter(e => e.status === 'Submitted').length;
+  const approvedCount = stats?.approvedEntries ?? filteredTimeEntries.filter(e => e.status === 'Approved').length;
+  const rejectedCount = stats?.rejectedEntries ?? filteredTimeEntries.filter(e => e.status === 'Rejected').length;
+
+  // Build status tabs configuration
+  const statusTabs = [
+    { key: 'all', label: 'All', count: totalEntriesCount },
+    { key: 'Draft', label: 'Draft', count: draftCount },
+    { key: 'Submitted', label: 'Submitted', count: submittedCount },
+    { key: 'Approved', label: 'Approved', count: approvedCount },
+    { key: 'Rejected', label: 'Rejected', count: rejectedCount },
+  ];
+
+  // Employee options for filter dropdown
+  const employeeOptions = useMemo(() => {
+    if (!employees || employees.length === 0) return [];
+    return employees.map((emp: Employee) => ({
+      value: emp._id,
+      label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
+    }));
+  }, [employees]);
 
   const getModalContainer = () => {
     const modalElement = document.getElementById("modal-datepicker");
@@ -466,19 +866,43 @@ const TimeSheet = () => {
                   </ul>
                 </div>
               </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#add_timesheet"
-                  className="btn btn-primary d-flex align-items-center"
-                  onClick={() => resetForm()}
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Today's Work
-                </Link>
-              </div>
+              {draftCount > 0 && role !== 'admin' && (
+                <div className="me-2 mb-2">
+                  <button
+                    onClick={handleSubmitAll}
+                    disabled={submitting}
+                    className="btn btn-outline-primary d-flex align-items-center"
+                  >
+                    {submitting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ti ti-send me-2" />
+                        Submit All Drafts
+                        <span className="badge bg-primary ms-2">{draftCount}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+              {role !== 'admin' && (
+                <div className="mb-2">
+                  <Link
+                    to="#"
+                    data-bs-toggle="modal"
+                    data-inert={true}
+                    data-bs-target="#add_timesheet"
+                    className="btn btn-primary d-flex align-items-center"
+                    onClick={() => resetForm()}
+                  >
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Today's Work
+                  </Link>
+                </div>
+              )}
               <div className="head-icons ms-2">
                 <CollapseHeader />
               </div>
@@ -565,6 +989,42 @@ const TimeSheet = () => {
                     ))}
                   </ul>
                 </div>
+                {(isAdmin || isHR || isProjectLevelManager) && employeeOptions.length > 0 && (
+                  <div className="dropdown me-3">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                    >
+                      {selectedEmployee
+                        ? employeeOptions.find(e => e.value === selectedEmployee)?.label || 'Select Employee'
+                        : 'All Employees'
+                      }
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => handleEmployeeFilter('')}
+                        >
+                          All Employees
+                        </Link>
+                      </li>
+                      {employeeOptions.map(employee => (
+                        <li key={employee.value}>
+                          <Link
+                            to="#"
+                            className="dropdown-item rounded-1"
+                            onClick={() => handleEmployeeFilter(employee.value)}
+                          >
+                            {employee.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div className="dropdown">
                   <Link
                     to="#"
@@ -638,19 +1098,68 @@ const TimeSheet = () => {
               </div>
             </div>
             <div className="card-body p-0">
-              {/* Info banner based on role */}
-              {!isAdmin && !isHR && (
-                <div className="alert alert-info border-0 rounded-0 m-0 mb-3" role="alert">
+              {/* Info banner for PM/TL - Shows their approval tier */}
+              {isProjectLevelManager && myManagedProjects.length > 0 && (
+                <div className="alert alert-success border-0 rounded-0 m-0 mb-3" role="alert">
                   <div className="d-flex align-items-center">
-                    <i className="ti ti-info-circle fs-20 me-2"></i>
+                    <i className="ti ti-shield-check fs-20 me-2"></i>
                     <span>
-                      {isRegularTeamMember
-                        ? "You are viewing only your own timesheet entries."
-                        : "You are viewing timesheet entries for projects where you are Team Lead or Project Manager, plus your own entries."}
+                      {isProjectManager && isTeamLeader
+                        ? `You manage ${myManagedProjects.length} project(s) as Project Manager and/or Team Leader. You can approve/reject submitted timesheets according to your role in each project.`
+                        : isProjectManager
+                          ? `You manage ${myManagedProjects.length} project(s) as Project Manager (Tier 1). You can approve/reject all submitted timesheets including your own.`
+                          : `You manage ${myManagedProjects.length} project(s) as Team Leader (Tier 2). You can approve/reject team members' timesheets, but your own entries require Project Manager approval.`}
                     </span>
                   </div>
                 </div>
               )}
+              {isProjectLevelManager && submittedCount > 0 && statusFilter !== 'Submitted' && (
+                <div
+                  className="alert alert-warning border-0 rounded-0 m-0 mb-3"
+                  role="alert"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setStatusFilter('Submitted')}
+                >
+                  <div className="d-flex align-items-center">
+                    <i className="ti ti-alert-circle fs-20 me-2"></i>
+                    <span>
+                      <strong>{submittedCount} timesheet entr{submittedCount > 1 ? 'ies' : 'y'} pending your approval.</strong>
+                      <span className="ms-2 text-muted">Click here or select the "Submitted" tab to review.</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* Info banner for regular team members (Tier 3) */}
+              {!isAdmin && !isHR && !isProjectLevelManager && (
+                <div className="alert alert-info border-0 rounded-0 m-0 mb-3" role="alert">
+                  <div className="d-flex align-items-center">
+                    <i className="ti ti-info-circle fs-20 me-2"></i>
+                    <span>
+                      You are viewing only your own timesheet entries. Your submitted entries require Team Lead or Project Manager approval.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Tabs */}
+              <div className="nav-tabs-container mb-3 px-3 pt-3">
+                <ul className="nav nav-tabs" role="tablist">
+                  {statusTabs.map(tab => (
+                    <li className="nav-item" role="presentation" key={tab.key}>
+                      <button
+                        className={`nav-link ${statusFilter === tab.key ? 'active' : ''}`}
+                        onClick={() => setStatusFilter(tab.key)}
+                        type="button"
+                      >
+                        {tab.label}
+                        <span className={`badge ms-2 ${statusFilter === tab.key ? 'bg-primary' : 'bg-secondary'}`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               {loading ? (
                 <div className="text-center py-5">
@@ -661,12 +1170,20 @@ const TimeSheet = () => {
                 <div className="text-center py-5">
                   <p className="text-danger">{error}</p>
                 </div>
-              ) : filteredTimeEntries.length === 0 ? (
+              ) : displayedEntries.length === 0 ? (
                 <div className="text-center py-5">
-                  <p className="text-muted">No time entries found. Click "Add Today's Work" to create one.</p>
+                  <p className="text-muted">No time entries found for "{statusTabs.find(t => t.key === statusFilter)?.label}" status.</p>
+                  {statusFilter !== 'all' && (
+                    <button
+                      className="btn btn-sm btn-outline-primary mt-2"
+                      onClick={() => setStatusFilter('all')}
+                    >
+                      View All Entries
+                    </button>
+                  )}
                 </div>
               ) : (
-                <Table dataSource={filteredTimeEntries} columns={columns} Selection={false} />
+                <Table dataSource={displayedEntries} columns={columns} Selection={false} />
               )}
             </div>
           </div>
@@ -710,6 +1227,30 @@ const TimeSheet = () => {
                           <option key={project.value} value={project.value}>{project.label}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Task <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-control"
+                        value={formData.taskId || ''}
+                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                        disabled={!formData.projectId || loadingTasks}
+                        required
+                      >
+                        <option value="">Select Task</option>
+                        {!formData.projectId && <option disabled>Select a project first</option>}
+                        {loadingTasks && <option disabled>Loading tasks...</option>}
+                        {taskOptions.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                      {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
+                        <small className="text-warning">No tasks assigned to you in this project.</small>
+                      )}
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -856,6 +1397,30 @@ const TimeSheet = () => {
                   <div className="col-md-12">
                     <div className="mb-3">
                       <label className="form-label">
+                        Task <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-control"
+                        value={formData.taskId || ''}
+                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                        disabled={!formData.projectId || loadingTasks}
+                        required
+                      >
+                        <option value="">Select Task</option>
+                        {!formData.projectId && <option disabled>Select a project first</option>}
+                        {loadingTasks && <option disabled>Loading tasks...</option>}
+                        {taskOptions.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                      {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
+                        <small className="text-warning">No tasks assigned to you in this project.</small>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
                         Description <span className="text-danger">*</span>
                       </label>
                       <textarea
@@ -991,6 +1556,64 @@ const TimeSheet = () => {
                 data-bs-dismiss="modal"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reject Timesheet Modal */}
+      <div className="modal fade" id="reject_modal">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Reject Timesheet Entry</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+                onClick={() => {
+                  setRejectEntryId(null);
+                  setRejectReason('');
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="mb-3">Please provide a reason for rejecting this timesheet entry:</p>
+              <textarea
+                className="form-control"
+                rows={4}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Enter rejection reason (required)"
+                maxLength={500}
+              />
+              <small className="text-muted mt-1 d-block">
+                {rejectReason.length}/500 characters
+              </small>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-light"
+                data-bs-dismiss="modal"
+                onClick={() => {
+                  setRejectEntryId(null);
+                  setRejectReason('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleRejectConfirm}
+                disabled={!rejectReason.trim()}
+              >
+                Reject Timesheet
               </button>
             </div>
           </div>
