@@ -20,14 +20,14 @@ const analyze = async () => {
   try {
     let mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/manageRTC';
     const dbName = process.env.MONGODB_DATABASE || 'AmasQIS';
-    
+
     // Append database name if not already present
     if (!mongoURI.endsWith('/') && !mongoURI.includes('/' + dbName)) {
       mongoURI += '/' + dbName;
     } else if (mongoURI.endsWith('/')) {
       mongoURI += dbName;
     }
-    
+
     console.log(`🔗 Connecting to database: ${dbName}`);
     await mongoose.connect(mongoURI);
     console.log('✅ Connected to MongoDB\n');

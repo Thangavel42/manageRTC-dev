@@ -1,6 +1,6 @@
 /**
  * Fix Company and Admin Profile Pages
- * 
+ *
  * 1. Move admin.profile from Administration to Pages category
  * 2. Fix double slash in admin.profile route (//admin/profile → /admin/profile)
  * 3. Move crm.company-details to Main Menu category under super-admin.companies parent
@@ -24,14 +24,14 @@ const fix = async () => {
   try {
     let mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/manageRTC';
     const dbName = process.env.MONGODB_DATABASE || 'AmasQIS';
-    
+
     // Append database name if not already present
     if (!mongoURI.endsWith('/') && !mongoURI.includes('/' + dbName)) {
       mongoURI += '/' + dbName;
     } else if (mongoURI.endsWith('/')) {
       mongoURI += dbName;
     }
-    
+
     console.log(`🔗 Connecting to database: ${dbName}`);
     await mongoose.connect(mongoURI);
     console.log('✅ Connected to MongoDB\n');
@@ -39,12 +39,12 @@ const fix = async () => {
     // Get categories
     const pagesCategory = await PageCategory.findOne({ identifier: 'XI' }).exec(); // Pages category
     const mainMenuCategory = await PageCategory.findOne({ identifier: 'I' }).exec(); // Main Menu category
-    
+
     if (!pagesCategory) {
       console.error('❌ Pages category (VII) not found!');
       process.exit(1);
     }
-    
+
     if (!mainMenuCategory) {
       console.error('❌ Main Menu category (I) not found!');
       process.exit(1);
@@ -55,34 +55,34 @@ const fix = async () => {
 
     // Find companies parent page
     const companiesParent = await Page.findOne({ name: 'super-admin.companies' }).exec();
-    
+
     if (!companiesParent) {
       console.error('❌ Companies parent page (super-admin.companies) not found!');
       process.exit(1);
     }
-    
+
     console.log(`✅ Found Companies parent: ${companiesParent.displayName} (${companiesParent.name})\n`);
 
     // 1. Fix admin.profile page
     console.log('📝 Fixing admin.profile page...');
     const adminProfilePage = await Page.findOne({ name: 'admin.profile' }).exec();
-    
+
     if (adminProfilePage) {
       const updates = {};
       let changes = [];
-      
+
       // Move to Pages category
       if (adminProfilePage.category.toString() !== pagesCategory._id.toString()) {
         updates.category = pagesCategory._id;
         changes.push(`Category: Administration → Pages`);
       }
-      
+
       // Fix double slash if exists
       if (adminProfilePage.route.startsWith('//')) {
         updates.route = adminProfilePage.route.replace('//', '/');
         changes.push(`Route: ${adminProfilePage.route} → ${updates.route}`);
       }
-      
+
       if (Object.keys(updates).length > 0) {
         await Page.updateOne({ _id: adminProfilePage._id }, { $set: updates });
         console.log(`✅ Updated admin.profile:`);
@@ -99,14 +99,14 @@ const fix = async () => {
     // 2. Fix crm.company-details page
     console.log('📝 Moving crm.company-details page...');
     const crmCompanyDetails = await Page.findOne({ name: 'crm.company-details' }).exec();
-    
+
     if (crmCompanyDetails) {
       const updates = {
         category: mainMenuCategory._id,
         parentPage: companiesParent._id,
         level: 2, // Child level
       };
-      
+
       await Page.updateOne({ _id: crmCompanyDetails._id }, { $set: updates });
       console.log(`✅ Updated crm.company-details:`);
       console.log(`   - Category: CRM → Main Menu`);
@@ -119,7 +119,7 @@ const fix = async () => {
     console.log('\n📊 Summary of changes:');
     const adminProfileAfter = await Page.findOne({ name: 'admin.profile' }).populate('category').exec();
     const crmCompanyDetailsAfter = await Page.findOne({ name: 'crm.company-details' }).populate('category').populate('parentPage').exec();
-    
+
     if (adminProfileAfter) {
       console.log(`\n  admin.profile:`);
       console.log(`    - Display: ${adminProfileAfter.displayName}`);
@@ -127,7 +127,7 @@ const fix = async () => {
       console.log(`    - Category: ${adminProfileAfter.category?.displayName || 'N/A'}`);
       console.log(`    - Level: ${adminProfileAfter.level}`);
     }
-    
+
     if (crmCompanyDetailsAfter) {
       console.log(`\n  crm.company-details:`);
       console.log(`    - Display: ${crmCompanyDetailsAfter.displayName}`);
