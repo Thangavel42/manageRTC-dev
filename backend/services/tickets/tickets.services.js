@@ -1,4 +1,4 @@
-import { getTenantCollections } from "../../config/db.js";
+import { getTenantCollections, getsuperadminCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 
 const parseDate = (d) => {
@@ -698,7 +698,7 @@ export const bulkDeleteTickets = async (tenantDbName, ticketIds) => {
 // Get all ticket categories
 export const getTicketCategories = async (tenantDbName) => {
   try {
-    const superAdminCollections = getTenantCollections('AmasQIS');
+    const superAdminCollections = getsuperadminCollections();
     const tenantCollections = getTenantCollections(tenantDbName);
 
     const categories = await superAdminCollections.ticketCategories
@@ -733,7 +733,7 @@ export const getTicketCategories = async (tenantDbName) => {
 // Add new ticket category
 export const addTicketCategory = async (categoryData, userId = "System") => {
   try {
-    const superAdminCollections = getTenantCollections('AmasQIS');
+    const superAdminCollections = getsuperadminCollections();
 
     // Validate required fields
     if (!categoryData.name || !categoryData.name.trim()) {
@@ -780,7 +780,7 @@ export const addTicketCategory = async (categoryData, userId = "System") => {
 // Update ticket category
 export const updateTicketCategory = async (categoryId, updateData) => {
   try {
-    const superAdminCollections = getTenantCollections('AmasQIS');
+    const superAdminCollections = getsuperadminCollections();
 
     // Validate category ID
     if (!ObjectId.isValid(categoryId)) {
@@ -818,7 +818,7 @@ export const updateTicketCategory = async (categoryId, updateData) => {
 // Delete ticket category
 export const deleteTicketCategory = async (tenantDbName, categoryId) => {
   try {
-    const superAdminCollections = getTenantCollections('AmasQIS');
+    const superAdminCollections = getsuperadminCollections();
     const tenantCollections = getTenantCollections(tenantDbName);
 
     // Validate category ID
