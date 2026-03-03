@@ -34,6 +34,7 @@ export const all_routes = {
   superAdminModules: '/super-admin/modules',
   superAdminPages: '/super-admin/pages',
   superAdminUsers: '/super-admin/superadmins',
+  superAdminCompanyDetails: '/super-admin/companies/:id',
 
   calendar: '/calendar',
   dataTables: '/data-tables',

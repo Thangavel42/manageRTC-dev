@@ -51,22 +51,94 @@ export interface CompanyStats {
   location: any;
 }
 
+export interface StructuredAddress {
+  street?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+}
+
+export interface ContactPerson {
+  name?: string;
+  email?: string;
+  phone?: string;
+  designation?: string;
+}
+
+export interface SocialLinks {
+  linkedin?: string;
+  twitter?: string;
+  facebook?: string;
+  instagram?: string;
+}
+
+export interface BillingAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}
+
+export interface AdminDetails {
+  name?: string;
+  email?: string;
+  phone?: string;
+  profileImage?: string;
+  memberSince?: string;
+}
+
 export interface CompanyDetails {
+  id?: string;
+  _id?: string;
   name: string;
   email: string;
   status: string;
   domain: string;
   phone: string;
+  phone2?: string | null;
+  fax?: string | null;
   website: string;
+  description?: string;
   currency: string;
   address: string;
+  structuredAddress?: StructuredAddress | null;
   plan_type: string;
   plan_name: string;
-  expiredate: string;
-  price: string;
-  registerdate: string;
+  plan_id?: string;
+  expiredate?: string;
+  price?: string;
+  registerdate?: string;
   logo: string;
-  _id: string;
+  // Registration & Legal
+  registrationNumber?: string | null;
+  taxId?: string | null;
+  taxIdType?: string | null;
+  legalName?: string | null;
+  legalEntityType?: string | null;
+  incorporationCountry?: string | null;
+  // Industry & Classification
+  industry?: string | null;
+  subIndustry?: string | null;
+  companySize?: string | null;
+  companyType?: string | null;
+  // Contact & Founder
+  contactPerson?: ContactPerson | null;
+  founderName?: string | null;
+  // Social Links
+  social?: SocialLinks | null;
+  // Billing
+  billingEmail?: string | null;
+  billingAddress?: BillingAddress | null;
+  // Admin & System
+  adminDetails?: AdminDetails | null;
+  userCount?: number;
+  isActive?: boolean;
+  clerkUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

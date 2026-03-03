@@ -395,13 +395,18 @@ const fetchcompany = async (companyid) => {
     return {
       done: true,
       data: {
+        id: details._id.toString(),
         name: details.name,
         email: details.email,
         status: details.status,
         domain: details.domain,
         phone: details.phone,
+        phone2: details.phone2 || null,
+        fax: details.fax || null,
         website: details.website,
+        description: details.description || '',
         address: details.address,
+        structuredAddress: details.structuredAddress || null,
         currency: details.currency,
         plan_name: details.plan_name,
         plan_type: details.plan_type,
@@ -409,6 +414,33 @@ const fetchcompany = async (companyid) => {
         registerdate: formatDate(registerDate),
         expiredate: formatDate(expireDate),
         logo: details.logo,
+        // Registration & Legal
+        registrationNumber: details.registrationNumber || null,
+        taxId: details.taxId || null,
+        taxIdType: details.taxIdType || null,
+        legalName: details.legalName || null,
+        legalEntityType: details.legalEntityType || null,
+        incorporationCountry: details.incorporationCountry || null,
+        // Industry & Classification
+        industry: details.industry || null,
+        subIndustry: details.subIndustry || null,
+        companySize: details.companySize || null,
+        companyType: details.companyType || null,
+        // Contact & Founder
+        contactPerson: details.contactPerson || null,
+        founderName: details.founderName || null,
+        // Social Links
+        social: details.social || null,
+        // Billing
+        billingEmail: details.billingEmail || null,
+        billingAddress: details.billingAddress || null,
+        // Admin & System
+        adminDetails: details.adminDetails || null,
+        userCount: details.userCount || 0,
+        isActive: details.isActive !== undefined ? details.isActive : true,
+        clerkUserId: details.clerkUserId || null,
+        createdAt: details.createdAt,
+        updatedAt: details.updatedAt,
       },
     };
   } catch (error) {
@@ -439,12 +471,40 @@ const fetcheditcompanyview = async (companyid) => {
         status: details.status,
         domain: details.domain,
         phone: details.phone,
+        phone2: details.phone2 || '',
+        fax: details.fax || '',
         website: details.website,
+        description: details.description || '',
         address: details.address,
+        structuredAddress: details.structuredAddress || { street: '', street2: '', city: '', state: '', country: '', postalCode: '' },
         plan_id: details.plan_id,
         plan_name: details.plan_name,
         plan_type: details.plan_type,
         logo: details.logo,
+        // Registration & Legal
+        registrationNumber: details.registrationNumber || '',
+        taxId: details.taxId || '',
+        taxIdType: details.taxIdType || '',
+        legalName: details.legalName || '',
+        legalEntityType: details.legalEntityType || '',
+        incorporationCountry: details.incorporationCountry || '',
+        // Industry & Classification
+        industry: details.industry || '',
+        subIndustry: details.subIndustry || '',
+        companySize: details.companySize || '',
+        companyType: details.companyType || '',
+        // Contact & Founder
+        contactPerson: details.contactPerson || { name: '', email: '', phone: '', designation: '' },
+        founderName: details.founderName || '',
+        // Social Links
+        social: details.social || { linkedin: '', twitter: '', facebook: '', instagram: '' },
+        // Billing
+        billingEmail: details.billingEmail || '',
+        billingAddress: details.billingAddress || { street: '', city: '', state: '', postalCode: '', country: '' },
+        // Admin & System
+        adminDetails: details.adminDetails || null,
+        userCount: details.userCount || 0,
+        isActive: details.isActive !== undefined ? details.isActive : true,
       },
     };
   } catch (error) {
@@ -490,6 +550,21 @@ const updateCompany = async (form) => {
       updatedAt: new Date().toISOString(),
       logo: form.logo,
     };
+
+    // Add new fields if provided
+    const optionalFields = [
+      'phone2', 'fax', 'description',
+      'registrationNumber', 'taxId', 'taxIdType', 'legalName', 'legalEntityType', 'incorporationCountry',
+      'industry', 'subIndustry', 'companySize', 'companyType',
+      'structuredAddress', 'contactPerson', 'founderName',
+      'social', 'billingEmail', 'billingAddress',
+      'adminDetails', 'isActive'
+    ];
+    for (const field of optionalFields) {
+      if (form[field] !== undefined) {
+        updateData[field] = form[field];
+      }
+    }
 
     // 3. Perform the update
     const result = await companiesCollection.updateOne(
