@@ -856,12 +856,12 @@ const CandidateGrid = () => {
                                 </div>
                               )}
 
-                              {candidate.applicationInfo?.recruiterName && (
+                              {candidate.applicationInfo?.recruiterDetails?.fullName && (
                                 <div className="mt-3 pt-3 border-top">
                                   <div className="d-flex align-items-center">
                                     <i className="ti ti-user-check me-2 text-muted"></i>
                                     <span className="fs-13 text-muted">
-                                      Recruiter: {candidate.applicationInfo.recruiterName}
+                                      Recruiter: {candidate.applicationInfo.recruiterDetails.fullName}
                                     </span>
                                   </div>
                                 </div>
