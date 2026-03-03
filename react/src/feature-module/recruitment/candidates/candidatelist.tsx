@@ -61,7 +61,7 @@ const CandidatesList = () => {
 
       const uniqueRecruiters = Array.from(new Set(
         candidates
-          .map(c => c.applicationInfo?.recruiterName)
+          .map(c => c.applicationInfo?.recruiterDetails?.fullName)
           .filter((recruiter): recruiter is string => Boolean(recruiter))
       ));
 
@@ -393,9 +393,9 @@ const CandidatesList = () => {
       title: "Recruiter",
       dataIndex: "recruiter",
       render: (text: string, record: Candidate) =>
-        record.applicationInfo?.recruiterName || "N/A",
+        record.applicationInfo?.recruiterDetails?.fullName || "N/A",
       sorter: (a: Candidate, b: Candidate) =>
-        (a.applicationInfo?.recruiterName || '').localeCompare(b.applicationInfo?.recruiterName || ''),
+        (a.applicationInfo?.recruiterDetails?.fullName || '').localeCompare(b.applicationInfo?.recruiterDetails?.fullName || ''),
     },
     {
       title: "Actions",

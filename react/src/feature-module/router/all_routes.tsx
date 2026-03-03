@@ -372,6 +372,9 @@ export const all_routes = {
   joblist: '/job-list',
   jobdetails: '/jobs/:jobId',
   candidates: '/candidates',
+  candidatesGrid: '/candidates-grid',
+  candidateslist: '/candidates-list',
+  candidateskanban: '/candidates-kanban',
   refferal: '/refferals',
   //FINANCE & ACCOUNTS
   estimate: '/estimates',
