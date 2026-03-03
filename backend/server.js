@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
+import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { attachRequestId } from './middleware/auth.js';
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
@@ -203,6 +204,13 @@ const initializeServer = async () => {
     await connectDB();
     console.log('Database connection established successfully');
 
+    // Seed ticket categories into superadmin DB (only if not already present)
+    try {
+      await seedTicketCategories();
+    } catch (err) {
+      console.error('⚠️  Ticket categories seed failed:', err.message);
+    }
+
     // Routes
     app.use('/api/socialfeed', socialFeedRoutes);
     app.use('/api/deals', dealRoutes);
@@ -325,6 +333,7 @@ const initializeServer = async () => {
           publicMetadata: {
             companyId,
             role,
+            ...(role === 'admin' ? { isAdminVerified: true } : {}),
           },
         });
 
