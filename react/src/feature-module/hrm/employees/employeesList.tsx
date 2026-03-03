@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/clerk-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import { Socket } from "socket.io-client";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
