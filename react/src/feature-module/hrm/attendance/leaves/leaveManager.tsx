@@ -1,6 +1,6 @@
 import { DatePicker, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import CollapseHeader from "../../../../core/common/collapse-header/collapse-header";
 import CommonSelect from "../../../../core/common/commonSelect";
 import Table from "../../../../core/common/dataTable/index";
@@ -9,6 +9,7 @@ import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
 import { useAuth } from "../../../../hooks/useAuth";
 import { useAutoReloadActions } from "../../../../hooks/useAutoReload";
 import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
+import { useIsReportingManager } from "../../../../hooks/useIsReportingManager";
 import { statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveTypeCode } from "../../../../hooks/useLeaveREST";
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
 import { all_routes } from "../../../router/all_routes";
@@ -144,10 +145,21 @@ const LeaveTypeBadge = ({ leaveType, leaveTypeDisplayMap }: { leaveType: string;
 const normalizeDate = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
 const ManagerLeaveDashboard = () => {
+  const navigate = useNavigate();
   const { role, userId } = useAuth();
+  const { isReportingManager, reporteeCount, loading: checkingManagerStatus } = useIsReportingManager();
   const { leaves, loading, fetchLeaves, approveLeave, rejectLeave, managerActionLeave, fetchStats, leaveTypeDisplayMap } = useLeaveREST();
   const { employees, fetchEmployees } = useEmployeesREST();
   const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
+
+  // Redirect unauthorized users (not reporting managers) to their own leaves page
+  useEffect(() => {
+    if (!checkingManagerStatus && !isReportingManager) {
+      console.log('[Team Leaves] Unauthorized access - redirecting to employee leaves');
+      message.warning('Access denied. You must be a reporting manager to access team leaves.');
+      navigate(all_routes.leaveemployee, { replace: true });
+    }
+  }, [isReportingManager, checkingManagerStatus, navigate]);
 
   // Auto-reload hook for refetching after actions
   const { refetchAfterAction } = useAutoReloadActions({
@@ -513,181 +525,233 @@ const ManagerLeaveDashboard = () => {
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="row">
-            {(loading || employees.length === 0) ? (
-              <>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="col-xl-3 col-md-6">
-                    <StatCardSkeleton />
-                  </div>
-                ))}
-              </>
-            ) : (
-              <>
-                <div className="col-xl-3 col-md-6">
-                  <div className="card bg-primary-img">
-                    <div className="card-body">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <p className="mb-1">Team Size</p>
-                          <h4 className="mb-0">{stats.teamSize}</h4>
-                        </div>
-                        <div className="avatar avatar-md bg-primary-transparent rounded">
-                          <i className="ti ti-users fs-24 text-primary" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+          {/* Checking Manager Status */}
+          {checkingManagerStatus ? (
+            <div className="card">
+              <div className="card-body text-center py-5">
+                <div className="spinner-border text-primary mb-3" role="status">
+                  <span className="visually-hidden">Loading...</span>
                 </div>
-                <div className="col-xl-3 col-md-6">
-                  <div className="card bg-warning-img">
-                    <div className="card-body">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <p className="mb-1">On Leave Today</p>
-                          <h4 className="mb-0">{stats.onLeaveToday}</h4>
-                        </div>
-                        <div className="avatar avatar-md bg-warning-transparent rounded">
-                          <i className="ti ti-calendar-event fs-24 text-warning" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-xl-3 col-md-6">
-                  <div className="card bg-info-img">
-                    <div className="card-body">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <p className="mb-1">Pending Approvals</p>
-                          <h4 className="mb-0">{stats.pendingApprovals}</h4>
-                        </div>
-                        <div className="avatar avatar-md bg-info-transparent rounded">
-                          <i className="ti ti-clock-hour-4 fs-24 text-info" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-xl-3 col-md-6">
-                  <div className="card bg-success-img">
-                    <div className="card-body">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div>
-                          <p className="mb-1">Approved This Month</p>
-                          <h4 className="mb-0">{stats.approvedThisMonth}</h4>
-                        </div>
-                        <div className="avatar avatar-md bg-success-transparent rounded">
-                          <i className="ti ti-circle-check fs-24 text-success" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Team Members on Leave Today */}
-          <div className="card mb-3">
-            <div className="card-header d-flex align-items-center justify-content-between">
-              <h5 className="mb-0">Team Members on Leave Today</h5>
-              <span className="badge bg-primary-transparent">
-                {(loading || employees.length === 0) ? 0 : stats.onLeaveToday} member{stats.onLeaveToday !== 1 ? 's' : ''}
-              </span>
+                <p className="text-muted">Checking access permissions...</p>
+              </div>
             </div>
-            <div className="card-body">
-              {(loading || employees.length === 0) ? (
-                <div className="row">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <TeamMemberCardSkeleton key={i} />
-                  ))}
+          ) : !isReportingManager ? (
+            /* Access Denied - Not a Reporting Manager */
+            <div className="card border-warning">
+              <div className="card-body text-center py-5">
+                <div className="avatar avatar-xxl bg-warning-transparent rounded-circle mx-auto mb-3">
+                  <i className="ti ti-user-x fs-1 text-warning" />
                 </div>
-              ) : stats.onLeaveToday > 0 ? (
-                <div className="row">
-                  {teamLeaves
-                    .filter(leave => {
-                      const today = new Date();
-                      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-                      const startDate = new Date(leave.startDate);
-                      const endDate = new Date(leave.endDate);
-                      return leave.status === 'approved' && startDate <= endOfToday && endDate >= startOfToday;
-                    })
-                    .map((leave) => {
-                      const employeeName = employeeNameById.get(leave.employeeId) || leave.employeeName || "Unknown";
-                      return (
-                        <div key={leave._id} className="col-xl-4 col-md-6 mb-3">
-                          <div className="d-flex align-items-center p-3 border rounded">
-                            <span className="avatar avatar-md me-3">
-                              <ImageWithBasePath src="assets/img/users/user-32.jpg" className="rounded-circle" alt="img" />
-                            </span>
-                            <div className="flex-grow-1">
-                              <h6 className="mb-1">{employeeName}</h6>
-                              <p className="text-muted mb-0 small">
-                                {leave.leaveTypeName || leaveTypeDisplayMap[leave.leaveType] || leave.leaveType} - {leave.duration} day{leave.duration > 1 ? 's' : ''}
-                              </p>
+                <h4 className="mb-3">Access Restricted</h4>
+                <p className="text-muted mb-4">
+                  This page is only available for employees who are assigned as reporting managers.
+                  <br />
+                  You currently have <strong>{reporteeCount}</strong> team member{reporteeCount !== 1 ? 's' : ''} reporting to you.
+                </p>
+                <div className="alert alert-warning d-inline-flex align-items-center" role="alert">
+                  <i className="ti ti-info-circle me-2 fs-5" />
+                  <div className="text-start">
+                    <strong>Why am I seeing this?</strong>
+                    <p className="mb-0 small">
+                      To access the Team Leaves page, at least one employee must have you assigned as their reporting manager.
+                      Please contact your HR administrator if you believe this is incorrect.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Link to={all_routes.leaveemployee} className="btn btn-primary me-2">
+                    <i className="ti ti-arrow-left me-1" />
+                    Go to My Leaves
+                  </Link>
+                  <Link to={all_routes.adminDashboard} className="btn btn-outline-secondary">
+                    <i className="ti ti-home me-1" />
+                    Dashboard
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Main Content - Reporting Manager Access Granted */
+            <>
+
+              {/* Stats Cards */}
+              <div className="row">
+                {(loading || employees.length === 0) ? (
+                  <>
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="col-xl-3 col-md-6">
+                        <StatCardSkeleton />
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <div className="col-xl-3 col-md-6">
+                      <div className="card bg-primary-img">
+                        <div className="card-body">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div>
+                              <p className="mb-1">Team Size</p>
+                              <h4 className="mb-0">{stats.teamSize}</h4>
                             </div>
-                            <span className="badge bg-success">On Leave</span>
+                            <div className="avatar avatar-md bg-primary-transparent rounded">
+                              <i className="ti ti-users fs-24 text-primary" />
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
-                </div>
-              ) : (
-                <p className="text-muted mb-0">No team members on leave today</p>
-              )}
-            </div>
-          </div>
+                      </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6">
+                      <div className="card bg-warning-img">
+                        <div className="card-body">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div>
+                              <p className="mb-1">On Leave Today</p>
+                              <h4 className="mb-0">{stats.onLeaveToday}</h4>
+                            </div>
+                            <div className="avatar avatar-md bg-warning-transparent rounded">
+                              <i className="ti ti-calendar-event fs-24 text-warning" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6">
+                      <div className="card bg-info-img">
+                        <div className="card-body">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div>
+                              <p className="mb-1">Pending Approvals</p>
+                              <h4 className="mb-0">{stats.pendingApprovals}</h4>
+                            </div>
+                            <div className="avatar avatar-md bg-info-transparent rounded">
+                              <i className="ti ti-clock-hour-4 fs-24 text-info" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6">
+                      <div className="card bg-success-img">
+                        <div className="card-body">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div>
+                              <p className="mb-1">Approved This Month</p>
+                              <h4 className="mb-0">{stats.approvedThisMonth}</h4>
+                            </div>
+                            <div className="avatar avatar-md bg-success-transparent rounded">
+                              <i className="ti ti-circle-check fs-24 text-success" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
-          {/* Team Leave Requests Table */}
-          <div className="card">
-            <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-              <div className="d-flex">
-                <h5 className="me-2">Team Leave Requests</h5>
-                <span className="badge bg-primary-transparent me-2">
-                  Total: {stats.totalTeamLeaves}
-                </span>
-                <span className="badge bg-warning-transparent">
-                  Pending: {stats.pendingApprovals}
-                </span>
-              </div>
-              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-                <div className="me-3">
-                  <CommonSelect
-                    className="select"
-                    options={statusOptions}
-                    onChange={(option) => setFilters({ ...filters, status: option.value as LeaveStatus, page: 1 })}
-                  />
+              {/* Team Members on Leave Today */}
+              <div className="card mb-3">
+                <div className="card-header d-flex align-items-center justify-content-between">
+                  <h5 className="mb-0">Team Members on Leave Today</h5>
+                  <span className="badge bg-primary-transparent">
+                    {(loading || employees.length === 0) ? 0 : stats.onLeaveToday} member{stats.onLeaveToday !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                <div className="me-3">
-                  <CommonSelect
-                    className="select"
-                    options={leaveTypeOptions}
-                    onChange={(option) => setFilters({ ...filters, leaveType: option.value as LeaveTypeCode, page: 1 })}
-                  />
-                </div>
-                <div>
-                  <DatePicker.RangePicker
-                    onChange={(dates: any) => {
-                      if (dates && dates[0] && dates[1]) {
-                        setFilters({ ...filters, dateRange: dates, page: 1 });
-                      }
-                    }}
-                  />
+                <div className="card-body">
+                  {(loading || employees.length === 0) ? (
+                    <div className="row">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <TeamMemberCardSkeleton key={i} />
+                      ))}
+                    </div>
+                  ) : stats.onLeaveToday > 0 ? (
+                    <div className="row">
+                      {teamLeaves
+                        .filter(leave => {
+                          const today = new Date();
+                          const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                          const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+                          const startDate = new Date(leave.startDate);
+                          const endDate = new Date(leave.endDate);
+                          return leave.status === 'approved' && startDate <= endOfToday && endDate >= startOfToday;
+                        })
+                        .map((leave) => {
+                          const employeeName = employeeNameById.get(leave.employeeId) || leave.employeeName || "Unknown";
+                          return (
+                            <div key={leave._id} className="col-xl-4 col-md-6 mb-3">
+                              <div className="d-flex align-items-center p-3 border rounded">
+                                <span className="avatar avatar-md me-3">
+                                  <ImageWithBasePath src="assets/img/users/user-32.jpg" className="rounded-circle" alt="img" />
+                                </span>
+                                <div className="flex-grow-1">
+                                  <h6 className="mb-1">{employeeName}</h6>
+                                  <p className="text-muted mb-0 small">
+                                    {leave.leaveTypeName || leaveTypeDisplayMap[leave.leaveType] || leave.leaveType} - {leave.duration} day{leave.duration > 1 ? 's' : ''}
+                                  </p>
+                                </div>
+                                <span className="badge bg-success">On Leave</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <p className="text-muted mb-0">No team members on leave today</p>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="card-body p-0">
-              <div className="table-responsive">
-                <Table
-                  columns={columns}
-                  dataSource={data}
-                />
+
+              {/* Team Leave Requests Table */}
+              <div className="card">
+                <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                  <div className="d-flex">
+                    <h5 className="me-2">Team Leave Requests</h5>
+                    <span className="badge bg-primary-transparent me-2">
+                      Total: {stats.totalTeamLeaves}
+                    </span>
+                    <span className="badge bg-warning-transparent">
+                      Pending: {stats.pendingApprovals}
+                    </span>
+                  </div>
+                  <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                    <div className="me-3">
+                      <CommonSelect
+                        className="select"
+                        options={statusOptions}
+                        onChange={(option) => setFilters({ ...filters, status: option.value as LeaveStatus, page: 1 })}
+                      />
+                    </div>
+                    <div className="me-3">
+                      <CommonSelect
+                        className="select"
+                        options={leaveTypeOptions}
+                        onChange={(option) => setFilters({ ...filters, leaveType: option.value as LeaveTypeCode, page: 1 })}
+                      />
+                    </div>
+                    <div>
+                      <DatePicker.RangePicker
+                        onChange={(dates: any) => {
+                          if (dates && dates[0] && dates[1]) {
+                            setFilters({ ...filters, dateRange: dates, page: 1 });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="card-body p-0">
+                  <div className="table-responsive">
+                    <Table
+                      columns={columns}
+                      dataSource={data}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
+          {/* /Conditional Content */}
         </div>
       </div>
       <Footer />

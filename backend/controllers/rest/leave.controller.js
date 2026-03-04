@@ -2003,20 +2003,29 @@ export const getLeaveBalance = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get team leave requests (for managers)
+ * @desc    Get team leave requests (for reporting managers)
  * @route   GET /api/leaves/team
- * @access  Private (Manager, Admin, HR, Superadmin)
+ * @access  Private (Reporting Managers, Admin, HR, Superadmin)
+ *
+ * Access Logic:
+ * - Admin/HR/Superadmin: Can view all employees' leaves
+ * - Reporting Managers: Can view leaves of employees who report to them (reportingTo === currentEmployee._id)
+ * - Non-managers: Forbidden (must have at least one reportee to access this endpoint)
  */
 export const getTeamLeaves = asyncHandler(async (req, res) => {
   const { page, limit, status, leaveType, department } = req.query;
   const user = extractUser(req);
 
-  logger.debug('[Leave Controller] getTeamLeaves called', { companyId: user.companyId, userId: user.userId });
+  logger.debug('[Leave Controller] getTeamLeaves called', {
+    companyId: user.companyId,
+    userId: user.userId,
+    role: user.role
+  });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
-  // Get current employee (manager)
+  // Get current employee
   const currentEmployee = await getEmployeeByClerkId(collections, user.userId, user.employeeId, user.email);
 
   if (!currentEmployee) {
@@ -2039,36 +2048,46 @@ export const getTeamLeaves = asyncHandler(async (req, res) => {
     filter.leaveType = leaveType;
   }
 
-  // Get team members based on role (case-insensitive)
+  // Get team members based on role and reporting hierarchy (case-insensitive)
   let teamEmployeeIds = [];
   const userRole = user.role?.toLowerCase();
 
   if (userRole === 'admin' || userRole === 'hr' || userRole === 'superadmin') {
-    // Admins/HR can see all employees
+    // Admins/HR/Superadmin can see all employees
+    logger.debug('[Leave Controller] Admin/HR/Superadmin access - fetching all employees');
     const allEmployees = await collections.employees.find({
       companyId: user.companyId,
       isDeleted: { $ne: true }
     }).toArray();
     teamEmployeeIds = allEmployees.map(emp => emp.employeeId);
-  } else if (userRole === 'manager') {
-    // Managers can see their department employees
-    const deptFilter = {
-      companyId: user.companyId,
-      isDeleted: { $ne: true }
-    };
+  } else {
+    // For all other roles: Check if user is a reporting manager
+    // Find employees who report to current user (reportingTo === currentEmployee._id)
+    logger.debug('[Leave Controller] Checking reporting manager status', {
+      currentEmployeeId: currentEmployee._id,
+      currentEmployeeEmpId: currentEmployee.employeeId
+    });
 
-    // Filter by department if specified, or use manager's department
-    if (department) {
-      deptFilter.departmentId = department;
-    } else if (currentEmployee.departmentId) {
-      deptFilter.departmentId = currentEmployee.departmentId;
+    const reportees = await collections.employees.find({
+      companyId: user.companyId,
+      reportingTo: currentEmployee._id, // MongoDB ObjectId reference
+      isDeleted: { $ne: true }
+    }).toArray();
+
+    logger.debug('[Leave Controller] Found reportees', {
+      count: reportees.length,
+      reporteeIds: reportees.map(r => r.employeeId)
+    });
+
+    if (reportees.length === 0) {
+      // User is not a reporting manager - deny access
+      throw buildForbiddenError(
+        'Access denied. This page is only available for reporting managers. You must have at least one employee reporting to you to access team leave management.'
+      );
     }
 
-    const teamEmployees = await collections.employees.find(deptFilter).toArray();
-    teamEmployeeIds = teamEmployees.map(emp => emp.employeeId);
-  } else {
-    // Other roles can only see their own leaves
-    teamEmployeeIds = [currentEmployee.employeeId];
+    // User is a reporting manager - show their reportees' leaves
+    teamEmployeeIds = reportees.map(emp => emp.employeeId);
   }
 
   if (teamEmployeeIds.length === 0) {
@@ -2093,6 +2112,14 @@ export const getTeamLeaves = asyncHandler(async (req, res) => {
     .toArray();
 
   const pagination = buildPagination(pageNum, limitNum, total);
+
+  logger.info('[Leave Controller] Team leaves retrieved', {
+    userId: user.userId,
+    role: user.role,
+    teamSize: teamEmployeeIds.length,
+    totalLeaves: total,
+    returnedLeaves: leaves.length
+  });
 
   return sendSuccess(res, leaves, 'Team leave requests retrieved successfully', 200, pagination);
 });
