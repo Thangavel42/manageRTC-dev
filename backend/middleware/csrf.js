@@ -59,7 +59,11 @@ export const csrfErrorHandler = (err, req, res, next) => {
 
 /**
  * Conditional CSRF middleware
- * Skips CSRF for GET/HEAD/OPTIONS and webhook endpoints
+ * Skips CSRF for GET/HEAD/OPTIONS, webhook endpoints, and JWT-authenticated requests
+ *
+ * NOTE: CSRF protection is primarily for cookie-based sessions.
+ * JWT-authenticated APIs don't need CSRF since the token is stored in memory/localStorage
+ * and sent via Authorization header (not automatically by browsers).
  */
 export const conditionalCsrf = (req, res, next) => {
   // Skip CSRF for safe methods
@@ -72,12 +76,19 @@ export const conditionalCsrf = (req, res, next) => {
     return next();
   }
 
+  // Skip CSRF for JWT-authenticated requests (Bearer token in Authorization header)
+  // JWT provides its own protection - CSRF is only needed for cookie-based auth
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
   // Skip CSRF for API endpoints during development (optional)
   if (process.env.NODE_ENV === 'development' && process.env.DISABLE_CSRF === 'true') {
     console.warn('[CSRF] CSRF protection disabled in development mode');
     return next();
   }
 
-  // Apply CSRF protection
+  // Apply CSRF protection only for non-authenticated state-changing requests
   csrfProtection(req, res, next);
 };

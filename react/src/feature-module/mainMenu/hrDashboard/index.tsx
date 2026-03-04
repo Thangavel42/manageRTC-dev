@@ -1254,7 +1254,7 @@ const HRDashboard = () => {
                         </div>
                       </div>
                       <Link
-                        to="/leaves"
+                        to={routes.attendancereport}
                         className="fs-13 link-primary text-decoration-underline mb-2"
                       >
                         View Details
@@ -1283,7 +1283,7 @@ const HRDashboard = () => {
                           } br-5`}
                         >
                           <div className="d-flex align-items-center">
-                            <Link to="#" className="avatar flex-shrink-0">
+                            <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)} className="avatar flex-shrink-0">
                               <ImageWithBasePath
                                 src={employee.avatar}
                                 className="rounded-circle border border-2"
@@ -1292,7 +1292,7 @@ const HRDashboard = () => {
                             </Link>
                             <div className="ms-2">
                               <h6 className="fw-medium mb-1">
-                                <Link to="#">{employee.name}</Link>
+                                <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)}>{employee.name}</Link>
                               </h6>
                               <p className="fs-13">{employee.position}</p>
                             </div>
@@ -1375,16 +1375,16 @@ const HRDashboard = () => {
                           className="d-flex align-items-center justify-content-between mb-3 p-2 border br-5"
                         >
                           <div className="d-flex align-items-center">
-                            <Link to="#" className="avatar avatar-md flex-shrink-0">
+                            <span className="avatar avatar-md flex-shrink-0">
                               <ImageWithBasePath
                                 src={applicant.avatar || "assets/img/profiles/avatar-14.jpg"}
                                 className="rounded-circle"
                                 alt="img"
                               />
-                            </Link>
+                            </span>
                             <div className="ms-2">
                               <h6 className="fw-medium mb-1">
-                                <Link to="#">{applicant.name}</Link>
+                                {applicant.name}
                               </h6>
                               <p className="fs-12 text-muted mb-1">{applicant.position}</p>
                               <span className="badge badge-soft-info fs-10">
@@ -1410,7 +1410,7 @@ const HRDashboard = () => {
                   </div>
                   {dashboardData?.jobApplicants?.applicants && dashboardData?.jobApplicants?.applicants?.length > 4 && (
                     <Link
-                      to="/job-applicants"
+                      to={routes.joblist}
                       className="btn btn-light w-100 mt-2"
                     >
                       View All Applicants

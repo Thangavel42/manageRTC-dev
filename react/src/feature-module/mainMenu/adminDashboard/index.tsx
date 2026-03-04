@@ -248,11 +248,24 @@ const AdminDashboard = () => {
   };
 
   const getUserName = () => {
+    // Try to get name from profile data first (from REST API)
+    if (profile && 'fullName' in profile && profile.fullName) {
+      return profile.fullName;
+    }
+    if (profile && 'firstName' in profile && profile.firstName) {
+      return `${profile.firstName} ${profile.lastName || ''}`.trim();
+    }
+    // Fallback to Clerk user data
     if (!user) return 'Admin';
     return user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Admin';
   };
 
   const getUserImage = () => {
+    // Try to get image from profile data first (from REST API)
+    if (profile && 'profileImage' in profile && profile.profileImage) {
+      return profile.profileImage;
+    }
+    // Fallback to Clerk user data
     if (!user) return 'assets/img/profiles/avatar-31.jpg';
     return user.imageUrl || 'assets/img/profiles/avatar-31.jpg';
   };

@@ -11,23 +11,23 @@ import PDFDocument from 'pdfkit';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-  asyncHandler,
-  buildNotFoundError,
-  buildValidationError
+    asyncHandler,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
 import { createAuditLog } from '../../services/audit/auditLog.service.js'; // ✅ SECURITY FIX - Phase 6: Audit logging
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-  buildPagination,
-  extractUser,
-  getRequestId,
-  sendCreated,
-  sendSuccess
+    buildPagination,
+    extractUser,
+    getRequestId,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import {
-  canUserDeleteAvatar,
-  getSystemDefaultAvatarUrl
+    canUserDeleteAvatar,
+    getSystemDefaultAvatarUrl
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail, sendPasswordChangedEmail } from '../../utils/emailer.js';
@@ -157,8 +157,9 @@ const formatEmployeeDates = (employee) => {
 
   // Format canonical root level date fields
   formatted.dateOfBirth = formatDDMMYYYY(formatted.dateOfBirth);
-  formatted.dateOfJoining = formatDDMMYYYY(formatted.dateOfJoining);
-  formatted.joiningDate = formatDDMMYYYY(formatted.joiningDate);
+  // DB schema uses 'joiningDate', frontend uses 'dateOfJoining' - keep both in sync
+  formatted.joiningDate = formatDDMMYYYY(formatted.joiningDate || formatted.dateOfJoining);
+  formatted.dateOfJoining = formatted.joiningDate; // Always alias for frontend compatibility
 
   // Format personal object dates (canonical fields only: passport)
   if (formatted.personal && typeof formatted.personal === 'object') {
