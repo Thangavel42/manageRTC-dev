@@ -62,6 +62,7 @@ var collapse_header_1 = require("../../core/common/collapse-header/collapse-head
 var footer_1 = require("../../core/common/footer");
 var imageWithBasePath_1 = require("../../core/common/imageWithBasePath");
 var AssignTicketModal_1 = require("../../core/modals/AssignTicketModal");
+var deleteModal_1 = require("../../core/modals/deleteModal");
 var EditTicketModal_1 = require("../../core/modals/EditTicketModal");
 var ticketListModal_1 = require("../../core/modals/ticketListModal");
 var useAuth_1 = require("../../hooks/useAuth");
@@ -98,8 +99,11 @@ var Tickets = function () {
     var _c = react_1.useState('assigned-to-me'), myTicketsSubTab = _c[0], setMyTicketsSubTab = _c[1];
     // State for view mode (list or grid)
     var _d = react_1.useState('list'), viewMode = _d[0], setViewMode = _d[1];
+    // Pagination state
+    var _e = react_1.useState(1), currentPage = _e[0], setCurrentPage = _e[1];
+    var itemsPerPage = react_1.useState(10)[0]; // 10 items per page
     // State for dynamic data
-    var _e = react_1.useState({
+    var _f = react_1.useState({
         newTickets: 0,
         openTickets: 0,
         solvedTickets: 0,
@@ -108,25 +112,27 @@ var Tickets = function () {
         monthlyTrends: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         categoryStats: [],
         agentStats: []
-    }), ticketsStats = _e[0], setTicketsStats = _e[1];
-    var _f = react_1.useState(true), loading = _f[0], setLoading = _f[1];
+    }), ticketsStats = _f[0], setTicketsStats = _f[1];
+    var _g = react_1.useState(true), loading = _g[0], setLoading = _g[1];
     // State for ticket list
-    var _g = react_1.useState([]), ticketsList = _g[0], setTicketsList = _g[1];
-    var _h = react_1.useState([]), filteredTickets = _h[0], setFilteredTickets = _h[1];
-    var _j = react_1.useState(true), ticketsLoading = _j[0], setTicketsLoading = _j[1];
-    var _k = react_1.useState({
+    var _h = react_1.useState([]), ticketsList = _h[0], setTicketsList = _h[1];
+    var _j = react_1.useState([]), filteredTickets = _j[0], setFilteredTickets = _j[1];
+    var _k = react_1.useState(true), ticketsLoading = _k[0], setTicketsLoading = _k[1];
+    var _l = react_1.useState({
         priority: '',
         sortBy: 'recently'
-    }), filters = _k[0], setFilters = _k[1];
-    var _l = react_1.useState(false), _exportLoading = _l[0], setExportLoading = _l[1];
+    }), filters = _l[0], setFilters = _l[1];
+    var _m = react_1.useState(false), _exportLoading = _m[0], setExportLoading = _m[1];
+    // State for delete ticket
+    var _o = react_1.useState(null), selectedTicketForDelete = _o[0], setSelectedTicketForDelete = _o[1];
     // State for categories
-    var _m = react_1.useState([]), categories = _m[0], setCategories = _m[1];
-    var _o = react_1.useState(false), loadingCategories = _o[0], setLoadingCategories = _o[1];
+    var _p = react_1.useState([]), categories = _p[0], setCategories = _p[1];
+    var _q = react_1.useState(false), loadingCategories = _q[0], setLoadingCategories = _q[1];
     // State for IT Support agents sidebar
-    var _p = react_1.useState([]), supportAgents = _p[0], setSupportAgents = _p[1];
-    var _q = react_1.useState(false), loadingAgents = _q[0], setLoadingAgents = _q[1];
+    var _r = react_1.useState([]), supportAgents = _r[0], setSupportAgents = _r[1];
+    var _s = react_1.useState(false), loadingAgents = _s[0], setLoadingAgents = _s[1];
     // Tab counts
-    var _r = react_1.useState({}), tabCounts = _r[0], setTabCounts = _r[1];
+    var _t = react_1.useState({}), tabCounts = _t[0], setTabCounts = _t[1];
     // Compute category counts from user's tickets for employees
     var employeeCategoryCounts = react_1.useMemo(function () {
         if (!isEmployeeRole || !ticketsList || ticketsList.length === 0) {
@@ -266,6 +272,35 @@ var Tickets = function () {
     var handleTabChange = function (tabId) {
         setCurrentTab(tabId);
         window.location.hash = tabId;
+    };
+    // Handle ticket delete
+    var handleDeleteTicket = function () {
+        if (!socket || !selectedTicketForDelete)
+            return;
+        console.log('🗑️ Deleting ticket:', selectedTicketForDelete);
+        socket.emit('tickets/delete-ticket', { ticketId: selectedTicketForDelete });
+        // Listen for delete response
+        var handleDeleteResponse = function (response) {
+            var _a, _b;
+            if (response.done) {
+                console.log('✅ Ticket deleted successfully');
+                // Close modal
+                var modalElement = document.querySelector('#delete_modal');
+                if (modalElement) {
+                    var modal = (_b = (_a = window.bootstrap) === null || _a === void 0 ? void 0 : _a.Modal) === null || _b === void 0 ? void 0 : _b.getInstance(modalElement);
+                    modal === null || modal === void 0 ? void 0 : modal.hide();
+                }
+                // Refresh list
+                fetchTicketsList();
+            }
+            else {
+                console.error('❌ Failed to delete ticket:', response.message);
+                alert(response.message || 'Failed to delete ticket');
+            }
+            setSelectedTicketForDelete(null);
+            socket.off('tickets/delete-ticket-response', handleDeleteResponse);
+        };
+        socket.on('tickets/delete-ticket-response', handleDeleteResponse);
     };
     // Update current tab when URL hash changes
     react_1.useEffect(function () {
@@ -759,9 +794,45 @@ var Tickets = function () {
             alert("Failed to export Excel");
         }
     };
+    // Pagination calculations
+    var totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+    var indexOfLastItem = currentPage * itemsPerPage;
+    var indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    var currentTickets = filteredTickets.slice(indexOfFirstItem, indexOfLastItem);
+    // Pagination handlers
+    var handlePageChange = function (pageNumber) {
+        setCurrentPage(pageNumber);
+        // Scroll to top of table when page changes
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    var handlePrevPage = function () {
+        if (currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+    var handleNextPage = function () {
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+    // Reset to page 1 when filters change
+    react_1.useEffect(function () {
+        setCurrentPage(1);
+    }, [filters, currentTab, myTicketsSubTab]);
     // Render ticket card for grid view
     var renderTicketCard = function (ticket) {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+        // Truncate title for grid view
+        var truncateTitle = function (title, maxLength) {
+            if (maxLength === void 0) { maxLength = 40; }
+            if (!title)
+                return 'Untitled';
+            if (title.length <= maxLength)
+                return title;
+            return title.substring(0, maxLength) + '...';
+        };
         return (React.createElement("div", { key: ticket.ticketId, className: "col-xl-3 col-lg-4 col-md-6" },
             React.createElement("div", { className: "card" },
                 React.createElement("div", { className: "card-body" },
@@ -776,16 +847,26 @@ var Tickets = function () {
                                 React.createElement("i", { className: "ti ti-dots-vertical" })),
                             React.createElement("ul", { className: "dropdown-menu dropdown-menu-end p-3" },
                                 React.createElement("li", null,
-                                    React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#edit_ticket" },
-                                        React.createElement("i", { className: "ti ti-edit me-1" }),
-                                        "Edit")),
-                                React.createElement("li", null,
-                                    React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: "#", "data-bs-toggle": "modal", "data-bs-target": "#delete_modal" },
-                                        React.createElement("i", { className: "ti ti-trash me-1" }),
-                                        "Delete"))))),
+                                    React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: routes.ticketDetails + "?id=" + ticket.ticketId },
+                                        React.createElement("i", { className: "ti ti-eye me-2" }),
+                                        "View Details")),
+                                !['Resolved', 'Closed'].includes(ticket.status) && (((_c = ticket.createdBy) === null || _c === void 0 ? void 0 : _c._id) === userId || ((_d = ticket.createdBy) === null || _d === void 0 ? void 0 : _d.clerkUserId) === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
+                                    React.createElement("button", { type: "button", className: "dropdown-item rounded-1", "data-bs-toggle": "modal", "data-bs-target": "#edit_ticket", "data-ticket-id": ticket.ticketId, "data-ticket-title": ticket.title, "data-ticket-description": ticket.description, "data-ticket-category": ticket.category, "data-ticket-subcategory": ticket.subCategory, "data-ticket-priority": ticket.priority },
+                                        React.createElement("i", { className: "ti ti-edit me-2" }),
+                                        "Edit"))),
+                                (role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
+                                    React.createElement("button", { type: "button", className: "dropdown-item rounded-1", "data-bs-toggle": "modal", "data-bs-target": "#assign_ticket", "data-ticket-id": ticket.ticketId, "data-ticket-title": ticket.title, "data-current-assignee": ((_e = ticket.assignedTo) === null || _e === void 0 ? void 0 : _e.firstName) && ((_f = ticket.assignedTo) === null || _f === void 0 ? void 0 : _f.lastName)
+                                            ? ticket.assignedTo.firstName + " " + ticket.assignedTo.lastName
+                                            : 'Unassigned', "data-current-assignee-id": ((_g = ticket.assignedTo) === null || _g === void 0 ? void 0 : _g._id) || '' },
+                                        React.createElement("i", { className: "ti ti-user-check me-2" }),
+                                        ((_h = ticket.assignedTo) === null || _h === void 0 ? void 0 : _h._id) ? 'Reassign' : 'Assign'))),
+                                (((_j = ticket.createdBy) === null || _j === void 0 ? void 0 : _j._id) === userId || ((_k = ticket.createdBy) === null || _k === void 0 ? void 0 : _k.clerkUserId) === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
+                                    React.createElement("button", { type: "button", className: "dropdown-item rounded-1 text-danger", "data-bs-toggle": "modal", "data-bs-target": "#delete_modal", onClick: function () { return setSelectedTicketForDelete(ticket.ticketId); } },
+                                        React.createElement("i", { className: "ti ti-trash me-2" }),
+                                        "Delete")))))),
                     React.createElement("div", { className: "text-center mb-3" },
-                        React.createElement("h6", { className: "mb-1" },
-                            React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId }, ticket.title || 'Untitled')),
+                        React.createElement("h6", { className: "mb-1", title: ticket.title || 'Untitled' },
+                            React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId }, truncateTitle(ticket.title))),
                         React.createElement("span", { className: "badge bg-info-transparent fs-10 fw-medium" }, ticket.ticketId || 'N/A')),
                     React.createElement("div", { className: "d-flex flex-column" },
                         React.createElement("div", { className: "d-flex align-items-center justify-content-between mb-3" },
@@ -806,7 +887,7 @@ var Tickets = function () {
                             React.createElement("p", { className: "mb-1 fs-12" }, "Assigned To"),
                             React.createElement("div", { className: "d-flex align-items-center" },
                                 React.createElement("span", { className: "avatar avatar-xs avatar-rounded me-2" }, ticket.assignedTo ? (React.createElement(imageWithBasePath_1["default"], { src: ticket.assignedTo.avatarUrl || ticket.assignedTo.avatar || "assets/img/profiles/avatar-01.jpg", alt: "Assigned" })) : (React.createElement(imageWithBasePath_1["default"], { src: "assets/img/profiles/avatar-01.jpg", alt: "Unassigned", style: { opacity: 0.5 } }))),
-                                React.createElement("h6", { className: "fw-normal" }, ((_c = ticket.assignedTo) === null || _c === void 0 ? void 0 : _c.firstName) && ((_d = ticket.assignedTo) === null || _d === void 0 ? void 0 : _d.lastName)
+                                React.createElement("h6", { className: "fw-normal" }, ((_l = ticket.assignedTo) === null || _l === void 0 ? void 0 : _l.firstName) && ((_m = ticket.assignedTo) === null || _m === void 0 ? void 0 : _m.lastName)
                                     ? ticket.assignedTo.firstName + " " + ticket.assignedTo.lastName
                                     : 'Unassigned'))),
                         React.createElement("div", { className: "icons-social d-flex align-items-center" },
@@ -1355,12 +1436,48 @@ var Tickets = function () {
                                 React.createElement("div", { className: "spinner-border text-primary", role: "status" },
                                     React.createElement("span", { className: "visually-hidden" }, "Loading tickets...")),
                                 React.createElement("p", { className: "mt-2 text-muted" }, "Loading tickets...")))),
-                        !ticketsLoading && viewMode === 'grid' && (React.createElement("div", { className: "row" }, filteredTickets.length > 0 ? (filteredTickets.map(function (ticket) { return renderTicketCard(ticket); })) : (React.createElement("div", { className: "col-12" },
-                            React.createElement("div", { className: "card" },
-                                React.createElement("div", { className: "card-body text-center py-5" },
-                                    React.createElement("i", { className: "ti ti-ticket fs-48 text-muted mb-3" }),
-                                    React.createElement("h5", { className: "text-muted" }, "No tickets found"),
-                                    React.createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket."))))))),
+                        !ticketsLoading && viewMode === 'grid' && (React.createElement(React.Fragment, null,
+                            React.createElement("div", { className: "row" }, filteredTickets.length > 0 ? (currentTickets.map(function (ticket) { return renderTicketCard(ticket); })) : (React.createElement("div", { className: "col-12" },
+                                React.createElement("div", { className: "card" },
+                                    React.createElement("div", { className: "card-body text-center py-5" },
+                                        React.createElement("i", { className: "ti ti-ticket fs-48 text-muted mb-3" }),
+                                        React.createElement("h5", { className: "text-muted" }, "No tickets found"),
+                                        React.createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket.")))))),
+                            filteredTickets.length > itemsPerPage && (React.createElement("div", { className: "card mt-3" },
+                                React.createElement("div", { className: "card-body" },
+                                    React.createElement("div", { className: "d-flex align-items-center justify-content-between flex-wrap" },
+                                        React.createElement("div", { className: "text-muted mb-2 mb-sm-0" },
+                                            "Showing ",
+                                            indexOfFirstItem + 1,
+                                            " to ",
+                                            Math.min(indexOfLastItem, filteredTickets.length),
+                                            " of ",
+                                            filteredTickets.length,
+                                            " entries"),
+                                        React.createElement("nav", { "aria-label": "Page navigation" },
+                                            React.createElement("ul", { className: "pagination mb-0" },
+                                                React.createElement("li", { className: "page-item " + (currentPage === 1 ? 'disabled' : '') },
+                                                    React.createElement("button", { className: "page-link", onClick: handlePrevPage, disabled: currentPage === 1 },
+                                                        React.createElement("i", { className: "ti ti-chevron-left" }))),
+                                                __spreadArrays(Array(totalPages)).map(function (_, index) {
+                                                    var pageNumber = index + 1;
+                                                    // Show first page, last page, current page, and pages around current
+                                                    if (pageNumber === 1 ||
+                                                        pageNumber === totalPages ||
+                                                        (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)) {
+                                                        return (React.createElement("li", { key: pageNumber, className: "page-item " + (currentPage === pageNumber ? 'active' : '') },
+                                                            React.createElement("button", { className: "page-link", onClick: function () { return handlePageChange(pageNumber); } }, pageNumber)));
+                                                    }
+                                                    else if (pageNumber === currentPage - 2 ||
+                                                        pageNumber === currentPage + 2) {
+                                                        return (React.createElement("li", { key: pageNumber, className: "page-item disabled" },
+                                                            React.createElement("span", { className: "page-link" }, "...")));
+                                                    }
+                                                    return null;
+                                                }),
+                                                React.createElement("li", { className: "page-item " + (currentPage === totalPages ? 'disabled' : '') },
+                                                    React.createElement("button", { className: "page-link", onClick: handleNextPage, disabled: currentPage === totalPages },
+                                                        React.createElement("i", { className: "ti ti-chevron-right" }))))))))))),
                         !ticketsLoading && viewMode === 'list' && (React.createElement(React.Fragment, null, filteredTickets.length > 0 ? (React.createElement("div", { className: "card" },
                             React.createElement("div", { className: "card-body p-0" },
                                 React.createElement("div", { className: "table-responsive" },
@@ -1378,8 +1495,8 @@ var Tickets = function () {
                                                 React.createElement("th", { style: { width: '12%' } }, "Assigned To"),
                                                 React.createElement("th", { style: { width: '10%' } }, "Updated"),
                                                 React.createElement("th", { style: { width: '4%' } }, "Actions"))),
-                                        React.createElement("tbody", null, filteredTickets.map(function (ticket, index) {
-                                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+                                        React.createElement("tbody", null, currentTickets.map(function (ticket, index) {
+                                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
                                             return (React.createElement("tr", { key: ticket.ticketId || index },
                                                 React.createElement("td", null,
                                                     React.createElement("div", { className: "form-check form-check-md" },
@@ -1388,7 +1505,7 @@ var Tickets = function () {
                                                     React.createElement("span", { className: "badge bg-info-transparent fw-medium" }, ticket.ticketId || 'N/A')),
                                                 React.createElement("td", null,
                                                     React.createElement("div", { className: "d-flex flex-column" },
-                                                        React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId, className: "text-dark fw-semibold mb-1" }, ticket.title || 'Untitled'),
+                                                        React.createElement(react_router_dom_1.Link, { to: routes.ticketDetails + "?id=" + ticket.ticketId, className: "text-dark fw-semibold mb-1 text-truncate", style: { maxWidth: '300px' }, title: ticket.title || 'Untitled' }, ticket.title || 'Untitled'),
                                                         React.createElement("div", { className: "d-flex align-items-center" },
                                                             React.createElement(imageWithBasePath_1["default"], { src: ((_a = ticket.createdBy) === null || _a === void 0 ? void 0 : _a.avatarUrl) || ((_b = ticket.createdBy) === null || _b === void 0 ? void 0 : _b.avatar) || "assets/img/profiles/avatar-01.jpg", className: "avatar avatar-xs rounded-circle me-2", alt: "Creator" }),
                                                             React.createElement("small", { className: "text-muted" }, ((_c = ticket.createdBy) === null || _c === void 0 ? void 0 : _c.firstName) && ((_d = ticket.createdBy) === null || _d === void 0 ? void 0 : _d.lastName)
@@ -1434,25 +1551,59 @@ var Tickets = function () {
                                                                 React.createElement(react_router_dom_1.Link, { className: "dropdown-item rounded-1", to: routes.ticketDetails + "?id=" + ticket.ticketId },
                                                                     React.createElement("i", { className: "ti ti-eye me-2" }),
                                                                     "View Details")),
-                                                            ticket.status === 'Open' && ((_f = ticket.createdBy) === null || _f === void 0 ? void 0 : _f._id) === userId && (React.createElement("li", null,
+                                                            !['Resolved', 'Closed'].includes(ticket.status) && (((_f = ticket.createdBy) === null || _f === void 0 ? void 0 : _f._id) === userId || ((_g = ticket.createdBy) === null || _g === void 0 ? void 0 : _g.clerkUserId) === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
                                                                 React.createElement("button", { type: "button", className: "dropdown-item rounded-1", "data-bs-toggle": "modal", "data-bs-target": "#edit_ticket", "data-ticket-id": ticket.ticketId, "data-ticket-title": ticket.title, "data-ticket-description": ticket.description, "data-ticket-category": ticket.category, "data-ticket-subcategory": ticket.subCategory, "data-ticket-priority": ticket.priority },
                                                                     React.createElement("i", { className: "ti ti-edit me-2" }),
                                                                     "Edit"))),
                                                             (role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
-                                                                React.createElement("button", { type: "button", className: "dropdown-item rounded-1", "data-bs-toggle": "modal", "data-bs-target": "#assign_ticket", "data-ticket-id": ticket.ticketId, "data-ticket-title": ticket.title, "data-current-assignee": ((_g = ticket.assignedTo) === null || _g === void 0 ? void 0 : _g.firstName) && ((_h = ticket.assignedTo) === null || _h === void 0 ? void 0 : _h.lastName)
+                                                                React.createElement("button", { type: "button", className: "dropdown-item rounded-1", "data-bs-toggle": "modal", "data-bs-target": "#assign_ticket", "data-ticket-id": ticket.ticketId, "data-ticket-title": ticket.title, "data-current-assignee": ((_h = ticket.assignedTo) === null || _h === void 0 ? void 0 : _h.firstName) && ((_j = ticket.assignedTo) === null || _j === void 0 ? void 0 : _j.lastName)
                                                                         ? ticket.assignedTo.firstName + " " + ticket.assignedTo.lastName
-                                                                        : 'Unassigned', "data-current-assignee-id": ((_j = ticket.assignedTo) === null || _j === void 0 ? void 0 : _j._id) || '' },
+                                                                        : 'Unassigned', "data-current-assignee-id": ((_k = ticket.assignedTo) === null || _k === void 0 ? void 0 : _k._id) || '' },
                                                                     React.createElement("i", { className: "ti ti-user-check me-2" }),
-                                                                    ((_k = ticket.assignedTo) === null || _k === void 0 ? void 0 : _k._id) ? 'Reassign' : 'Assign'))))))));
-                                        }))))))) : (React.createElement("div", { className: "card" },
+                                                                    ((_l = ticket.assignedTo) === null || _l === void 0 ? void 0 : _l._id) ? 'Reassign' : 'Assign'))),
+                                                            (((_m = ticket.createdBy) === null || _m === void 0 ? void 0 : _m._id) === userId || ((_o = ticket.createdBy) === null || _o === void 0 ? void 0 : _o.clerkUserId) === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (React.createElement("li", null,
+                                                                React.createElement("button", { type: "button", className: "dropdown-item rounded-1 text-danger", "data-bs-toggle": "modal", "data-bs-target": "#delete_modal", onClick: function () { return setSelectedTicketForDelete(ticket.ticketId); } },
+                                                                    React.createElement("i", { className: "ti ti-trash me-2" }),
+                                                                    "Delete"))))))));
+                                        }))))),
+                            filteredTickets.length > itemsPerPage && (React.createElement("div", { className: "card-footer" },
+                                React.createElement("div", { className: "d-flex align-items-center justify-content-between flex-wrap" },
+                                    React.createElement("div", { className: "text-muted mb-2 mb-sm-0" },
+                                        "Showing ",
+                                        indexOfFirstItem + 1,
+                                        " to ",
+                                        Math.min(indexOfLastItem, filteredTickets.length),
+                                        " of ",
+                                        filteredTickets.length,
+                                        " entries"),
+                                    React.createElement("nav", { "aria-label": "Page navigation" },
+                                        React.createElement("ul", { className: "pagination mb-0" },
+                                            React.createElement("li", { className: "page-item " + (currentPage === 1 ? 'disabled' : '') },
+                                                React.createElement("button", { className: "page-link", onClick: handlePrevPage, disabled: currentPage === 1 },
+                                                    React.createElement("i", { className: "ti ti-chevron-left" }))),
+                                            __spreadArrays(Array(totalPages)).map(function (_, index) {
+                                                var pageNumber = index + 1;
+                                                // Show first page, last page, current page, and pages around current
+                                                if (pageNumber === 1 ||
+                                                    pageNumber === totalPages ||
+                                                    (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)) {
+                                                    return (React.createElement("li", { key: pageNumber, className: "page-item " + (currentPage === pageNumber ? 'active' : '') },
+                                                        React.createElement("button", { className: "page-link", onClick: function () { return handlePageChange(pageNumber); } }, pageNumber)));
+                                                }
+                                                else if (pageNumber === currentPage - 2 ||
+                                                    pageNumber === currentPage + 2) {
+                                                    return (React.createElement("li", { key: pageNumber, className: "page-item disabled" },
+                                                        React.createElement("span", { className: "page-link" }, "...")));
+                                                }
+                                                return null;
+                                            }),
+                                            React.createElement("li", { className: "page-item " + (currentPage === totalPages ? 'disabled' : '') },
+                                                React.createElement("button", { className: "page-link", onClick: handleNextPage, disabled: currentPage === totalPages },
+                                                    React.createElement("i", { className: "ti ti-chevron-right" })))))))))) : (React.createElement("div", { className: "card" },
                             React.createElement("div", { className: "card-body text-center py-5" },
                                 React.createElement("i", { className: "ti ti-ticket fs-48 text-muted mb-3" }),
                                 React.createElement("h5", { className: "text-muted" }, "No tickets found"),
-                                React.createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket.")))))),
-                        filteredTickets.length > 10 && (React.createElement("div", { className: "text-center mb-4" },
-                            React.createElement(react_router_dom_1.Link, { to: "#", className: "btn btn-primary" },
-                                React.createElement("i", { className: "ti ti-loader-3 me-1" }),
-                                "Load More")))),
+                                React.createElement("p", { className: "text-muted" }, "Try adjusting your filters or create a new ticket."))))))),
                     React.createElement("div", { className: "col-xl-3 col-md-4" },
                         React.createElement("div", { className: "card" },
                             React.createElement("div", { className: "card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3" },
@@ -1485,6 +1636,7 @@ var Tickets = function () {
             React.createElement(footer_1["default"], null)),
         React.createElement(ticketListModal_1["default"], null),
         React.createElement(EditTicketModal_1["default"], { onTicketUpdated: fetchTicketsList }),
-        React.createElement(AssignTicketModal_1["default"], { onTicketAssigned: fetchTicketsList })));
+        React.createElement(AssignTicketModal_1["default"], { onTicketAssigned: fetchTicketsList }),
+        React.createElement(deleteModal_1["default"], { onDeleteConfirm: handleDeleteTicket })));
 };
 exports["default"] = Tickets;

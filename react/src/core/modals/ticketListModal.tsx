@@ -337,9 +337,15 @@ const TicketListModal = () => {
                         className="form-control"
                         placeholder="Enter ticket title"
                         value={formData.title}
-                        onChange={(e) => handleInputChange('title', e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 100) {
+                            handleInputChange('title', e.target.value);
+                          }
+                        }}
                         required
+                        maxLength={100}
                       />
+                      <small className="text-muted">{formData.title.length}/100 characters</small>
                     </div>
 
                     <div className="row">

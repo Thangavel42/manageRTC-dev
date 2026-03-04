@@ -6,6 +6,7 @@ import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import Footer from "../../core/common/footer";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import AssignTicketModal from "../../core/modals/AssignTicketModal";
+import DeleteModal from "../../core/modals/deleteModal";
 import EditTicketModal from "../../core/modals/EditTicketModal";
 import TicketListModal from "../../core/modals/ticketListModal";
 import { useAuth } from "../../hooks/useAuth";
@@ -51,6 +52,10 @@ const Tickets = () => {
   // State for view mode (list or grid)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10); // 10 items per page
+
   // State for dynamic data
   const [ticketsStats, setTicketsStats] = useState({
     newTickets: 0,
@@ -73,6 +78,9 @@ const Tickets = () => {
     sortBy: 'recently'
   });
   const [_exportLoading, setExportLoading] = useState(false);
+
+  // State for delete ticket
+  const [selectedTicketForDelete, setSelectedTicketForDelete] = useState<string | null>(null);
 
   // State for categories
   const [categories, setCategories] = useState([]);
@@ -251,6 +259,36 @@ const Tickets = () => {
   const handleTabChange = (tabId: string) => {
     setCurrentTab(tabId);
     window.location.hash = tabId;
+  };
+
+  // Handle ticket delete
+  const handleDeleteTicket = () => {
+    if (!socket || !selectedTicketForDelete) return;
+
+    console.log('🗑️ Deleting ticket:', selectedTicketForDelete);
+    socket.emit('tickets/delete-ticket', { ticketId: selectedTicketForDelete });
+
+    // Listen for delete response
+    const handleDeleteResponse = (response: any) => {
+      if (response.done) {
+        console.log('✅ Ticket deleted successfully');
+        // Close modal
+        const modalElement = document.querySelector('#delete_modal');
+        if (modalElement) {
+          const modal = (window as any).bootstrap?.Modal?.getInstance(modalElement);
+          modal?.hide();
+        }
+        // Refresh list
+        fetchTicketsList();
+      } else {
+        console.error('❌ Failed to delete ticket:', response.message);
+        alert(response.message || 'Failed to delete ticket');
+      }
+      setSelectedTicketForDelete(null);
+      socket.off('tickets/delete-ticket-response', handleDeleteResponse);
+    };
+
+    socket.on('tickets/delete-ticket-response', handleDeleteResponse);
   };
 
   // Update current tab when URL hash changes
@@ -739,8 +777,47 @@ const Tickets = () => {
     }
   };
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentTickets = filteredTickets.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Pagination handlers
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // Scroll to top of table when page changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, currentTab, myTicketsSubTab]);
+
   // Render ticket card for grid view
   const renderTicketCard = (ticket) => {
+    // Truncate title for grid view
+    const truncateTitle = (title: string, maxLength: number = 40) => {
+      if (!title) return 'Untitled';
+      if (title.length <= maxLength) return title;
+      return title.substring(0, maxLength) + '...';
+    };
+
     return (
       <div key={ticket.ticketId} className="col-xl-3 col-lg-4 col-md-6">
         <div className="card">
@@ -775,31 +852,74 @@ const Tickets = () => {
                   <li>
                     <Link
                       className="dropdown-item rounded-1"
-                      to="#"
-                      data-bs-toggle="modal"
-                      data-bs-target="#edit_ticket"
+                      to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
                     >
-                      <i className="ti ti-edit me-1" />
-                      Edit
+                      <i className="ti ti-eye me-2" />
+                      View Details
                     </Link>
                   </li>
-                  <li>
-                    <Link
-                      className="dropdown-item rounded-1"
-                      to="#"
-                      data-bs-toggle="modal"
-                      data-bs-target="#delete_modal"
-                    >
-                      <i className="ti ti-trash me-1" />
-                      Delete
-                    </Link>
-                  </li>
+                  {!['Resolved', 'Closed'].includes(ticket.status) && (ticket.createdBy?._id === userId || ticket.createdBy?.clerkUserId === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#edit_ticket"
+                        data-ticket-id={ticket.ticketId}
+                        data-ticket-title={ticket.title}
+                        data-ticket-description={ticket.description}
+                        data-ticket-category={ticket.category}
+                        data-ticket-subcategory={ticket.subCategory}
+                        data-ticket-priority={ticket.priority}
+                      >
+                        <i className="ti ti-edit me-2" />
+                        Edit
+                      </button>
+                    </li>
+                  )}
+                  {(role === 'hr' || role === 'admin' || role === 'superadmin') && (
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        data-bs-toggle="modal"
+                        data-bs-target="#assign_ticket"
+                        data-ticket-id={ticket.ticketId}
+                        data-ticket-title={ticket.title}
+                        data-current-assignee={
+                          ticket.assignedTo?.firstName && ticket.assignedTo?.lastName
+                            ? `${ticket.assignedTo.firstName} ${ticket.assignedTo.lastName}`
+                            : 'Unassigned'
+                        }
+                        data-current-assignee-id={ticket.assignedTo?._id || ''}
+                      >
+                        <i className="ti ti-user-check me-2" />
+                        {ticket.assignedTo?._id ? 'Reassign' : 'Assign'}
+                      </button>
+                    </li>
+                  )}
+                  {(ticket.createdBy?._id === userId || ticket.createdBy?.clerkUserId === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1 text-danger"
+                        data-bs-toggle="modal"
+                        data-bs-target="#delete_modal"
+                        onClick={() => setSelectedTicketForDelete(ticket.ticketId)}
+                      >
+                        <i className="ti ti-trash me-2" />
+                        Delete
+                      </button>
+                    </li>
+                  )}
                 </ul>
               </div>
             </div>
             <div className="text-center mb-3">
-              <h6 className="mb-1">
-                <Link to={`${routes.ticketDetails}?id=${ticket.ticketId}`}>{ticket.title || 'Untitled'}</Link>
+              <h6 className="mb-1" title={ticket.title || 'Untitled'}>
+                <Link to={`${routes.ticketDetails}?id=${ticket.ticketId}`}>
+                  {truncateTitle(ticket.title)}
+                </Link>
               </h6>
               <span className="badge bg-info-transparent fs-10 fw-medium">
                 {ticket.ticketId || 'N/A'}
@@ -1720,21 +1840,91 @@ const Tickets = () => {
 
               {/* Grid View */}
               {!ticketsLoading && viewMode === 'grid' && (
-                <div className="row">
-                  {filteredTickets.length > 0 ? (
-                    filteredTickets.map((ticket) => renderTicketCard(ticket))
-                  ) : (
-                    <div className="col-12">
-                      <div className="card">
-                        <div className="card-body text-center py-5">
-                          <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
-                          <h5 className="text-muted">No tickets found</h5>
-                          <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
+                <>
+                  <div className="row">
+                    {filteredTickets.length > 0 ? (
+                      currentTickets.map((ticket) => renderTicketCard(ticket))
+                    ) : (
+                      <div className="col-12">
+                        <div className="card">
+                          <div className="card-body text-center py-5">
+                            <i className="ti ti-ticket fs-48 text-muted mb-3"></i>
+                            <h5 className="text-muted">No tickets found</h5>
+                            <p className="text-muted">Try adjusting your filters or create a new ticket.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pagination for Grid View */}
+                  {filteredTickets.length > itemsPerPage && (
+                    <div className="card mt-3">
+                      <div className="card-body">
+                        <div className="d-flex align-items-center justify-content-between flex-wrap">
+                          <div className="text-muted mb-2 mb-sm-0">
+                            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredTickets.length)} of {filteredTickets.length} entries
+                          </div>
+                          <nav aria-label="Page navigation">
+                            <ul className="pagination mb-0">
+                              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                                <button
+                                  className="page-link"
+                                  onClick={handlePrevPage}
+                                  disabled={currentPage === 1}
+                                >
+                                  <i className="ti ti-chevron-left" />
+                                </button>
+                              </li>
+                              {[...Array(totalPages)].map((_, index) => {
+                                const pageNumber = index + 1;
+                                // Show first page, last page, current page, and pages around current
+                                if (
+                                  pageNumber === 1 ||
+                                  pageNumber === totalPages ||
+                                  (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                                ) {
+                                  return (
+                                    <li
+                                      key={pageNumber}
+                                      className={`page-item ${currentPage === pageNumber ? 'active' : ''}`}
+                                    >
+                                      <button
+                                        className="page-link"
+                                        onClick={() => handlePageChange(pageNumber)}
+                                      >
+                                        {pageNumber}
+                                      </button>
+                                    </li>
+                                  );
+                                } else if (
+                                  pageNumber === currentPage - 2 ||
+                                  pageNumber === currentPage + 2
+                                ) {
+                                  return (
+                                    <li key={pageNumber} className="page-item disabled">
+                                      <span className="page-link">...</span>
+                                    </li>
+                                  );
+                                }
+                                return null;
+                              })}
+                              <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                                <button
+                                  className="page-link"
+                                  onClick={handleNextPage}
+                                  disabled={currentPage === totalPages}
+                                >
+                                  <i className="ti ti-chevron-right" />
+                                </button>
+                              </li>
+                            </ul>
+                          </nav>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               )}
 
               {/* List View */}
@@ -1763,7 +1953,7 @@ const Tickets = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {filteredTickets.map((ticket, index) => (
+                              {currentTickets.map((ticket, index) => (
                                 <tr key={ticket.ticketId || index}>
                                   <td>
                                     <div className="form-check form-check-md">
@@ -1779,7 +1969,9 @@ const Tickets = () => {
                                     <div className="d-flex flex-column">
                                       <Link
                                         to={`${routes.ticketDetails}?id=${ticket.ticketId}`}
-                                        className="text-dark fw-semibold mb-1"
+                                        className="text-dark fw-semibold mb-1 text-truncate"
+                                        style={{ maxWidth: '300px' }}
+                                        title={ticket.title || 'Untitled'}
                                       >
                                         {ticket.title || 'Untitled'}
                                       </Link>
@@ -1882,7 +2074,7 @@ const Tickets = () => {
                                             View Details
                                           </Link>
                                         </li>
-                                        {ticket.status === 'Open' && ticket.createdBy?._id === userId && (
+                                        {!['Resolved', 'Closed'].includes(ticket.status) && (ticket.createdBy?._id === userId || ticket.createdBy?.clerkUserId === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (
                                           <li>
                                             <button
                                               type="button"
@@ -1922,6 +2114,20 @@ const Tickets = () => {
                                             </button>
                                           </li>
                                         )}
+                                        {(ticket.createdBy?._id === userId || ticket.createdBy?.clerkUserId === userId || role === 'hr' || role === 'admin' || role === 'superadmin') && (
+                                          <li>
+                                            <button
+                                              type="button"
+                                              className="dropdown-item rounded-1 text-danger"
+                                              data-bs-toggle="modal"
+                                              data-bs-target="#delete_modal"
+                                              onClick={() => setSelectedTicketForDelete(ticket.ticketId)}
+                                            >
+                                              <i className="ti ti-trash me-2" />
+                                              Delete
+                                            </button>
+                                          </li>
+                                        )}
                                       </ul>
                                     </div>
                                   </td>
@@ -1931,6 +2137,72 @@ const Tickets = () => {
                           </table>
                         </div>
                       </div>
+
+                      {/* Pagination */}
+                      {filteredTickets.length > itemsPerPage && (
+                        <div className="card-footer">
+                          <div className="d-flex align-items-center justify-content-between flex-wrap">
+                            <div className="text-muted mb-2 mb-sm-0">
+                              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredTickets.length)} of {filteredTickets.length} entries
+                            </div>
+                            <nav aria-label="Page navigation">
+                              <ul className="pagination mb-0">
+                                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                                  <button
+                                    className="page-link"
+                                    onClick={handlePrevPage}
+                                    disabled={currentPage === 1}
+                                  >
+                                    <i className="ti ti-chevron-left" />
+                                  </button>
+                                </li>
+                                {[...Array(totalPages)].map((_, index) => {
+                                  const pageNumber = index + 1;
+                                  // Show first page, last page, current page, and pages around current
+                                  if (
+                                    pageNumber === 1 ||
+                                    pageNumber === totalPages ||
+                                    (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                                  ) {
+                                    return (
+                                      <li
+                                        key={pageNumber}
+                                        className={`page-item ${currentPage === pageNumber ? 'active' : ''}`}
+                                      >
+                                        <button
+                                          className="page-link"
+                                          onClick={() => handlePageChange(pageNumber)}
+                                        >
+                                          {pageNumber}
+                                        </button>
+                                      </li>
+                                    );
+                                  } else if (
+                                    pageNumber === currentPage - 2 ||
+                                    pageNumber === currentPage + 2
+                                  ) {
+                                    return (
+                                      <li key={pageNumber} className="page-item disabled">
+                                        <span className="page-link">...</span>
+                                      </li>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                                  <button
+                                    className="page-link"
+                                    onClick={handleNextPage}
+                                    disabled={currentPage === totalPages}
+                                  >
+                                    <i className="ti ti-chevron-right" />
+                                  </button>
+                                </li>
+                              </ul>
+                            </nav>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="card">
@@ -1944,14 +2216,6 @@ const Tickets = () => {
                 </>
               )}
 
-              {filteredTickets.length > 10 && (
-                <div className="text-center mb-4">
-                  <Link to="#" className="btn btn-primary">
-                    <i className="ti ti-loader-3 me-1" />
-                    Load More
-                  </Link>
-                </div>
-              )}
             </div>
             <div className="col-xl-3 col-md-4">
               <div className="card">
@@ -2052,6 +2316,7 @@ const Tickets = () => {
       <TicketListModal />
       <EditTicketModal onTicketUpdated={fetchTicketsList} />
       <AssignTicketModal onTicketAssigned={fetchTicketsList} />
+      <DeleteModal onDeleteConfirm={handleDeleteTicket} />
     </>
   );
 };
