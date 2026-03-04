@@ -53,7 +53,7 @@ export const apiLimiter = rateLimit({
     expireTimeMs: 1 * 60 * 1000  // 1 minute
   }),
   windowMs: 1 * 60 * 1000,  // 1 minute
-  max: 100,  // 100 requests per minute
+  max: 300,  // 300 requests per minute (increased from 100 for better UX with multiple modals)
   message: {
     success: false,
     error: {
@@ -71,7 +71,12 @@ export const apiLimiter = rateLimit({
   },
   skip: (req) => {
     const trustedIPs = process.env.TRUSTED_IPS?.split(',') || [];
-    return trustedIPs.includes(req.ip);
+    // Also skip rate limiting for read-only lookup endpoints (shifts, batches, departments, designations)
+    // These are frequently called by modals and components for dropdowns
+    const skipPaths = ['/api/shifts', '/api/batches', '/api/departments', '/api/designations'];
+    const shouldSkip = trustedIPs.includes(req.ip) ||
+      skipPaths.some(path => (req.path || req.url)?.startsWith(path));
+    return shouldSkip;
   }
 });
 

@@ -144,11 +144,13 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   const previousEmployeeRef = useRef<Employee | null>(null);
   const navigate = useNavigate();
 
+  // Only show hr, manager, employee roles (as per business requirement)
+  // Admin/Superadmin roles are managed separately and should not be assignable here
   const roleOptions = [
     { value: "", label: "Select Role" },
-    { value: "HR", label: "HR" },
-    { value: "Manager", label: "Manager" },
-    { value: "Employee", label: "Employee" },
+    { value: "hr", label: "HR" },
+    { value: "manager", label: "Manager" },
+    { value: "employee", label: "Employee" },
   ];
 
   const genderOptions = [
@@ -320,6 +322,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
           setStates(result);
         });
       }
+    } else if (!editingEmployee?.address?.country) {
+      // Reset country selection when no country is set
+      setSelectedCountryId(null);
+      setStates([]);
     }
   }, [editingEmployee?.address?.country, countries]);
 
@@ -347,14 +353,33 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         passport: employee.passport || employee.personal?.passport || { number: "", expiryDate: null, country: "" }
       };
 
+      // Get role from either top-level field or account.role (for backwards compatibility)
+      const roleValue = employee.role || employee.account?.role || "";
+
+      // Map joiningDate (DB field) to dateOfJoining (frontend field) if needed
+      const joiningDateValue = employee.dateOfJoining || (employee as any).joiningDate || null;
+
+      // Ensure address has all required fields with defaults
+      const addressData = {
+        street: employee.address?.street || "",
+        city: employee.address?.city || "",
+        state: employee.address?.state || "",
+        postalCode: employee.address?.postalCode || "",
+        country: employee.address?.country || "",
+      };
+
       // Create transformed employee with personal fields in the correct location
       const transformedEmployee = {
         ...employee,
+        role: roleValue, // Ensure role is set at top level
+        dateOfJoining: joiningDateValue, // Map joiningDate -> dateOfJoining
         departmentId,
         designationId,
         reportingTo,
         phoneCode,
-        personal: personalData
+        address: addressData,
+        personal: personalData,
+        account: employee.account || { role: roleValue }
       };
 
       setEditingEmployee(transformedEmployee);
@@ -363,6 +388,20 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         setIsDesignationDisabled(false);
         setLoadingDesignations(true);
         fetchDesignations({ departmentId });
+      }
+
+      // Initialize country selection for address
+      if (addressData.country && countries.length > 0) {
+        const matchingCountry = countries.find(
+          (c) => c.name.toLowerCase() === addressData.country.toLowerCase()
+        );
+        if (matchingCountry) {
+          setSelectedCountryId(matchingCountry.id);
+          // Load states for this country
+          GetState(matchingCountry.id).then((result: any) => {
+            setStates(result);
+          });
+        }
       }
 
       // Set shift assignment
@@ -641,7 +680,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
 
     if (!editingEmployee.phoneCode?.trim()) errors.phoneCode = "Phone code is required";
     if (!editingEmployee.phone?.trim()) errors.phone = "Phone number is required";
-    if (!editingEmployee.account?.role) errors.role = "Role is required";
+    if (!editingEmployee.role) errors.role = "Role is required";
     if (!editingEmployee.departmentId) errors.departmentId = "Department is required";
     if (!editingEmployee.designationId) errors.designationId = "Designation is required";
     if (!editingEmployee.reportingTo) errors.reportingTo = "Reporting Manager is required";
@@ -751,6 +790,11 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         payload.reportingTo = editingEmployee._id;
       }
 
+      // Ensure joiningDate (DB schema field) is set from dateOfJoining (frontend field)
+      if (payload.dateOfJoining) {
+        payload.joiningDate = payload.dateOfJoining;
+      }
+
       // Ensure avatarUrl is valid or remove default
       if (!payload.avatarUrl || payload.avatarUrl === "assets/img/profiles/profile.png") {
         delete payload.avatarUrl;
@@ -765,7 +809,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       const employeeSuccess = await updateEmployee(editingEmployee._id, payload);
 
       if (employeeSuccess) {
-        const roleLabel = editingEmployee.account?.role || "Employee";
+        const roleLabel = editingEmployee.role || "Employee";
         toast.success(`${roleLabel} updated successfully!`);
         onUpdate?.(editingEmployee);
         if (modalRef.current) {
@@ -1014,17 +1058,19 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Role <span className="text-danger"> *</span></label>
                       <CommonSelect
+                        key={`role-${editingEmployee?._id}-${editingEmployee?.role}`}
                         className="select"
                         options={roleOptions}
-                        defaultValue={roleOptions.find((opt) => opt.value === editingEmployee?.account?.role)}
+                        value={roleOptions.find((opt) => opt.value === editingEmployee?.role)}
                         onChange={(option: any) => {
                           if (option) {
                             setEditingEmployee((prev) =>
                               prev ? {
                                 ...prev,
+                                role: option.value, // Update top-level role
                                 account: {
                                   ...prev.account,
-                                  role: option.value,
+                                  role: option.value, // Also update account.role for consistency
                                 },
                               } : prev
                             );
@@ -1038,9 +1084,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Gender <span className="text-danger"> *</span></label>
                       <CommonSelect
+                        key={`gender-${editingEmployee?._id}-${editingEmployee?.gender}`}
                         className="select"
                         options={genderOptions}
-                        defaultValue={genderOptions.find((opt) => opt.value === editingEmployee?.gender)}
+                        value={genderOptions.find((opt) => opt.value === editingEmployee?.gender)}
                         onChange={(option: any) => {
                           if (option) {
                             setEditingEmployee((prev) =>
@@ -1379,9 +1426,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                       ) : (
                         <>
                           <CommonSelect
+                            key={`department-${editingEmployee?._id}-${editingEmployee?.departmentId}`}
                             className="select"
                             options={department}
-                            defaultValue={department.find((opt) => opt.value === editingEmployee?.departmentId)}
+                            value={department.find((opt) => opt.value === editingEmployee?.departmentId)}
                             onChange={handleDepartmentChange}
                           />
                           {fieldErrors.departmentId && <div className="invalid-feedback d-block">{fieldErrors.departmentId}</div>}
@@ -1407,11 +1455,12 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                       ) : (
                         <>
                           <CommonSelect
+                            key={`designation-${editingEmployee?._id}-${editingEmployee?.designationId}`}
                             className="select"
                             options={designation}
                             disabled={isDesignationDisabled}
                             isLoading={loadingDesignations}
-                            defaultValue={designation.find((opt) => opt.value === editingEmployee?.designationId)}
+                            value={designation.find((opt) => opt.value === editingEmployee?.designationId)}
                             onChange={handleDesignationChange}
                           />
                           {fieldErrors.designationId && <div className="invalid-feedback d-block">{fieldErrors.designationId}</div>}
@@ -1423,9 +1472,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                     <div className="mb-3">
                       <label className="form-label">Reporting Manager <span className="text-danger">*</span></label>
                       <CommonSelect
+                        key={`reportingTo-${editingEmployee?._id}-${editingEmployee?.reportingTo}`}
                         className={`select ${fieldErrors.reportingTo ? 'is-invalid' : ''}`}
                         options={managers}
-                        defaultValue={managers.find((opt) => opt.value === editingEmployee?.reportingTo) ||
+                        value={managers.find((opt) => opt.value === editingEmployee?.reportingTo) ||
                           (editingEmployee?.reportingTo === editingEmployee?._id ? managers.find((opt) => opt.value === 'SELF_REPORTING') : undefined)}
                         onChange={(option: any) => {
                           if (option) {
@@ -1618,7 +1668,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                   disabled={loading}
                   onClick={handleEditSubmit}
                 >
-                  {loading ? "Updating..." : `Update ${editingEmployee?.account?.role || "Employee"}`}
+                  {loading ? "Updating..." : `Update ${editingEmployee?.role || "Employee"}`}
                 </button>
               </div>
             </form>

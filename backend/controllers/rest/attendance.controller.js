@@ -215,11 +215,50 @@ export const getAttendances = asyncHandler(async (req, res) => {
   const limitNum = parseInt(limit) || 20;
   const skip = (pageNum - 1) * limitNum;
 
+  // Use aggregation to join with employees and get name/avatar
   const attendance = await collections.attendance
-    .find(filter)
-    .sort(sort)
-    .skip(skip)
-    .limit(limitNum)
+    .aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'employeeId',
+          foreignField: 'employeeId',
+          as: 'employee'
+        }
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          employeeName: {
+            $cond: {
+              if: '$employee',
+              then: { $concat: ['$employee.firstName', ' ', '$employee.lastName'] },
+              else: 'Unknown Employee'
+            }
+          },
+          employeeAvatar: {
+            $cond: {
+              if: '$employee',
+              then: {
+                $ifNull: [
+                  '$employee.profileImage',
+                  '$employee.avatar',
+                  '$employee.avatarUrl',
+                  'assets/img/profiles/avatar-01.jpg'
+                ]
+              },
+              else: 'assets/img/profiles/avatar-01.jpg'
+            }
+          },
+          employeePosition: '$employee.position',
+          employeeDepartment: '$employee.department'
+        }
+      },
+      { $sort: sort },
+      { $skip: skip },
+      { $limit: limitNum }
+    ])
     .toArray();
 
   const pagination = buildPagination(pageNum, limitNum, total);
@@ -664,10 +703,49 @@ export const getMyAttendance = asyncHandler(async (req, res) => {
     filter.status = status;
   }
 
+  // Use aggregation to join with employees and get name/avatar
   const attendances = await collections.attendance
-    .find(filter)
-    .sort({ date: -1 })
-    .limit(parseInt(limit) || 31)
+    .aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'employeeId',
+          foreignField: 'employeeId',
+          as: 'employee'
+        }
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          employeeName: {
+            $cond: {
+              if: '$employee',
+              then: { $concat: ['$employee.firstName', ' ', '$employee.lastName'] },
+              else: 'Unknown Employee'
+            }
+          },
+          employeeAvatar: {
+            $cond: {
+              if: '$employee',
+              then: {
+                $ifNull: [
+                  '$employee.profileImage',
+                  '$employee.avatar',
+                  '$employee.avatarUrl',
+                  'assets/img/profiles/avatar-01.jpg'
+                ]
+              },
+              else: 'assets/img/profiles/avatar-01.jpg'
+            }
+          },
+          employeePosition: '$employee.position',
+          employeeDepartment: '$employee.department'
+        }
+      },
+      { $sort: { date: -1 } },
+      { $limit: parseInt(limit) || 31 }
+    ])
     .toArray();
 
   return sendSuccess(res, attendances, 'My attendance records retrieved successfully');
@@ -727,11 +805,50 @@ export const getAttendanceByDateRange = asyncHandler(async (req, res) => {
   const limitNum = Math.min(parseInt(limit) || 31, 365); // Also cap limit
   const skip = (pageNum - 1) * limitNum;
 
+  // Use aggregation to join with employees and get name/avatar
   const attendance = await collections.attendance
-    .find(filter)
-    .sort({ date: -1 })
-    .skip(skip)
-    .limit(limitNum)
+    .aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'employeeId',
+          foreignField: 'employeeId',
+          as: 'employee'
+        }
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          employeeName: {
+            $cond: {
+              if: '$employee',
+              then: { $concat: ['$employee.firstName', ' ', '$employee.lastName'] },
+              else: 'Unknown Employee'
+            }
+          },
+          employeeAvatar: {
+            $cond: {
+              if: '$employee',
+              then: {
+                $ifNull: [
+                  '$employee.profileImage',
+                  '$employee.avatar',
+                  '$employee.avatarUrl',
+                  'assets/img/profiles/avatar-01.jpg'
+                ]
+              },
+              else: 'assets/img/profiles/avatar-01.jpg'
+            }
+          },
+          employeePosition: '$employee.position',
+          employeeDepartment: '$employee.department'
+        }
+      },
+      { $sort: { date: -1 } },
+      { $skip: skip },
+      { $limit: limitNum }
+    ])
     .toArray();
 
   const pagination = buildPagination(pageNum, limitNum, total);
@@ -782,11 +899,50 @@ export const getAttendanceByEmployee = asyncHandler(async (req, res) => {
   const limitNum = parseInt(limit) || 31;
   const skip = (pageNum - 1) * limitNum;
 
+  // Use aggregation to join with employees and get name/avatar
   const attendance = await collections.attendance
-    .find(filter)
-    .sort({ date: -1 })
-    .skip(skip)
-    .limit(limitNum)
+    .aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'employeeId',
+          foreignField: 'employeeId',
+          as: 'employee'
+        }
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          employeeName: {
+            $cond: {
+              if: '$employee',
+              then: { $concat: ['$employee.firstName', ' ', '$employee.lastName'] },
+              else: 'Unknown Employee'
+            }
+          },
+          employeeAvatar: {
+            $cond: {
+              if: '$employee',
+              then: {
+                $ifNull: [
+                  '$employee.profileImage',
+                  '$employee.avatar',
+                  '$employee.avatarUrl',
+                  'assets/img/profiles/avatar-01.jpg'
+                ]
+              },
+              else: 'assets/img/profiles/avatar-01.jpg'
+            }
+          },
+          employeePosition: '$employee.position',
+          employeeDepartment: '$employee.department'
+        }
+      },
+      { $sort: { date: -1 } },
+      { $skip: skip },
+      { $limit: limitNum }
+    ])
     .toArray();
 
   const pagination = buildPagination(pageNum, limitNum, total);

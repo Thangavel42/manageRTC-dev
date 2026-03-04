@@ -149,11 +149,13 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  // Only show hr, manager, employee roles (as per business requirement)
+  // Admin/Superadmin roles are managed separately and should not be assignable here
   const roleOptions = [
     { value: "", label: "Select Role" },
-    { value: "HR", label: "HR" },
-    { value: "Manager", label: "Manager" },
-    { value: "Employee", label: "Employee" },
+    { value: "hr", label: "HR" },
+    { value: "manager", label: "Manager" },
+    { value: "employee", label: "Employee" },
   ];
 
   const genderOptions = [
