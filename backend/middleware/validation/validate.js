@@ -92,12 +92,14 @@ export const validateQuery = (schema, options = {}) => {
 
       // Replace req.query with validated and sanitized value
       // Note: req.query is read-only in Express 4.17+, so we modify in-place
-      // Clear existing properties
-      for (const key in req.query) {
+      // Clear existing properties using Object.keys() to avoid for...in issues
+      const keysToDelete = Object.keys(req.query);
+      for (const key of keysToDelete) {
         delete req.query[key];
       }
       // Add validated properties
-      for (const key in value) {
+      const keysToAdd = Object.keys(value);
+      for (const key of keysToAdd) {
         req.query[key] = value[key];
       }
       next();
@@ -145,12 +147,14 @@ export const validateParams = (schema, options = {}) => {
 
       // Replace req.params with validated and sanitized value
       // Note: req.params is read-only in Express 4.17+, so we modify in-place
-      // Clear existing properties
-      for (const key in req.params) {
+      // Clear existing properties using Object.keys() to avoid for...in issues
+      const keysToDelete = Object.keys(req.params);
+      for (const key of keysToDelete) {
         delete req.params[key];
       }
       // Add validated properties
-      for (const key in value) {
+      const keysToAdd = Object.keys(value);
+      for (const key of keysToAdd) {
         req.params[key] = value[key];
       }
       next();
@@ -357,12 +361,14 @@ export const validate = (schemas = {}) => {
         }
 
         // Note: req.query is read-only in Express 4.17+, so we modify in-place
-        // Clear existing properties
-        for (const key in req.query) {
+        // Clear existing properties using Object.keys() to avoid for...in issues
+        const queryKeysToDelete = Object.keys(req.query);
+        for (const key of queryKeysToDelete) {
           delete req.query[key];
         }
         // Add validated properties
-        for (const key in queryValue) {
+        const queryKeysToAdd = Object.keys(queryValue);
+        for (const key of queryKeysToAdd) {
           req.query[key] = queryValue[key];
         }
       }
@@ -388,12 +394,14 @@ export const validate = (schemas = {}) => {
         }
 
         // Note: req.params is read-only in Express 4.17+, so we modify in-place
-        // Clear existing properties
-        for (const key in req.params) {
+        // Clear existing properties using Object.keys() to avoid for...in issues
+        const paramsKeysToDelete = Object.keys(req.params);
+        for (const key of paramsKeysToDelete) {
           delete req.params[key];
         }
         // Add validated properties
-        for (const key in paramsValue) {
+        const paramsKeysToAdd = Object.keys(paramsValue);
+        for (const key of paramsKeysToAdd) {
           req.params[key] = paramsValue[key];
         }
       }
