@@ -4,7 +4,7 @@ import { DatePicker } from "antd";
 import moment from "moment";
 import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
@@ -14,12 +14,14 @@ import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { companies_details } from "../../../core/data/json/companiesdetails";
-import { useSuperadminCompaniesREST } from "../../../hooks/useSuperadminCompaniesREST";
+import { CompanyDetails, useSuperadminCompaniesREST } from "../../../hooks/useSuperadminCompaniesREST";
 import { all_routes } from "../../router/all_routes";
 
 type PasswordField = "password" | "confirmPassword";
 
 const Companies = () => {
+  const location = useLocation();
+
   // REST API Hook
   const {
     packages,
@@ -50,24 +52,11 @@ const Companies = () => {
   const [editcompanyloader, seteditcompanyloader] = useState(false);
   const [isLoadingediting, setisLoadingediting] = useState(false);
 
-  type CompanyDetailType = {
-    name: string;
-    email: string;
-    status: string;
-    domain: string;
-    phone: string;
-    website: string;
-    currency: string;
-    address: string;
-    plan_type: string;
-    plan_name: string;
-    expiredate: string;
-    price: string;
-    registerdate: string;
-    logo: string;
-  };
+  // Multi-step form state for Add Company modal
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 5;
 
-  const [companydetail, setcompanydetail] = useState<CompanyDetailType>({
+  const [companydetail, setcompanydetail] = useState<CompanyDetails>({
     name: "Bytecamp Technologies",
     email: "contact@bytecamp.in",
     status: "Active",
@@ -102,7 +91,7 @@ const Companies = () => {
       dataIndex: "CompanyName",
       render: (text: String, record: any) => (
         <div className="d-flex align-items-center file-name-icon">
-          <Link to="#" className="avatar avatar-md border rounded-circle">
+          <Link to={`/super-admin/companies/${record.id}`} className="avatar avatar-md border rounded-circle">
             <ImageWithBasePath
               isLink={true}
               src={record.Image}
@@ -112,7 +101,7 @@ const Companies = () => {
           </Link>
           <div className="ms-2">
             <h6 className="fw-medium">
-              <Link to="#">{record.CompanyName}</Link>
+              <Link to={`/super-admin/companies/${record.id}`}>{record.CompanyName}</Link>
             </h6>
           </div>
         </div>
@@ -181,6 +170,13 @@ const Companies = () => {
             }}
           >
             <i className="ti ti-eye" />
+          </Link>
+          <Link
+            to={`/super-admin/companies/${record.id}`}
+            className="me-2"
+            title="View Full Details"
+          >
+            <i className="ti ti-external-link" />
           </Link>
           <Link
             to="#"
@@ -309,7 +305,7 @@ const Companies = () => {
 
   // Form Data
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Record<string, any>>({
     name: "",
     email: "",
     domain: "",
@@ -321,6 +317,56 @@ const Companies = () => {
     plan_type: "",
     plan_id: "",
     currency: "",
+    // Basic Info (Enhanced)
+    phone2: "",
+    fax: "",
+    description: "",
+    // Registration & Legal
+    legalName: "",
+    registrationNumber: "",
+    taxId: "",
+    taxIdType: "",
+    legalEntityType: "",
+    incorporationCountry: "",
+    // Industry & Classification
+    industry: "",
+    subIndustry: "",
+    companySize: "",
+    companyType: "",
+    // Structured Address
+    structuredAddress: {
+      street: "",
+      street2: "",
+      city: "",
+      state: "",
+      country: "",
+      postalCode: "",
+    },
+    // Contact Person
+    contactPerson: {
+      name: "",
+      email: "",
+      phone: "",
+      designation: "",
+    },
+    founderName: "",
+    // Social Links
+    social: {
+      linkedin: "",
+      twitter: "",
+      facebook: "",
+      instagram: "",
+    },
+    // Billing
+    billingEmail: "",
+    billingAddress: {
+      street: "",
+      street2: "",
+      city: "",
+      state: "",
+      country: "",
+      postalCode: "",
+    },
   });
 
   // Form Validation Errors State
@@ -366,6 +412,81 @@ const Companies = () => {
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // Validate specific step
+  const validateStep = (step: number): boolean => {
+    const errors: Record<string, string> = {};
+
+    switch (step) {
+      case 1: // Basic Information
+        if (!formData.name.trim()) errors.name = "Company name is required";
+        if (!formData.email.trim()) {
+          errors.email = "Email address is required";
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          errors.email = "Please enter a valid email address";
+        }
+        if (!formData.domain.trim()) errors.domain = "Sub domain URL is required";
+        if (!formData.phone.trim()) errors.phone = "Phone number is required";
+        if (!formData.website.trim()) errors.website = "Website is required";
+        if (!formData.address.trim()) errors.address = "Address is required";
+        if (!logo) errors.logo = "Company logo is required";
+        break;
+
+      case 2: // Legal & Registration (all optional)
+        // No required fields in this step
+        break;
+
+      case 3: // Industry & Contact (all optional)
+        // No required fields in this step
+        break;
+
+      case 4: // Social & Billing (all optional)
+        // No required fields in this step
+        break;
+
+      case 5: // Plan & Status
+        if (!formData.plan_id) errors.plan_id = "Please select a plan";
+        break;
+
+      default:
+        break;
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Navigate to next step
+  const handleNextStep = () => {
+    if (validateStep(currentStep)) {
+      if (currentStep < totalSteps) {
+        setCurrentStep(currentStep + 1);
+      }
+    }
+  };
+
+  // Navigate to previous step
+  const handlePrevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  // Jump to specific step (only if previous steps are valid)
+  const handleStepClick = (targetStep: number) => {
+    // Validate all steps before the target
+    let canNavigate = true;
+    for (let i = 1; i < targetStep; i++) {
+      if (!validateStep(i)) {
+        canNavigate = false;
+        break;
+      }
+    }
+
+    if (canNavigate || targetStep <= currentStep) {
+      setCurrentStep(targetStep);
+    }
   };
 
   // Clear specific error when user types
@@ -487,6 +608,21 @@ const Companies = () => {
     clearFieldError(name);
   };
 
+  // Handle nested object field changes (for structuredAddress, contactPerson, social, billingAddress)
+  const handleNestedInputChange = (
+    parentKey: string,
+    childKey: string,
+    value: string
+  ) => {
+    setFormData((prevState) => ({
+      ...prevState,
+      [parentKey]: {
+        ...(prevState[parentKey] || {}),
+        [childKey]: value,
+      },
+    }));
+  };
+
   // Common Select Change
 
   type SelectOption = {
@@ -565,8 +701,26 @@ const Companies = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Validate form using the new validation function
-    if (!validateForm()) {
+    // Validate all steps before final submission
+    let allStepsValid = true;
+    for (let step = 1; step <= totalSteps; step++) {
+      if (!validateStep(step)) {
+        allStepsValid = false;
+        // Move to the first step with errors
+        setCurrentStep(step);
+        toast.error(`Please fix errors in Step ${step}`, {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        return;
+      }
+    }
+
+    if (!allStepsValid) {
       toast.error("Please fill in all required fields.", {
         position: "top-right",
         autoClose: 3000,
@@ -670,8 +824,59 @@ const Companies = () => {
       plan_type: "",
       plan_id: "",
       currency: "",
+      // Basic Info (Enhanced)
+      phone2: "",
+      fax: "",
+      description: "",
+      // Registration & Legal
+      legalName: "",
+      registrationNumber: "",
+      taxId: "",
+      taxIdType: "",
+      legalEntityType: "",
+      incorporationCountry: "",
+      // Industry & Classification
+      industry: "",
+      subIndustry: "",
+      companySize: "",
+      companyType: "",
+      // Structured Address
+      structuredAddress: {
+        street: "",
+        street2: "",
+        city: "",
+        state: "",
+        country: "",
+        postalCode: "",
+      },
+      // Contact Person
+      contactPerson: {
+        name: "",
+        email: "",
+        phone: "",
+        designation: "",
+      },
+      founderName: "",
+      // Social Links
+      social: {
+        linkedin: "",
+        twitter: "",
+        facebook: "",
+        instagram: "",
+      },
+      // Billing
+      billingEmail: "",
+      billingAddress: {
+        street: "",
+        street2: "",
+        city: "",
+        state: "",
+        country: "",
+        postalCode: "",
+      },
     });
     setFormErrors({}); // Clear all validation errors
+    setCurrentStep(1); // Reset to first step
     RemoveLogo();
     const elements = document.querySelectorAll('[id="close-add-company"]');
 
@@ -1506,190 +1711,242 @@ const Companies = () => {
                 </button>
               </div>
               <form onSubmit={handleSubmit} autoComplete="off">
-                <div className="modal-body pb-0">
-                  <div className="row">
-                    <div className="col-md-12">
-                      <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
-                        <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                          {logo ? (
-                            <img
-                              src={logo}
-                              alt="Uploaded Logo"
-                              className="rounded-circle"
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "cover",
-                              }}
-                            />
-                          ) : imageupload ? (
-                            <div
-                              className="spinner-border text-primary"
-                              role="status"
-                            >
-                              <span className="visually-hidden">
-                                Uploading...
-                              </span>
-                            </div>
-                          ) : (
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-30.jpg"
-                              alt="img"
-                              className="rounded-circle"
-                            />
-                          )}
-                        </div>
-                        <div className="profile-upload">
-                          <div className="mb-2">
-                            <h6 className="mb-1">Upload Profile Image <span className="text-danger">*</span></h6>
-                            <p className="fs-12">Image should be below 4 mb</p>
-                          </div>
-                          <div className="profile-uploader d-flex align-items-center">
-                            <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                              {logo ? "Change" : "Upload"}
-                              <input
-                                type="file"
-                                className="form-control image-sign"
-                                accept=".png,.jpeg,.jpg,.ico"
-                                key={inputKey}
-                                ref={fileInputRef}
-                                onChange={handleImageUpload}
-                              />
-                            </div>
-                            {logo && (
-                              <Link
-                                to="#"
-                                onClick={RemoveLogo}
-                                className="btn btn-light btn-sm"
-                              >
-                                Remove
-                              </Link>
-                            )}
-                          </div>
-                          {formErrors.logo && (
-                            <div className="text-danger fs-12 mt-1">{formErrors.logo}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Name <span className="text-danger"> *</span>
-                        </label>
-                        <input
-                          type="text"
-                          className={`form-control ${formErrors.name ? "is-invalid" : ""}`}
-                          name="name"
-                          placeholder="Enter company name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          maxLength={100}
-                        />
-                        {formErrors.name && (
-                          <div className="invalid-feedback">{formErrors.name}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Email Address <span className="text-danger"> *</span>
-                        </label>
-                        <input
-                          type="email"
-                          className={`form-control ${formErrors.email ? "is-invalid" : ""}`}
-                          name="email"
-                          placeholder="company@example.com"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          maxLength={100}
-                        />
-                        {formErrors.email && (
-                          <div className="invalid-feedback">{formErrors.email}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Sub Domain URL<span className="text-danger"> *</span>
-                        </label>
-                        <div style={{ display: "flex", alignItems: "center" }}>
-                          <input
-                            type="text"
-                            className={`form-control ${formErrors.domain ? "is-invalid" : ""}`}
-                            name="domain"
-                            placeholder="Subdomain"
-                            value={formData.domain}
-                            onChange={handleInputChange}
-                            maxLength={100}
+                {/* Step Indicator */}
+                <div className="px-4 pt-4 pb-3">
+                  <div className="d-flex align-items-center justify-content-between">
+                    {[1, 2, 3, 4, 5].map((step) => (
+                      <React.Fragment key={step}>
+                        <div className="d-flex flex-column align-items-center flex-fill">
+                          <div
+                            className={`rounded-circle d-flex align-items-center justify-content-center mb-2 ${currentStep === step
+                                ? "bg-primary text-white"
+                                : currentStep > step
+                                  ? "bg-success text-white"
+                                  : "bg-light text-muted"
+                              }`}
                             style={{
-                              borderTopRightRadius: 0,
-                              borderBottomRightRadius: 0,
+                              width: "40px",
+                              height: "40px",
+                              cursor: step < currentStep ? "pointer" : "default",
+                              fontWeight: "600",
+                            }}
+                            onClick={() => step < currentStep && handleStepClick(step)}
+                          >
+                            {currentStep > step ? "✓" : step}
+                          </div>
+                          <small
+                            className={`text-center ${currentStep === step ? "text-primary fw-bold" : "text-muted"
+                              }`}
+                            style={{ fontSize: "11px", maxWidth: "80px" }}
+                          >
+                            {step === 1 && "Basic Info"}
+                            {step === 2 && "Legal & Reg"}
+                            {step === 3 && "Industry"}
+                            {step === 4 && "Social & Billing"}
+                            {step === 5 && "Plan"}
+                          </small>
+                        </div>
+                        {step < 5 && (
+                          <div
+                            className={`flex-fill ${currentStep > step ? "bg-success" : "bg-light"
+                              }`}
+                            style={{
+                              height: "2px",
+                              margin: "0 0 35px 0",
                             }}
                           />
-                          <span
-                            style={{
-                              padding: "0 12px",
-                              backgroundColor: "#e9ecef",
-                              border: "1px solid #ced4da",
-                              borderLeft: "none",
-                              borderTopRightRadius: "0.25rem",
-                              borderBottomRightRadius: "0.25rem",
-                              height: "38px",
-                              display: "flex",
-                              alignItems: "center",
-                              fontSize: "1rem",
-                              color: "#495057",
-                              userSelect: "none",
-                            }}
-                          >
-                            {hostSuffix}
-                          </span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+                <div className="modal-body pb-0">
+                  <div className="row">
+                    {/* Step 1: Basic Information */}
+                    {currentStep === 1 && (
+                      <>
+                        <div className="col-md-12">
+                          <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
+                            <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
+                              {logo ? (
+                                <img
+                                  src={logo}
+                                  alt="Uploaded Logo"
+                                  className="rounded-circle"
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : imageupload ? (
+                                <div
+                                  className="spinner-border text-primary"
+                                  role="status"
+                                >
+                                  <span className="visually-hidden">
+                                    Uploading...
+                                  </span>
+                                </div>
+                              ) : (
+                                <ImageWithBasePath
+                                  src="assets/img/profiles/avatar-30.jpg"
+                                  alt="img"
+                                  className="rounded-circle"
+                                />
+                              )}
+                            </div>
+                            <div className="profile-upload">
+                              <div className="mb-2">
+                                <h6 className="mb-1">Upload Profile Image <span className="text-danger">*</span></h6>
+                                <p className="fs-12">Image should be below 4 mb</p>
+                              </div>
+                              <div className="profile-uploader d-flex align-items-center">
+                                <div className="drag-upload-btn btn btn-sm btn-primary me-2">
+                                  {logo ? "Change" : "Upload"}
+                                  <input
+                                    type="file"
+                                    className="form-control image-sign"
+                                    accept=".png,.jpeg,.jpg,.ico"
+                                    key={inputKey}
+                                    ref={fileInputRef}
+                                    onChange={handleImageUpload}
+                                  />
+                                </div>
+                                {logo && (
+                                  <Link
+                                    to="#"
+                                    onClick={RemoveLogo}
+                                    className="btn btn-light btn-sm"
+                                  >
+                                    Remove
+                                  </Link>
+                                )}
+                              </div>
+                              {formErrors.logo && (
+                                <div className="text-danger fs-12 mt-1">{formErrors.logo}</div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        {formErrors.domain && (
-                          <div className="text-danger fs-12 mt-1">{formErrors.domain}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">
-                          Phone Number <span className="text-danger"> *</span>
-                        </label>
-                        <input
-                          type="text"
-                          className={`form-control ${formErrors.phone ? "is-invalid" : ""}`}
-                          name="phone"
-                          placeholder="Mobile Number"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          maxLength={100}
-                        />
-                        {formErrors.phone && (
-                          <div className="invalid-feedback">{formErrors.phone}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Website <span className="text-danger">*</span></label>
-                        <input
-                          type="text"
-                          className={`form-control ${formErrors.website ? "is-invalid" : ""}`}
-                          name="website"
-                          placeholder="Enter company website"
-                          value={formData.website}
-                          onChange={handleInputChange}
-                          maxLength={100}
-                        />
-                        {formErrors.website && (
-                          <div className="invalid-feedback">{formErrors.website}</div>
-                        )}
-                      </div>
-                    </div>
-                    {/* <div className="col-md-6">
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Name <span className="text-danger"> *</span>
+                            </label>
+                            <input
+                              type="text"
+                              className={`form-control ${formErrors.name ? "is-invalid" : ""}`}
+                              name="name"
+                              placeholder="Enter company name"
+                              value={formData.name}
+                              onChange={handleInputChange}
+                              maxLength={100}
+                            />
+                            {formErrors.name && (
+                              <div className="invalid-feedback">{formErrors.name}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Email Address <span className="text-danger"> *</span>
+                            </label>
+                            <input
+                              type="email"
+                              className={`form-control ${formErrors.email ? "is-invalid" : ""}`}
+                              name="email"
+                              placeholder="company@example.com"
+                              value={formData.email}
+                              onChange={handleInputChange}
+                              maxLength={100}
+                            />
+                            {formErrors.email && (
+                              <div className="invalid-feedback">{formErrors.email}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Sub Domain URL<span className="text-danger"> *</span>
+                            </label>
+                            <div style={{ display: "flex", alignItems: "center" }}>
+                              <input
+                                type="text"
+                                className={`form-control ${formErrors.domain ? "is-invalid" : ""}`}
+                                name="domain"
+                                placeholder="Subdomain"
+                                value={formData.domain}
+                                onChange={handleInputChange}
+                                maxLength={100}
+                                style={{
+                                  borderTopRightRadius: 0,
+                                  borderBottomRightRadius: 0,
+                                }}
+                              />
+                              <span
+                                style={{
+                                  padding: "0 12px",
+                                  backgroundColor: "#e9ecef",
+                                  border: "1px solid #ced4da",
+                                  borderLeft: "none",
+                                  borderTopRightRadius: "0.25rem",
+                                  borderBottomRightRadius: "0.25rem",
+                                  height: "38px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  fontSize: "1rem",
+                                  color: "#495057",
+                                  userSelect: "none",
+                                }}
+                              >
+                                {hostSuffix}
+                              </span>
+                            </div>
+                            {formErrors.domain && (
+                              <div className="text-danger fs-12 mt-1">{formErrors.domain}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Phone Number <span className="text-danger"> *</span>
+                            </label>
+                            <input
+                              type="text"
+                              className={`form-control ${formErrors.phone ? "is-invalid" : ""}`}
+                              name="phone"
+                              placeholder="Mobile Number"
+                              value={formData.phone}
+                              onChange={handleInputChange}
+                              maxLength={100}
+                            />
+                            {formErrors.phone && (
+                              <div className="invalid-feedback">{formErrors.phone}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Website <span className="text-danger">*</span></label>
+                            <input
+                              type="text"
+                              className={`form-control ${formErrors.website ? "is-invalid" : ""}`}
+                              name="website"
+                              placeholder="Enter company website"
+                              value={formData.website}
+                              onChange={handleInputChange}
+                              maxLength={100}
+                            />
+                            {formErrors.website && (
+                              <div className="invalid-feedback">{formErrors.website}</div>
+                            )}
+                          </div>
+                        </div>
+                        {/* <div className="col-md-6">
                     <div className="mb-3 ">
                       <label className="form-label">
                         Password <span className="text-danger"> *</span>
@@ -1739,68 +1996,456 @@ const Companies = () => {
                       </div>
                     </div>
                   </div> */}
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Address <span className="text-danger">*</span></label>
-                        <input
-                          type="text"
-                          className={`form-control ${formErrors.address ? "is-invalid" : ""}`}
-                          name="address"
-                          placeholder="Enter company address"
-                          value={formData.address}
-                          onChange={handleInputChange}
-                          maxLength={100}
-                        />
-                        {formErrors.address && (
-                          <div className="invalid-feedback">{formErrors.address}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3 ">
-                        <label className="form-label">
-                          Plan Name <span className="text-danger"> *</span>
-                        </label>
-                        <CommonSelect
-                          className={`select ${formErrors.plan_id ? "is-invalid" : ""}`}
-                          options={planName}
-                          defaultValue={formData.plan_name}
-                          onChange={(selectedOption) =>
-                            handleSelectChange("plan_id", selectedOption)
-                          }
-                        />
-                        {formErrors.plan_id && (
-                          <div className="text-danger fs-12 mt-1">{formErrors.plan_id}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3 ">
-                        <label className="form-label">
-                          Plan Type <span className="text-danger"> *</span>
-                        </label>
-                        <CommonSelect
-                          className="select"
-                          options={planType}
-                          defaultValue={formData.plan_type}
-                          disabled={true}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3 ">
-                        <label className="form-label">
-                          Currency <span className="text-danger"> *</span>
-                        </label>
-                        <CommonSelect
-                          className="select"
-                          options={currency}
-                          defaultValue={formData.currency}
-                          disabled={true}
-                        />
-                      </div>
-                    </div>
-                    {/* <div className="col-md-4">
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">Address <span className="text-danger">*</span></label>
+                            <input
+                              type="text"
+                              className={`form-control ${formErrors.address ? "is-invalid" : ""}`}
+                              name="address"
+                              placeholder="Enter company address"
+                              value={formData.address}
+                              onChange={handleInputChange}
+                              maxLength={100}
+                            />
+                            {formErrors.address && (
+                              <div className="invalid-feedback">{formErrors.address}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Structured Address (Optional) */}
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Structured Address</strong> (Optional - for detailed address breakdown)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Street Address</label>
+                            <input type="text" className="form-control" placeholder="Street address line 1" value={formData.structuredAddress?.street || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'street', e.target.value)} maxLength={200} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Street Address 2</label>
+                            <input type="text" className="form-control" placeholder="Apt, suite, unit, etc." value={formData.structuredAddress?.street2 || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'street2', e.target.value)} maxLength={200} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">City</label>
+                            <input type="text" className="form-control" placeholder="City" value={formData.structuredAddress?.city || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'city', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">State / Province</label>
+                            <input type="text" className="form-control" placeholder="State or Province" value={formData.structuredAddress?.state || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'state', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Country</label>
+                            <input type="text" className="form-control" placeholder="Country" value={formData.structuredAddress?.country || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'country', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Postal Code</label>
+                            <input type="text" className="form-control" placeholder="Postal / ZIP code" value={formData.structuredAddress?.postalCode || ''} onChange={(e) => handleNestedInputChange('structuredAddress', 'postalCode', e.target.value)} maxLength={20} />
+                          </div>
+                        </div>
+
+                        {/* Additional Company Fields (Optional) */}
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Additional Contact Details</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Secondary Phone</label>
+                            <input type="text" className="form-control" name="phone2" placeholder="Secondary phone number" value={formData.phone2 || ''} onChange={handleInputChange} maxLength={20} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Fax</label>
+                            <input type="text" className="form-control" name="fax" placeholder="Fax number" value={formData.fax || ''} onChange={handleInputChange} maxLength={20} />
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">Description</label>
+                            <input type="text" className="form-control" name="description" placeholder="Brief company description" value={formData.description || ''} onChange={handleInputChange} maxLength={500} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 2: Registration & Legal */}
+                    {currentStep === 2 && (
+                      <>
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Registration & Legal Information</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Legal Name</label>
+                            <input type="text" className="form-control" name="legalName" placeholder="Legal entity name" value={formData.legalName || ''} onChange={handleInputChange} maxLength={200} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Legal Entity Type</label>
+                            <CommonSelect
+                              className="select"
+                              options={[
+                                { label: 'Sole Proprietorship', value: 'Sole Proprietorship' },
+                                { label: 'Partnership', value: 'Partnership' },
+                                { label: 'LLP', value: 'LLP' },
+                                { label: 'Private Limited', value: 'Private Limited' },
+                                { label: 'Public Limited', value: 'Public Limited' },
+                                { label: 'Corporation', value: 'Corporation' },
+                                { label: 'LLC', value: 'LLC' },
+                                { label: 'Non-Profit', value: 'Non-Profit' },
+                                { label: 'Government Entity', value: 'Government Entity' },
+                                { label: 'Other', value: 'Other' },
+                              ]}
+                              defaultValue={formData.legalEntityType || undefined}
+                              onChange={(selectedOption) => handleSelectChange("legalEntityType", selectedOption)}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Registration Number</label>
+                            <input type="text" className="form-control" name="registrationNumber" placeholder="Company registration number" value={formData.registrationNumber || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Incorporation Country</label>
+                            <input type="text" className="form-control" name="incorporationCountry" placeholder="Country of incorporation" value={formData.incorporationCountry || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="mb-3">
+                            <label className="form-label">Tax ID</label>
+                            <input type="text" className="form-control" name="taxId" placeholder="Tax identification number" value={formData.taxId || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="mb-3">
+                            <label className="form-label">Tax ID Type</label>
+                            <CommonSelect
+                              className="select"
+                              options={[
+                                { label: 'GST', value: 'GST' },
+                                { label: 'VAT', value: 'VAT' },
+                                { label: 'EIN', value: 'EIN' },
+                                { label: 'TIN', value: 'TIN' },
+                                { label: 'PAN', value: 'PAN' },
+                                { label: 'Other', value: 'Other' },
+                              ]}
+                              defaultValue={formData.taxIdType || undefined}
+                              onChange={(selectedOption) => handleSelectChange("taxIdType", selectedOption)}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 3: Industry & Contact */}
+                    {currentStep === 3 && (
+                      <>
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Industry & Classification</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Industry</label>
+                            <input type="text" className="form-control" name="industry" placeholder="e.g. Information Technology" value={formData.industry || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Sub-Industry</label>
+                            <input type="text" className="form-control" name="subIndustry" placeholder="e.g. SaaS, Cloud Services" value={formData.subIndustry || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Company Size</label>
+                            <CommonSelect
+                              className="select"
+                              options={[
+                                { label: '1-10', value: '1-10' },
+                                { label: '11-50', value: '11-50' },
+                                { label: '51-200', value: '51-200' },
+                                { label: '201-500', value: '201-500' },
+                                { label: '501-1000', value: '501-1000' },
+                                { label: '1001-5000', value: '1001-5000' },
+                                { label: '5000+', value: '5000+' },
+                              ]}
+                              defaultValue={formData.companySize || undefined}
+                              onChange={(selectedOption) => handleSelectChange("companySize", selectedOption)}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Company Type</label>
+                            <CommonSelect
+                              className="select"
+                              options={[
+                                { label: 'Startup', value: 'Startup' },
+                                { label: 'SME', value: 'SME' },
+                                { label: 'Enterprise', value: 'Enterprise' },
+                                { label: 'Government', value: 'Government' },
+                                { label: 'NGO', value: 'NGO' },
+                                { label: 'Other', value: 'Other' },
+                              ]}
+                              defaultValue={formData.companyType || undefined}
+                              onChange={(selectedOption) => handleSelectChange("companyType", selectedOption)}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Contact Person & Founder */}
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Contact Person & Founder</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Contact Person Name</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Primary contact person"
+                              value={formData.contactPerson?.name || ''}
+                              onChange={(e) => handleNestedInputChange('contactPerson', 'name', e.target.value)}
+                              maxLength={100}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Contact Person Email</label>
+                            <input
+                              type="email"
+                              className="form-control"
+                              placeholder="contact@company.com"
+                              value={formData.contactPerson?.email || ''}
+                              onChange={(e) => handleNestedInputChange('contactPerson', 'email', e.target.value)}
+                              maxLength={100}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Contact Person Phone</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Phone number"
+                              value={formData.contactPerson?.phone || ''}
+                              onChange={(e) => handleNestedInputChange('contactPerson', 'phone', e.target.value)}
+                              maxLength={20}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Contact Person Designation</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="e.g. CEO, CTO, Manager"
+                              value={formData.contactPerson?.designation || ''}
+                              onChange={(e) => handleNestedInputChange('contactPerson', 'designation', e.target.value)}
+                              maxLength={100}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">Founder Name</label>
+                            <input type="text" className="form-control" name="founderName" placeholder="Founder's name" value={formData.founderName || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 4: Social & Billing */}
+                    {currentStep === 4 && (
+                      <>
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Social Media Links</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">LinkedIn</label>
+                            <input
+                              type="url"
+                              className="form-control"
+                              placeholder="https://linkedin.com/company/..."
+                              value={formData.social?.linkedin || ''}
+                              onChange={(e) => handleNestedInputChange('social', 'linkedin', e.target.value)}
+                              maxLength={200}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Twitter</label>
+                            <input
+                              type="url"
+                              className="form-control"
+                              placeholder="https://twitter.com/..."
+                              value={formData.social?.twitter || ''}
+                              onChange={(e) => handleNestedInputChange('social', 'twitter', e.target.value)}
+                              maxLength={200}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Facebook</label>
+                            <input
+                              type="url"
+                              className="form-control"
+                              placeholder="https://facebook.com/..."
+                              value={formData.social?.facebook || ''}
+                              onChange={(e) => handleNestedInputChange('social', 'facebook', e.target.value)}
+                              maxLength={200}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Instagram</label>
+                            <input
+                              type="url"
+                              className="form-control"
+                              placeholder="https://instagram.com/..."
+                              value={formData.social?.instagram || ''}
+                              onChange={(e) => handleNestedInputChange('social', 'instagram', e.target.value)}
+                              maxLength={200}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Billing Information */}
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Billing Information</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">Billing Email</label>
+                            <input type="email" className="form-control" name="billingEmail" placeholder="billing@company.com" value={formData.billingEmail || ''} onChange={handleInputChange} maxLength={100} />
+                          </div>
+                        </div>
+
+                        {/* Billing Address */}
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                          <p className="text-muted small mb-2"><strong>Billing Address</strong> (Optional)</p>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Street Address</label>
+                            <input type="text" className="form-control" placeholder="Billing street address" value={formData.billingAddress?.street || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'street', e.target.value)} maxLength={200} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Street Address 2</label>
+                            <input type="text" className="form-control" placeholder="Apt, suite, unit, etc." value={formData.billingAddress?.street2 || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'street2', e.target.value)} maxLength={200} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">City</label>
+                            <input type="text" className="form-control" placeholder="City" value={formData.billingAddress?.city || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'city', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">State / Province</label>
+                            <input type="text" className="form-control" placeholder="State or Province" value={formData.billingAddress?.state || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'state', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Country</label>
+                            <input type="text" className="form-control" placeholder="Country" value={formData.billingAddress?.country || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'country', e.target.value)} maxLength={100} />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3">
+                            <label className="form-label">Postal Code</label>
+                            <input type="text" className="form-control" placeholder="Postal / ZIP code" value={formData.billingAddress?.postalCode || ''} onChange={(e) => handleNestedInputChange('billingAddress', 'postalCode', e.target.value)} maxLength={20} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 5: Plan & Status */}
+                    {currentStep === 5 && (
+                      <>
+                        <div className="col-md-12 mb-2">
+                          <hr className="my-2" />
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3 ">
+                            <label className="form-label">
+                              Plan Name <span className="text-danger"> *</span>
+                            </label>
+                            <CommonSelect
+                              className={`select ${formErrors.plan_id ? "is-invalid" : ""}`}
+                              options={planName}
+                              defaultValue={formData.plan_name}
+                              onChange={(selectedOption) =>
+                                handleSelectChange("plan_id", selectedOption)
+                              }
+                            />
+                            {formErrors.plan_id && (
+                              <div className="text-danger fs-12 mt-1">{formErrors.plan_id}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3 ">
+                            <label className="form-label">
+                              Plan Type <span className="text-danger"> *</span>
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              options={planType}
+                              defaultValue={formData.plan_type}
+                              disabled={true}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-md-6">
+                          <div className="mb-3 ">
+                            <label className="form-label">
+                              Currency <span className="text-danger"> *</span>
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              options={currency}
+                              defaultValue={formData.currency}
+                              disabled={true}
+                            />
+                          </div>
+                        </div>
+                        {/* <div className="col-md-4">
                     <div className="mb-3 ">
                       <label className="form-label">
                         Language <span className="text-danger"> *</span>
@@ -1812,20 +2457,22 @@ const Companies = () => {
                       />
                     </div>
                   </div> */}
-                    <div className="col-md-6">
-                      <div className="mb-3 ">
-                        <label className="form-label">Status</label>
-                        <CommonSelect
-                          className="select"
-                          key={resetKey}
-                          options={statusChoose}
-                          defaultValue={formData.status}
-                          onChange={(selectedOption) =>
-                            handleSelectChange("status", selectedOption)
-                          }
-                        />
-                      </div>
-                    </div>
+                        <div className="col-md-6">
+                          <div className="mb-3 ">
+                            <label className="form-label">Status</label>
+                            <CommonSelect
+                              className="select"
+                              key={resetKey}
+                              options={statusChoose}
+                              defaultValue={formData.status}
+                              onChange={(selectedOption) =>
+                                handleSelectChange("status", selectedOption)
+                              }
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="modal-footer">
@@ -1838,25 +2485,47 @@ const Companies = () => {
                   >
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    // data-bs-dismiss="modal"
-                    className="btn btn-primary"
-                    disabled={isLoading} // Disable the button when loading
-                  >
-                    {isLoading ? (
-                      <>
-                        <span
-                          className="spinner-border spinner-border-sm me-2"
-                          role="status"
-                          aria-hidden="true"
-                        />
-                        Adding...
-                      </>
-                    ) : (
-                      "Add Companyss"
-                    )}
-                  </button>
+
+                  {currentStep > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary me-2"
+                      onClick={handlePrevStep}
+                    >
+                      <i className="ti ti-arrow-left me-1" />
+                      Previous
+                    </button>
+                  )}
+
+                  {currentStep < totalSteps ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleNextStep}
+                    >
+                      Next
+                      <i className="ti ti-arrow-right ms-1" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-2"
+                            role="status"
+                            aria-hidden="true"
+                          />
+                          Adding...
+                        </>
+                      ) : (
+                        "Add Company"
+                      )}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
@@ -2127,6 +2796,293 @@ const Companies = () => {
                             maxLength={100}
                           />
                         </div>
+                      </div>
+
+                      {/* Additional Company Fields (Optional) */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Additional Contact Details</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Secondary Phone</label>
+                          <input type="text" className="form-control" name="phone2" placeholder="Secondary phone number" value={formData.phone2 || ''} onChange={handleInputChange} maxLength={20} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Fax</label>
+                          <input type="text" className="form-control" name="fax" placeholder="Fax number" value={formData.fax || ''} onChange={handleInputChange} maxLength={20} />
+                        </div>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Description</label>
+                          <input type="text" className="form-control" name="description" placeholder="Brief company description" value={formData.description || ''} onChange={handleInputChange} maxLength={500} />
+                        </div>
+                      </div>
+
+                      {/* Registration & Legal */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Registration & Legal Information</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Legal Name</label>
+                          <input type="text" className="form-control" name="legalName" placeholder="Legal entity name" value={formData.legalName || ''} onChange={handleInputChange} maxLength={200} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Legal Entity Type</label>
+                          <CommonSelect
+                            className="select"
+                            options={[
+                              { label: 'Sole Proprietorship', value: 'Sole Proprietorship' },
+                              { label: 'Partnership', value: 'Partnership' },
+                              { label: 'LLP', value: 'LLP' },
+                              { label: 'Private Limited', value: 'Private Limited' },
+                              { label: 'Public Limited', value: 'Public Limited' },
+                              { label: 'Corporation', value: 'Corporation' },
+                              { label: 'LLC', value: 'LLC' },
+                              { label: 'Non-Profit', value: 'Non-Profit' },
+                              { label: 'Government Entity', value: 'Government Entity' },
+                              { label: 'Other', value: 'Other' },
+                            ]}
+                            defaultValue={formData.legalEntityType || undefined}
+                            onChange={(selectedOption) => handleSelectChange("legalEntityType", selectedOption)}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Registration Number</label>
+                          <input type="text" className="form-control" name="registrationNumber" placeholder="Company registration number" value={formData.registrationNumber || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Incorporation Country</label>
+                          <input type="text" className="form-control" name="incorporationCountry" placeholder="Country of incorporation" value={formData.incorporationCountry || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="mb-3">
+                          <label className="form-label">Tax ID</label>
+                          <input type="text" className="form-control" name="taxId" placeholder="Tax identification number" value={formData.taxId || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="mb-3">
+                          <label className="form-label">Tax ID Type</label>
+                          <CommonSelect
+                            className="select"
+                            options={[
+                              { label: 'GST', value: 'GST' },
+                              { label: 'VAT', value: 'VAT' },
+                              { label: 'EIN', value: 'EIN' },
+                              { label: 'TIN', value: 'TIN' },
+                              { label: 'PAN', value: 'PAN' },
+                              { label: 'Other', value: 'Other' },
+                            ]}
+                            defaultValue={formData.taxIdType || undefined}
+                            onChange={(selectedOption) => handleSelectChange("taxIdType", selectedOption)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Industry & Classification */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Industry & Classification</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Industry</label>
+                          <input type="text" className="form-control" name="industry" placeholder="e.g. Information Technology" value={formData.industry || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Sub-Industry</label>
+                          <input type="text" className="form-control" name="subIndustry" placeholder="e.g. SaaS, Cloud Services" value={formData.subIndustry || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Company Size</label>
+                          <CommonSelect
+                            className="select"
+                            options={[
+                              { label: '1-10', value: '1-10' },
+                              { label: '11-50', value: '11-50' },
+                              { label: '51-200', value: '51-200' },
+                              { label: '201-500', value: '201-500' },
+                              { label: '501-1000', value: '501-1000' },
+                              { label: '1001-5000', value: '1001-5000' },
+                              { label: '5000+', value: '5000+' },
+                            ]}
+                            defaultValue={formData.companySize || undefined}
+                            onChange={(selectedOption) => handleSelectChange("companySize", selectedOption)}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Company Type</label>
+                          <CommonSelect
+                            className="select"
+                            options={[
+                              { label: 'Startup', value: 'Startup' },
+                              { label: 'SME', value: 'SME' },
+                              { label: 'Enterprise', value: 'Enterprise' },
+                              { label: 'Government', value: 'Government' },
+                              { label: 'NGO', value: 'NGO' },
+                              { label: 'Other', value: 'Other' },
+                            ]}
+                            defaultValue={formData.companyType || undefined}
+                            onChange={(selectedOption) => handleSelectChange("companyType", selectedOption)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Contact Person & Founder */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Contact Person & Founder</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Contact Person Name</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Primary contact person"
+                            value={formData.contactPerson?.name || ''}
+                            onChange={(e) => handleNestedInputChange('contactPerson', 'name', e.target.value)}
+                            maxLength={100}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Contact Person Email</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            placeholder="contact@company.com"
+                            value={formData.contactPerson?.email || ''}
+                            onChange={(e) => handleNestedInputChange('contactPerson', 'email', e.target.value)}
+                            maxLength={100}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Contact Person Phone</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Phone number"
+                            value={formData.contactPerson?.phone || ''}
+                            onChange={(e) => handleNestedInputChange('contactPerson', 'phone', e.target.value)}
+                            maxLength={20}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Contact Person Designation</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="e.g. CEO, CTO, Manager"
+                            value={formData.contactPerson?.designation || ''}
+                            onChange={(e) => handleNestedInputChange('contactPerson', 'designation', e.target.value)}
+                            maxLength={100}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Founder Name</label>
+                          <input type="text" className="form-control" name="founderName" placeholder="Founder's name" value={formData.founderName || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+
+                      {/* Social Links */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Social Media Links</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">LinkedIn</label>
+                          <input
+                            type="url"
+                            className="form-control"
+                            placeholder="https://linkedin.com/company/..."
+                            value={formData.social?.linkedin || ''}
+                            onChange={(e) => handleNestedInputChange('social', 'linkedin', e.target.value)}
+                            maxLength={200}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Twitter</label>
+                          <input
+                            type="url"
+                            className="form-control"
+                            placeholder="https://twitter.com/..."
+                            value={formData.social?.twitter || ''}
+                            onChange={(e) => handleNestedInputChange('social', 'twitter', e.target.value)}
+                            maxLength={200}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Facebook</label>
+                          <input
+                            type="url"
+                            className="form-control"
+                            placeholder="https://facebook.com/..."
+                            value={formData.social?.facebook || ''}
+                            onChange={(e) => handleNestedInputChange('social', 'facebook', e.target.value)}
+                            maxLength={200}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">Instagram</label>
+                          <input
+                            type="url"
+                            className="form-control"
+                            placeholder="https://instagram.com/..."
+                            value={formData.social?.instagram || ''}
+                            onChange={(e) => handleNestedInputChange('social', 'instagram', e.target.value)}
+                            maxLength={200}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Billing Information */}
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
+                        <p className="text-muted small mb-2"><strong>Billing Information</strong> (Optional)</p>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Billing Email</label>
+                          <input type="email" className="form-control" name="billingEmail" placeholder="billing@company.com" value={formData.billingEmail || ''} onChange={handleInputChange} maxLength={100} />
+                        </div>
+                      </div>
+
+                      <div className="col-md-12 mb-2">
+                        <hr className="my-2" />
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3 ">
@@ -2462,8 +3418,8 @@ const Companies = () => {
                         </div>
                         <span
                           className={`badge ${companydetail.status === "Active"
-                              ? "badge-success"
-                              : "badge-danger"
+                            ? "badge-success"
+                            : "badge-danger"
                             }`}
                         >
                           <i className="ti ti-point-filled" />
@@ -2524,8 +3480,77 @@ const Companies = () => {
                               </p>
                             </div>
                           </div>
+                          {companydetail.description && (
+                            <div className="col-md-4">
+                              <div className="mb-3">
+                                <p className="fs-12 mb-0">Description</p>
+                                <p className="text-gray-9">
+                                  {companydetail.description}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
+
+                      {(companydetail.registrationNumber || companydetail.taxId || companydetail.legalName || companydetail.industry || companydetail.companySize || companydetail.founderName) && (
+                        <>
+                          <p className="text-gray-9 fw-medium">Company Details</p>
+                          <div className="pb-1 border-bottom mb-4">
+                            <div className="row align-items-center">
+                              {companydetail.legalName && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Legal Name</p>
+                                    <p className="text-gray-9">{companydetail.legalName}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {companydetail.registrationNumber && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Registration Number</p>
+                                    <p className="text-gray-9">{companydetail.registrationNumber}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {companydetail.taxId && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Tax ID</p>
+                                    <p className="text-gray-9">{companydetail.taxId}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {companydetail.industry && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Industry</p>
+                                    <p className="text-gray-9">{companydetail.industry}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {companydetail.companySize && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Company Size</p>
+                                    <p className="text-gray-9">{companydetail.companySize}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {companydetail.founderName && (
+                                <div className="col-md-4">
+                                  <div className="mb-3">
+                                    <p className="fs-12 mb-0">Founder Name</p>
+                                    <p className="text-gray-9">{companydetail.founderName}</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       <p className="text-gray-9 fw-medium">Plan Details</p>
                       <div>
                         <div className="row align-items-center">
@@ -2571,6 +3596,16 @@ const Companies = () => {
                               </p>
                             </div>
                           </div>
+                          {companydetail.billingEmail && (
+                            <div className="col-md-4">
+                              <div className="mb-3">
+                                <p className="fs-12 mb-0">Billing Email</p>
+                                <p className="text-gray-9">
+                                  {companydetail.billingEmail}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

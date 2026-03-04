@@ -148,6 +148,88 @@ const companySchema = new mongoose.Schema({
   currency: { type: String },
   logo: { type: String },
 
+  // ============================================
+  // ENHANCED COMPANY FIELDS
+  // ============================================
+
+  // Basic Info (Enhanced)
+  phone2: { type: String },
+  fax: { type: String },
+  description: { type: String },
+
+  // Registration & Legal
+  registrationNumber: { type: String },
+  taxId: { type: String },
+  taxIdType: { type: String, enum: ['GST', 'VAT', 'EIN', 'TIN', 'PAN', 'Other', ''] },
+  legalName: { type: String },
+  legalEntityType: { type: String, enum: [
+    'Sole Proprietorship', 'Partnership', 'LLP', 'Private Limited',
+    'Public Limited', 'Corporation', 'LLC', 'Non-Profit', 'Government Entity', 'Other', ''
+  ]},
+  incorporationCountry: { type: String },
+
+  // Industry & Classification
+  industry: { type: String },
+  subIndustry: { type: String },
+  companySize: { type: String, enum: ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5000+', ''] },
+  companyType: { type: String, enum: ['Startup', 'SME', 'Enterprise', 'Government', 'NGO', 'Other', ''] },
+
+  // Structured Address (replaces flat string for new companies, backward compatible)
+  structuredAddress: {
+    street: { type: String },
+    street2: { type: String },
+    city: { type: String },
+    state: { type: String },
+    country: { type: String },
+    postalCode: { type: String },
+    fullAddress: { type: String },
+  },
+
+  // Contact Person / Founder
+  contactPerson: {
+    name: { type: String },
+    email: { type: String },
+    phone: { type: String },
+    designation: { type: String },
+  },
+  founderName: { type: String },
+
+  // Social Links
+  social: {
+    linkedin: { type: String },
+    twitter: { type: String },
+    facebook: { type: String },
+    instagram: { type: String },
+  },
+
+  // Subscription & Billing (Enhanced)
+  subscriptionStartDate: { type: Date },
+  subscriptionEndDate: { type: Date },
+  billingEmail: { type: String },
+  billingAddress: {
+    street: { type: String },
+    street2: { type: String },
+    city: { type: String },
+    state: { type: String },
+    country: { type: String },
+    postalCode: { type: String },
+  },
+  userCount: { type: Number, default: 0 },
+  userCountLastUpdated: { type: Date },
+
+  // Admin Details (stored here for admin profile page)
+  adminDetails: {
+    name: { type: String },
+    email: { type: String },
+    phone: { type: String },
+    profileImage: { type: String },
+    memberSince: { type: Date },
+  },
+
+  // System
+  isActive: { type: Boolean, default: true },
+  clerkUserId: { type: String },
+
   // Migration flag
   isMigrated: { type: Boolean, default: false },
 
@@ -161,6 +243,9 @@ companySchema.index({ domain: 1 }, { unique: true, sparse: true });
 companySchema.index({ email: 1 });
 companySchema.index({ status: 1 });
 companySchema.index({ planId: 1 });
+companySchema.index({ industry: 1 });
+companySchema.index({ companyType: 1 });
+companySchema.index({ clerkUserId: 1 }, { sparse: true });
 
 // Static method to get company with populated plan
 companySchema.statics.getWithPlan = function(companyId) {

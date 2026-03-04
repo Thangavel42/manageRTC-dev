@@ -41,7 +41,6 @@ interface CandidateFormData {
   appliedRole: string;
   appliedDate: string;
   recruiterId: string;
-  recruiterName: string;
   source: string;
   referredBy: string;
 
@@ -104,7 +103,6 @@ const EditCandidate = () => {
     appliedRole: '',
     appliedDate: '',
     recruiterId: '',
-    recruiterName: '',
     source: 'Direct',
     referredBy: '',
 
@@ -175,7 +173,6 @@ const EditCandidate = () => {
             ? new Date(candidate.applicationInfo.appliedDate).toISOString().split('T')[0]
             : '',
           recruiterId: candidate.applicationInfo?.recruiterId || '',
-          recruiterName: candidate.applicationInfo?.recruiterName || '',
           source: candidate.applicationInfo?.source || 'Direct',
           referredBy: candidate.applicationInfo?.referredBy || '',
 
@@ -743,14 +740,15 @@ const EditCandidate = () => {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Recruiter Name</label>
+                <label className="form-label">Recruiter ID</label>
                 <input
                   type="text"
                   className="form-control"
-                  name="recruiterName"
-                  value={formData.recruiterName}
+                  name="recruiterId"
+                  value={formData.recruiterId}
                   onChange={handleInputChange}
-                  placeholder="Enter recruiter name"
+                  placeholder="Recruiter ID"
+                  disabled
                 />
               </div>
               <div className="col-md-6 mb-3">
@@ -950,9 +948,8 @@ const EditCandidate = () => {
                     {[1, 2, 3, 4].map((step) => (
                       <div key={step} className={`text-center ${currentStep >= step ? 'text-primary' : 'text-muted'}`}>
                         <div
-                          className={`rounded-circle d-inline-flex align-items-center justify-content-center ${
-                            currentStep >= step ? 'bg-primary text-white' : 'bg-light'
-                          }`}
+                          className={`rounded-circle d-inline-flex align-items-center justify-content-center ${currentStep >= step ? 'bg-primary text-white' : 'bg-light'
+                            }`}
                           style={{ width: '40px', height: '40px' }}
                         >
                           {step}

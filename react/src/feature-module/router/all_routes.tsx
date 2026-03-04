@@ -34,6 +34,7 @@ export const all_routes = {
   superAdminModules: '/super-admin/modules',
   superAdminPages: '/super-admin/pages',
   superAdminUsers: '/super-admin/superadmins',
+  superAdminCompanyDetails: '/super-admin/companies/:id',
 
   calendar: '/calendar',
   dataTables: '/data-tables',
@@ -370,9 +371,7 @@ export const all_routes = {
   jobgrid: '/job-grid',
   joblist: '/job-list',
   jobdetails: '/jobs/:jobId',
-  candidatesGrid: '/candidates-grid',
-  candidateslist: '/candidates',
-  candidateskanban: '/candidates-kanban',
+  candidates: '/candidates',
   refferal: '/refferals',
   //FINANCE & ACCOUNTS
   estimate: '/estimates',

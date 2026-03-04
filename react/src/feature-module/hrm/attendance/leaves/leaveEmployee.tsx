@@ -129,7 +129,7 @@ const LeaveEmployee = () => {
   const { activeOptions, fetchActiveLeaveTypes, loading: leaveTypesLoading } = useLeaveTypesREST();
   const socket = useSocket();
   const { employeeId, isLoaded, isSignedIn, role } = useAuth();
-  const { employees, fetchEmployees, loading: employeesLoading } = useEmployeesREST();
+  const { employees, fetchEmployees, fetchActiveEmployeesList, loading: employeesLoading } = useEmployeesREST({ autoFetch: false });
 
   // Loading states
   const [balanceLoading, setBalanceLoading] = useState(true);
@@ -204,9 +204,13 @@ const LeaveEmployee = () => {
     fetchBalanceData();
     // Fetch employee data to get avatar and role
     if (employeeId) {
-      fetchEmployees({ status: 'Active' });
+      if (['admin', 'hr', 'superadmin', 'manager'].includes(role)) {
+        fetchEmployees({ status: 'Active' });
+      } else {
+        fetchActiveEmployeesList();
+      }
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, employeeId, role, fetchEmployees, fetchActiveEmployeesList]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;

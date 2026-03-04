@@ -16,6 +16,8 @@ import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
+import { seedTicketCategories } from './seed/ticketCategories.seed.js';
+import { attachRequestId } from './middleware/auth.js';
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -41,11 +43,15 @@ import assetCategoryRoutes from './routes/api/asset-categories.js';
 import assetRoutes from './routes/api/assets.js';
 import assetUserRoutes from './routes/api/assetUsers.js';
 import attendanceRoutes from './routes/api/attendance.js';
-import employeeDashboardRoutes from './routes/api/employee-dashboard.js';
+import auditRoutes from './routes/api/audit.js';
 import batchRoutes from './routes/api/batches.js';
+import candidatesRoutes from './routes/api/candidates.js';
+import changeRequestRoutes from './routes/api/changeRequest.js';
 import clientRoutes from './routes/api/clients.js';
 import departmentRoutes from './routes/api/departments.js';
 import designationRoutes from './routes/api/designations.js';
+import emailChangeRoutes from './routes/api/emailChange.routes.js';
+import employeeDashboardRoutes from './routes/api/employee-dashboard.js';
 import employeeRoutes from './routes/api/employees.js';
 import holidayTypeRoutes from './routes/api/holiday-types.js';
 import holidayRoutes from './routes/api/holidays.js';
@@ -66,10 +72,10 @@ import subcontractRoutes from './routes/api/subcontracts.js';
 import syncRoleRoutes from './routes/api/syncRole.routes.js';
 import taskRoutes from './routes/api/tasks.js';
 import terminationRoutes from './routes/api/terminations.js';
+import timesheetRoutes from './routes/api/timesheets.js';
 import timetrackingRoutes from './routes/api/timetracking.js';
 import trainingRoutes from './routes/api/training.js';
 import userProfileRoutes from './routes/api/user-profile.js';
-import changeRequestRoutes from './routes/api/changeRequest.js';
 import healthRoutes from './routes/health.js';
 import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 import auditRoutes from './routes/api/audit.js';
@@ -78,15 +84,27 @@ import emailChangeRoutes from './routes/api/emailChange.routes.js';
 import csrfRoutes from './routes/api/csrf.js';  // ✅ SECURITY FIX - Phase 2: CSRF token endpoint
 
 // RBAC Routes
+import adminUsersRoutes from './routes/api/admin.users.js';
+import companyPagesRoutes from './routes/api/companyPages.routes.js';
+import rbacModulesRoutes from './routes/api/rbac/modules.js';
+import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';
+import rbacPagesRoutes from './routes/api/rbac/pages.js';
+import rbacPagesHierarchyRoutes from './routes/api/rbac/pagesHierarchy.js';
+import rbacPermissionsRoutes from './routes/api/rbac/permissions.js';
+import rbacRolesRoutes from './routes/api/rbac/roles.js';
+import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
+import superadminRoutes from './routes/api/superadmin.routes.js';
+import debugRoutes from './routes/debug/auth-debug.js';
 import adminUsersRoutes from "./routes/api/admin.users.js";
+import companyPagesRoutes from "./routes/api/companyPages.routes.js";
 import rbacModulesRoutes from "./routes/api/rbac/modules.js";
 import rbacPageCategoriesRoutes from "./routes/api/rbac/pageCategories.routes.js";
 import rbacPagesRoutes from "./routes/api/rbac/pages.js";
 import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
 import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
 import rbacRolesRoutes from "./routes/api/rbac/roles.js";
-import companyPagesRoutes from "./routes/api/companyPages.routes.js";
 import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
+import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
 import superadminRoutes from "./routes/api/superadmin.routes.js";
 import debugRoutes from "./routes/debug/auth-debug.js";
 
@@ -135,7 +153,9 @@ app.use(helmet({
 // Compress all responses
 app.use(compression());
 
-app.use(express.json());
+// Parse JSON bodies with increased limit for base64 images
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ✅ SECURITY FIX - Phase 2: Cookie parser (required for CSRF protection)
 app.use(cookieParser());
@@ -227,6 +247,13 @@ const initializeServer = async () => {
     // CSRF Token Endpoint (must be before other routes to work)
     app.use('/api', csrfRoutes);
 
+    // Seed ticket categories into superadmin DB (only if not already present)
+    try {
+      await seedTicketCategories();
+    } catch (err) {
+      console.error('⚠️  Ticket categories seed failed:', err.message);
+    }
+
     // Routes
     app.use('/api/socialfeed', socialFeedRoutes);
     app.use('/api/deals', dealRoutes);
@@ -267,6 +294,7 @@ const initializeServer = async () => {
     app.use('/api/resignations', resignationRoutes);
     app.use('/api/shifts', shiftRoutes);
     app.use('/api/batches', batchRoutes);
+    app.use('/api/candidates', candidatesRoutes);
     app.use('/api/terminations', terminationRoutes);
     app.use('/api/holidays', holidayRoutes);
     app.use('/api/hr-dashboard', hrDashboardRoutes);
@@ -293,8 +321,11 @@ const initializeServer = async () => {
     app.use('/api/superadmin', superadminCompaniesRoutes);
     app.use('/api/superadmin/users', superadminRoutes);
 
+    // Company Change Request Routes (Admin → Superadmin approval flow)
+    app.use('/api/company-change-requests', companyChangeRequestRoutes);
+
     // Company Pages Routes (module-based sidebar filtering)
-    app.use("/api/company", companyPagesRoutes);
+    app.use('/api/company', companyPagesRoutes);
 
     // Clerk Webhooks
     app.use('/api/webhooks', clerkWebhookRoutes);
@@ -345,6 +376,7 @@ const initializeServer = async () => {
           publicMetadata: {
             companyId,
             role,
+            ...(role === 'admin' ? { isAdminVerified: true } : {}),
           },
         });
 

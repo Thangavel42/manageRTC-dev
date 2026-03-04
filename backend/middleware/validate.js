@@ -347,13 +347,77 @@ export const employeeSchemas = {
         country: Joi.string().optional(),
       }).optional(),
     }).optional(),
-    // Bank information
+    // Bank information (legacy field name)
     bank: Joi.object({
       accountHolderName: Joi.string().allow('').optional(),
-      accountNumber: Joi.string().allow('').optional(),
-      bankName: Joi.string().allow('').optional(),
-      branch: Joi.string().allow('').optional(),
-      ifscCode: Joi.string().allow('').optional(),
+      accountNumber: Joi.string()
+        .pattern(/^\d{8,18}$/)
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Account number must be 8-18 digits',
+        }),
+      bankName: Joi.string()
+        .min(3)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Bank name must be at least 3 characters',
+        }),
+      branch: Joi.string()
+        .min(2)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Branch name must be at least 2 characters',
+        }),
+      ifscCode: Joi.string()
+        .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+        .uppercase()
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+        }),
+      accountType: Joi.string()
+        .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
+        .optional(),
+    }).optional(),
+    // Bank information (canonical field name - used by REST API)
+    bankDetails: Joi.object({
+      accountHolderName: Joi.string().allow('').optional(),
+      accountNumber: Joi.string()
+        .pattern(/^\d{8,18}$/)
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Account number must be 8-18 digits',
+        }),
+      bankName: Joi.string()
+        .min(3)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Bank name must be at least 3 characters',
+        }),
+      branch: Joi.string()
+        .min(2)
+        .allow('')
+        .optional()
+        .messages({
+          'string.min': 'Branch name must be at least 2 characters',
+        }),
+      ifscCode: Joi.string()
+        .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+        .uppercase()
+        .allow('')
+        .optional()
+        .messages({
+          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+        }),
+      accountType: Joi.string()
+        .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
+        .optional(),
     }).optional(),
     // Emergency contacts
     emergencyContacts: Joi.array().items(

@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/clerk-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import { Socket } from "socket.io-client";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
@@ -12,15 +12,16 @@ import { employee_list_details } from "../../../core/data/json/employees_list_de
 import { useSocket } from "../../../SocketContext";
 import { all_routes } from "../../router/all_routes";
 // REST API Hooks for HRM operations
+import { useChangeRequestREST } from "../../../hooks/useChangeRequestREST";
 import { useDepartmentsREST } from "../../../hooks/useDepartmentsREST";
 import { useDesignationsREST } from "../../../hooks/useDesignationsREST";
 import { useEmployeesREST } from "../../../hooks/useEmployeesREST";
-import { useChangeRequestREST } from "../../../hooks/useChangeRequestREST";
 // Common Modals
-import AddEmployeeModal from "../../../core/modals/AddEmployeeModal";
-import EditEmployeeModal from "../../../core/modals/EditEmployeeModal";
-import { ChangeRequestsModal } from "../../../core/modals/ChangeRequestsModal";
 import { Badge } from "antd";
+import AddEmployeeModal from "../../../core/modals/AddEmployeeModal";
+import { ChangeRequestsModal } from "../../../core/modals/ChangeRequestsModal";
+import EditEmployeeModal from "../../../core/modals/EditEmployeeModal";
+import { apiClient } from "../../../services/api";
 
 interface Department {
   _id: string;
@@ -105,12 +106,12 @@ interface Employee {
   batchShiftName?: string;
   employmentType?: "Full-time" | "Part-time" | "Contract" | "Intern";
   status:
-    | "Active"
-    | "Inactive"
-    | "On Notice"
-    | "Resigned"
-    | "Terminated"
-    | "On Leave";
+  | "Active"
+  | "Inactive"
+  | "On Notice"
+  | "Resigned"
+  | "Terminated"
+  | "On Leave";
   dateOfJoining: string | null;
   about: string;
   role: string;
@@ -175,7 +176,8 @@ const EmployeeList = () => {
   );
   const [selectedDepartment, setSelectedDepartment] = useState<string>("");
   const [selectedDesignation, setSelectedDesignation] = useState<string>("");
-  const [sortOrder, setSortOrder] = useState("");
+  const [sortField, setSortField] = useState<"employeeId" | "name" | "dateOfJoining" | "createdAt">("employeeId");
+  const [sortOrder, setSortOrder] = useState<"ascending" | "descending">("ascending");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(
     null,
@@ -196,6 +198,7 @@ const EmployeeList = () => {
     inactiveCount: 0,
     newJoinersCount: 0,
   });
+  const [exporting, setExporting] = useState(false);
 
   // Lifecycle status tracking for status dropdown control
   const [lifecycleStatus, setLifecycleStatus] = useState<{
@@ -231,6 +234,9 @@ const EmployeeList = () => {
   const [selectedEmployeeForRequests, setSelectedEmployeeForRequests] = useState<Employee | null>(null);
 
   const socket = useSocket() as Socket | null;
+
+  // URL search params for department filter
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Initial data fetching with REST API
   useEffect(() => {
@@ -272,6 +278,22 @@ const EmployeeList = () => {
       setDepartment([{ value: "", label: "Select" }, ...mappedDepartments]);
     }
   }, [departments]);
+
+  // Apply department filter from URL query parameter
+  useEffect(() => {
+    const departmentParam = searchParams.get("department");
+    if (departmentParam && department.length > 1) {
+      // Check if the department ID exists in the available departments
+      const deptExists = department.some(d => d.value === departmentParam);
+      if (deptExists) {
+        setSelectedDepartment(departmentParam);
+        setFilters(prev => ({
+          ...prev,
+          departmentId: departmentParam,
+        }));
+      }
+    }
+  }, [searchParams, department]);
 
   // Sync designations from REST hook to local state
   useEffect(() => {
@@ -483,8 +505,9 @@ const EmployeeList = () => {
       if (filters.startDate && filters.endDate) {
         const rangeStart = parseDateValue(filters.startDate);
         const rangeEnd = parseDateValue(filters.endDate);
-        const employeeDate = parseDateValue(emp.dateOfJoining) || parseDateValue((emp as any).createdAt);
+        const employeeDate = parseDateValue(emp.dateOfJoining);
 
+        // If employee has no dateOfJoining, exclude from date-filtered results
         if (!rangeStart || !rangeEnd || !employeeDate) {
           return false;
         }
@@ -497,22 +520,56 @@ const EmployeeList = () => {
       return true;
     });
 
-    if (sortOrder) {
-      filtered.sort((a, b) => {
-        const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
-        const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
-        if (sortOrder === "ascending") {
-          return nameA.localeCompare(nameB);
+    // Sort the filtered employees
+    filtered.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case "employeeId": {
+          // Extract numeric part from employeeId (e.g., "EMP-0001" -> 1)
+          const getEmpIdNumber = (empId: string): number => {
+            if (!empId) return 0;
+            const match = empId.match(/\d+/);
+            return match ? parseInt(match[0], 10) : 0;
+          };
+          comparison = getEmpIdNumber(a.employeeId) - getEmpIdNumber(b.employeeId);
+          break;
         }
-        if (sortOrder === "descending") {
-          return nameB.localeCompare(nameA);
+        case "name": {
+          const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
+          const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
+          comparison = nameA.localeCompare(nameB);
+          break;
         }
-        return 0;
-      });
-    }
+        case "dateOfJoining": {
+          const dateA = parseDateValue(a.dateOfJoining);
+          const dateB = parseDateValue(b.dateOfJoining);
+          // Put null dates at the end
+          if (!dateA && !dateB) comparison = 0;
+          else if (!dateA) comparison = 1;
+          else if (!dateB) comparison = -1;
+          else comparison = dateA.getTime() - dateB.getTime();
+          break;
+        }
+        case "createdAt": {
+          const createdA = parseDateValue((a as any).createdAt);
+          const createdB = parseDateValue((b as any).createdAt);
+          // Put null dates at the end
+          if (!createdA && !createdB) comparison = 0;
+          else if (!createdA) comparison = 1;
+          else if (!createdB) comparison = -1;
+          else comparison = createdA.getTime() - createdB.getTime();
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+
+      return sortOrder === "descending" ? -comparison : comparison;
+    });
 
     setEmployees(filtered);
-  }, [allEmployees, filters, sortOrder]);
+  }, [allEmployees, filters, sortField, sortOrder]);
 
   // Clean up modal backdrops whenever modals might have closed
   useEffect(() => {
@@ -583,7 +640,7 @@ const EmployeeList = () => {
       title: "Phone",
       dataIndex: "phone",
       render: (text: string, record: any) => (
-        <span>{record.phone || "-"}</span>
+        <span>{record.phone ? `${record.phoneCode || ''} ${record.phone}`.trim() : "-"}</span>
       ),
       sorter: (a: any, b: any) =>
         (a.phone || "").localeCompare(b.phone || ""),
@@ -715,6 +772,88 @@ const EmployeeList = () => {
     },
   ];
 
+  const visibleExportColumns = useMemo(
+    () => ["employeeId", "name", "email", "phone", "department", "role", "status"],
+    [],
+  );
+
+  const buildExportParams = useCallback(
+    (type: "pdf" | "excel") => {
+      const params: Record<string, string> = { type };
+
+      if (filters.departmentId) {
+        params.department = filters.departmentId;
+      }
+      if (filters.status) {
+        params.status = filters.status;
+      }
+      if (filters.startDate) {
+        params.fromDate = filters.startDate;
+      }
+      if (filters.endDate) {
+        params.toDate = filters.endDate;
+      }
+
+      const normalizedOrder =
+        sortOrder === "ascending" ? "asc" : sortOrder === "descending" ? "desc" : "";
+      if (normalizedOrder) {
+        params.sortBy = "fullName";
+        params.order = normalizedOrder;
+      }
+
+      if (visibleExportColumns.length > 0) {
+        params.columns = visibleExportColumns.join(",");
+      }
+
+      return params;
+    },
+    [filters.departmentId, filters.endDate, filters.startDate, filters.status, sortOrder, visibleExportColumns],
+  );
+
+  const exportEmployees = useCallback(
+    async (type: "pdf" | "excel") => {
+      try {
+        setExporting(true);
+        const params = buildExportParams(type);
+        const response = await apiClient.get(`/employees/export`, {
+          params,
+          responseType: "blob",
+        });
+
+        const contentType =
+          response.headers?.["content-type"] ||
+          (type === "pdf"
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        const blob = new Blob([response.data], { type: contentType });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", type === "pdf" ? "employees.pdf" : "employees.xlsx");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+
+        toast.success(`Employee ${type === "pdf" ? "PDF" : "Excel"} exported`);
+      } catch (err: any) {
+        console.error("Employee export failed:", err);
+        const message =
+          err?.response?.data?.error?.message ||
+          err?.message ||
+          "Failed to export employees";
+        toast.error(message);
+      } finally {
+        setExporting(false);
+      }
+    },
+    [buildExportParams],
+  );
+
+  const handleExportPDF = useCallback(() => exportEmployees("pdf"), [exportEmployees]);
+  const handleExportExcel = useCallback(() => exportEmployees("excel"), [exportEmployees]);
+
   const onSelectStatus = (status: string) => {
     if (!status) return;
     const nextStatus = status === "all" ? "" : status;
@@ -731,6 +870,13 @@ const EmployeeList = () => {
       ...prevFilters,
       departmentId: id,
     }));
+    // Update URL query parameter
+    if (id) {
+      setSearchParams({ department: id });
+    } else {
+      searchParams.delete("department");
+      setSearchParams(searchParams);
+    }
   };
 
   // Clear all filters
@@ -745,7 +891,11 @@ const EmployeeList = () => {
       setFilters(clearedFilters);
       setSelectedDepartment("");
       setSelectedStatus("");
-      setSortOrder("");
+      setSortField("employeeId");
+      setSortOrder("ascending");
+      // Clear URL query parameter
+      searchParams.delete("department");
+      setSearchParams(searchParams);
 
       toast.success("All filters cleared", {
         position: "top-right",
@@ -778,8 +928,20 @@ const EmployeeList = () => {
     }
   };
 
-  const handleSort = (order: string) => {
+  const handleSort = (field: "employeeId" | "name" | "dateOfJoining" | "createdAt", order: "ascending" | "descending") => {
+    setSortField(field);
     setSortOrder(order);
+  };
+
+  // Get display label for sort field
+  const getSortFieldLabel = (field: string): string => {
+    switch (field) {
+      case "employeeId": return "Emp ID";
+      case "name": return "Name";
+      case "dateOfJoining": return "Date of Joining";
+      case "createdAt": return "Created Date";
+      default: return field;
+    }
   };
 
   const deleteEmployee = async (id: string): Promise<boolean> => {
@@ -977,17 +1139,15 @@ const EmployeeList = () => {
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
                   <button
                     onClick={() => setViewMode("list")}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === "list" ? "active bg-primary text-white" : ""
-                    } me-1`}
+                    className={`btn btn-icon btn-sm ${viewMode === "list" ? "active bg-primary text-white" : ""
+                      } me-1`}
                   >
                     <i className="ti ti-list-tree" />
                   </button>
                   <button
                     onClick={() => setViewMode("grid")}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === "grid" ? "active bg-primary text-white" : ""
-                    }`}
+                    className={`btn btn-icon btn-sm ${viewMode === "grid" ? "active bg-primary text-white" : ""
+                      }`}
                   >
                     <i className="ti ti-layout-grid" />
                   </button>
@@ -1005,16 +1165,28 @@ const EmployeeList = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={handleExportPDF}
+                        disabled={exporting}
+                        aria-busy={exporting}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
+                        {exporting ? "Preparing..." : "Export as PDF"}
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={handleExportExcel}
+                        disabled={exporting}
+                        aria-busy={exporting}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
-                      </Link>
+                        {exporting ? "Preparing..." : "Export as Excel"}
+                      </button>
                     </li>
                   </ul>
                 </div>
@@ -1151,20 +1323,18 @@ const EmployeeList = () => {
                   >
                     Department
                     {selectedDepartment
-                      ? `: ${
-                          department.find(
-                            (dep) => dep.value === selectedDepartment,
-                          )?.label || "None"
-                        }`
+                      ? `: ${department.find(
+                        (dep) => dep.value === selectedDepartment,
+                      )?.label || "None"
+                      }`
                       : ": None"}
                   </a>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
-                        className={`dropdown-item rounded-1${
-                          selectedDepartment === "" ? " bg-primary text-white" : ""
-                        }`}
+                        className={`dropdown-item rounded-1${selectedDepartment === "" ? " bg-primary text-white" : ""
+                          }`}
                         onClick={(e) => {
                           e.preventDefault();
                           onSelectDepartment("");
@@ -1179,11 +1349,10 @@ const EmployeeList = () => {
                         <li key={dep.value}>
                           <Link
                             to="#"
-                            className={`dropdown-item rounded-1${
-                              selectedDepartment === dep.value
-                                ? " bg-primary text-white"
-                                : ""
-                            }`}
+                            className={`dropdown-item rounded-1${selectedDepartment === dep.value
+                              ? " bg-primary text-white"
+                              : ""
+                              }`}
                             onClick={(e) => {
                               e.preventDefault();
                               onSelectDepartment(dep.value);
@@ -1237,39 +1406,86 @@ const EmployeeList = () => {
                     data-bs-toggle="dropdown"
                     onClick={(e) => e.preventDefault()}
                   >
-                    Sort By
-                    {sortOrder
-                      ? `: ${
-                          sortOrder.charAt(0).toUpperCase() + sortOrder.slice(1)
-                        }`
-                      : ": None"}
+                    Sort By: {getSortFieldLabel(sortField)} ({sortOrder === "ascending" ? "Asc" : "Desc"})
                   </a>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3" style={{ minWidth: "220px" }}>
+                    <li className="dropdown-header fw-semibold text-muted mb-1">Employee ID</li>
                     <li>
                       <button
                         type="button"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleSort("ascending")}
+                        className={`dropdown-item rounded-1 ${sortField === "employeeId" && sortOrder === "ascending" ? "active" : ""}`}
+                        onClick={() => handleSort("employeeId", "ascending")}
                       >
-                        Ascending
+                        <i className="ti ti-sort-ascending-numbers me-2" />Ascending
                       </button>
                     </li>
                     <li>
                       <button
                         type="button"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleSort("descending")}
+                        className={`dropdown-item rounded-1 ${sortField === "employeeId" && sortOrder === "descending" ? "active" : ""}`}
+                        onClick={() => handleSort("employeeId", "descending")}
                       >
-                        Descending
+                        <i className="ti ti-sort-descending-numbers me-2" />Descending
+                      </button>
+                    </li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li className="dropdown-header fw-semibold text-muted mb-1">Name</li>
+                    <li>
+                      <button
+                        type="button"
+                        className={`dropdown-item rounded-1 ${sortField === "name" && sortOrder === "ascending" ? "active" : ""}`}
+                        onClick={() => handleSort("name", "ascending")}
+                      >
+                        <i className="ti ti-sort-ascending-letters me-2" />A to Z
                       </button>
                     </li>
                     <li>
                       <button
                         type="button"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleSort("")}
+                        className={`dropdown-item rounded-1 ${sortField === "name" && sortOrder === "descending" ? "active" : ""}`}
+                        onClick={() => handleSort("name", "descending")}
                       >
-                        None
+                        <i className="ti ti-sort-descending-letters me-2" />Z to A
+                      </button>
+                    </li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li className="dropdown-header fw-semibold text-muted mb-1">Date of Joining</li>
+                    <li>
+                      <button
+                        type="button"
+                        className={`dropdown-item rounded-1 ${sortField === "dateOfJoining" && sortOrder === "ascending" ? "active" : ""}`}
+                        onClick={() => handleSort("dateOfJoining", "ascending")}
+                      >
+                        <i className="ti ti-calendar-up me-2" />Oldest First
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className={`dropdown-item rounded-1 ${sortField === "dateOfJoining" && sortOrder === "descending" ? "active" : ""}`}
+                        onClick={() => handleSort("dateOfJoining", "descending")}
+                      >
+                        <i className="ti ti-calendar-down me-2" />Newest First
+                      </button>
+                    </li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li className="dropdown-header fw-semibold text-muted mb-1">Created Date</li>
+                    <li>
+                      <button
+                        type="button"
+                        className={`dropdown-item rounded-1 ${sortField === "createdAt" && sortOrder === "ascending" ? "active" : ""}`}
+                        onClick={() => handleSort("createdAt", "ascending")}
+                      >
+                        <i className="ti ti-calendar-up me-2" />Oldest First
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className={`dropdown-item rounded-1 ${sortField === "createdAt" && sortOrder === "descending" ? "active" : ""}`}
+                        onClick={() => handleSort("createdAt", "descending")}
+                      >
+                        <i className="ti ti-calendar-down me-2" />Newest First
                       </button>
                     </li>
                   </ul>
@@ -1339,11 +1555,10 @@ const EmployeeList = () => {
                                 <div>
                                   <Link
                                     to={`${all_routes.employeedetails}/${_id}`}
-                                    className={`avatar avatar-xl avatar-rounded border p-1 border-primary rounded-circle ${
-                                      emp.status === "Active"
-                                        ? "online"
-                                        : "offline" // or "inactive"
-                                    }`}
+                                    className={`avatar avatar-xl avatar-rounded border p-1 border-primary rounded-circle ${emp.status === "Active"
+                                      ? "online"
+                                      : "offline" // or "inactive"
+                                      }`}
                                   >
                                     <img
                                       src={
@@ -1489,11 +1704,10 @@ const EmployeeList = () => {
                                     Status
                                   </span>
                                   <span
-                                    className={`badge ${
-                                      status === "Active"
-                                        ? "badge-success"
-                                        : "badge-danger"
-                                    } d-inline-flex align-items-center badge-xs`}
+                                    className={`badge ${status === "Active"
+                                      ? "badge-success"
+                                      : "badge-danger"
+                                      } d-inline-flex align-items-center badge-xs`}
                                   >
                                     <i className="ti ti-point-filled me-1" />
                                     {status}

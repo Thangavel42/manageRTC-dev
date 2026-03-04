@@ -1,8 +1,3 @@
-/**
- * Leave Ledger / Balance History Page
- * Shows complete audit trail of leave balance changes
- */
-
 import { DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';

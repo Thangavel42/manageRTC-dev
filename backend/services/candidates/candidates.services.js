@@ -1,32 +1,65 @@
-import { getTenantCollections } from "../../config/db.js";
-import { ObjectId } from "mongodb";
-import PDFDocument from "pdfkit";
-import ExcelJS from "exceljs";
-import fs from "fs";
-import path from "path";
-import { format } from "date-fns";
+import { format } from 'date-fns';
+import ExcelJS from 'exceljs';
+import fs from 'fs';
+import { ObjectId } from 'mongodb';
+import path from 'path';
+import PDFDocument from 'pdfkit';
+import { getTenantCollections } from '../../config/db.js';
 
-// Generate application number
-const generateApplicationNumber = () => {
-  const timestamp = Date.now().toString();
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `CAND-${timestamp.slice(-6)}${random}`;
+// Helper function to safely convert string to ObjectId
+const toObjectId = (value) => {
+  if (!value || value === '') return null;
+  try {
+    return ObjectId.isValid(value) ? new ObjectId(value) : null;
+  } catch (error) {
+    console.warn('[CandidateService] Invalid ObjectId:', value);
+    return null;
+  }
+};
+
+// Generate sequential application number
+const generateApplicationNumber = async (collections) => {
+  try {
+    // Find the latest candidate to get the highest number
+    const latestCandidate = await collections.candidates
+      .find({ applicationNumber: { $regex: /^Cand-\d+$/ } })
+      .sort({ applicationNumber: -1 })
+      .limit(1)
+      .toArray();
+
+    let nextNumber = 1;
+    if (latestCandidate.length > 0) {
+      const lastNumber = latestCandidate[0].applicationNumber;
+      const match = lastNumber.match(/^Cand-(\d+)$/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    // Format as Cand-0001, Cand-0002, etc.
+    return `Cand-${String(nextNumber).padStart(4, '0')}`;
+  } catch (error) {
+    console.error('[CandidateService] Error generating application number:', error);
+    // Fallback to timestamp-based if there's an error
+    const timestamp = Date.now().toString();
+    return `Cand-${timestamp.slice(-4)}`;
+  }
 };
 
 // Create new candidate
 export const createCandidate = async (companyId, candidateData) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] createCandidate", { companyId, candidateData });
+    console.log('[CandidateService] createCandidate', { companyId, candidateData });
 
     // Generate application number
-    const applicationNumber = generateApplicationNumber();
+    const applicationNumber = await generateApplicationNumber(collections);
 
     // Process the form data into the structured format
     const newCandidate = {
       applicationNumber,
       companyId,
-      
+
       // Personal Information
       personalInfo: {
         firstName: candidateData.firstName || '',
@@ -43,9 +76,9 @@ export const createCandidate = async (companyId, candidateData) => {
         state: candidateData.state || '',
         country: candidateData.country || '',
         linkedinProfile: candidateData.linkedinProfile || '',
-        portfolio: candidateData.portfolio || ''
+        portfolio: candidateData.portfolio || '',
       },
-      
+
       // Professional Information
       professionalInfo: {
         currentRole: candidateData.currentRole || '',
@@ -55,45 +88,48 @@ export const createCandidate = async (companyId, candidateData) => {
         expectedSalary: candidateData.expectedSalary || 0,
         noticePeriod: candidateData.noticePeriod || '',
         skills: Array.isArray(candidateData.skills) ? candidateData.skills : [],
-        qualifications: Array.isArray(candidateData.qualifications) ? candidateData.qualifications : [],
-        certifications: Array.isArray(candidateData.certifications) ? candidateData.certifications : [],
-        languages: Array.isArray(candidateData.languages) ? candidateData.languages : []
+        qualifications: Array.isArray(candidateData.qualifications)
+          ? candidateData.qualifications
+          : [],
+        certifications: Array.isArray(candidateData.certifications)
+          ? candidateData.certifications
+          : [],
+        languages: Array.isArray(candidateData.languages) ? candidateData.languages : [],
       },
-      
+
       // Application Information
       applicationInfo: {
-        appliedRole: candidateData.appliedRole || '',
+        appliedRole: toObjectId(candidateData.appliedRole),
         appliedDate: candidateData.appliedDate ? new Date(candidateData.appliedDate) : new Date(),
-        recruiterId: candidateData.recruiterId || '',
-        recruiterName: candidateData.recruiterName || '',
+        recruiterId: toObjectId(candidateData.recruiterId),
         source: candidateData.source || 'Direct',
-        referredBy: candidateData.referredBy || '',
-        jobId: candidateData.jobId || ''
+        referredBy: toObjectId(candidateData.referredBy),
+        jobId: candidateData.jobId || '',
       },
-      
+
       // Documents
       documents: {
         resume: candidateData.resume || '',
         coverLetter: candidateData.coverLetter || '',
         portfolio: candidateData.portfolioDoc || '',
-        others: []
+        others: [],
       },
-      
+
       // Ratings (initialized to 0)
       ratings: {
         technical: 0,
         communication: 0,
         cultural: 0,
-        overall: 0
+        overall: 0,
       },
-      
+
       // Interview Information
       interviewInfo: {
         rounds: [],
         feedback: [],
-        nextInterviewDate: null
+        nextInterviewDate: null,
       },
-      
+
       // Status and Timeline
       status: candidateData.status || 'New Application',
       timeline: [
@@ -101,34 +137,34 @@ export const createCandidate = async (companyId, candidateData) => {
           status: candidateData.status || 'New Application',
           date: new Date(),
           notes: 'Application submitted',
-          updatedBy: 'System'
-        }
+          updatedBy: 'System',
+        },
       ],
-      
+
       // Generate full name for easier searching
       fullName: `${candidateData.firstName || ''} ${candidateData.lastName || ''}`.trim(),
-      
+
       // Metadata
       createdAt: new Date(),
       updatedAt: new Date(),
-      isDeleted: false
+      isDeleted: false,
     };
 
     const result = await collections.candidates.insertOne(newCandidate);
-    console.log("[CandidateService] insertOne result", { result });
+    console.log('[CandidateService] insertOne result', { result });
 
     if (result.insertedId) {
       const inserted = await collections.candidates.findOne({
         _id: result.insertedId,
       });
-      console.log("[CandidateService] inserted candidate", { inserted });
+      console.log('[CandidateService] inserted candidate', { inserted });
       return { done: true, data: inserted };
     } else {
-      console.error("[CandidateService] Failed to insert candidate");
-      return { done: false, error: "Failed to insert candidate" };
+      console.error('[CandidateService] Failed to insert candidate');
+      return { done: false, error: 'Failed to insert candidate' };
     }
   } catch (error) {
-    console.error("[CandidateService] Error in createCandidate", {
+    console.error('[CandidateService] Error in createCandidate', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -139,106 +175,149 @@ export const createCandidate = async (companyId, candidateData) => {
 export const getCandidates = async (companyId, filters = {}) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] getCandidates", { companyId, filters });
+    console.log('[CandidateService] getCandidates', { companyId, filters });
 
     const query = { companyId, isDeleted: { $ne: true } };
 
     // Apply filters
-    if (filters.status && filters.status !== "All") {
+    if (filters.status && filters.status !== 'All') {
       query.status = filters.status;
     }
 
     if (filters.appliedRole) {
-      query["applicationInfo.appliedRole"] = filters.appliedRole;
+      query['applicationInfo.appliedRole'] = filters.appliedRole;
     }
 
     if (filters.experienceLevel) {
       switch (filters.experienceLevel) {
-        case "Entry Level":
-          query["professionalInfo.experienceYears"] = { $lt: 2 };
+        case 'Entry Level':
+          query['professionalInfo.experienceYears'] = { $lt: 2 };
           break;
-        case "Mid Level":
-          query["professionalInfo.experienceYears"] = { $gte: 2, $lt: 5 };
+        case 'Mid Level':
+          query['professionalInfo.experienceYears'] = { $gte: 2, $lt: 5 };
           break;
-        case "Senior Level":
-          query["professionalInfo.experienceYears"] = { $gte: 5, $lt: 10 };
+        case 'Senior Level':
+          query['professionalInfo.experienceYears'] = { $gte: 5, $lt: 10 };
           break;
-        case "Expert Level":
-          query["professionalInfo.experienceYears"] = { $gte: 10 };
+        case 'Expert Level':
+          query['professionalInfo.experienceYears'] = { $gte: 10 };
           break;
       }
     }
 
     if (filters.recruiterId) {
-      query["applicationInfo.recruiterId"] = filters.recruiterId;
+      query['applicationInfo.recruiterId'] = filters.recruiterId;
     }
 
     // Search filter
     if (filters.search) {
       query.$or = [
-        { fullName: { $regex: filters.search, $options: "i" } },
-        { "personalInfo.email": { $regex: filters.search, $options: "i" } },
-        { "personalInfo.phone": { $regex: filters.search, $options: "i" } },
-        { "applicationInfo.appliedRole": { $regex: filters.search, $options: "i" } },
-        { "professionalInfo.currentRole": { $regex: filters.search, $options: "i" } },
-        { "professionalInfo.skills": { $regex: filters.search, $options: "i" } }
+        { fullName: { $regex: filters.search, $options: 'i' } },
+        { 'personalInfo.email': { $regex: filters.search, $options: 'i' } },
+        { 'personalInfo.phone': { $regex: filters.search, $options: 'i' } },
+        { 'applicationInfo.appliedRole': { $regex: filters.search, $options: 'i' } },
+        { 'professionalInfo.currentRole': { $regex: filters.search, $options: 'i' } },
+        { 'professionalInfo.skills': { $regex: filters.search, $options: 'i' } },
       ];
     }
 
     // Date range filter
     if (filters.startDate && filters.endDate) {
-      query["applicationInfo.appliedDate"] = {
+      query['applicationInfo.appliedDate'] = {
         $gte: new Date(filters.startDate),
-        $lte: new Date(filters.endDate)
+        $lte: new Date(filters.endDate),
       };
     }
 
     // Sort options
-    let sort = { "applicationInfo.appliedDate": -1 };
+    let sort = { 'applicationInfo.appliedDate': -1 };
     if (filters.sortBy) {
       switch (filters.sortBy) {
-        case "name_asc":
+        case 'name_asc':
           sort = { fullName: 1 };
           break;
-        case "name_desc":
+        case 'name_desc':
           sort = { fullName: -1 };
           break;
-        case "date_recent":
-          sort = { "applicationInfo.appliedDate": -1 };
+        case 'date_recent':
+          sort = { 'applicationInfo.appliedDate': -1 };
           break;
-        case "date_oldest":
-          sort = { "applicationInfo.appliedDate": 1 };
+        case 'date_oldest':
+          sort = { 'applicationInfo.appliedDate': 1 };
           break;
-        case "experience":
-          sort = { "professionalInfo.experienceYears": -1 };
+        case 'experience':
+          sort = { 'professionalInfo.experienceYears': -1 };
           break;
-        case "role":
-          sort = { "applicationInfo.appliedRole": 1 };
+        case 'role':
+          sort = { 'applicationInfo.appliedRole': 1 };
           break;
-        case "status":
+        case 'status':
           sort = { status: 1 };
           break;
       }
     }
 
-    console.log("[CandidateService] Final query", { query, sort });
+    console.log('[CandidateService] Final query', { query, sort });
 
-    const candidates = await collections.candidates.find(query).sort(sort).toArray();
-    console.log("[CandidateService] found candidates", { count: candidates.length });
+    // Use aggregation to populate references
+    const pipeline = [
+      { $match: query },
+      // Lookup appliedRole from designations
+      {
+        $lookup: {
+          from: 'designations',
+          localField: 'applicationInfo.appliedRole',
+          foreignField: '_id',
+          as: 'appliedRoleInfo',
+        },
+      },
+      // Lookup recruiterId from employees
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'applicationInfo.recruiterId',
+          foreignField: '_id',
+          as: 'recruiterInfo',
+        },
+      },
+      // Lookup referredBy from employees
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'applicationInfo.referredBy',
+          foreignField: '_id',
+          as: 'referredByInfo',
+        },
+      },
+      // Add populated fields to applicationInfo
+      {
+        $addFields: {
+          'applicationInfo.appliedRoleDetails': { $arrayElemAt: ['$appliedRoleInfo', 0] },
+          'applicationInfo.recruiterDetails': { $arrayElemAt: ['$recruiterInfo', 0] },
+          'applicationInfo.referredByDetails': { $arrayElemAt: ['$referredByInfo', 0] },
+        },
+      },
+      // Remove temporary lookup arrays
+      { $project: { appliedRoleInfo: 0, recruiterInfo: 0, referredByInfo: 0 } },
+      { $sort: sort },
+    ];
+
+    const candidates = await collections.candidates.aggregate(pipeline).toArray();
+    console.log('[CandidateService] found candidates', { count: candidates.length });
 
     // Ensure dates are properly converted to Date objects
     const processedCandidates = candidates.map((candidate) => ({
       ...candidate,
       createdAt: candidate.createdAt ? new Date(candidate.createdAt) : null,
       updatedAt: candidate.updatedAt ? new Date(candidate.updatedAt) : null,
-      "applicationInfo.appliedDate": candidate.applicationInfo?.appliedDate 
-        ? new Date(candidate.applicationInfo.appliedDate) 
+      'applicationInfo.appliedDate': candidate.applicationInfo?.appliedDate
+        ? new Date(candidate.applicationInfo.appliedDate)
         : null,
     }));
 
     return { done: true, data: processedCandidates };
   } catch (error) {
-    console.error("[CandidateService] Error in getCandidates", {
+    console.error('[CandidateService] Error in getCandidates', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -249,20 +328,65 @@ export const getCandidates = async (companyId, filters = {}) => {
 export const getCandidateById = async (companyId, candidateId) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] getCandidateById", { companyId, candidateId });
+    console.log('[CandidateService] getCandidateById', { companyId, candidateId });
 
     if (!ObjectId.isValid(candidateId)) {
-      return { done: false, error: "Invalid candidate ID format" };
+      return { done: false, error: 'Invalid candidate ID format' };
     }
 
-    const candidate = await collections.candidates.findOne({
-      _id: new ObjectId(candidateId),
-      companyId,
-      isDeleted: { $ne: true },
-    });
+    // Use aggregation to populate references
+    const pipeline = [
+      {
+        $match: {
+          _id: new ObjectId(candidateId),
+          companyId,
+          isDeleted: { $ne: true },
+        },
+      },
+      // Lookup appliedRole from designations
+      {
+        $lookup: {
+          from: 'designations',
+          localField: 'applicationInfo.appliedRole',
+          foreignField: '_id',
+          as: 'appliedRoleInfo',
+        },
+      },
+      // Lookup recruiterId from employees
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'applicationInfo.recruiterId',
+          foreignField: '_id',
+          as: 'recruiterInfo',
+        },
+      },
+      // Lookup referredBy from employees
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'applicationInfo.referredBy',
+          foreignField: '_id',
+          as: 'referredByInfo',
+        },
+      },
+      // Add populated fields to applicationInfo
+      {
+        $addFields: {
+          'applicationInfo.appliedRoleDetails': { $arrayElemAt: ['$appliedRoleInfo', 0] },
+          'applicationInfo.recruiterDetails': { $arrayElemAt: ['$recruiterInfo', 0] },
+          'applicationInfo.referredByDetails': { $arrayElemAt: ['$referredByInfo', 0] },
+        },
+      },
+      // Remove temporary lookup arrays
+      { $project: { appliedRoleInfo: 0, recruiterInfo: 0, referredByInfo: 0 } },
+    ];
+
+    const result = await collections.candidates.aggregate(pipeline).toArray();
+    const candidate = result[0];
 
     if (!candidate) {
-      return { done: false, error: "Candidate not found" };
+      return { done: false, error: 'Candidate not found' };
     }
 
     // Ensure dates are properly converted
@@ -270,14 +394,14 @@ export const getCandidateById = async (companyId, candidateId) => {
       ...candidate,
       createdAt: candidate.createdAt ? new Date(candidate.createdAt) : null,
       updatedAt: candidate.updatedAt ? new Date(candidate.updatedAt) : null,
-      "applicationInfo.appliedDate": candidate.applicationInfo?.appliedDate 
-        ? new Date(candidate.applicationInfo.appliedDate) 
+      'applicationInfo.appliedDate': candidate.applicationInfo?.appliedDate
+        ? new Date(candidate.applicationInfo.appliedDate)
         : null,
     };
 
     return { done: true, data: processedCandidate };
   } catch (error) {
-    console.error("[CandidateService] Error in getCandidateById", {
+    console.error('[CandidateService] Error in getCandidateById', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -288,14 +412,14 @@ export const getCandidateById = async (companyId, candidateId) => {
 export const updateCandidate = async (companyId, candidateId, updateData) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] updateCandidate", {
+    console.log('[CandidateService] updateCandidate', {
       companyId,
       candidateId,
       updateData,
     });
 
     if (!ObjectId.isValid(candidateId)) {
-      return { done: false, error: "Invalid candidate ID format" };
+      return { done: false, error: 'Invalid candidate ID format' };
     }
 
     // Process the form data into the structured format
@@ -316,9 +440,9 @@ export const updateCandidate = async (companyId, candidateId, updateData) => {
         state: updateData.state || '',
         country: updateData.country || '',
         linkedinProfile: updateData.linkedinProfile || '',
-        portfolio: updateData.portfolio || ''
+        portfolio: updateData.portfolio || '',
       },
-      
+
       // Professional Information
       professionalInfo: {
         currentRole: updateData.currentRole || '',
@@ -330,36 +454,37 @@ export const updateCandidate = async (companyId, candidateId, updateData) => {
         skills: Array.isArray(updateData.skills) ? updateData.skills : [],
         qualifications: Array.isArray(updateData.qualifications) ? updateData.qualifications : [],
         certifications: Array.isArray(updateData.certifications) ? updateData.certifications : [],
-        languages: Array.isArray(updateData.languages) ? updateData.languages : []
+        languages: Array.isArray(updateData.languages) ? updateData.languages : [],
       },
-      
+
       // Application Information
       applicationInfo: {
-        appliedRole: updateData.appliedRole || '',
+        appliedRole: toObjectId(updateData.appliedRole),
         appliedDate: updateData.appliedDate ? new Date(updateData.appliedDate) : new Date(),
-        recruiterId: updateData.recruiterId || '',
-        recruiterName: updateData.recruiterName || '',
+        recruiterId: toObjectId(updateData.recruiterId),
         source: updateData.source || 'Direct',
-        referredBy: updateData.referredBy || '',
-        jobId: updateData.jobId || ''
+        referredBy: toObjectId(updateData.referredBy),
+        jobId: updateData.jobId || '',
       },
-      
+
       // Documents (only update if provided)
-      ...(updateData.resume || updateData.coverLetter || updateData.portfolioDoc ? {
-        documents: {
-          resume: updateData.resume || '',
-          coverLetter: updateData.coverLetter || '',
-          portfolio: updateData.portfolioDoc || '',
-          others: []
-        }
-      } : {}),
-      
+      ...(updateData.resume || updateData.coverLetter || updateData.portfolioDoc
+        ? {
+            documents: {
+              resume: updateData.resume || '',
+              coverLetter: updateData.coverLetter || '',
+              portfolio: updateData.portfolioDoc || '',
+              others: [],
+            },
+          }
+        : {}),
+
       // Status (if provided)
       ...(updateData.status ? { status: updateData.status } : {}),
-      
+
       // Update full name for easier searching
       fullName: `${updateData.firstName || ''} ${updateData.lastName || ''}`.trim(),
-      
+
       updatedAt: new Date(),
     };
 
@@ -372,11 +497,11 @@ export const updateCandidate = async (companyId, candidateId, updateData) => {
     );
 
     if (result.matchedCount === 0) {
-      return { done: false, error: "Candidate not found" };
+      return { done: false, error: 'Candidate not found' };
     }
 
     if (result.modifiedCount === 0) {
-      return { done: false, error: "No changes made to candidate" };
+      return { done: false, error: 'No changes made to candidate' };
     }
 
     // Return updated candidate
@@ -387,20 +512,16 @@ export const updateCandidate = async (companyId, candidateId, updateData) => {
 
     const processedCandidate = {
       ...updatedCandidate,
-      createdAt: updatedCandidate.createdAt
-        ? new Date(updatedCandidate.createdAt)
-        : null,
-      updatedAt: updatedCandidate.updatedAt
-        ? new Date(updatedCandidate.updatedAt)
-        : null,
-      "applicationInfo.appliedDate": updatedCandidate.applicationInfo?.appliedDate 
-        ? new Date(updatedCandidate.applicationInfo.appliedDate) 
+      createdAt: updatedCandidate.createdAt ? new Date(updatedCandidate.createdAt) : null,
+      updatedAt: updatedCandidate.updatedAt ? new Date(updatedCandidate.updatedAt) : null,
+      'applicationInfo.appliedDate': updatedCandidate.applicationInfo?.appliedDate
+        ? new Date(updatedCandidate.applicationInfo.appliedDate)
         : null,
     };
 
     return { done: true, data: processedCandidate };
   } catch (error) {
-    console.error("[CandidateService] Error in updateCandidate", {
+    console.error('[CandidateService] Error in updateCandidate', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -411,10 +532,10 @@ export const updateCandidate = async (companyId, candidateId, updateData) => {
 export const deleteCandidate = async (companyId, candidateId) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] deleteCandidate", { companyId, candidateId });
+    console.log('[CandidateService] deleteCandidate', { companyId, candidateId });
 
     if (!ObjectId.isValid(candidateId)) {
-      return { done: false, error: "Invalid candidate ID format" };
+      return { done: false, error: 'Invalid candidate ID format' };
     }
 
     const result = await collections.candidates.updateOne(
@@ -429,12 +550,12 @@ export const deleteCandidate = async (companyId, candidateId) => {
     );
 
     if (result.matchedCount === 0) {
-      return { done: false, error: "Candidate not found" };
+      return { done: false, error: 'Candidate not found' };
     }
 
     return { done: true, data: { _id: candidateId, deleted: true } };
   } catch (error) {
-    console.error("[CandidateService] Error in deleteCandidate", {
+    console.error('[CandidateService] Error in deleteCandidate', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -445,10 +566,10 @@ export const deleteCandidate = async (companyId, candidateId) => {
 export const updateCandidateStatus = async (companyId, candidateId, statusData) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] updateCandidateStatus", { companyId, candidateId, statusData });
+    console.log('[CandidateService] updateCandidateStatus', { companyId, candidateId, statusData });
 
     if (!ObjectId.isValid(candidateId)) {
-      return { done: false, error: "Invalid candidate ID format" };
+      return { done: false, error: 'Invalid candidate ID format' };
     }
 
     const candidate = await collections.candidates.findOne({
@@ -458,7 +579,7 @@ export const updateCandidateStatus = async (companyId, candidateId, statusData) 
     });
 
     if (!candidate) {
-      return { done: false, error: "Candidate not found" };
+      return { done: false, error: 'Candidate not found' };
     }
 
     // Add to timeline
@@ -466,7 +587,7 @@ export const updateCandidateStatus = async (companyId, candidateId, statusData) 
       status: statusData.status,
       date: new Date(),
       notes: statusData.notes || '',
-      updatedBy: statusData.updatedBy || 'Unknown'
+      updatedBy: statusData.updatedBy || 'Unknown',
     };
 
     const result = await collections.candidates.updateOne(
@@ -477,13 +598,13 @@ export const updateCandidateStatus = async (companyId, candidateId, statusData) 
           updatedAt: new Date(),
         },
         $push: {
-          timeline: newTimelineEntry
-        }
+          timeline: newTimelineEntry,
+        },
       }
     );
 
     if (result.modifiedCount === 0) {
-      return { done: false, error: "Failed to update candidate status" };
+      return { done: false, error: 'Failed to update candidate status' };
     }
 
     // Return updated candidate
@@ -494,7 +615,7 @@ export const updateCandidateStatus = async (companyId, candidateId, statusData) 
 
     return { done: true, data: updatedCandidate };
   } catch (error) {
-    console.error("[CandidateService] Error in updateCandidateStatus", {
+    console.error('[CandidateService] Error in updateCandidateStatus', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -505,7 +626,7 @@ export const updateCandidateStatus = async (companyId, candidateId, statusData) 
 export const getCandidateStats = async (companyId) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] getCandidateStats", { companyId });
+    console.log('[CandidateService] getCandidateStats', { companyId });
 
     const totalCandidates = await collections.candidates.countDocuments({
       companyId,
@@ -526,7 +647,7 @@ export const getCandidateStats = async (companyId) => {
     const monthlyHires = await collections.candidates.countDocuments({
       companyId,
       isDeleted: { $ne: true },
-      status: "Hired",
+      status: 'Hired',
       updatedAt: { $gte: thirtyDaysAgo },
     });
 
@@ -534,41 +655,45 @@ export const getCandidateStats = async (companyId) => {
     const newApplications = await collections.candidates.countDocuments({
       companyId,
       isDeleted: { $ne: true },
-      status: "New Application",
+      status: 'New Application',
     });
 
     const screening = await collections.candidates.countDocuments({
       companyId,
       isDeleted: { $ne: true },
-      status: "Screening",
+      status: 'Screening',
     });
 
     const interview = await collections.candidates.countDocuments({
       companyId,
       isDeleted: { $ne: true },
-      status: "Interview",
+      status: 'Interview',
     });
 
     const hired = await collections.candidates.countDocuments({
       companyId,
       isDeleted: { $ne: true },
-      status: "Hired",
+      status: 'Hired',
     });
 
     // Status breakdown
-    const statusBreakdown = await collections.candidates.aggregate([
-      { $match: { companyId, isDeleted: { $ne: true } } },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).toArray();
+    const statusBreakdown = await collections.candidates
+      .aggregate([
+        { $match: { companyId, isDeleted: { $ne: true } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ])
+      .toArray();
 
     // Top applied roles
-    const topRoles = await collections.candidates.aggregate([
-      { $match: { companyId, isDeleted: { $ne: true } } },
-      { $group: { _id: "$applicationInfo.appliedRole", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]).toArray();
+    const topRoles = await collections.candidates
+      .aggregate([
+        { $match: { companyId, isDeleted: { $ne: true } } },
+        { $group: { _id: '$applicationInfo.appliedRole', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ])
+      .toArray();
 
     const stats = {
       totalCandidates,
@@ -582,10 +707,10 @@ export const getCandidateStats = async (companyId) => {
       topRoles,
     };
 
-    console.log("[CandidateService] Candidate stats", stats);
+    console.log('[CandidateService] Candidate stats', stats);
     return { done: true, data: stats };
   } catch (error) {
-    console.error("[CandidateService] Error in getCandidateStats", {
+    console.error('[CandidateService] Error in getCandidateStats', {
       error: error.message,
     });
     return { done: false, error: error.message };
@@ -596,19 +721,19 @@ export const getCandidateStats = async (companyId) => {
 export const exportCandidatesPDF = async (companyId) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] exportCandidatesPDF", { companyId });
+    console.log('[CandidateService] exportCandidatesPDF', { companyId });
 
     const candidates = await collections.candidates
       .find({
         companyId,
         isDeleted: { $ne: true },
       })
-      .sort({ "applicationInfo.appliedDate": -1 })
+      .sort({ 'applicationInfo.appliedDate': -1 })
       .toArray();
 
     const doc = new PDFDocument();
     const fileName = `candidates_${companyId}_${Date.now()}.pdf`;
-    const tempDir = path.join(process.cwd(), "temp");
+    const tempDir = path.join(process.cwd(), 'temp');
     const filePath = path.join(tempDir, fileName);
 
     // Ensure temp directory exists
@@ -619,19 +744,19 @@ export const exportCandidatesPDF = async (companyId) => {
     doc.pipe(fs.createWriteStream(filePath));
 
     // Header
-    doc.fontSize(20).text("Candidate Report", 50, 50);
-    doc.fontSize(12).text(`Generated on: ${format(new Date(), "PPP")}`, 50, 80);
+    doc.fontSize(20).text('Candidate Report', 50, 50);
+    doc.fontSize(12).text(`Generated on: ${format(new Date(), 'PPP')}`, 50, 80);
     doc.text(`Total Candidates: ${candidates.length}`, 50, 100);
 
     let yPosition = 130;
 
     // Table header
     doc.fontSize(10);
-    doc.text("Name", 50, yPosition);
-    doc.text("Applied Role", 150, yPosition);
-    doc.text("Email", 280, yPosition);
-    doc.text("Status", 450, yPosition);
-    doc.text("Applied Date", 520, yPosition);
+    doc.text('Name', 50, yPosition);
+    doc.text('Applied Role', 150, yPosition);
+    doc.text('Email', 280, yPosition);
+    doc.text('Status', 450, yPosition);
+    doc.text('Applied Date', 520, yPosition);
 
     yPosition += 20;
 
@@ -646,14 +771,14 @@ export const exportCandidatesPDF = async (companyId) => {
         yPosition = 50;
       }
 
-      doc.text(candidate.fullName || "N/A", 50, yPosition);
-      doc.text(candidate.applicationInfo?.appliedRole || "N/A", 150, yPosition);
-      doc.text(candidate.personalInfo?.email || "N/A", 280, yPosition);
-      doc.text(candidate.status || "N/A", 450, yPosition);
+      doc.text(candidate.fullName || 'N/A', 50, yPosition);
+      doc.text(candidate.applicationInfo?.appliedRole || 'N/A', 150, yPosition);
+      doc.text(candidate.personalInfo?.email || 'N/A', 280, yPosition);
+      doc.text(candidate.status || 'N/A', 450, yPosition);
       doc.text(
-        candidate.applicationInfo?.appliedDate 
-          ? format(new Date(candidate.applicationInfo.appliedDate), "MMM dd, yyyy")
-          : "N/A",
+        candidate.applicationInfo?.appliedDate
+          ? format(new Date(candidate.applicationInfo.appliedDate), 'MMM dd, yyyy')
+          : 'N/A',
         520,
         yPosition
       );
@@ -663,7 +788,7 @@ export const exportCandidatesPDF = async (companyId) => {
 
     doc.end();
 
-    console.log("PDF generation completed successfully");
+    console.log('PDF generation completed successfully');
 
     const frontendurl = process.env.FRONTEND_URL + `/temp/${fileName}`;
 
@@ -675,7 +800,7 @@ export const exportCandidatesPDF = async (companyId) => {
       },
     };
   } catch (error) {
-    console.error("Error generating PDF:", error);
+    console.error('Error generating PDF:', error);
     return { done: false, error: error.message };
   }
 };
@@ -684,79 +809,77 @@ export const exportCandidatesPDF = async (companyId) => {
 export const exportCandidatesExcel = async (companyId) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[CandidateService] exportCandidatesExcel", { companyId });
+    console.log('[CandidateService] exportCandidatesExcel', { companyId });
 
     const candidates = await collections.candidates
       .find({
         companyId,
         isDeleted: { $ne: true },
       })
-      .sort({ "applicationInfo.appliedDate": -1 })
+      .sort({ 'applicationInfo.appliedDate': -1 })
       .toArray();
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Candidates");
+    const worksheet = workbook.addWorksheet('Candidates');
 
     // Define columns
     worksheet.columns = [
-      { header: "Application Number", key: "applicationNumber", width: 20 },
-      { header: "Full Name", key: "fullName", width: 25 },
-      { header: "Email", key: "email", width: 30 },
-      { header: "Phone", key: "phone", width: 15 },
-      { header: "Applied Role", key: "appliedRole", width: 25 },
-      { header: "Current Role", key: "currentRole", width: 25 },
-      { header: "Current Company", key: "currentCompany", width: 25 },
-      { header: "Experience (Years)", key: "experience", width: 15 },
-      { header: "Current Salary", key: "currentSalary", width: 15 },
-      { header: "Expected Salary", key: "expectedSalary", width: 15 },
-      { header: "Status", key: "status", width: 15 },
-      { header: "Applied Date", key: "appliedDate", width: 15 },
-      { header: "Recruiter", key: "recruiter", width: 20 },
-      { header: "Source", key: "source", width: 15 },
-      { header: "City", key: "city", width: 15 },
-      { header: "Skills", key: "skills", width: 40 },
-      { header: "Qualifications", key: "qualifications", width: 40 },
-      { header: "Created Date", key: "createdAt", width: 15 },
+      { header: 'Application Number', key: 'applicationNumber', width: 20 },
+      { header: 'Full Name', key: 'fullName', width: 25 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Phone', key: 'phone', width: 15 },
+      { header: 'Applied Role', key: 'appliedRole', width: 25 },
+      { header: 'Current Role', key: 'currentRole', width: 25 },
+      { header: 'Current Company', key: 'currentCompany', width: 25 },
+      { header: 'Experience (Years)', key: 'experience', width: 15 },
+      { header: 'Current Salary', key: 'currentSalary', width: 15 },
+      { header: 'Expected Salary', key: 'expectedSalary', width: 15 },
+      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Applied Date', key: 'appliedDate', width: 15 },
+      { header: 'Recruiter', key: 'recruiter', width: 20 },
+      { header: 'Source', key: 'source', width: 15 },
+      { header: 'City', key: 'city', width: 15 },
+      { header: 'Skills', key: 'skills', width: 40 },
+      { header: 'Qualifications', key: 'qualifications', width: 40 },
+      { header: 'Created Date', key: 'createdAt', width: 15 },
     ];
 
     // Add data
     candidates.forEach((candidate) => {
       worksheet.addRow({
-        applicationNumber: candidate.applicationNumber || "",
-        fullName: candidate.fullName || "",
-        email: candidate.personalInfo?.email || "",
-        phone: candidate.personalInfo?.phone || "",
-        appliedRole: candidate.applicationInfo?.appliedRole || "",
-        currentRole: candidate.professionalInfo?.currentRole || "",
-        currentCompany: candidate.professionalInfo?.currentCompany || "",
+        applicationNumber: candidate.applicationNumber || '',
+        fullName: candidate.fullName || '',
+        email: candidate.personalInfo?.email || '',
+        phone: candidate.personalInfo?.phone || '',
+        appliedRole: candidate.applicationInfo?.appliedRole || '',
+        currentRole: candidate.professionalInfo?.currentRole || '',
+        currentCompany: candidate.professionalInfo?.currentCompany || '',
         experience: candidate.professionalInfo?.experienceYears || 0,
         currentSalary: candidate.professionalInfo?.currentSalary || 0,
         expectedSalary: candidate.professionalInfo?.expectedSalary || 0,
-        status: candidate.status || "",
+        status: candidate.status || '',
         appliedDate: candidate.applicationInfo?.appliedDate
-          ? format(new Date(candidate.applicationInfo.appliedDate), "MMM dd, yyyy")
-          : "",
-        recruiter: candidate.applicationInfo?.recruiterName || "",
-        source: candidate.applicationInfo?.source || "",
-        city: candidate.personalInfo?.city || "",
-        skills: candidate.professionalInfo?.skills?.join(", ") || "",
-        qualifications: candidate.professionalInfo?.qualifications?.join(", ") || "",
-        createdAt: candidate.createdAt
-          ? format(new Date(candidate.createdAt), "MMM dd, yyyy")
-          : "",
+          ? format(new Date(candidate.applicationInfo.appliedDate), 'MMM dd, yyyy')
+          : '',
+        recruiter: candidate.applicationInfo?.recruiterId || '',
+        source: candidate.applicationInfo?.source || '',
+        city: candidate.personalInfo?.city || '',
+        skills: candidate.professionalInfo?.skills?.join(', ') || '',
+        qualifications: candidate.professionalInfo?.qualifications?.join(', ') || '',
+        createdAt: candidate.createdAt ? format(new Date(candidate.createdAt), 'MMM dd, yyyy') : '',
       });
     });
 
     // Style the header
     worksheet.getRow(1).font = { bold: true };
     worksheet.getRow(1).fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE0E0E0" },
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
     };
 
     const fileName = `candidates_${companyId}_${Date.now()}.xlsx`;
-    const tempDir = path.join(process.cwd(), "temp");
+    const tempDir = path.join(process.cwd(), 'temp');
     const filePath = path.join(tempDir, fileName);
 
     // Ensure temp directory exists
@@ -766,7 +889,7 @@ export const exportCandidatesExcel = async (companyId) => {
 
     await workbook.xlsx.writeFile(filePath);
 
-    console.log("Excel generation completed successfully");
+    console.log('Excel generation completed successfully');
 
     const frontendurl = process.env.FRONTEND_URL + `/temp/${fileName}`;
 
@@ -778,7 +901,7 @@ export const exportCandidatesExcel = async (companyId) => {
       },
     };
   } catch (error) {
-    console.error("Error generating Excel:", error);
+    console.error('Error generating Excel:', error);
     return { done: false, error: error.message };
   }
 };

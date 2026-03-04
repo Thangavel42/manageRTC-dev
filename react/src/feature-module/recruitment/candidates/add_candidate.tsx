@@ -1,8 +1,13 @@
-import { message } from 'antd';
-import React, { useRef, useState } from 'react';
+import { DatePicker, message } from 'antd';
+import dayjs from 'dayjs';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Socket } from 'socket.io-client';
+import CommonSelect from '../../../core/common/commonSelect';
+import { useCandidates } from '../../../hooks/useCandidates';
+import { useDesignationsREST } from '../../../hooks/useDesignationsREST';
+import { useEmployeesREST } from '../../../hooks/useEmployeesREST';
 import { useSocket } from '../../../SocketContext';
 
 interface CandidateFormData {
@@ -24,6 +29,7 @@ interface CandidateFormData {
   portfolio: string;
 
   // Professional Information
+  candidateType: string; // 'Fresher' or 'Experienced'
   currentRole: string;
   currentCompany: string;
   experienceYears: number;
@@ -39,7 +45,6 @@ interface CandidateFormData {
   appliedRole: string;
   appliedDate: string;
   recruiterId: string;
-  recruiterName: string;
   source: string;
   referredBy: string;
 
@@ -57,15 +62,29 @@ interface CandidateFormErrors {
   lastName?: string;
   email?: string;
   phone?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  address?: string;
   appliedRole?: string;
   appliedDate?: string;
+  currentRole?: string;
+  currentCompany?: string;
   experienceYears?: string;
   currentSalary?: string;
   expectedSalary?: string;
+  noticePeriod?: string;
+  skills?: string;
+  qualifications?: string;
 }
 
 const AddCandidate = () => {
   const socket = useSocket() as Socket | null;
+  const { createCandidate } = useCandidates();
+  const { employees, fetchActiveEmployeesList } = useEmployeesREST();
+  const { designations, fetchDesignations } = useDesignationsREST();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<CandidateFormData>({
     // Personal Information
@@ -86,6 +105,7 @@ const AddCandidate = () => {
     portfolio: '',
 
     // Professional Information
+    candidateType: 'Experienced',
     currentRole: '',
     currentCompany: '',
     experienceYears: 0,
@@ -101,7 +121,6 @@ const AddCandidate = () => {
     appliedRole: '',
     appliedDate: new Date().toISOString().split('T')[0],
     recruiterId: '',
-    recruiterName: '',
     source: 'Direct',
     referredBy: '',
 
@@ -126,6 +145,12 @@ const AddCandidate = () => {
     coverLetter: useRef<HTMLInputElement>(null),
     portfolio: useRef<HTMLInputElement>(null)
   };
+
+  // Fetch employees and designations on component mount
+  useEffect(() => {
+    fetchActiveEmployeesList();
+    fetchDesignations({ status: 'Active' });
+  }, [fetchActiveEmployeesList, fetchDesignations]);
 
   // Cloudinary file upload function
   const uploadFile = async (file: File) => {
@@ -257,16 +282,55 @@ const AddCandidate = () => {
       if (!formData.phone.trim()) {
         newErrors.phone = 'Phone number is required';
       }
+      if (!formData.dateOfBirth) {
+        newErrors.dateOfBirth = 'Date of birth is required';
+      }
+      if (!formData.gender.trim()) {
+        newErrors.gender = 'Gender is required';
+      }
+      if (!formData.city.trim()) {
+        newErrors.city = 'City is required';
+      }
+      if (!formData.state.trim()) {
+        newErrors.state = 'State is required';
+      }
+      if (!formData.country.trim()) {
+        newErrors.country = 'Country is required';
+      }
+      if (!formData.address.trim()) {
+        newErrors.address = 'Address is required';
+      }
     } else if (step === 2) {
       // Professional Information validation
-      if (formData.experienceYears < 0) {
-        newErrors.experienceYears = 'Experience years cannot be negative';
+
+      if (formData.candidateType === 'Experienced') {
+        // Validation for Experienced candidates
+        if (!formData.currentRole.trim()) {
+          newErrors.currentRole = 'Current role is required';
+        }
+        if (!formData.currentCompany.trim()) {
+          newErrors.currentCompany = 'Current company is required';
+        }
+        if (!formData.experienceYears || formData.experienceYears <= 0) {
+          newErrors.experienceYears = 'Experience years is required and must be greater than 0';
+        }
+        if (!formData.currentSalary || formData.currentSalary <= 0) {
+          newErrors.currentSalary = 'Current salary is required and must be greater than 0';
+        }
+        if (!formData.noticePeriod.trim()) {
+          newErrors.noticePeriod = 'Notice period is required';
+        }
       }
-      if (formData.currentSalary < 0) {
-        newErrors.currentSalary = 'Current salary cannot be negative';
+
+      // Common validation for both Fresher and Experienced
+      if (!formData.expectedSalary || formData.expectedSalary <= 0) {
+        newErrors.expectedSalary = 'Expected salary is required and must be greater than 0';
       }
-      if (formData.expectedSalary < 0) {
-        newErrors.expectedSalary = 'Expected salary cannot be negative';
+      if (!formData.skills.trim()) {
+        newErrors.skills = 'Skills are required';
+      }
+      if (!formData.qualifications.trim()) {
+        newErrors.qualifications = 'Qualifications are required';
       }
     } else if (step === 3) {
       // Application Information validation
@@ -298,11 +362,6 @@ const AddCandidate = () => {
       return;
     }
 
-    if (!socket) {
-      message.error("Socket connection not available");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -317,27 +376,25 @@ const AddCandidate = () => {
         languages: formData.languages ? formData.languages.split(',').map(s => s.trim()).filter(s => s) : [],
       };
 
-      socket.emit('candidate:create', processedData);
+      const success = await createCandidate(processedData);
 
-      // Listen for response
-      socket.once('candidate:create-response', (response: any) => {
-        if (response.done) {
-          console.log('Candidate created successfully:', response.data);
-          message.success('Candidate created successfully!');
-          resetForm();
-          // Show success message briefly, then close modal
-          setTimeout(() => {
-            closeModal();
-            setTimeout(() => {
-              setLoading(false);
-            }, 300);
-          }, 1500);
-        } else {
-          console.error('Failed to create candidate:', response.error);
-          message.error(`Failed to create candidate: ${response.error}`);
+      if (success) {
+        console.log('Candidate created successfully');
+
+        // Emit event to notify parent component to refresh data
+        window.dispatchEvent(new CustomEvent('candidate-created'));
+
+        resetForm();
+
+        // Close modal after a brief delay to show success message
+        setTimeout(() => {
+          closeModal();
           setLoading(false);
-        }
-      });
+        }, 800);
+      } else {
+        console.error('Failed to create candidate');
+        setLoading(false);
+      }
     } catch (error) {
       console.error('Error creating candidate:', error);
       message.error('An error occurred while creating the candidate');
@@ -407,6 +464,7 @@ const AddCandidate = () => {
       portfolio: '',
 
       // Professional Information
+      candidateType: 'Experienced',
       currentRole: '',
       currentCompany: '',
       experienceYears: 0,
@@ -422,7 +480,6 @@ const AddCandidate = () => {
       appliedRole: '',
       appliedDate: new Date().toISOString().split('T')[0],
       recruiterId: '',
-      recruiterName: '',
       source: 'Direct',
       referredBy: '',
 
@@ -453,7 +510,7 @@ const AddCandidate = () => {
             <h6 className="mb-3">Personal Information</h6>
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">First Name *</label>
+                <label className="form-label">First Name <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   className={`form-control ${errors.firstName ? 'is-invalid' : ''}`}
@@ -462,10 +519,10 @@ const AddCandidate = () => {
                   onChange={handleInputChange}
                   placeholder="Enter first name"
                 />
-                {errors.firstName && <div className="invalid-feedback">{errors.firstName}</div>}
+                {errors.firstName && <div className="invalid-feedback d-block">{errors.firstName}</div>}
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Last Name *</label>
+                <label className="form-label">Last Name <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   className={`form-control ${errors.lastName ? 'is-invalid' : ''}`}
@@ -474,13 +531,13 @@ const AddCandidate = () => {
                   onChange={handleInputChange}
                   placeholder="Enter last name"
                 />
-                {errors.lastName && <div className="invalid-feedback">{errors.lastName}</div>}
+                {errors.lastName && <div className="invalid-feedback d-block">{errors.lastName}</div>}
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Email *</label>
+                <label className="form-label">Email <span className="text-danger">*</span></label>
                 <input
                   type="email"
                   className={`form-control ${errors.email ? 'is-invalid' : ''}`}
@@ -489,10 +546,10 @@ const AddCandidate = () => {
                   onChange={handleInputChange}
                   placeholder="Enter email address"
                 />
-                {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+                {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Phone *</label>
+                <label className="form-label">Phone <span className="text-danger">*</span></label>
                 <input
                   type="tel"
                   className={`form-control ${errors.phone ? 'is-invalid' : ''}`}
@@ -501,85 +558,108 @@ const AddCandidate = () => {
                   onChange={handleInputChange}
                   placeholder="Enter phone number"
                 />
-                {errors.phone && <div className="invalid-feedback">{errors.phone}</div>}
+                {errors.phone && <div className="invalid-feedback d-block">{errors.phone}</div>}
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Date of Birth</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  name="dateOfBirth"
-                  value={formData.dateOfBirth}
-                  max={new Date(new Date().setFullYear(new Date().getFullYear() - 15)).toISOString().split('T')[0]}
-                  onChange={handleInputChange}
-                />
+                <label className="form-label">Date of Birth <span className="text-danger">*</span></label>
+                <div className="input-icon-end position-relative">
+                  <DatePicker
+                    className="form-control datetimepicker"
+                    style={errors.dateOfBirth ? { borderColor: '#dc3545' } : {}}
+                    format="DD-MM-YYYY"
+                    placeholder="DD-MM-YYYY"
+                    value={formData.dateOfBirth ? dayjs(formData.dateOfBirth, 'YYYY-MM-DD') : null}
+                    defaultPickerValue={dayjs().subtract(25, 'year')}
+                    onChange={(date, dateString) => {
+                      const dateStr = Array.isArray(dateString) ? dateString[0] : dateString;
+                      const isoDate = date ? date.format('YYYY-MM-DD') : '';
+                      handleInputChange({ target: { name: 'dateOfBirth', value: isoDate } } as any);
+                    }}
+                    disabledDate={(current) => {
+                      const maxDate = dayjs().subtract(15, 'year');
+                      const minDate = dayjs().subtract(100, 'year');
+                      return current && (current.isAfter(maxDate, 'day') || current.isBefore(minDate, 'day'));
+                    }}
+                  />
+                  <span className="input-icon-addon">
+                    <i className="ti ti-calendar text-gray-7" />
+                  </span>
+                </div>
+                {errors.dateOfBirth && <div className="invalid-feedback d-block">{errors.dateOfBirth}</div>}
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Gender</label>
-                <select
-                  className="form-control"
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleInputChange}
-                >
-                  <option value="">Select Gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
-                </select>
+                <label className="form-label">Gender <span className="text-danger">*</span></label>
+                <CommonSelect
+                  className={`select ${errors.gender ? 'is-invalid' : ''}`}
+                  options={[
+                    { value: '', label: 'Select Gender' },
+                    { value: 'Male', label: 'Male' },
+                    { value: 'Female', label: 'Female' },
+                    { value: 'Other', label: 'Other' },
+                    { value: 'Prefer not to say', label: 'Prefer not to say' }
+                  ]}
+                  value={formData.gender ? { value: formData.gender, label: formData.gender } : { value: '', label: 'Select Gender' }}
+                  onChange={(option: any) => {
+                    handleInputChange({ target: { name: 'gender', value: option?.value || '' } } as any);
+                  }}
+                />
+                {errors.gender && <div className="invalid-feedback d-block">{errors.gender}</div>}
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-4 mb-3">
-                <label className="form-label">City</label>
+                <label className="form-label">City <span className="text-danger">*</span></label>
                 <input
                   type="text"
-                  className="form-control"
+                  className={`form-control ${errors.city ? 'is-invalid' : ''}`}
                   name="city"
                   value={formData.city}
                   onChange={handleInputChange}
                   placeholder="Enter city"
                 />
+                {errors.city && <div className="invalid-feedback d-block">{errors.city}</div>}
               </div>
               <div className="col-md-4 mb-3">
-                <label className="form-label">State</label>
+                <label className="form-label">State <span className="text-danger">*</span></label>
                 <input
                   type="text"
-                  className="form-control"
+                  className={`form-control ${errors.state ? 'is-invalid' : ''}`}
                   name="state"
                   value={formData.state}
                   onChange={handleInputChange}
                   placeholder="Enter state"
                 />
+                {errors.state && <div className="invalid-feedback d-block">{errors.state}</div>}
               </div>
               <div className="col-md-4 mb-3">
-                <label className="form-label">Country</label>
+                <label className="form-label">Country <span className="text-danger">*</span></label>
                 <input
                   type="text"
-                  className="form-control"
+                  className={`form-control ${errors.country ? 'is-invalid' : ''}`}
                   name="country"
                   value={formData.country}
                   onChange={handleInputChange}
                   placeholder="Enter country"
                 />
+                {errors.country && <div className="invalid-feedback d-block">{errors.country}</div>}
               </div>
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Address</label>
+              <label className="form-label">Address <span className="text-danger">*</span></label>
               <textarea
-                className="form-control"
+                className={`form-control ${errors.address ? 'is-invalid' : ''}`}
                 name="address"
                 value={formData.address}
                 onChange={handleInputChange}
                 placeholder="Enter full address"
                 rows={2}
               />
+              {errors.address && <div className="invalid-feedback d-block">{errors.address}</div>}
             </div>
           </div>
         );
@@ -588,114 +668,145 @@ const AddCandidate = () => {
         return (
           <div>
             <h6 className="mb-3">Professional Information</h6>
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Current Role</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  name="currentRole"
-                  value={formData.currentRole}
-                  onChange={handleInputChange}
-                  placeholder="Enter current role"
-                />
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Current Company</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  name="currentCompany"
-                  value={formData.currentCompany}
-                  onChange={handleInputChange}
-                  placeholder="Enter current company"
-                />
-              </div>
+
+            {/* Candidate Type Selection */}
+            <div className="mb-4">
+              <label className="form-label">Candidate Type <span className="text-danger">*</span></label>
+              <CommonSelect
+                className="select"
+                options={[
+                  { value: 'Fresher', label: 'Fresher' },
+                  { value: 'Experienced', label: 'Experienced' }
+                ]}
+                value={formData.candidateType ? { value: formData.candidateType, label: formData.candidateType } : { value: 'Experienced', label: 'Experienced' }}
+                onChange={(option: any) => {
+                  handleInputChange({ target: { name: 'candidateType', value: option?.value || 'Experienced' } } as any);
+                }}
+              />
             </div>
 
-            <div className="row">
-              <div className="col-md-4 mb-3">
-                <label className="form-label">Experience (Years)</label>
-                <input
-                  type="number"
-                  className={`form-control ${errors.experienceYears ? 'is-invalid' : ''}`}
-                  name="experienceYears"
-                  value={formData.experienceYears}
-                  onChange={handleInputChange}
-                  min="0"
-                  placeholder="0"
-                />
-                {errors.experienceYears && <div className="invalid-feedback">{errors.experienceYears}</div>}
-              </div>
-              <div className="col-md-4 mb-3">
-                <label className="form-label">Current Salary ($)</label>
-                <input
-                  type="number"
-                  className={`form-control ${errors.currentSalary ? 'is-invalid' : ''}`}
-                  name="currentSalary"
-                  value={formData.currentSalary}
-                  onChange={handleInputChange}
-                  min="0"
-                  placeholder="0"
-                />
-                {errors.currentSalary && <div className="invalid-feedback">{errors.currentSalary}</div>}
-              </div>
-              <div className="col-md-4 mb-3">
-                <label className="form-label">Expected Salary ($)</label>
-                <input
-                  type="number"
-                  className={`form-control ${errors.expectedSalary ? 'is-invalid' : ''}`}
-                  name="expectedSalary"
-                  value={formData.expectedSalary}
-                  onChange={handleInputChange}
-                  min="0"
-                  placeholder="0"
-                />
-                {errors.expectedSalary && <div className="invalid-feedback">{errors.expectedSalary}</div>}
-              </div>
-            </div>
+            {/* Show professional fields only for Experienced candidates */}
+            {formData.candidateType === 'Experienced' && (
+              <>
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Current Role <span className="text-danger">*</span></label>
+                    <input
+                      type="text"
+                      className={`form-control ${errors.currentRole ? 'is-invalid' : ''}`}
+                      name="currentRole"
+                      value={formData.currentRole}
+                      onChange={handleInputChange}
+                      placeholder="Enter current role"
+                    />
+                    {errors.currentRole && <div className="invalid-feedback d-block">{errors.currentRole}</div>}
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Current Company <span className="text-danger">*</span></label>
+                    <input
+                      type="text"
+                      className={`form-control ${errors.currentCompany ? 'is-invalid' : ''}`}
+                      name="currentCompany"
+                      value={formData.currentCompany}
+                      onChange={handleInputChange}
+                      placeholder="Enter current company"
+                    />
+                    {errors.currentCompany && <div className="invalid-feedback d-block">{errors.currentCompany}</div>}
+                  </div>
+                </div>
 
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Experience (Years) <span className="text-danger">*</span></label>
+                    <input
+                      type="number"
+                      className={`form-control ${errors.experienceYears ? 'is-invalid' : ''}`}
+                      name="experienceYears"
+                      value={formData.experienceYears || ''}
+                      onChange={handleInputChange}
+                      min="0"
+                      placeholder="0"
+                    />
+                    {errors.experienceYears && <div className="invalid-feedback d-block">{errors.experienceYears}</div>}
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Current Salary ($) <span className="text-danger">*</span></label>
+                    <input
+                      type="number"
+                      className={`form-control ${errors.currentSalary ? 'is-invalid' : ''}`}
+                      name="currentSalary"
+                      value={formData.currentSalary || ''}
+                      onChange={handleInputChange}
+                      min="0"
+                      placeholder="0"
+                    />
+                    {errors.currentSalary && <div className="invalid-feedback d-block">{errors.currentSalary}</div>}
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">Notice Period <span className="text-danger">*</span></label>
+                  <CommonSelect
+                    className={`select ${errors.noticePeriod ? 'is-invalid' : ''}`}
+                    options={[
+                      { value: '', label: 'Select Notice Period' },
+                      { value: 'Immediate', label: 'Immediate' },
+                      { value: '1 Week', label: '1 Week' },
+                      { value: '2 Weeks', label: '2 Weeks' },
+                      { value: '1 Month', label: '1 Month' },
+                      { value: '2 Months', label: '2 Months' },
+                      { value: '3 Months', label: '3 Months' }
+                    ]}
+                    value={formData.noticePeriod ? { value: formData.noticePeriod, label: formData.noticePeriod } : { value: '', label: 'Select Notice Period' }}
+                    onChange={(option: any) => {
+                      handleInputChange({ target: { name: 'noticePeriod', value: option?.value || '' } } as any);
+                    }}
+                  />
+                  {errors.noticePeriod && <div className="invalid-feedback d-block">{errors.noticePeriod}</div>}
+                </div>
+              </>
+            )}
+
+            {/* Expected Salary - shown for both Fresher and Experienced */}
             <div className="mb-3">
-              <label className="form-label">Notice Period</label>
-              <select
-                className="form-control"
-                name="noticePeriod"
-                value={formData.noticePeriod}
+              <label className="form-label">Expected Salary ($) <span className="text-danger">*</span></label>
+              <input
+                type="number"
+                className={`form-control ${errors.expectedSalary ? 'is-invalid' : ''}`}
+                name="expectedSalary"
+                value={formData.expectedSalary || ''}
                 onChange={handleInputChange}
-              >
-                <option value="">Select Notice Period</option>
-                <option value="Immediate">Immediate</option>
-                <option value="1 Week">1 Week</option>
-                <option value="2 Weeks">2 Weeks</option>
-                <option value="1 Month">1 Month</option>
-                <option value="2 Months">2 Months</option>
-                <option value="3 Months">3 Months</option>
-              </select>
+                min="0"
+                placeholder="0"
+              />
+              {errors.expectedSalary && <div className="invalid-feedback d-block">{errors.expectedSalary}</div>}
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Skills (comma separated)</label>
+              <label className="form-label">Skills (comma separated) <span className="text-danger">*</span></label>
               <textarea
-                className="form-control"
+                className={`form-control ${errors.skills ? 'is-invalid' : ''}`}
                 name="skills"
                 value={formData.skills}
                 onChange={handleInputChange}
                 placeholder="e.g. JavaScript, React, Node.js, Python"
                 rows={2}
               />
+              {errors.skills && <div className="invalid-feedback d-block">{errors.skills}</div>}
               <small className="text-muted">Separate multiple skills with commas</small>
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Qualifications (comma separated)</label>
+              <label className="form-label">Qualifications (comma separated) <span className="text-danger">*</span></label>
               <textarea
-                className="form-control"
+                className={`form-control ${errors.qualifications ? 'is-invalid' : ''}`}
                 name="qualifications"
                 value={formData.qualifications}
                 onChange={handleInputChange}
                 placeholder="e.g. Bachelor's in Computer Science, MBA"
                 rows={2}
               />
+              {errors.qualifications && <div className="invalid-feedback d-block">{errors.qualifications}</div>}
             </div>
           </div>
         );
@@ -706,88 +817,166 @@ const AddCandidate = () => {
             <h6 className="mb-3">Application Information</h6>
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Applied Role *</label>
-                <input
-                  type="text"
-                  className={`form-control ${errors.appliedRole ? 'is-invalid' : ''}`}
-                  name="appliedRole"
-                  value={formData.appliedRole}
-                  onChange={handleInputChange}
-                  placeholder="Enter applied role"
+                <label className="form-label">Applied Role <span className="text-danger">*</span></label>
+                <CommonSelect
+                  className={`${errors.appliedRole ? 'is-invalid' : ''}`}
+                  options={[
+                    { value: '', label: 'Select Applied Role' },
+                    ...designations
+                      .filter(d => d.status === 'Active')
+                      .map(designation => ({
+                        value: designation._id,
+                        label: `${designation.designation}${designation.department ? ` (${designation.department})` : ''}`,
+                        designation: designation.designation
+                      }))
+                  ]}
+                  value={formData.appliedRole ? {
+                    value: formData.appliedRole,
+                    label: (() => {
+                      const role = designations.find(d => d._id === formData.appliedRole);
+                      return role ? `${role.designation}${role.department ? ` (${role.department})` : ''}` : formData.appliedRole;
+                    })()
+                  } : null}
+                  onChange={(option: any) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      appliedRole: option?.value || ''
+                    }));
+                    if (errors.appliedRole) {
+                      setErrors(prev => ({ ...prev, appliedRole: '' }));
+                    }
+                  }}
+                  placeholder="Select Applied Role"
                 />
-                {errors.appliedRole && <div className="invalid-feedback">{errors.appliedRole}</div>}
+                {errors.appliedRole && <div className="invalid-feedback d-block">{errors.appliedRole}</div>}
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Applied Date *</label>
-                <input
-                  type="date"
-                  className={`form-control ${errors.appliedDate ? 'is-invalid' : ''}`}
-                  name="appliedDate"
-                  value={formData.appliedDate}
-                  onChange={handleInputChange}
-                />
-                {errors.appliedDate && <div className="invalid-feedback">{errors.appliedDate}</div>}
+                <label className="form-label">Applied Date <span className="text-danger">*</span></label>
+                <div className="input-icon-end position-relative">
+                  <DatePicker
+                    className="form-control datetimepicker"
+                    style={errors.appliedDate ? { borderColor: '#dc3545' } : {}}
+                    format="DD-MM-YYYY"
+                    placeholder="DD-MM-YYYY"
+                    value={formData.appliedDate ? dayjs(formData.appliedDate, 'YYYY-MM-DD') : null}
+                    onChange={(date, dateString) => {
+                      const dateStr = Array.isArray(dateString) ? dateString[0] : dateString;
+                      const isoDate = date ? date.format('YYYY-MM-DD') : '';
+                      handleInputChange({ target: { name: 'appliedDate', value: isoDate } } as any);
+                    }}
+                  />
+                  <span className="input-icon-addon">
+                    <i className="ti ti-calendar text-gray-7" />
+                  </span>
+                </div>
+                {errors.appliedDate && <div className="invalid-feedback d-block">{errors.appliedDate}</div>}
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
                 <label className="form-label">Recruiter Name</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  name="recruiterName"
-                  value={formData.recruiterName}
-                  onChange={handleInputChange}
-                  placeholder="Enter recruiter name"
+                <CommonSelect
+                  className="select"
+                  options={(() => {
+                    console.log('[AddCandidate] Total employees loaded:', employees.length);
+                    const hrEmployees = employees.filter(emp => {
+                      const role = emp.role || (emp as any).account?.role;
+                      console.log('[AddCandidate] Employee:', emp.firstName, emp.lastName, 'Role:', role, 'emp.role:', emp.role, 'emp.account?.role:', (emp as any).account?.role);
+                      return role?.toLowerCase() === 'hr';
+                    });
+                    console.log('[AddCandidate] HR employees found:', hrEmployees.length);
+                    return [
+                      { value: '', label: 'Select Recruiter' },
+                      ...hrEmployees.map(emp => ({
+                        value: emp._id,
+                        label: `${emp.fullName || `${emp.firstName} ${emp.lastName}`} (${emp.employeeId})`,
+                        employeeName: emp.fullName || `${emp.firstName} ${emp.lastName}`,
+                        employeeId: emp.employeeId
+                      }))
+                    ];
+                  })()}
+                  value={formData.recruiterId ? {
+                    value: formData.recruiterId,
+                    label: (() => {
+                      const recruiter = employees.find(e => e._id === formData.recruiterId);
+                      return recruiter ? `${recruiter.fullName || `${recruiter.firstName} ${recruiter.lastName}`} (${recruiter.employeeId})` : formData.recruiterId;
+                    })()
+                  } : { value: '', label: 'Select Recruiter' }}
+                  onChange={(option: any) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      recruiterId: option?.value || ''
+                    }));
+                  }}
                 />
               </div>
               <div className="col-md-6 mb-3">
                 <label className="form-label">Source</label>
-                <select
-                  className="form-control"
-                  name="source"
-                  value={formData.source}
-                  onChange={handleInputChange}
-                >
-                  <option value="Direct">Direct Application</option>
-                  <option value="LinkedIn">LinkedIn</option>
-                  <option value="Job Portal">Job Portal</option>
-                  <option value="Referral">Referral</option>
-                  <option value="Agency">Agency</option>
-                  <option value="Career Fair">Career Fair</option>
-                  <option value="Company Website">Company Website</option>
-                </select>
+                <CommonSelect
+                  className="select"
+                  options={[
+                    { value: 'Direct', label: 'Direct Application' },
+                    { value: 'LinkedIn', label: 'LinkedIn' },
+                    { value: 'Job Portal', label: 'Job Portal' },
+                    { value: 'Referral', label: 'Referral' },
+                    { value: 'Agency', label: 'Agency' },
+                    { value: 'Career Fair', label: 'Career Fair' },
+                    { value: 'Company Website', label: 'Company Website' }
+                  ]}
+                  value={formData.source ? { value: formData.source, label: formData.source === 'Direct' ? 'Direct Application' : formData.source } : null}
+                  onChange={(option: any) => {
+                    handleInputChange({ target: { name: 'source', value: option?.value || '' } } as any);
+                  }}
+                />
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
                 <label className="form-label">Status</label>
-                <select
-                  className="form-control"
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                >
-                  <option value="New Application">New Application</option>
-                  <option value="Screening">Screening</option>
-                  <option value="Interview">Interview</option>
-                  <option value="Technical Test">Technical Test</option>
-                  <option value="Offer Stage">Offer Stage</option>
-                  <option value="Hired">Hired</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
+                <CommonSelect
+                  className="select"
+                  options={[
+                    { value: 'New Application', label: 'New Application' },
+                    { value: 'Screening', label: 'Screening' },
+                    { value: 'Interview', label: 'Interview' },
+                    { value: 'Technical Test', label: 'Technical Test' },
+                    { value: 'Offer Stage', label: 'Offer Stage' },
+                    { value: 'Hired', label: 'Hired' },
+                    { value: 'Rejected', label: 'Rejected' }
+                  ]}
+                  value={formData.status ? { value: formData.status, label: formData.status } : null}
+                  onChange={(option: any) => {
+                    handleInputChange({ target: { name: 'status', value: option?.value || '' } } as any);
+                  }}
+                />
               </div>
               <div className="col-md-6 mb-3">
                 <label className="form-label">Referred By</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  name="referredBy"
-                  value={formData.referredBy}
-                  onChange={handleInputChange}
-                  placeholder="Enter referrer name (if any)"
+                <CommonSelect
+                  className="select"
+                  options={[
+                    { value: '', label: 'Select Employee' },
+                    ...employees.map(emp => ({
+                      value: emp._id,
+                      label: `${emp.fullName || `${emp.firstName} ${emp.lastName}`} (${emp.employeeId})`,
+                      employeeName: emp.fullName || `${emp.firstName} ${emp.lastName}`
+                    }))
+                  ]}
+                  value={formData.referredBy ? {
+                    value: formData.referredBy,
+                    label: (() => {
+                      const referrer = employees.find(e => e._id === formData.referredBy);
+                      return referrer ? `${referrer.fullName || `${referrer.firstName} ${referrer.lastName}`} (${referrer.employeeId})` : formData.referredBy;
+                    })()
+                  } : { value: '', label: 'Select Employee' }}
+                  onChange={(option: any) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      referredBy: option?.value || ''
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -936,9 +1125,8 @@ const AddCandidate = () => {
                     {[1, 2, 3, 4].map((step) => (
                       <div key={step} className={`text-center ${currentStep >= step ? 'text-primary' : 'text-muted'}`}>
                         <div
-                          className={`rounded-circle d-inline-flex align-items-center justify-content-center ${
-                            currentStep >= step ? 'bg-primary text-white' : 'bg-light'
-                          }`}
+                          className={`rounded-circle d-inline-flex align-items-center justify-content-center ${currentStep >= step ? 'bg-primary text-white' : 'bg-light'
+                            }`}
                           style={{ width: '40px', height: '40px' }}
                         >
                           {step}

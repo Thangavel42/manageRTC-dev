@@ -5,7 +5,9 @@
  */
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
+import ExcelJS from 'exceljs';
 import { ObjectId } from 'mongodb';
+import PDFDocument from 'pdfkit';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
@@ -13,8 +15,8 @@ import {
     buildNotFoundError,
     buildValidationError
 } from '../../middleware/errorHandler.js';
-import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
+import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
     buildPagination,
     extractUser,
@@ -111,7 +113,7 @@ const normalizeEmployeeDates = (data) => {
     normalized.education = normalized.education.map((entry, index) => ({
       ...entry,
       startDate: parseDateField(entry?.startDate, `education.${index}.startDate`),
-      endDate: parseDateField(entry?.endDate, `education.${index}.endDate`)
+      endDate: parseDateField(entry?.endDate, `education.${index}.endDate`),
     }));
   }
 
@@ -119,7 +121,7 @@ const normalizeEmployeeDates = (data) => {
     normalized.experience = normalized.experience.map((entry, index) => ({
       ...entry,
       startDate: parseDateField(entry?.startDate, `experience.${index}.startDate`),
-      endDate: parseDateField(entry?.endDate, `experience.${index}.endDate`)
+      endDate: parseDateField(entry?.endDate, `experience.${index}.endDate`),
     }));
   }
 
@@ -131,10 +133,7 @@ const ensureEmployeeDateLogic = (data, existingEmployee = null) => {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   // Use canonical dateOfBirth field (at root level)
-  const dob =
-    data?.dateOfBirth ||
-    existingEmployee?.dateOfBirth ||
-    null;
+  const dob = data?.dateOfBirth || existingEmployee?.dateOfBirth || null;
 
   if (dob instanceof Date && dob > todayStart) {
     throw buildValidationError('dateOfBirth', 'Date of birth cannot be in the future');
@@ -167,7 +166,9 @@ const formatEmployeeDates = (employee) => {
     if (formatted.personal.passport && typeof formatted.personal.passport === 'object') {
       formatted.personal.passport = { ...formatted.personal.passport };
       formatted.personal.passport.issueDate = formatDDMMYYYY(formatted.personal.passport.issueDate);
-      formatted.personal.passport.expiryDate = formatDDMMYYYY(formatted.personal.passport.expiryDate);
+      formatted.personal.passport.expiryDate = formatDDMMYYYY(
+        formatted.personal.passport.expiryDate
+      );
     }
   }
 
@@ -175,7 +176,7 @@ const formatEmployeeDates = (employee) => {
     formatted.education = formatted.education.map((entry) => ({
       ...entry,
       startDate: formatDDMMYYYY(entry?.startDate),
-      endDate: formatDDMMYYYY(entry?.endDate)
+      endDate: formatDDMMYYYY(entry?.endDate),
     }));
   }
 
@@ -183,11 +184,52 @@ const formatEmployeeDates = (employee) => {
     formatted.experience = formatted.experience.map((entry) => ({
       ...entry,
       startDate: formatDDMMYYYY(entry?.startDate),
-      endDate: formatDDMMYYYY(entry?.endDate)
+      endDate: formatDDMMYYYY(entry?.endDate),
     }));
   }
 
   return formatted;
+};
+
+const DEFAULT_EXPORT_COLUMNS = ['employeeId', 'name', 'email', 'phone', 'department', 'role', 'status'];
+
+const parseQueryDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+      const [day, month, year] = value.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const getInclusiveEndDate = (value) => {
+  if (!value) return null;
+  const end = new Date(value);
+  end.setHours(23, 59, 59, 999);
+  return end;
+};
+
+const resolveHrDepartmentId = async (collections, employeeId) => {
+  if (!employeeId) return null;
+
+  const baseFilter = { isDeleted: { $ne: true } };
+
+  if (ObjectId.isValid(employeeId)) {
+    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId), ...baseFilter });
+    if (employee?.departmentId) {
+      return employee.departmentId;
+    }
+  }
+
+  const employeeByCode = await collections.employees.findOne({ employeeId, ...baseFilter });
+  return employeeByCode?.departmentId || null;
 };
 
 /**
@@ -209,11 +251,19 @@ export const getEmployees = asyncHandler(async (req, res) => {
     sortBy,
     order,
     reportingManagerList,
-    excludeEmployeeId
+    excludeEmployeeId,
   } = query;
   const user = extractUser(req);
 
-  devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', { page, limit, search, department, designation, status, role });
+  devLog('[Employee Controller] getEmployees - companyId:', user.companyId, 'filters:', {
+    page,
+    limit,
+    search,
+    department,
+    designation,
+    status,
+    role,
+  });
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -223,7 +273,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const filter = {
       isDeleted: { $ne: true },
-      status: 'Active'
+      status: 'Active',
     };
 
     if (department) {
@@ -239,7 +289,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } },
         { fullName: { $regex: search, $options: 'i' } },
-        { employeeId: { $regex: search, $options: 'i' } }
+        { employeeId: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -247,6 +297,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
       { $match: filter },
       {
         $addFields: {
+          // Handle both departmentId (string) and department (ObjectId) field names
           departmentObjId: {
             $cond: {
               if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
@@ -261,13 +312,13 @@ export const getEmployees = asyncHandler(async (req, res) => {
           from: 'departments',
           localField: 'departmentObjId',
           foreignField: '_id',
-          as: 'departmentInfo'
-        }
+          as: 'departmentInfo',
+        },
       },
       {
         $addFields: {
-          departmentName: { $ifNull: [{ $arrayElemAt: ['$departmentInfo.department', 0] }, null] }
-        }
+          departmentName: { $ifNull: [{ $arrayElemAt: ['$departmentInfo.department', 0] }, null] },
+        },
       },
       {
         $project: {
@@ -276,11 +327,11 @@ export const getEmployees = asyncHandler(async (req, res) => {
           firstName: 1,
           lastName: 1,
           fullName: 1,
-          departmentName: 1
-        }
+          departmentName: 1,
+        },
       },
       { $sort: { firstName: 1, lastName: 1 } },
-      { $limit: limitNum }
+      { $limit: limitNum },
     ];
 
     const employees = await collections.employees.aggregate(pipeline).toArray();
@@ -288,7 +339,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
       id: emp._id?.toString(),
       employeeId: emp.employeeId,
       name: emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
-      department: emp.departmentName || ''
+      department: emp.departmentName || '',
     }));
 
     return sendSuccess(res, results, 'Employees retrieved successfully');
@@ -307,10 +358,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
     const roleRegex = new RegExp(`^${role}$`, 'i');
     filter.$and = filter.$and || [];
     filter.$and.push({
-      $or: [
-        { role: roleRegex },
-        { 'account.role': roleRegex }
-      ]
+      $or: [{ role: roleRegex }, { 'account.role': roleRegex }],
     });
   }
 
@@ -331,7 +379,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
       { lastName: { $regex: search, $options: 'i' } },
       { fullName: { $regex: search, $options: 'i' } },
       { 'contact.email': { $regex: search, $options: 'i' } },
-      { employeeId: { $regex: search, $options: 'i' } }
+      { employeeId: { $regex: search, $options: 'i' } },
     ];
   }
 
@@ -357,6 +405,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
@@ -364,6 +413,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
@@ -371,6 +421,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
@@ -378,6 +429,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
@@ -385,6 +437,7 @@ export const getEmployees = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
@@ -399,16 +452,16 @@ export const getEmployees = asyncHandler(async (req, res) => {
         from: 'departments',
         localField: 'departmentObjId',
         foreignField: '_id',
-        as: 'departmentInfo'
-      }
+        as: 'departmentInfo',
+      },
     },
     {
       $lookup: {
         from: 'designations',
         localField: 'designationObjId',
         foreignField: '_id',
-        as: 'designationInfo'
-      }
+        as: 'designationInfo',
+      },
     },
     {
       $lookup: {
@@ -418,28 +471,28 @@ export const getEmployees = asyncHandler(async (req, res) => {
           {
             $match: {
               $expr: { $eq: ['$_id', '$$reportingToObjId'] },
-              isDeleted: { $ne: true }
-            }
-          }
+              isDeleted: { $ne: true },
+            },
+          },
         ],
-        as: 'reportingToInfo'
-      }
+        as: 'reportingToInfo',
+      },
     },
     {
       $lookup: {
         from: 'shifts',
         localField: 'shiftObjId',
         foreignField: '_id',
-        as: 'shiftInfo'
-      }
+        as: 'shiftInfo',
+      },
     },
     {
       $lookup: {
         from: 'batches',
         localField: 'batchObjId',
         foreignField: '_id',
-        as: 'batchInfo'
-      }
+        as: 'batchInfo',
+      },
     },
     {
       $addFields: {
@@ -453,18 +506,18 @@ export const getEmployees = asyncHandler(async (req, res) => {
           $cond: {
             if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
             then: '$profileImage',
-            else: getSystemDefaultAvatarUrl()
-          }
+            else: getSystemDefaultAvatarUrl(),
+          },
         },
         // Add avatarUrl field for frontend compatibility (same as profileImage)
         avatarUrl: {
           $cond: {
             if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
             then: '$profileImage',
-            else: getSystemDefaultAvatarUrl()
-          }
-        }
-      }
+            else: getSystemDefaultAvatarUrl(),
+          },
+        },
+      },
     },
     {
       $addFields: {
@@ -473,13 +526,9 @@ export const getEmployees = asyncHandler(async (req, res) => {
           $ifNull: [
             '$fullName',
             {
-              $concat: [
-                { $ifNull: ['$firstName', ''] },
-                ' ',
-                { $ifNull: ['$lastName', ''] }
-              ]
-            }
-          ]
+              $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }],
+            },
+          ],
         },
         // Reporting Manager Name from populated manager
         reportingManagerName: {
@@ -489,11 +538,11 @@ export const getEmployees = asyncHandler(async (req, res) => {
               $concat: [
                 { $ifNull: ['$reportingToManager.firstName', ''] },
                 ' ',
-                { $ifNull: ['$reportingToManager.lastName', ''] }
-              ]
+                { $ifNull: ['$reportingToManager.lastName', ''] },
+              ],
             },
-            else: null
-          }
+            else: null,
+          },
         },
         // Reporting Manager Employee ID from populated manager (for frontend lookups)
         reportingToEmployeeId: {
@@ -522,16 +571,22 @@ export const getEmployees = asyncHandler(async (req, res) => {
         shiftColor: { $ifNull: ['$shiftData.color', null] },
         shiftTiming: {
           $cond: {
-            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            if: {
+              $and: [
+                { $ne: ['$shiftData', null] },
+                { $ne: ['$shiftData.startTime', null] },
+                { $ne: ['$shiftData.endTime', null] },
+              ],
+            },
             then: {
               $concat: [
                 { $ifNull: ['$shiftData.startTime', ''] },
                 ' - ',
-                { $ifNull: ['$shiftData.endTime', ''] }
-              ]
+                { $ifNull: ['$shiftData.endTime', ''] },
+              ],
             },
-            else: null
-          }
+            else: null,
+          },
         },
         // Batch information from populated batch
         batchName: { $ifNull: ['$batchData.name', null] },
@@ -544,8 +599,8 @@ export const getEmployees = asyncHandler(async (req, res) => {
         religion: '$personal.religion',
         maritalStatus: '$personal.maritalStatus',
         employmentOfSpouse: '$personal.employmentOfSpouse',
-        noOfChildren: '$personal.noOfChildren'
-      }
+        noOfChildren: '$personal.noOfChildren',
+      },
     },
     {
       $project: {
@@ -565,12 +620,12 @@ export const getEmployees = asyncHandler(async (req, res) => {
         salary: 0,
         bankDetails: 0,
         emergencyContacts: 0,
-        'account.password': 0
-      }
+        'account.password': 0,
+      },
     },
     { $sort: sortObj },
     { $skip: skip },
-    { $limit: limitNum }
+    { $limit: limitNum },
   ];
 
   const employees = await collections.employees.aggregate(pipeline).toArray();
@@ -583,6 +638,269 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const pagination = buildPagination(pageNum, limitNum, total);
 
   return sendSuccess(res, sanitizedEmployees, 'Employees retrieved successfully', 200, pagination);
+});
+
+/**
+ * @desc    Export employees as PDF or Excel with filters
+ * @route   GET /api/employees/export
+ * @access  Private (Admin, HR, Superadmin)
+ */
+export const exportEmployees = asyncHandler(async (req, res) => {
+  const user = extractUser(req);
+  const {
+    type = 'pdf',
+    department,
+    status,
+    fromDate,
+    toDate,
+    sortBy,
+    order,
+    columns
+  } = req.query || {};
+
+  const exportType = String(type).toLowerCase();
+  if (!['pdf', 'excel'].includes(exportType)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_EXPORT_TYPE',
+        message: 'Export type must be pdf or excel'
+      }
+    });
+  }
+
+  if (!['admin', 'hr', 'superadmin'].includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'NOT_AUTHORIZED',
+        message: 'Not authorized to export employees'
+      }
+    });
+  }
+
+  const collections = getTenantCollections(user.companyId);
+  const filter = { isDeleted: { $ne: true } };
+
+  if (status && status !== 'none') {
+    filter.status = status;
+  }
+
+  if (user.role === 'hr') {
+    const hrDepartmentId = await resolveHrDepartmentId(collections, user.employeeId);
+    if (!hrDepartmentId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'NOT_AUTHORIZED',
+          message: 'HR user department not found for export'
+        }
+      });
+    }
+    filter.departmentId = hrDepartmentId;
+  } else if (department && department !== 'none') {
+    filter.departmentId = department;
+  }
+
+  const start = parseQueryDate(fromDate);
+  const end = getInclusiveEndDate(parseQueryDate(toDate));
+  if (start && end) {
+    filter.createdAt = { $gte: start, $lte: end };
+  }
+
+  const normalizedOrder = (order || '').toString().toLowerCase();
+  const sortField = sortBy === 'name' || sortBy === 'fullName' ? 'fullName' : sortBy || 'createdAt';
+  const sortDirection = normalizedOrder === 'desc' ? -1 : 1;
+  const sortObj = { [sortField]: sortDirection };
+
+  const selectedColumns =
+    typeof columns === 'string' && columns.trim() !== ''
+      ? columns
+          .split(',')
+          .map((col) => col.trim())
+          .filter((col) => DEFAULT_EXPORT_COLUMNS.includes(col))
+      : DEFAULT_EXPORT_COLUMNS;
+  const exportColumns = selectedColumns.length > 0 ? selectedColumns : DEFAULT_EXPORT_COLUMNS;
+
+  const pipeline = [
+    { $match: filter },
+    {
+      $addFields: {
+        departmentObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
+            then: { $toObjectId: '$departmentId' },
+            else: null
+          }
+        },
+        designationObjId: {
+          $cond: {
+            if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
+            then: { $toObjectId: '$designationId' },
+            else: null
+          }
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'departmentObjId',
+        foreignField: '_id',
+        as: 'departmentInfo'
+      }
+    },
+    {
+      $lookup: {
+        from: 'designations',
+        localField: 'designationObjId',
+        foreignField: '_id',
+        as: 'designationInfo'
+      }
+    },
+    {
+      $addFields: {
+        department: { $arrayElemAt: ['$departmentInfo', 0] },
+        designation: { $arrayElemAt: ['$designationInfo', 0] },
+        fullName: {
+          $ifNull: [
+            '$fullName',
+            {
+              $concat: [
+                { $ifNull: ['$firstName', ''] },
+                ' ',
+                { $ifNull: ['$lastName', ''] }
+              ]
+            }
+          ]
+        },
+        contactEmail: '$contact.email',
+        contactPhone: '$contact.phone'
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        employeeId: 1,
+        firstName: 1,
+        lastName: 1,
+        fullName: 1,
+        email: 1,
+        phone: 1,
+        contactEmail: 1,
+        contactPhone: 1,
+        departmentId: 1,
+        department: 1,
+        designation: 1,
+        role: 1,
+        account: 1,
+        status: 1,
+        createdAt: 1
+      }
+    },
+    { $sort: sortObj }
+  ];
+
+  const employees = await collections.employees.aggregate(pipeline).toArray();
+  const normalizedEmployees = employees.map((emp) => ({
+    ...emp,
+    status: normalizeStatus(emp.status)
+  }));
+
+  const columnDefinitions = {
+    employeeId: {
+      header: 'Employee ID',
+      width: 16,
+      getValue: (emp) => emp.employeeId || ''
+    },
+    name: {
+      header: 'Name',
+      width: 26,
+      getValue: (emp) => (emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`).trim()
+    },
+    email: {
+      header: 'Email',
+      width: 30,
+      getValue: (emp) => emp.email || emp.contactEmail || ''
+    },
+    phone: {
+      header: 'Phone',
+      width: 18,
+      getValue: (emp) => {
+        const phoneVal = emp.phone || emp.contactPhone;
+        if (Array.isArray(phoneVal)) {
+          return phoneVal.filter(Boolean).join(', ');
+        }
+        return phoneVal || '';
+      }
+    },
+    department: {
+      header: 'Department',
+      width: 22,
+      getValue: (emp) => emp.department?.department || emp.department?.name || ''
+    },
+    role: {
+      header: 'Role',
+      width: 18,
+      getValue: (emp) => emp.account?.role || emp.role || ''
+    },
+    status: {
+      header: 'Status',
+      width: 14,
+      getValue: (emp) => normalizeStatus(emp.status)
+    }
+  };
+
+  if (exportType === 'excel') {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Employees');
+
+    worksheet.columns = exportColumns.map((key) => ({
+      header: columnDefinitions[key].header,
+      key,
+      width: columnDefinitions[key].width
+    }));
+
+    normalizedEmployees.forEach((emp) => {
+      const row = {};
+      exportColumns.forEach((key) => {
+        row[key] = columnDefinitions[key].getValue(emp);
+      });
+      worksheet.addRow(row);
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="employees.xlsx"');
+
+    await workbook.xlsx.write(res);
+    return res.end();
+  }
+
+  // Default to PDF export
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="employees.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  doc.pipe(res);
+
+  doc.fontSize(16).text('Employee List', { align: 'center' });
+  doc.moveDown();
+
+  normalizedEmployees.forEach((emp, index) => {
+    exportColumns.forEach((key) => {
+      const value = columnDefinitions[key].getValue(emp) || '-';
+      doc.fontSize(11).text(`${columnDefinitions[key].header}: ${value}`);
+    });
+
+    if (index < normalizedEmployees.length - 1) {
+      doc.moveDown();
+    }
+  });
+
+  doc.end();
 });
 
 /**
@@ -599,7 +917,7 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
 
   const filter = {
     isDeleted: { $ne: true },
-    status: 'Active'
+    status: 'Active',
   };
 
   if (search && search.trim()) {
@@ -607,7 +925,7 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
       { firstName: { $regex: search, $options: 'i' } },
       { lastName: { $regex: search, $options: 'i' } },
       { fullName: { $regex: search, $options: 'i' } },
-      { employeeId: { $regex: search, $options: 'i' } }
+      { employeeId: { $regex: search, $options: 'i' } },
     ];
   }
 
@@ -615,6 +933,7 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
     { $match: filter },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
@@ -629,13 +948,13 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
         from: 'departments',
         localField: 'departmentObjId',
         foreignField: '_id',
-        as: 'departmentInfo'
-      }
+        as: 'departmentInfo',
+      },
     },
     {
       $addFields: {
-        department: { $arrayElemAt: ['$departmentInfo', 0] }
-      }
+        department: { $arrayElemAt: ['$departmentInfo', 0] },
+      },
     },
     {
       $project: {
@@ -646,10 +965,12 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
         fullName: 1,
         departmentId: 1,
         department: '$department.department',
-        status: 1
-      }
+        status: 1,
+        role: 1,
+        account: 1,
+      },
     },
-    { $sort: { firstName: 1, lastName: 1 } }
+    { $sort: { firstName: 1, lastName: 1 } },
   ];
 
   const employees = await collections.employees.aggregate(pipeline).toArray();
@@ -707,6 +1028,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     { $match: { _id: new ObjectId(id) } },
     {
       $addFields: {
+        // Handle both departmentId (string) and department (ObjectId) field names
         departmentObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$departmentId', null] }, { $ne: ['$departmentId', ''] }] },
@@ -714,6 +1036,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle both designationId (string) and designation (ObjectId) field names
         designationObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$designationId', null] }, { $ne: ['$designationId', ''] }] },
@@ -721,6 +1044,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle reportingTo as both string and ObjectId
         reportingToObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$reportingTo', null] }, { $ne: ['$reportingTo', ''] }] },
@@ -735,16 +1059,16 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         from: 'departments',
         localField: 'departmentObjId',
         foreignField: '_id',
-        as: 'departmentInfo'
-      }
+        as: 'departmentInfo',
+      },
     },
     {
       $lookup: {
         from: 'designations',
         localField: 'designationObjId',
         foreignField: '_id',
-        as: 'designationInfo'
-      }
+        as: 'designationInfo',
+      },
     },
     {
       $lookup: {
@@ -754,15 +1078,16 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
           {
             $match: {
               $expr: { $eq: ['$_id', '$$reportingToObjId'] },
-              isDeleted: { $ne: true }  // Exclude deleted managers
-            }
-          }
+              isDeleted: { $ne: true }, // Exclude deleted managers
+            },
+          },
         ],
-        as: 'reportingToInfo'
-      }
+        as: 'reportingToInfo',
+      },
     },
     {
       $addFields: {
+        // Handle shiftId as both string and ObjectId
         shiftObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$shiftId', null] }, { $ne: ['$shiftId', ''] }] },
@@ -770,6 +1095,7 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
             else: null
           }
         },
+        // Handle batchId as both string and ObjectId
         batchObjId: {
           $cond: {
             if: { $and: [{ $ne: ['$batchId', null] }, { $ne: ['$batchId', ''] }] },
@@ -784,16 +1110,16 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         from: 'shifts',
         localField: 'shiftObjId',
         foreignField: '_id',
-        as: 'shiftInfo'
-      }
+        as: 'shiftInfo',
+      },
     },
     {
       $lookup: {
         from: 'batches',
         localField: 'batchObjId',
         foreignField: '_id',
-        as: 'batchInfo'
-      }
+        as: 'batchInfo',
+      },
     },
     {
       $addFields: {
@@ -807,18 +1133,18 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
           $cond: {
             if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
             then: '$profileImage',
-            else: getSystemDefaultAvatarUrl()
-          }
+            else: getSystemDefaultAvatarUrl(),
+          },
         },
         // Add avatarUrl field for frontend compatibility (same as profileImage)
         avatarUrl: {
           $cond: {
             if: { $and: [{ $ne: ['$profileImage', null] }, { $ne: ['$profileImage', ''] }] },
             then: '$profileImage',
-            else: getSystemDefaultAvatarUrl()
-          }
-        }
-      }
+            else: getSystemDefaultAvatarUrl(),
+          },
+        },
+      },
     },
     {
       $addFields: {
@@ -827,13 +1153,9 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
           $ifNull: [
             '$fullName',
             {
-              $concat: [
-                { $ifNull: ['$firstName', ''] },
-                ' ',
-                { $ifNull: ['$lastName', ''] }
-              ]
-            }
-          ]
+              $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }],
+            },
+          ],
         },
         // Reporting Manager Name from populated manager
         reportingManagerName: {
@@ -843,11 +1165,11 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
               $concat: [
                 { $ifNull: ['$reportingToManager.firstName', ''] },
                 ' ',
-                { $ifNull: ['$reportingToManager.lastName', ''] }
-              ]
+                { $ifNull: ['$reportingToManager.lastName', ''] },
+              ],
             },
-            else: null
-          }
+            else: null,
+          },
         },
         // Reporting Manager Employee ID from populated manager (for frontend lookups)
         reportingToEmployeeId: {
@@ -876,16 +1198,22 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         shiftColor: { $ifNull: ['$shiftData.color', null] },
         shiftTiming: {
           $cond: {
-            if: { $and: [{ $ne: ['$shiftData', null] }, { $ne: ['$shiftData.startTime', null] }, { $ne: ['$shiftData.endTime', null] }] },
+            if: {
+              $and: [
+                { $ne: ['$shiftData', null] },
+                { $ne: ['$shiftData.startTime', null] },
+                { $ne: ['$shiftData.endTime', null] },
+              ],
+            },
             then: {
               $concat: [
                 { $ifNull: ['$shiftData.startTime', ''] },
                 ' - ',
-                { $ifNull: ['$shiftData.endTime', ''] }
-              ]
+                { $ifNull: ['$shiftData.endTime', ''] },
+              ],
             },
-            else: null
-          }
+            else: null,
+          },
         },
         // Batch information from populated batch
         batchName: { $ifNull: ['$batchData.name', null] },
@@ -900,8 +1228,8 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         religion: '$personal.religion',
         maritalStatus: '$personal.maritalStatus',
         employmentOfSpouse: '$personal.employmentOfSpouse',
-        noOfChildren: '$personal.noOfChildren'
-      }
+        noOfChildren: '$personal.noOfChildren',
+      },
     },
     {
       $project: {
@@ -917,9 +1245,9 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
         shiftInfo: 0,
         batchInfo: 0,
         shiftData: 0,
-        batchData: 0
-      }
-    }
+        batchData: 0,
+      },
+    },
   ];
 
   const results = await collections.employees.aggregate(pipeline).toArray();
@@ -964,7 +1292,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const { permissionsData, ...restEmployeeData } = employeeData;
 
   // Normalize data - use canonical schema structure (root level fields only)
-  // Canonical schema: email, phone, dateOfBirth, gender, address at root level
+  // Canonical schema: email, phone, phoneCode, dateOfBirth, gender, address at root level
   // personal object contains: passport, nationality, religion, maritalStatus, employmentOfSpouse, noOfChildren only
   const normalizedData = {
     ...restEmployeeData,
@@ -973,6 +1301,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
     email: restEmployeeData.email ?? restEmployeeData.contact?.email,
     // Extract phone from root level or contact object (for backward compatibility)
     phone: restEmployeeData.phone ?? restEmployeeData.contact?.phone,
+    // Extract phoneCode from request (country code for phone)
+    phoneCode: restEmployeeData.phoneCode ?? restEmployeeData.contact?.phoneCode ?? '+1',
     // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
     dateOfBirth: restEmployeeData.dateOfBirth ?? restEmployeeData.personal?.birthday,
     // Extract gender from root level or personal.gender (for backward compatibility)
@@ -986,21 +1316,27 @@ export const createEmployee = asyncHandler(async (req, res) => {
 
   // Check if email already exists (use root level email field)
   const existingEmployee = await collections.employees.findOne({
-    email: normalizedWithDates.email
+    email: normalizedWithDates.email,
   });
 
   if (existingEmployee) {
-    throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
+    throw buildValidationError(
+      'email',
+      'This email address is already registered. Please use a different email.'
+    );
   }
 
   // Check if employee code already exists (if provided)
   if (normalizedWithDates.employeeId) {
     const existingCode = await collections.employees.findOne({
-      employeeId: normalizedWithDates.employeeId
+      employeeId: normalizedWithDates.employeeId,
     });
 
     if (existingCode) {
-      throw buildValidationError('employeeId', 'This employee ID is already in use. Please use a different ID.');
+      throw buildValidationError(
+        'employeeId',
+        'This employee ID is already in use. Please use a different ID.'
+      );
     }
   }
 
@@ -1036,7 +1372,11 @@ export const createEmployee = asyncHandler(async (req, res) => {
 
     // If still too short, pad with random numbers
     if (username.length < 4) {
-      username = username + Math.floor(1000 + Math.random() * 9000).toString().substring(0, 4 - username.length);
+      username =
+        username +
+        Math.floor(1000 + Math.random() * 9000)
+          .toString()
+          .substring(0, 4 - username.length);
     }
   }
 
@@ -1049,9 +1389,10 @@ export const createEmployee = asyncHandler(async (req, res) => {
   const createClerkUserWithFallback = async (baseUsername) => {
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const candidate = attempt === 0
-        ? baseUsername
-        : `${baseUsername}-${Math.floor(1000 + Math.random() * 9000)}`.substring(0, 64);
+      const candidate =
+        attempt === 0
+          ? baseUsername
+          : `${baseUsername}-${Math.floor(1000 + Math.random() * 9000)}`.substring(0, 64);
 
       try {
         devLog('[Employee Controller] Creating Clerk user with username:', candidate);
@@ -1067,12 +1408,18 @@ export const createEmployee = asyncHandler(async (req, res) => {
         return createdUser;
       } catch (error) {
         lastError = error;
-        const isUsernameTaken = Array.isArray(error?.errors)
-          && error.errors.some((e) => e.code === 'form_identifier_exists'
-            && ((e.meta && e.meta.paramName === 'username')
-              || (e.message || '').toLowerCase().includes('username')));
+        const isUsernameTaken =
+          Array.isArray(error?.errors) &&
+          error.errors.some(
+            (e) =>
+              e.code === 'form_identifier_exists' &&
+              ((e.meta && e.meta.paramName === 'username') ||
+                (e.message || '').toLowerCase().includes('username'))
+          );
         if (isUsernameTaken) {
-          devError('[Employee Controller] Username already taken in Clerk, retrying with suffix', { candidate });
+          devError('[Employee Controller] Username already taken in Clerk, retrying with suffix', {
+            candidate,
+          });
           continue;
         }
         throw error;
@@ -1093,7 +1440,7 @@ export const createEmployee = asyncHandler(async (req, res) => {
       code: clerkError.code,
       message: clerkError.message,
       errors: clerkError.errors,
-      clerkTraceId: clerkError.clerkTraceId
+      clerkTraceId: clerkError.clerkTraceId,
     });
 
     // Parse Clerk errors and return field-specific errors
@@ -1102,7 +1449,10 @@ export const createEmployee = asyncHandler(async (req, res) => {
         devError('[Employee Controller] Clerk error code:', error.code, 'message:', error.message);
 
         // Email already exists in Clerk
-        if (error.code === 'form_identifier_exists' && error.message.toLowerCase().includes('email')) {
+        if (
+          error.code === 'form_identifier_exists' &&
+          error.message.toLowerCase().includes('email')
+        ) {
           return res.status(400).json({
             success: false,
             error: {
@@ -1110,8 +1460,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
               message: 'This email is already registered.',
               field: 'email',
               details: error.message,
-              requestId: getRequestId(req)
-            }
+              requestId: getRequestId(req),
+            },
           });
         }
 
@@ -1121,11 +1471,12 @@ export const createEmployee = asyncHandler(async (req, res) => {
             success: false,
             error: {
               code: 'PASSWORD_TOO_WEAK',
-              message: 'Password is too weak or has been compromised. Please use a stronger password.',
+              message:
+                'Password is too weak or has been compromised. Please use a stronger password.',
               field: 'password',
               details: error.message,
-              requestId: getRequestId(req)
-            }
+              requestId: getRequestId(req),
+            },
           });
         }
       }
@@ -1139,8 +1490,8 @@ export const createEmployee = asyncHandler(async (req, res) => {
         message: 'Failed to create user account. Please try again.',
         details: clerkError.message,
         requestId: getRequestId(req),
-        clerkTraceId: clerkError.clerkTraceId
-      }
+        clerkTraceId: clerkError.clerkTraceId,
+      },
     });
   }
 
@@ -1157,13 +1508,14 @@ export const createEmployee = asyncHandler(async (req, res) => {
     },
     // Assign default avatar if no profile image provided
     // Support both avatarUrl (from frontend) and profileImage (from API)
-    profileImage: normalizedData.avatarUrl || normalizedData.profileImage || getSystemDefaultAvatarUrl(),
+    profileImage:
+      normalizedData.avatarUrl || normalizedData.profileImage || getSystemDefaultAvatarUrl(),
     profileImagePath: normalizedData.profileImagePath || null,
     createdAt: new Date(),
     updatedAt: new Date(),
     createdBy: user.userId,
     updatedBy: user.userId,
-    status: normalizeStatus(normalizedWithDates.status || 'Active')
+    status: normalizeStatus(normalizedWithDates.status || 'Active'),
   };
 
   // Remove account from normalizedWithDates to prevent it from overwriting our explicitly set account object
@@ -1258,6 +1610,20 @@ export const createEmployee = asyncHandler(async (req, res) => {
     throw new Error('Failed to create employee');
   }
 
+  // Handle Self Reporting: Update reportingTo to the employee's own _id
+  if (restEmployeeData.selfReporting) {
+    try {
+      await collections.employees.updateOne(
+        { _id: result.insertedId },
+        { $set: { reportingTo: result.insertedId.toString() } }
+      );
+      devLog('[Employee Controller] Set self-reporting for employee:', result.insertedId);
+    } catch (selfReportingError) {
+      devError('[Employee Controller] Failed to set self-reporting:', selfReportingError);
+      // Continue anyway - can be fixed later
+    }
+  }
+
   // Create permissions record if provided
   if (permissionsData && (permissionsData.permissions || permissionsData.enabledModules)) {
     try {
@@ -1320,7 +1686,11 @@ export const createEmployee = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.created(io, user.companyId, employee);
   }
 
-  return sendCreated(res, formattedEmployee, 'Employee created successfully. Credentials email sent.');
+  return sendCreated(
+    res,
+    formattedEmployee,
+    'Employee created successfully. Credentials email sent.'
+  );
 });
 
 /**
@@ -1359,22 +1729,41 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  // ⚠️ CRITICAL: Email is connected to Clerk authentication and cannot be updated
-  // Remove email from updateData if provided to prevent accidental updates
+// Check email uniqueness only if email is in the root level (not nested personal data)
   if (updateData.email) {
-    devLog('[Employee Controller] Email update ignored - email is managed by Clerk');
-    delete updateData.email;
+    const newEmail = updateData.email.trim().toLowerCase();
+    const currentEmail = (employee.email || '').trim().toLowerCase();
+
+    devLog('[Email Check] newEmail:', newEmail, 'currentEmail:', currentEmail, 'equal?', newEmail === currentEmail);
+
+    // Only check for duplicates if email is actually changing
+    if (newEmail !== currentEmail) {
+      // Simple case-insensitive email check
+      const emailExists = await collections.employees.countDocuments({
+        email: { $regex: `^${newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+        _id: { $ne: new ObjectId(id) }
+      });
+
+      devLog('[Email Check] Email exists count:', emailExists);
+
+      if (emailExists > 0) {
+        throw buildValidationError('email', 'This email address is already registered. Please use a different email.');
+      }
+    }
   }
 
   // Check employee code uniqueness if being updated
   if (updateData.employeeId && updateData.employeeId !== employee.employeeId) {
     const existingCode = await collections.employees.findOne({
       employeeId: updateData.employeeId,
-      _id: { $ne: new ObjectId(id) }
+      _id: { $ne: new ObjectId(id) },
     });
 
     if (existingCode) {
-      throw buildValidationError('employeeId', 'This employee ID is already in use. Please use a different ID.');
+      throw buildValidationError(
+        'employeeId',
+        'This employee ID is already in use. Please use a different ID.'
+      );
     }
   }
 
@@ -1390,6 +1779,11 @@ export const updateEmployee = asyncHandler(async (req, res) => {
   // Extract phone from root level or contact object (for backward compatibility)
   if (updateData.phone || updateData.contact?.phone) {
     normalizedData.phone = updateData.phone ?? updateData.contact?.phone;
+  }
+
+  // Extract phoneCode from root level or contact object (for backward compatibility)
+  if (updateData.phoneCode !== undefined || updateData.contact?.phoneCode !== undefined) {
+    normalizedData.phoneCode = updateData.phoneCode ?? updateData.contact?.phoneCode;
   }
 
   // Extract dateOfBirth from root level or personal.birthday (for backward compatibility)
@@ -1659,8 +2053,8 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
         isActive: false,  // Also set isActive to false
         deletedAt: new Date(),
         deletedBy: user.userId,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     }
   );
 
@@ -1688,12 +2082,16 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.deleted(io, user.companyId, employee.employeeId, user.userId);
   }
 
-  return sendSuccess(res, {
-    _id: employee._id,
-    employeeId: employee.employeeId,
-    isDeleted: true,
-    deletedAt: new Date()
-  }, 'Employee deleted successfully');
+  return sendSuccess(
+    res,
+    {
+      _id: employee._id,
+      employeeId: employee.employeeId,
+      isDeleted: true,
+      deletedAt: new Date(),
+    },
+    'Employee deleted successfully'
+  );
 });
 
 /**
@@ -1706,7 +2104,14 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
   const { reassignTo } = req.body;
   const user = extractUser(req);
 
-  devLog('[Employee Controller] reassignAndDeleteEmployee - id:', id, 'reassignTo:', reassignTo, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] reassignAndDeleteEmployee - id:',
+    id,
+    'reassignTo:',
+    reassignTo,
+    'companyId:',
+    user.companyId
+  );
 
   if (!ObjectId.isValid(id)) {
     throw buildValidationError('id', 'Invalid employee ID format');
@@ -1717,7 +2122,10 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
   }
 
   if (id === reassignTo) {
-    throw buildValidationError('reassignTo', 'Reassignment employee must be different from the employee being deleted');
+    throw buildValidationError(
+      'reassignTo',
+      'Reassignment employee must be different from the employee being deleted'
+    );
   }
 
   const collections = getTenantCollections(user.companyId);
@@ -1729,18 +2137,27 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  const reassignee = await collections.employees.findOne({ _id: newEmployeeId, isDeleted: { $ne: true } });
+  const reassignee = await collections.employees.findOne({
+    _id: newEmployeeId,
+    isDeleted: { $ne: true },
+  });
   if (!reassignee) {
     throw buildValidationError('reassignTo', 'Reassignment employee not found or inactive');
   }
 
   // Validate same department and designation
   if (reassignee.departmentId?.toString() !== employee.departmentId?.toString()) {
-    throw buildValidationError('reassignTo', 'Reassignment employee must be from the same department');
+    throw buildValidationError(
+      'reassignTo',
+      'Reassignment employee must be from the same department'
+    );
   }
 
   if (reassignee.designationId?.toString() !== employee.designationId?.toString()) {
-    throw buildValidationError('reassignTo', 'Reassignment employee must have the same designation');
+    throw buildValidationError(
+      'reassignTo',
+      'Reassignment employee must have the same designation'
+    );
   }
 
   const session = client.startSession();
@@ -1778,7 +2195,7 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
         lastName: reassignee.lastName || '',
         avatar: reassignee.avatar || reassignee.avatarUrl || 'assets/img/profiles/avatar-01.jpg',
         email: reassignee.contact?.email || reassignee.email || '',
-        role: reassignee.role || 'IT Support Specialist'
+        role: reassignee.role || 'IT Support Specialist',
       };
 
       await collections.tickets.updateMany(
@@ -1823,8 +2240,8 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
             isActive: false,  // Also set isActive to false
             deletedAt: new Date(),
             deletedBy: user.userId,
-            updatedAt: new Date()
-          }
+            updatedAt: new Date(),
+          },
         },
         { session }
       );
@@ -1842,13 +2259,17 @@ export const reassignAndDeleteEmployee = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.deleted(io, user.companyId, employee.employeeId, user.userId);
   }
 
-  return sendSuccess(res, {
-    _id: employee._id,
-    employeeId: employee.employeeId,
-    isDeleted: true,
-    deletedAt: new Date(),
-    reassignedTo: reassignTo
-  }, 'Employee reassigned and deleted successfully');
+  return sendSuccess(
+    res,
+    {
+      _id: employee._id,
+      employeeId: employee.employeeId,
+      isDeleted: true,
+      deletedAt: new Date(),
+      reassignedTo: reassignTo,
+    },
+    'Employee reassigned and deleted successfully'
+  );
 });
 
 /**
@@ -1866,7 +2287,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
 
   // Find employee by clerk user ID (stored in clerkUserId field)
   const employee = await collections.employees.findOne({
-    clerkUserId: user.userId
+    clerkUserId: user.userId,
   });
 
   if (!employee) {
@@ -1895,14 +2316,19 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const rawUpdateData = req.body;
 
-  devLog('[Employee Controller] updateMyProfile - userId:', user.userId, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] updateMyProfile - userId:',
+    user.userId,
+    'companyId:',
+    user.companyId
+  );
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
   // Find employee by clerk user ID (stored in clerkUserId field)
   const employee = await collections.employees.findOne({
-    clerkUserId: user.userId
+    clerkUserId: user.userId,
   });
 
   if (!employee) {
@@ -1916,12 +2342,6 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   // Validate that at least one field remains after sanitization
   if (!sanitizedUpdate || Object.keys(sanitizedUpdate).length === 0) {
     throw buildValidationError('updateData', 'No valid fields to update');
-  }
-
-  // Map avatarUrl to profileImage for compatibility
-  if (sanitizedUpdate.avatarUrl !== undefined) {
-    sanitizedUpdate.profileImage = sanitizedUpdate.avatarUrl;
-    delete sanitizedUpdate.avatarUrl;
   }
 
   // ✅ Extract personal fields from root level and store in personal object
@@ -2020,11 +2440,13 @@ export const getEmployeeReportees = asyncHandler(async (req, res) => {
   }
 
   // Get all reportees (excluding deleted records)
-  const reportees = await collections.employees.find({
-    reportingTo: id,
-    isDeleted: { $ne: true },  // Exclude soft-deleted records
-    status: 'Active'
-  }).toArray();
+  const reportees = await collections.employees
+    .find({
+      reportingTo: id,
+      isDeleted: { $ne: true }, // Exclude soft-deleted records
+      status: 'Active',
+    })
+    .toArray();
 
   // ✅ SECURITY FIX: Apply list DTO to prevent data leakage
   const sanitizedReportees = reportees.map(emp => employeeListDTO(emp, user.role));
@@ -2110,23 +2532,24 @@ export const searchEmployees = asyncHandler(async (req, res) => {
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
-  const employees = await collections.employees.find({
-    isDeleted: { $ne: true },  // Exclude soft-deleted records
-    status: 'Active',
-    $or: [
-      { firstName: { $regex: q, $options: 'i' } },
-      { lastName: { $regex: q, $options: 'i' } },
-      { fullName: { $regex: q, $options: 'i' } },
-      { 'contact.email': { $regex: q, $options: 'i' } },
-      { employeeId: { $regex: q, $options: 'i' } }
-    ]
-  })
+  const employees = await collections.employees
+    .find({
+      isDeleted: { $ne: true }, // Exclude soft-deleted records
+      status: 'Active',
+      $or: [
+        { firstName: { $regex: q, $options: 'i' } },
+        { lastName: { $regex: q, $options: 'i' } },
+        { fullName: { $regex: q, $options: 'i' } },
+        { 'contact.email': { $regex: q, $options: 'i' } },
+        { employeeId: { $regex: q, $options: 'i' } },
+      ],
+    })
     .limit(20)
     .project({
       salary: 0,
       bank: 0,
       emergencyContacts: 0,
-      'account.password': 0
+      'account.password': 0,
     })
     .toArray();
 
@@ -2147,7 +2570,14 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { email, phone } = req.body;
 
-  devLog('[Employee Controller] checkDuplicates - email:', email, 'phone:', phone, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] checkDuplicates - email:',
+    email,
+    'phone:',
+    phone,
+    'companyId:',
+    user.companyId
+  );
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
@@ -2156,7 +2586,7 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
   if (email) {
     const emailExists = await collections.employees.countDocuments({
       'contact.email': email,
-      isDeleted: { $ne: true }  // Exclude soft-deleted records
+      isDeleted: { $ne: true }, // Exclude soft-deleted records
     });
 
     if (emailExists > 0) {
@@ -2165,7 +2595,7 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
         done: false,
         error: 'Email already registered',
         field: 'email',
-        message: 'This email is already registered in the system'
+        message: 'This email is already registered in the system',
       });
     }
   }
@@ -2174,7 +2604,7 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
   if (phone) {
     const phoneExists = await collections.employees.countDocuments({
       'contact.phone': phone,
-      isDeleted: { $ne: true }  // Exclude soft-deleted records
+      isDeleted: { $ne: true }, // Exclude soft-deleted records
     });
 
     if (phoneExists > 0) {
@@ -2183,7 +2613,7 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
         done: false,
         error: 'Phone number already registered',
         field: 'phone',
-        message: 'This phone number is already registered in the system'
+        message: 'This phone number is already registered in the system',
       });
     }
   }
@@ -2200,7 +2630,12 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const { employees } = req.body;
 
-  devLog('[Employee Controller] bulkUploadEmployees - count:', employees?.length, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] bulkUploadEmployees - count:',
+    employees?.length,
+    'companyId:',
+    user.companyId
+  );
 
   if (!employees || !Array.isArray(employees) || employees.length === 0) {
     throw buildValidationError('employees', 'At least one employee is required');
@@ -2216,7 +2651,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
   const results = {
     success: [],
     failed: [],
-    duplicate: []
+    duplicate: [],
   };
 
   const loginLink = process.env.DOMAIN
@@ -2231,20 +2666,20 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
       if (!email) {
         results.failed.push({
           email: 'N/A',
-          reason: 'Email is required'
+          reason: 'Email is required',
         });
         continue;
       }
 
       // Check for duplicate email
       const existing = await collections.employees.findOne({
-        'contact.email': email
+        'contact.email': email,
       });
 
       if (existing) {
         results.duplicate.push({
           email: email,
-          reason: 'Email already exists'
+          reason: 'Email already exists',
         });
         continue;
       }
@@ -2279,10 +2714,14 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         clerkUserId = createdUser.id;
         devLog('[Employee Controller] Bulk upload - Clerk user created for:', email);
       } catch (clerkError) {
-        devError('[Employee Controller] Bulk upload - Failed to create Clerk user for:', email, clerkError);
+        devError(
+          '[Employee Controller] Bulk upload - Failed to create Clerk user for:',
+          email,
+          clerkError
+        );
         results.failed.push({
           email: email,
-          reason: `Clerk user creation failed: ${clerkError.message}`
+          reason: `Clerk user creation failed: ${clerkError.message}`,
         });
         continue;
       }
@@ -2309,7 +2748,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         updatedAt: new Date(),
         createdBy: user.userId,
         updatedBy: user.userId,
-        status: normalizeStatus(empData.status || 'Active')
+        status: normalizeStatus(empData.status || 'Active'),
       };
 
       // ✅ CRITICAL: Move nationality from root to personal.nationality for bulk upload
@@ -2332,7 +2771,7 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         firstName: empData.firstName,
         lastName: empData.lastName,
         companyName: empData.companyName || 'Your Company',
-      }).catch(emailError => {
+      }).catch((emailError) => {
         devError('[Employee Controller] Bulk upload - Failed to send email to:', email, emailError);
       });
 
@@ -2340,17 +2779,21 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
         _id: result.insertedId,
         email: email,
         name: `${empData.firstName} ${empData.lastName}`,
-        passwordSent: true
+        passwordSent: true,
       });
     } catch (error) {
       results.failed.push({
         email: empData.email || empData.contact?.email || 'N/A',
-        reason: error.message
+        reason: error.message,
       });
     }
   }
 
-  return sendSuccess(res, results, `Bulk upload completed: ${results.success.length} created, ${results.duplicate.length} duplicates, ${results.failed.length} failed`);
+  return sendSuccess(
+    res,
+    results,
+    `Bulk upload completed: ${results.success.length} created, ${results.duplicate.length} duplicates, ${results.failed.length} failed`
+  );
 });
 
 /**
@@ -2361,14 +2804,19 @@ export const bulkUploadEmployees = asyncHandler(async (req, res) => {
 export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   const user = extractUser(req);
 
-  devLog('[Employee Controller] syncMyEmployeeRecord - userId:', user.userId, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] syncMyEmployeeRecord - userId:',
+    user.userId,
+    'companyId:',
+    user.companyId
+  );
 
   // Get tenant collections
   const collections = getTenantCollections(user.companyId);
 
   // Check if employee already exists
   const existingEmployee = await collections.employees.findOne({
-    clerkUserId: user.userId
+    clerkUserId: user.userId,
   });
 
   if (existingEmployee) {
@@ -2398,7 +2846,7 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   // Check if email already exists (link to existing employee)
   const emailExists = await collections.employees.findOne({
     email: email,
-    isDeleted: { $ne: true }
+    isDeleted: { $ne: true },
   });
 
   if (emailExists) {
@@ -2408,8 +2856,8 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
       {
         $set: {
           clerkUserId: user.userId,
-          updatedAt: new Date()
-        }
+          updatedAt: new Date(),
+        },
       }
     );
     // ✅ SECURITY FIX: Apply detail DTO with self-access
@@ -2445,7 +2893,7 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
     role: role,
     account: {
       userName: username,
-      role: role.charAt(0).toUpperCase() + role.slice(1)
+      role: role.charAt(0).toUpperCase() + role.slice(1),
     },
     profileImage: clerkUser.imageUrl || '',
     createdAt: new Date(),
@@ -2454,7 +2902,7 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
     updatedBy: user.userId,
     status: 'Active',
     isActive: true,
-    isDeleted: false
+    isDeleted: false,
   };
 
   const result = await collections.employees.insertOne(employeeToInsert);
@@ -2479,7 +2927,12 @@ export const uploadEmployeeProfileImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  devLog('[Employee Controller] uploadEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] uploadEmployeeProfileImage - id:',
+    id,
+    'companyId:',
+    user.companyId
+  );
 
   // Check if file was uploaded
   if (!req.file) {
@@ -2521,8 +2974,8 @@ export const uploadEmployeeProfileImage = asyncHandler(async (req, res) => {
         profileImagePath: imagePath,
         profileImage: imageUrl,
         updatedAt: new Date(),
-        updatedBy: user.userId
-      }
+        updatedBy: user.userId,
+      },
     }
   );
 
@@ -2539,10 +2992,14 @@ export const uploadEmployeeProfileImage = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.updated(io, user.companyId, updatedEmployee);
   }
 
-  return sendSuccess(res, {
-    profileImage: imageUrl,
-    profileImagePath: imagePath
-  }, 'Profile image uploaded successfully');
+  return sendSuccess(
+    res,
+    {
+      profileImage: imageUrl,
+      profileImagePath: imagePath,
+    },
+    'Profile image uploaded successfully'
+  );
 });
 
 /**
@@ -2554,7 +3011,12 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  devLog('[Employee Controller] deleteEmployeeProfileImage - id:', id, 'companyId:', user.companyId);
+  devLog(
+    '[Employee Controller] deleteEmployeeProfileImage - id:',
+    id,
+    'companyId:',
+    user.companyId
+  );
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -2600,8 +3062,8 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
         profileImagePath: null, // Default avatar is served as static, not uploaded
         profileImage: defaultAvatarUrl,
         updatedAt: new Date(),
-        updatedBy: user.userId
-      }
+        updatedBy: user.userId,
+      },
     }
   );
 
@@ -2618,11 +3080,15 @@ export const deleteEmployeeProfileImage = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.updated(io, user.companyId, updatedEmployee);
   }
 
-  return sendSuccess(res, {
-    deleted: !!deletedPath,
-    previousPath: deletedPath,
-    reassignedTo: defaultAvatarUrl
-  }, 'Profile image deleted and reassigned to default avatar');
+  return sendSuccess(
+    res,
+    {
+      deleted: !!deletedPath,
+      previousPath: deletedPath,
+      reassignedTo: defaultAvatarUrl,
+    },
+    'Profile image deleted and reassigned to default avatar'
+  );
 });
 
 /**
@@ -2639,7 +3105,7 @@ export const serveEmployeeProfileImage = asyncHandler(async (req, res) => {
   if (!ObjectId.isValid(id)) {
     return res.status(404).json({
       success: false,
-      error: 'Invalid employee ID'
+      error: 'Invalid employee ID',
     });
   }
 
@@ -2647,7 +3113,7 @@ export const serveEmployeeProfileImage = asyncHandler(async (req, res) => {
   // This endpoint can be used to track image views or add caching headers
   return res.status(200).json({
     success: true,
-    message: 'Use /uploads/employee-images/:filename for direct file access'
+    message: 'Use /uploads/employee-images/:filename for direct file access',
   });
 });
 
@@ -2818,7 +3284,5 @@ export default {
   syncMyEmployeeRecord,
   uploadEmployeeProfileImage,
   deleteEmployeeProfileImage,
-  serveEmployeeProfileImage,
-  sendEmployeeCredentials,
-  changeEmployeePassword,
+  serveEmployeeProfileImage
 };

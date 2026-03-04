@@ -207,9 +207,7 @@ import SubContractList from '../projects/subcontract/subcontractlist';
 import Task from '../projects/task/task';
 import TaskBoard from '../projects/task/task-board';
 import TaskDetails from '../projects/task/taskdetails';
-import CandidateGrid from '../recruitment/candidates/candidategrid';
-import CandidateKanban from '../recruitment/candidates/candidatekanban';
-import CandidatesList from '../recruitment/candidates/candidatelist';
+import Candidates from '../recruitment/candidates/candidates';
 import JobGrid from '../recruitment/jobs/jobgrid';
 import JobList from '../recruitment/jobs/joblist';
 import RefferalList from '../recruitment/refferal/refferallist';
@@ -278,8 +276,8 @@ import Permission from '../userManagement/permission';
 import RolesPermissions from '../userManagement/rolesPermissions';
 
 import Invoices from '../finance-accounts/sales/invoices';
-import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import AttendanceEmployee from '../hrm/attendance/attendance_employee';
+import AttendanceAdmin from '../hrm/attendance/attendanceadmin';
 import BatchesList from '../hrm/attendance/batchesList';
 import LeaveAdmin from '../hrm/attendance/leaves/leaveAdmin';
 import LeaveCalendar from '../hrm/attendance/leaves/leaveCalendar';
@@ -295,6 +293,7 @@ import Promotion from '../hrm/promotion';
 import Resignation from '../hrm/resignation';
 import Termination from '../hrm/termination';
 import Companies from '../super-admin/companies';
+import CompanyDetailsPage from '../super-admin/companies/company-details';
 import Domain from '../super-admin/domin';
 import { default as PackageGrid, default as Packages } from '../super-admin/packages/packagelist';
 import PurchaseTransaction from '../super-admin/purchase-transaction';
@@ -326,7 +325,7 @@ export const publicRoutes = [
     path: routes.employeeDashboard,
     element: <EmployeeDashboard />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'leads'],
+    roles: ['employee', 'hr', 'manager', 'leads'],
   },
   {
     path: routes.leadsDashboard,
@@ -1454,7 +1453,7 @@ export const publicRoutes = [
   {
     path: routes.adminProfile,
     element: <AdminProfilePage />,
-    roles: ['admin'],
+    roles: ['admin', 'superadmin'],
   },
   {
     path: routes.gallery,
@@ -1604,20 +1603,8 @@ export const publicRoutes = [
     roles: ['admin', 'hr', 'manager', 'superadmin'],
   },
   {
-    path: routes.candidatesGrid,
-    element: <CandidateGrid />,
-    route: Route,
-    roles: ['admin', 'hr', 'manager', 'superadmin'],
-  },
-  {
-    path: routes.candidateslist,
-    element: <CandidatesList />,
-    route: Route,
-    roles: ['admin', 'hr', 'manager', 'superadmin'],
-  },
-  {
-    path: routes.candidateskanban,
-    element: <CandidateKanban />,
+    path: routes.candidates,
+    element: <Candidates />,
     route: Route,
     roles: ['admin', 'hr', 'manager', 'superadmin'],
   },
@@ -1829,7 +1816,7 @@ export const publicRoutes = [
     path: routes.leaveemployee,
     element: <LeaveEmployee />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'superadmin'],
+    roles: ['employee', 'hr', 'manager', 'superadmin'],
   },
   {
     path: routes.leavemanager,
@@ -1865,7 +1852,7 @@ export const publicRoutes = [
     path: routes.attendanceemployee,
     element: <AttendanceEmployee />,
     route: Route,
-    roles: ['employee', 'admin', 'hr', 'manager', 'superadmin'],
+    roles: ['employee', 'hr', 'manager', 'superadmin'],
   },
   {
     path: routes.timesheet,
@@ -1992,6 +1979,12 @@ export const publicRoutes = [
   {
     path: routes.superAdminCompanies,
     element: <Companies />,
+    route: Route,
+    roles: ['superadmin'],
+  },
+  {
+    path: routes.superAdminCompanyDetails,
+    element: <CompanyDetailsPage />,
     route: Route,
     roles: ['superadmin'],
   },

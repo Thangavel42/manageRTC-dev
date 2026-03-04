@@ -5,8 +5,18 @@ import { ChatUsersController } from '../controllers/chat/users.controller.js';
 import employeeController from '../controllers/employee/employee.controller.js';
 import notesController from '../controllers/employee/notes.controller.js';
 import hrDashboardController from '../controllers/hr/hr.controller.js';
+import trainersController from '../controllers/hr/trainers.controller.js';
+import trainingListController from '../controllers/hr/trainingList.controller.js';
+import trainingTypesController from '../controllers/hr/trainingTypes.controller.js';
+import {
+  default as jobController,
+  default as jobsController,
+} from '../controllers/jobs/jobs.controllers.js';
 import kanbanController from '../controllers/kaban/kaban.controller.js';
 import leadController from '../controllers/lead/lead.controller.js';
+import profileController from '../controllers/pages/profilepage.controllers.js';
+import goalTrackingController from '../controllers/performance/goalTracking.controller.js';
+import goalTypeController from '../controllers/performance/goalType.controller.js';
 import pipelineController from '../controllers/pipeline/pipeline.controllers.js';
 import projectController from '../controllers/project/project.controller.js';
 import projectNotesController from '../controllers/project/project.notes.controller.js';
@@ -15,18 +25,6 @@ import superAdminController from '../controllers/superadmin/superadmin.controlle
 import taskController from '../controllers/task/task.controller.js';
 import ticketsSocketController from '../controllers/tickets/tickets.socket.controller.js';
 import userSocketController from '../controllers/user/user.socket.controller.js';
-
-import candidateController from '../controllers/candidates/candidates.controllers.js';
-import trainersController from '../controllers/hr/trainers.controller.js';
-import trainingListController from '../controllers/hr/trainingList.controller.js';
-import trainingTypesController from '../controllers/hr/trainingTypes.controller.js';
-import {
-  default as jobController,
-  default as jobsController,
-} from '../controllers/jobs/jobs.controllers.js';
-import profileController from '../controllers/pages/profilepage.controllers.js';
-import goalTrackingController from '../controllers/performance/goalTracking.controller.js';
-import goalTypeController from '../controllers/performance/goalType.controller.js';
 
 import performanceAppraisalController from '../controllers/performance/performanceAppraisal.controller.js';
 import performanceIndicatorController from '../controllers/performance/performanceIndicator.controller.js';
@@ -62,12 +60,10 @@ const router = (socket, io, role) => {
       kanbanController(socket, io);
 
       pipelineController(socket, io);
-      candidateController(socket, io);
       jobController(socket, io);
       profileController(socket, io);
       notesController(socket, io);
       ticketsSocketController(socket, io);
-      candidateController(socket, io);
       jobsController(socket, io);
       trainersController(socket, io);
       trainingTypesController(socket, io);
@@ -94,7 +90,6 @@ const router = (socket, io, role) => {
       notesController(socket, io);
       ticketsSocketController(socket, io);
       jobsController(socket, io);
-      candidateController(socket, io);
       kanbanController(socket, io);
 
       performanceIndicatorController(socket, io);

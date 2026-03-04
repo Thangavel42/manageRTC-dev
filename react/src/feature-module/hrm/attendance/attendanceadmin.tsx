@@ -16,8 +16,8 @@ import { all_routes } from "../../router/all_routes";
 const AttendanceAdmin = () => {
   // Role-based access control
   const { role } = useAuth();
-  // Show switch only if user has access to both attendance pages (admin page is only for admin/hr/superadmin)
-  const showPageSwitch = ['admin', 'hr', 'superadmin'].includes(role);
+  // Show switch only if user has access to both attendance pages (hr and superadmin have access to both)
+  const showPageSwitch = ['hr', 'superadmin'].includes(role);
 
   // API Hook
   const {
@@ -116,10 +116,10 @@ const AttendanceAdmin = () => {
       render: (text: string) => (
         <span
           className={`badge ${text === "Present" || text === "Late"
-              ? "badge-success-transparent"
-              : text === "Absent"
-                ? "badge-danger-transparent"
-                : "badge-warning-transparent"
+            ? "badge-success-transparent"
+            : text === "Absent"
+              ? "badge-danger-transparent"
+              : "badge-warning-transparent"
             } d-inline-flex align-items-center`}
         >
           <i className="ti ti-point-filled me-1" />
@@ -154,11 +154,11 @@ const AttendanceAdmin = () => {
       render: (text: string, record: any) => (
         <span
           className={`badge d-inline-flex align-items-center badge-sm ${parseFloat(record.ProductionHours) < 8
-              ? "badge-danger"
-              : parseFloat(record.ProductionHours) >= 8 &&
-                parseFloat(record.ProductionHours) <= 9
-                ? "badge-success"
-                : "badge-info"
+            ? "badge-danger"
+            : parseFloat(record.ProductionHours) >= 8 &&
+              parseFloat(record.ProductionHours) <= 9
+              ? "badge-success"
+              : "badge-info"
             }`}
         >
           <i className="ti ti-clock-hour-11 me-1"></i>
