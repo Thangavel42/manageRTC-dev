@@ -37,6 +37,9 @@ export interface Attendance {
   attendanceId?: string;
   employeeId?: string;
   employeeName?: string;
+  employeeAvatar?: string;
+  employeePosition?: string;
+  employeeDepartment?: string;
   date: string;
   clockIn?: {
     time: string;
@@ -171,8 +174,8 @@ export const toTableFormat = (attendance: Attendance): any => {
   return {
     key: attendance._id,
     Employee: attendance.employeeName || 'Unknown',
-    Image: 'user-49.jpg', // TODO: Get from employee data
-    Role: 'Employee', // TODO: Get from employee data
+    Image: attendance.employeeAvatar || 'assets/img/profiles/avatar-01.jpg',
+    Role: attendance.employeePosition || 'Employee',
     Status: attendance.status.charAt(0).toUpperCase() + attendance.status.slice(1).replace('-', ' '),
     CheckIn: attendance.clockIn?.time ? formatAttendanceTime(attendance.clockIn.time) : '-',
     CheckOut: attendance.clockOut?.time ? formatAttendanceTime(attendance.clockOut.time) : '-',
