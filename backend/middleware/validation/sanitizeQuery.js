@@ -224,11 +224,23 @@ export const sanitizeQuery = (options = {}) => {
       }
 
       // Step 5: Update req.query with sanitized values
-      req.query = value || sanitized;
+      // Note: req.query is read-only in Express 4.17+, so we modify in-place
+      const finalValue = value || sanitized;
+
+      // Keep original for debugging
+      req.queryOriginal = { ...req.query };
+
+      // Clear existing properties
+      for (const key in req.query) {
+        delete req.query[key];
+      }
+      // Add sanitized properties
+      for (const key in finalValue) {
+        req.query[key] = finalValue[key];
+      }
 
       // Step 6: Add sanitization metadata to request
       req.querySanitized = true;
-      req.queryOriginal = req.query; // Keep original for debugging
 
       next();
     } catch (err) {
