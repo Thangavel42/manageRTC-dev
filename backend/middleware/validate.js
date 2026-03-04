@@ -1610,7 +1610,14 @@ export const promotionSchemas = {
       'any.required': 'Promotion date is required',
     }),
     promotionType: Joi.string()
-      .valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other')
+      .valid(
+        'Performance Based',
+        'Experience Based',
+        'Qualification Based',
+        'Special Achievement',
+        'Regular',
+        'Other'
+      )
       .default('Regular')
       .optional(),
     salaryChange: Joi.object({
@@ -1673,7 +1680,16 @@ export const promotionSchemas = {
       designationId: commonSchemas.objectId.optional(),
     }).optional(),
     promotionDate: commonSchemas.isoDate.optional(),
-    promotionType: Joi.string().valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other').optional(),
+    promotionType: Joi.string()
+      .valid(
+        'Performance Based',
+        'Experience Based',
+        'Qualification Based',
+        'Special Achievement',
+        'Regular',
+        'Other'
+      )
+      .optional(),
     salaryChange: Joi.object({
       previousSalary: Joi.number().min(0).optional(),
       newSalary: Joi.number().min(0).optional(),
@@ -1712,9 +1728,8 @@ export const resignationSchemas = {
     departmentId: commonSchemas.objectId.required().messages({
       'any.required': 'Department is required',
     }),
-    reportingManagerId: commonSchemas.objectId.required().messages({
-      'any.required': 'Reporting manager is required',
-    }),
+    reportingManagerId: commonSchemas.objectId.allow(null, '').optional(),
+    approvalFlow: Joi.string().valid('manager_then_hr', 'hr_only').optional(),
     resignationDate: commonSchemas.ddmmyyyy.optional().allow(null, '').messages({
       'date.base': 'Resignation date must be in DD-MM-YYYY format',
     }),
@@ -1788,7 +1803,8 @@ export const resignationSchemas = {
     resignationDate: commonSchemas.ddmmyyyy.optional(),
     noticeDate: commonSchemas.ddmmyyyy.optional(),
     departmentId: commonSchemas.objectId.optional(),
-    reportingManagerId: commonSchemas.objectId.optional(),
+    reportingManagerId: commonSchemas.objectId.allow(null, '').optional(),
+    approvalFlow: Joi.string().valid('manager_then_hr', 'hr_only').optional(),
     noticePeriodDays: Joi.number().integer().min(0).max(180).optional(),
     reason: Joi.string().max(500).trim().optional(),
     notes: Joi.string().max(2000).allow('').optional(),
