@@ -99,6 +99,39 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+// Monthly Attendance Summary Types
+export interface MonthlySummaryData {
+  period: {
+    month: number;
+    year: number;
+  };
+  companyStats: {
+    totalEmployees: number;
+    avgAttendancePercentage: string;
+    totalPresent: number;
+    totalAbsent: number;
+    totalWorkHours: string;
+  };
+  departmentSummaries: Array<{
+    department: string;
+    totalEmployees: number;
+    avgAttendancePercentage: string;
+    totalPresent: number;
+    totalAbsent: number;
+  }>;
+  employeeSummaries: Array<{
+    employeeId: string;
+    name: string;
+    department: string;
+    present: number;
+    absent: number;
+    halfDay: number;
+    leave: number;
+    totalWorkHours: string;
+    attendancePercentage: string;
+  }>;
+}
+
 /**
  * Format date for display
  */
@@ -161,6 +194,7 @@ export const useAttendanceREST = () => {
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [needsEmployeeSync, setNeedsEmployeeSync] = useState(false);
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryData | null>(null);
 
   /**
    * Sync employee record (create if not exists)
@@ -477,6 +511,36 @@ export const useAttendanceREST = () => {
   }, []);
 
   /**
+   * Fetch monthly attendance summary
+   * @param month - Month (1-12)
+   * @param year - Year (e.g., 2024)
+   */
+  const fetchMonthlySummary = useCallback(async (month?: number, year?: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params: any = {};
+      if (month) params.month = month;
+      if (year) params.year = year;
+
+      const response: ApiResponse<MonthlySummaryData> = await get('/reports/attendance/monthly-summary', { params });
+
+      if (response.success && response.data) {
+        setMonthlySummary(response.data);
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to fetch monthly summary');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch monthly summary';
+      setError(errorMessage);
+      message.error(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Bulk attendance action
    */
   const bulkAction = useCallback(async (action: string, attendanceIds: string[], data?: any): Promise<boolean> => {
@@ -512,6 +576,7 @@ export const useAttendanceREST = () => {
     error,
     pagination,
     needsEmployeeSync,
+    monthlySummary,
 
     // Methods
     fetchAttendance,
@@ -524,6 +589,7 @@ export const useAttendanceREST = () => {
     fetchAttendanceByDateRange,
     fetchEmployeeAttendance,
     fetchStats,
+    fetchMonthlySummary,
     bulkAction,
     syncEmployeeRecord
   };

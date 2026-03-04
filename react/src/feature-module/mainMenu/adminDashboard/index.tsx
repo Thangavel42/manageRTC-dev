@@ -1344,19 +1344,9 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                   <div className="d-flex align-items-center flex-wrap mb-1">
-                    <Link to={routes.projectlist} className="btn btn-secondary btn-md me-2 mb-2">
+                    <Link to={routes.projectlist} className="btn btn-secondary btn-md mb-2">
                       <i className="ti ti-square-rounded-plus me-1" />
                       Add Project
-                    </Link>
-                    <Link
-                      to="#"
-                      className="btn btn-primary btn-md mb-2"
-                      data-bs-toggle="modal"
-                      data-inert={true}
-                      data-bs-target="#add_leaves"
-                    >
-                      <i className="ti ti-square-rounded-plus me-1" />
-                      Add Requests
                     </Link>
                   </div>
                 </div>
@@ -2112,7 +2102,7 @@ const AdminDashboard = () => {
                           </div>
                         </div>
                         <Link
-                          to={routes.leaveadmin}
+                          to={routes.attendancereport}
                           className="fs-13 link-primary text-decoration-underline mb-2"
                         >
                           View Details
@@ -2315,7 +2305,7 @@ const AdminDashboard = () => {
                             </div>
                           </div>
                         ))}
-                      <Link to={routes.attendancereport} className="btn btn-light btn-md w-100">
+                      <Link to="/attendance-admin" className="btn btn-light btn-md w-100">
                         View All Attendance
                       </Link>
                     </div>
