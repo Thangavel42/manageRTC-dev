@@ -230,12 +230,14 @@ export const sanitizeQuery = (options = {}) => {
       // Keep original for debugging
       req.queryOriginal = { ...req.query };
 
-      // Clear existing properties
-      for (const key in req.query) {
+      // Clear existing properties using Object.keys() to avoid for...in issues
+      const keysToDelete = Object.keys(req.query);
+      for (const key of keysToDelete) {
         delete req.query[key];
       }
       // Add sanitized properties
-      for (const key in finalValue) {
+      const keysToAdd = Object.keys(finalValue);
+      for (const key of keysToAdd) {
         req.query[key] = finalValue[key];
       }
 
