@@ -440,7 +440,8 @@ export const requireRole = (...roles) => {
         success: false,
         error: {
           code: 'FORBIDDEN',
-          message: `Insufficient permissions. Required roles: ${roles.join(', ')}`,
+          // Keep the response minimal to avoid propagating role details to clients
+          message: 'Forbidden',
           requestId: req.id || 'no-id',
         },
       });
