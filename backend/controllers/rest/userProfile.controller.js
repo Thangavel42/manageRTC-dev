@@ -10,20 +10,19 @@ import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
 import { getsuperadminCollections, getTenantCollections } from '../../config/db.js';
 import {
-    asyncHandler,
-    buildForbiddenError,
-    buildNotFoundError,
-    buildValidationError,
+  asyncHandler,
+  buildForbiddenError,
+  buildNotFoundError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
 import otpService from '../../services/otp/otp.service.js';
 import {
-    extractUser,
-    sendSuccess
+  extractUser,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import { getSystemDefaultAvatarUrl, isValidAvatar } from '../../utils/avatarUtils.js';
 import { sendPasswordChangedEmail } from '../../utils/emailer.js';
-import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js';  // ✅ SECURITY FIX: Mass assignment prevention
-import otpService from '../../services/otp/otp.service.js';
+import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js'; // ✅ SECURITY FIX: Mass assignment prevention
 import { devError, devLog } from '../../utils/logger.js';
 
 /**

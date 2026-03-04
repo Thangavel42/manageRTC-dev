@@ -11,29 +11,29 @@ import PDFDocument from 'pdfkit';
 import { client, getTenantCollections } from '../../config/db.js';
 import { deleteUploadedFile, getPublicUrl } from '../../config/multer.config.js';
 import {
-    asyncHandler,
-    buildNotFoundError,
-    buildValidationError
+  asyncHandler,
+  buildNotFoundError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
+import { createAuditLog } from '../../services/audit/auditLog.service.js'; // ✅ SECURITY FIX - Phase 6: Audit logging
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
 import {
-    buildPagination,
-    extractUser,
-    getRequestId,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  getRequestId,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import {
-    canUserDeleteAvatar,
-    getSystemDefaultAvatarUrl
+  canUserDeleteAvatar,
+  getSystemDefaultAvatarUrl
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail, sendPasswordChangedEmail } from '../../utils/emailer.js';
-import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js';  // ✅ SECURITY FIX: Mass assignment prevention
-import { employeeListDTO, employeeDetailDTO, employeeReferenceDTO } from '../../utils/responseDTO.js';  // ✅ SECURITY FIX: Data leakage prevention
+import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js'; // ✅ SECURITY FIX: Mass assignment prevention
 import { devError, devLog } from '../../utils/logger.js';
-import { createAuditLog } from '../../services/audit/auditLog.service.js';  // ✅ SECURITY FIX - Phase 6: Audit logging
+import { employeeDetailDTO, employeeListDTO, employeeReferenceDTO } from '../../utils/responseDTO.js'; // ✅ SECURITY FIX: Data leakage prevention
 import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**

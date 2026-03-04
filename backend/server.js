@@ -2,22 +2,20 @@ import 'dotenv/config';
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import compression from 'compression';
-import cookieParser from 'cookie-parser';  // ✅ SECURITY FIX - Phase 2: CSRF protection
+import cookieParser from 'cookie-parser'; // ✅ SECURITY FIX - Phase 2: CSRF protection
 import cors from 'cors';
 import express from 'express';
-import helmet from 'helmet';  // ✅ SECURITY FIX - Phase 6: Security headers
-import { attachRequestId } from './middleware/auth.js';
-import { apiLimiter } from './middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2
-import { conditionalCsrf, csrfErrorHandler } from './middleware/csrf.js';  // ✅ SECURITY FIX - Phase 2
 import fs from 'fs';
+import helmet from 'helmet'; // ✅ SECURITY FIX - Phase 6: Security headers
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
-import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { attachRequestId } from './middleware/auth.js';
+import { conditionalCsrf, csrfErrorHandler } from './middleware/csrf.js'; // ✅ SECURITY FIX - Phase 2
+import { apiLimiter } from './middleware/rateLimiting.js'; // ✅ SECURITY FIX - Phase 2
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -25,8 +23,9 @@ import goalTrackingRoutes from './routes/performance/goalTracking.routes.js';
 import goalTypeRoutes from './routes/performance/goalType.routes.js';
 import socialFeedRoutes from './routes/socialfeed.routes.js';
 import ticketRoutes from './routes/tickets.routes.js';
+import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { socketHandler } from './socket/index.js';
-import logger from './utils/logger.js';  // ✅ SECURITY FIX - Phase 6: Structured logging
+import logger from './utils/logger.js'; // ✅ SECURITY FIX - Phase 6: Structured logging
 
 // Swagger/OpenAPI Documentation
 import { specs, swaggerUi } from './config/swagger.js';
@@ -48,6 +47,7 @@ import batchRoutes from './routes/api/batches.js';
 import candidatesRoutes from './routes/api/candidates.js';
 import changeRequestRoutes from './routes/api/changeRequest.js';
 import clientRoutes from './routes/api/clients.js';
+import csrfRoutes from './routes/api/csrf.js'; // ✅ SECURITY FIX - Phase 2: CSRF token endpoint
 import departmentRoutes from './routes/api/departments.js';
 import designationRoutes from './routes/api/designations.js';
 import emailChangeRoutes from './routes/api/emailChange.routes.js';
@@ -78,13 +78,10 @@ import trainingRoutes from './routes/api/training.js';
 import userProfileRoutes from './routes/api/user-profile.js';
 import healthRoutes from './routes/health.js';
 import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
-import auditRoutes from './routes/api/audit.js';
-import timesheetRoutes from './routes/api/timesheets.js';
-import emailChangeRoutes from './routes/api/emailChange.routes.js';
-import csrfRoutes from './routes/api/csrf.js';  // ✅ SECURITY FIX - Phase 2: CSRF token endpoint
 
 // RBAC Routes
 import adminUsersRoutes from './routes/api/admin.users.js';
+import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
 import companyPagesRoutes from './routes/api/companyPages.routes.js';
 import rbacModulesRoutes from './routes/api/rbac/modules.js';
 import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';
@@ -95,18 +92,6 @@ import rbacRolesRoutes from './routes/api/rbac/roles.js';
 import superadminCompaniesRoutes from './routes/api/superadmin.companies.js';
 import superadminRoutes from './routes/api/superadmin.routes.js';
 import debugRoutes from './routes/debug/auth-debug.js';
-import adminUsersRoutes from "./routes/api/admin.users.js";
-import companyPagesRoutes from "./routes/api/companyPages.routes.js";
-import rbacModulesRoutes from "./routes/api/rbac/modules.js";
-import rbacPageCategoriesRoutes from "./routes/api/rbac/pageCategories.routes.js";
-import rbacPagesRoutes from "./routes/api/rbac/pages.js";
-import rbacPagesHierarchyRoutes from "./routes/api/rbac/pagesHierarchy.js";
-import rbacPermissionsRoutes from "./routes/api/rbac/permissions.js";
-import rbacRolesRoutes from "./routes/api/rbac/roles.js";
-import superadminCompaniesRoutes from "./routes/api/superadmin.companies.js";
-import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
-import superadminRoutes from "./routes/api/superadmin.routes.js";
-import debugRoutes from "./routes/debug/auth-debug.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
