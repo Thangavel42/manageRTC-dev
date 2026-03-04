@@ -3,21 +3,30 @@
  * Handles all Resignation CRUD operations via REST API
  */
 
+import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-    asyncHandler, buildConflictError, buildNotFoundError, buildValidationError
+  asyncHandler, buildConflictError, buildNotFoundError, buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-    addResignation, approveResignation, deleteResignation,
-    getDepartments,
-    getEmployeesByDepartment, getResignations, getResignationStats, getSpecificResignation, processResignationEffectiveDate, rejectResignation, updateResignation
+  addResignation, approveResignation, deleteResignation,
+  getDepartments,
+  getEmployeesByDepartment, getResignations, getResignationStats, getSpecificResignation, processResignationEffectiveDate, rejectResignation, updateResignation
 } from '../../services/hr/resignation.services.js';
 import {
-    extractUser, sendCreated, sendSuccess
+  extractUser, sendCreated, sendSuccess
 } from '../../utils/apiResponse.js';
 import { broadcastDashboardEvents, broadcastResignationEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
-const ACTIVE_RESIGNATION_STATUSES = new Set(["pending", "approved", "on_notice", "resigned"]);
+const ACTIVE_RESIGNATION_STATUSES = new Set([
+  "pending",
+  "approved",
+  "on_notice",
+  "resigned",
+  "PENDING_MANAGER_APPROVAL",
+  "PENDING_HR_APPROVAL",
+  "APPROVED",
+]);
 
 const resolveEmployeeIdForUser = async (collections, user) => {
   const userId = user.userId || user._id?.toString();
@@ -242,7 +251,7 @@ export const createResignation = asyncHandler(async (req, res) => {
 /**
  * @desc    Update resignation
  * @route   PUT /api/resignations/:id
- * @access  Private (Admin, HR)
+ * @access  Private (Admin, HR, Employee)
  */
 export const updateResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -252,6 +261,36 @@ export const updateResignationById = asyncHandler(async (req, res) => {
 
   if (!id) {
     throw buildValidationError('id', 'Resignation ID is required');
+  }
+
+  // Employees may only update their own pending resignation
+  const isEmployeeRole = (user.role || '').toLowerCase() === 'employee';
+  if (isEmployeeRole) {
+    const collections = getTenantCollections(user.companyId);
+    const objectId = ObjectId.isValid(id) ? new ObjectId(id) : null;
+    const existing = await collections.resignation.findOne({
+      $or: [
+        { resignationId: id },
+        ...(objectId ? [{ _id: objectId }] : []),
+      ],
+    });
+
+    if (!existing) {
+      throw buildNotFoundError('Resignation', id);
+    }
+
+    const resolvedEmployeeId = await resolveEmployeeIdForUser(collections, user);
+    const matchesOwner = resolvedEmployeeId &&
+      (existing.employeeId === resolvedEmployeeId || existing.employee_id === resolvedEmployeeId);
+    const isPending = (existing.resignationStatus || existing.status || '').toLowerCase() === 'pending';
+
+    if (!matchesOwner) {
+      throw buildValidationError('id', 'You can only edit your own resignation');
+    }
+
+    if (!isPending) {
+      throw buildValidationError('status', 'Only pending resignations can be edited');
+    }
   }
 
   // Add resignationId to updateData
@@ -299,7 +338,7 @@ export const deleteResignations = asyncHandler(async (req, res) => {
 /**
  * @desc    Approve resignation
  * @route   PUT /api/resignations/:id/approve
- * @access  Private (Admin, HR)
+ * @access  Private (Manager, HR, Admin)
  */
 export const approveResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -310,7 +349,7 @@ export const approveResignationById = asyncHandler(async (req, res) => {
     throw buildValidationError('id', 'Resignation ID is required');
   }
 
-  const result = await approveResignation(user.companyId, id, user);
+  const result = await approveResignation(user.companyId, id, user, req.body || {});
 
   if (!result.done) {
     if (result.message.includes('not found')) {
@@ -336,7 +375,7 @@ export const approveResignationById = asyncHandler(async (req, res) => {
 /**
  * @desc    Reject resignation
  * @route   PUT /api/resignations/:id/reject
- * @access  Private (Admin, HR)
+ * @access  Private (Manager, HR, Admin)
  */
 export const rejectResignationById = asyncHandler(async (req, res) => {
   const { id } = req.params;

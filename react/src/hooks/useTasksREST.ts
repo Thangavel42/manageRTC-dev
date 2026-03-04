@@ -15,7 +15,7 @@ export interface Task {
   project?: string; // For display/populated data
   projectId?: string; // For create/update operations
   assignee?: string | string[] | any[]; // Array of employee IDs (send to API) or populated employee objects (receive from API)
-  status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+  status: 'Active' | 'Inactive';
   priority: 'Low' | 'Medium' | 'High' | 'Urgent';
   dueDate?: string;
   estimatedHours?: number;

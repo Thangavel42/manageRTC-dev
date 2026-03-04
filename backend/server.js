@@ -101,7 +101,9 @@ const httpServer = createServer(app);
 
 // CORS configuration — set EXTRA_ALLOWED_ORIGINS in .env as comma-separated list for additional origins
 const extraOrigins = process.env.EXTRA_ALLOWED_ORIGINS
-  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean)
   : [];
 const allowedOrigins = [
   'http://localhost:3000',
@@ -124,16 +126,18 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
   })
 );
 
 // ✅ SECURITY FIX - Phase 6: Security headers via helmet
-app.use(helmet({
-  contentSecurityPolicy: false,           // CSP handled separately to avoid breaking frontend
-  crossOriginEmbedderPolicy: false,       // Allow cross-origin images (Cloudinary, Clerk)
-  crossOriginResourcePolicy: false,       // Allow cross-origin resource loading
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // CSP handled separately to avoid breaking frontend
+    crossOriginEmbedderPolicy: false, // Allow cross-origin images (Cloudinary, Clerk)
+    crossOriginResourcePolicy: false, // Allow cross-origin resource loading
+  })
+);
 
 // Compress all responses
 app.use(compression());
@@ -222,7 +226,7 @@ const initializeServer = async () => {
     // ✅ SECURITY FIX - Phase 2: Apply global rate limiting to all API routes
     // This prevents DoS attacks and API abuse
     // Individual routes can have stricter limits on top of this
-    app.use('/api/', apiLimiter);  // 100 requests per minute per user/IP
+    app.use('/api/', apiLimiter); // 100 requests per minute per user/IP
 
     // ✅ SECURITY FIX - Phase 2: Apply CSRF protection to state-changing requests
     // Skips GET/HEAD/OPTIONS and webhook endpoints
@@ -431,7 +435,7 @@ const initializeServer = async () => {
 
     // Error handling (must be after all routes)
     app.use(notFoundHandler);
-    app.use(csrfErrorHandler);  // ✅ SECURITY FIX - Phase 2: Handle CSRF errors
+    app.use(csrfErrorHandler); // ✅ SECURITY FIX - Phase 2: Handle CSRF errors
     app.use(errorHandler);
 
     // Socket setup - attach io to app for REST broadcasters
@@ -465,7 +469,9 @@ const initializeServer = async () => {
         logger.error('Failed to start server', { error: err.message });
         process.exit(1);
       }
-      logger.info(`Server running on port ${PORT}`, { environment: process.env.NODE_ENV || 'development' });
+      logger.info(`Server running on port ${PORT}`, {
+        environment: process.env.NODE_ENV || 'development',
+      });
     });
 
     // Handle server errors

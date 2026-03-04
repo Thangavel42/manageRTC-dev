@@ -67,7 +67,13 @@ router.post('/', requireRole('admin', 'hr', 'employee', 'superadmin'), validateB
  * @desc    Update resignation
  * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/:id', requireRole('admin', 'hr', 'superadmin'), validateParams(commonSchemas.objectId), validateBody(resignationSchemas.update), resignationController.updateResignationById);
+router.put(
+	'/:id',
+	requireRole('admin', 'hr', 'superadmin', 'employee'),
+	validateParams(commonSchemas.objectId),
+	validateBody(resignationSchemas.update),
+	resignationController.updateResignationById
+);
 
 /**
  * @route   PUT /api/resignations/:id/approve

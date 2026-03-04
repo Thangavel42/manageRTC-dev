@@ -784,7 +784,7 @@ const TaskBoard = () => {
         tags: validTags,
         assignee: selectedAssignees,
         dueDate: taskDueDate ? taskDueDate.format('YYYY-MM-DD') : undefined,
-        status: taskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: taskStatus as 'Active' | 'Inactive',
       };
 
       const success = await createTaskAPI(taskData);
@@ -958,15 +958,15 @@ const TaskBoard = () => {
       // Handle assignees - they can be objects (populated) or strings (IDs)
       const assigneeIds = Array.isArray(task.assignee)
         ? task.assignee
-            .map((a: any) => {
-              // If it's an object (populated), extract _id
-              if (typeof a === 'object' && a !== null) {
-                return (a._id || a.id || '').toString();
-              }
-              // If it's already a string ID
-              return a.toString();
-            })
-            .filter(Boolean) // Remove any empty values
+          .map((a: any) => {
+            // If it's an object (populated), extract _id
+            if (typeof a === 'object' && a !== null) {
+              return (a._id || a.id || '').toString();
+            }
+            // If it's already a string ID
+            return a.toString();
+          })
+          .filter(Boolean) // Remove any empty values
         : [];
 
       setEditTaskAssignees(assigneeIds);
@@ -1008,7 +1008,7 @@ const TaskBoard = () => {
         title: editTaskTitle,
         description: editTaskDescription,
         priority: editTaskPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
-        status: editTaskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: editTaskStatus as 'Active' | 'Inactive',
         tags: validTags,
         assignee: editTaskAssignees.join(','),
         dueDate: editTaskDueDate ? editTaskDueDate.format('YYYY-MM-DD') : undefined,
@@ -1258,11 +1258,11 @@ const TaskBoard = () => {
                                 prev.map((p) =>
                                   p._id === value || p.projectId === value
                                     ? {
-                                        ...p,
-                                        ...fullProject,
-                                        teamMembersdetail: fullProject.teamMembers,
-                                        teamLeaderdetail: fullProject.teamLeader,
-                                      }
+                                      ...p,
+                                      ...fullProject,
+                                      teamMembersdetail: fullProject.teamMembers,
+                                      teamLeaderdetail: fullProject.teamLeader,
+                                    }
                                     : p
                                 )
                               );
@@ -1282,13 +1282,13 @@ const TaskBoard = () => {
                     <strong>Selected Project:</strong>{' '}
                     {selectedProject !== 'Select'
                       ? (() => {
-                          const proj = projects.find(
-                            (p) => p.projectId === selectedProject || p._id === selectedProject
-                          );
-                          if (!proj) return selectedProject;
-                          const id = proj.projectId || proj._id;
-                          return `${proj.name} (${id})`;
-                        })()
+                        const proj = projects.find(
+                          (p) => p.projectId === selectedProject || p._id === selectedProject
+                        );
+                        if (!proj) return selectedProject;
+                        const id = proj.projectId || proj._id;
+                        return `${proj.name} (${id})`;
+                      })()
                       : 'No project selected'}
                   </div>
                 </div>
@@ -1300,13 +1300,13 @@ const TaskBoard = () => {
               <h4>
                 {selectedProject !== 'Select'
                   ? (() => {
-                      const proj = projects.find(
-                        (p) => p.projectId === selectedProject || p._id === selectedProject
-                      );
-                      if (!proj) return 'Select a Project to View Tasks';
-                      const id = proj.projectId || proj._id;
-                      return `${proj.name} (${id})`;
-                    })()
+                    const proj = projects.find(
+                      (p) => p.projectId === selectedProject || p._id === selectedProject
+                    );
+                    if (!proj) return 'Select a Project to View Tasks';
+                    const id = proj.projectId || proj._id;
+                    return `${proj.name} (${id})`;
+                  })()
                   : 'Select a Project to View Tasks'}
               </h4>
               <div className="d-flex align-items-center flex-wrap row-gap-3">
@@ -1662,13 +1662,13 @@ const TaskBoard = () => {
                                           <span className="text-gray-9">
                                             {(t as any).dueDate
                                               ? new Date((t as any).dueDate).toLocaleDateString(
-                                                  'en-GB',
-                                                  {
-                                                    day: 'numeric',
-                                                    month: 'short',
-                                                    year: 'numeric',
-                                                  }
-                                                )
+                                                'en-GB',
+                                                {
+                                                  day: 'numeric',
+                                                  month: 'short',
+                                                  year: 'numeric',
+                                                }
+                                              )
                                               : '-'}
                                           </span>
                                         </p>
@@ -1912,10 +1912,10 @@ const TaskBoard = () => {
                         value={
                           taskStatuses.find((status) => status.key === taskStatus)
                             ? {
-                                value: taskStatus,
-                                label: taskStatuses.find((status) => status.key === taskStatus)
-                                  ?.name,
-                              }
+                              value: taskStatus,
+                              label: taskStatuses.find((status) => status.key === taskStatus)
+                                ?.name,
+                            }
                             : taskStatuses.length > 0
                               ? { value: taskStatuses[0].key, label: taskStatuses[0].name }
                               : { value: '', label: 'Select Status' }
@@ -2054,10 +2054,10 @@ const TaskBoard = () => {
                       value={
                         taskStatuses.find((status) => status.key === editTaskStatus)
                           ? {
-                              value: editTaskStatus,
-                              label: taskStatuses.find((status) => status.key === editTaskStatus)
-                                ?.name,
-                            }
+                            value: editTaskStatus,
+                            label: taskStatuses.find((status) => status.key === editTaskStatus)
+                              ?.name,
+                          }
                           : { value: '', label: '' }
                       }
                       onChange={(option: any) => {
@@ -2533,18 +2533,16 @@ const TaskBoard = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${
-                          confirmBoardName &&
-                          confirmBoardName.trim().toLowerCase() !==
+                        className={`form-control form-control-sm ${confirmBoardName &&
+                            confirmBoardName.trim().toLowerCase() !==
                             deletingBoard.name.trim().toLowerCase()
                             ? 'is-invalid'
                             : ''
-                        } ${
-                          confirmBoardName.trim().toLowerCase() ===
-                          deletingBoard.name.trim().toLowerCase()
+                          } ${confirmBoardName.trim().toLowerCase() ===
+                            deletingBoard.name.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                        }`}
+                          }`}
                         placeholder={`Type "${deletingBoard.name}" to confirm`}
                         value={confirmBoardName}
                         onChange={(e) => setConfirmBoardName(e.target.value)}
@@ -2552,7 +2550,7 @@ const TaskBoard = () => {
                       />
                       {confirmBoardName &&
                         confirmBoardName.trim().toLowerCase() !==
-                          deletingBoard.name.trim().toLowerCase() && (
+                        deletingBoard.name.trim().toLowerCase() && (
                           <div className="invalid-feedback">Name does not match</div>
                         )}
                     </div>
@@ -2579,7 +2577,7 @@ const TaskBoard = () => {
                       isDeletingBoard ||
                       !deletingBoard ||
                       confirmBoardName.trim().toLowerCase() !==
-                        deletingBoard.name.trim().toLowerCase()
+                      deletingBoard.name.trim().toLowerCase()
                     }
                   >
                     {isDeletingBoard ? 'Deleting...' : 'Delete Board'}
@@ -2627,18 +2625,16 @@ const TaskBoard = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${
-                          confirmTaskName &&
-                          confirmTaskName.trim().toLowerCase() !==
+                        className={`form-control form-control-sm ${confirmTaskName &&
+                            confirmTaskName.trim().toLowerCase() !==
                             deletingTask.title.trim().toLowerCase()
                             ? 'is-invalid'
                             : ''
-                        } ${
-                          confirmTaskName.trim().toLowerCase() ===
-                          deletingTask.title.trim().toLowerCase()
+                          } ${confirmTaskName.trim().toLowerCase() ===
+                            deletingTask.title.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                        }`}
+                          }`}
                         placeholder={`Type "${deletingTask.title}" to confirm`}
                         value={confirmTaskName}
                         onChange={(e) => setConfirmTaskName(e.target.value)}
@@ -2646,7 +2642,7 @@ const TaskBoard = () => {
                       />
                       {confirmTaskName &&
                         confirmTaskName.trim().toLowerCase() !==
-                          deletingTask.title.trim().toLowerCase() && (
+                        deletingTask.title.trim().toLowerCase() && (
                           <div className="invalid-feedback">Name does not match</div>
                         )}
                     </div>
@@ -2673,7 +2669,7 @@ const TaskBoard = () => {
                       isDeletingTask ||
                       !deletingTask ||
                       confirmTaskName.trim().toLowerCase() !==
-                        deletingTask.title.trim().toLowerCase()
+                      deletingTask.title.trim().toLowerCase()
                     }
                   >
                     {isDeletingTask ? 'Deleting...' : 'Delete Task'}

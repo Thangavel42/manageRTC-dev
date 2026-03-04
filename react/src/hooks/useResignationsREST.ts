@@ -23,8 +23,21 @@ export interface Resignation {
   reason: string;
   status: string;
   resignationStatus?: 'pending' | 'on_notice' | 'rejected' | 'resigned' | 'withdrawn';
+  workflowStatus?: 'PENDING_MANAGER_APPROVAL' | 'PENDING_HR_APPROVAL' | 'REJECTED_BY_MANAGER' | 'REJECTED_BY_HR' | 'APPROVED';
+  finalStatus?: string;
   reportingManagerId?: string;
   reportingManagerName?: string;
+  approvalFlow?: 'manager_then_hr' | 'hr_only';
+  managerStatus?: 'pending' | 'approved' | 'rejected' | 'skipped';
+  hrStatus?: 'waiting' | 'pending' | 'approved' | 'rejected' | 'skipped';
+  managerDecision?: string;
+  managerComments?: string;
+  managerDecisionAt?: string;
+  hrDecision?: string;
+  hrComments?: string;
+  hrDecisionAt?: string;
+  noticePeriodStartDate?: string;
+  noticePeriodEndDate?: string;
   effectiveDate?: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -65,6 +78,16 @@ export const useResignationsREST = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const friendlyErrorMessage = (err: any, fallback: string): string | null => {
+    if (err?.suppressPermissionToast) return null;
+    const status = err?.response?.status;
+    const raw = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message;
+    if (status === 403 && raw && raw.toLowerCase().includes('insufficient permissions')) {
+      return null; // Suppress noisy permission toast on resignation page
+    }
+    return raw || fallback;
+  };
+
   /**
    * Fetch resignation statistics
    * REST API: GET /api/resignations/stats
@@ -79,8 +102,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to fetch resignation stats');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch resignation stats';
-      console.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to fetch resignation stats');
+      if (errorMessage) {
+        console.error(errorMessage);
+      }
       return null;
     }
   }, []);
@@ -103,9 +128,11 @@ export const useResignationsREST = () => {
         throw new Error(response.error?.message || 'Failed to fetch resignations');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch resignations';
-      setError(errorMessage);
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to fetch resignations');
+      setError(errorMessage || null);
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return [];
     } finally {
       setLoading(false);
@@ -125,8 +152,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to fetch resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to fetch resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return null;
     }
   }, []);
@@ -145,8 +174,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to create resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to create resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to create resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);
@@ -176,7 +207,7 @@ export const useResignationsREST = () => {
     } catch (err: any) {
       // For 400/403 responses, surface the server message but keep structured data
       const status = err.response?.data?.status || err.response?.data?.data?.status || 'unknown';
-      const messageText = err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Resignation already applied.';
+      const messageText = friendlyErrorMessage(err, 'Resignation already applied.');
       return {
         canApply: false,
         status: typeof status === 'string' ? status : 'unknown',
@@ -204,8 +235,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to update resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to update resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to update resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);
@@ -225,8 +258,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to delete resignation(s)');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to delete resignation(s)';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to delete resignation(s)');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);
@@ -235,16 +270,32 @@ export const useResignationsREST = () => {
    * Approve resignation
    * REST API: PUT /api/resignations/:id/approve
    */
-  const approveResignation = useCallback(async (resignationId: string): Promise<boolean> => {
+  const approveResignation = useCallback(async (
+    resignationId: string,
+    payload: {
+      noticePeriodStartDate?: string;
+      noticePeriodEndDate?: string;
+      resignationDate?: string;
+      comments?: string;
+    } = {}
+  ): Promise<boolean> => {
     try {
-      const response: ApiResponse = await put(`/resignations/${resignationId}/approve`);
+      const response: ApiResponse = await put(`/resignations/${resignationId}/approve`, payload);
 
       if (response.success) {
         message.success('Resignation approved successfully!');
         setResignations(prev =>
           prev.map(resignation =>
             resignation.resignationId === resignationId
-              ? { ...resignation, resignationStatus: 'on_notice', status: 'on_notice' }
+              ? {
+                  ...resignation,
+                  workflowStatus: payload?.resignationDate ? 'APPROVED' : 'PENDING_HR_APPROVAL',
+                  resignationStatus: payload?.resignationDate ? 'on_notice' : resignation.resignationStatus,
+                  status: payload?.resignationDate ? 'on_notice' : resignation.status,
+                  noticePeriodStartDate: payload.noticePeriodStartDate || resignation.noticePeriodStartDate,
+                  noticePeriodEndDate: payload.noticePeriodEndDate || resignation.noticePeriodEndDate,
+                  resignationDate: payload.resignationDate || resignation.resignationDate,
+                }
               : resignation
           )
         );
@@ -252,8 +303,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to approve resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to approve resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to approve resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);
@@ -279,8 +332,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to reject resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to reject resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to reject resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);
@@ -306,8 +361,10 @@ export const useResignationsREST = () => {
       }
       throw new Error(response.error?.message || 'Failed to process resignation');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to process resignation';
-      message.error(errorMessage);
+      const errorMessage = friendlyErrorMessage(err, 'Failed to process resignation');
+      if (errorMessage) {
+        message.error(errorMessage);
+      }
       return false;
     }
   }, []);

@@ -56,7 +56,14 @@ const promotionSchema = new mongoose.Schema({
   // Type of promotion
   promotionType: {
     type: String,
-    enum: ['Regular', 'Acting', 'Charge', 'Transfer', 'Other'],
+    enum: [
+      'Performance Based',
+      'Experience Based',
+      'Qualification Based',
+      'Special Achievement',
+      'Regular',
+      'Other'
+    ],
     default: 'Regular'
   },
 
