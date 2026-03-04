@@ -11,7 +11,6 @@ import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { Task, useTasksREST } from '../../../hooks/useTasksREST';
-import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
 import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import {
   del as apiDel,
@@ -27,6 +26,19 @@ const ProjectDetails = () => {
 
   // Initialize user profile hook
   const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
+
+  // Debug profile data
+  useEffect(() => {
+    console.log('[ProjectDetails] 📊 Profile Debug:', {
+      profile,
+      profileRole: profile?.role,
+      profileRoleType: typeof profile?.role,
+      profileKeys: profile ? Object.keys(profile) : [],
+      isAdmin,
+      isHR,
+      isEmployee,
+    });
+  }, [profile, isAdmin, isHR, isEmployee]);
 
   // Log user metadata for verification
   useEffect(() => {
@@ -62,9 +74,6 @@ const ProjectDetails = () => {
   } = useTasksREST();
 
   const { getProjectById: getProjectByIdAPI, updateProject: updateProjectAPI } = useProjectsREST();
-
-  const { statuses: statusesFromHook, fetchTaskStatuses: fetchTaskStatusesAPI } =
-    useTaskStatusREST();
 
   const [project, setProject] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -103,7 +112,7 @@ const ProjectDetails = () => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('Medium');
-  const [taskStatus, setTaskStatus] = useState(''); // Will be set to "To Do" status key
+  const [taskStatus, setTaskStatus] = useState('Active');
   const [taskDueDate, setTaskDueDate] = useState<Dayjs | null>(null);
   const [taskTags, setTaskTags] = useState<string[]>([]);
   const [isSavingTask, setIsSavingTask] = useState(false);
@@ -124,7 +133,6 @@ const ProjectDetails = () => {
   const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [confirmTaskTitle, setConfirmTaskTitle] = useState('');
   const [viewingTask, setViewingTask] = useState<any>(null);
-  const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
   const [isSavingProject, setIsSavingProject] = useState(false);
   const [editModalError, setEditModalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -168,41 +176,6 @@ const ProjectDetails = () => {
   const [isDeletingSubContract, setIsDeletingSubContract] = useState(false);
   const [confirmSubContractName, setConfirmSubContractName] = useState('');
 
-  // Helper function to match status with various formats
-  const findMatchingStatus = useCallback((taskStatus: string, statuses: any[]) => {
-    if (!taskStatus || !statuses || statuses.length === 0) {
-      return ''; // default fallback
-    }
-
-    const normalizedTaskStatus = taskStatus.toLowerCase().replace(/\s+/g, '');
-
-    // Try exact key match first (case-insensitive)
-    const exactMatch = statuses.find((s) => s.key.toLowerCase() === normalizedTaskStatus);
-    if (exactMatch) return exactMatch.key;
-
-    // Try name match (case-insensitive, no spaces)
-    const nameMatch = statuses.find(
-      (s) => s.name.toLowerCase().replace(/\s+/g, '') === normalizedTaskStatus
-    );
-    if (nameMatch) return nameMatch.key;
-
-    // Try partial match for common variations
-    const partialMatch = statuses.find((s) => {
-      const key = s.key.toLowerCase();
-      const name = s.name.toLowerCase();
-      return (
-        key.includes(normalizedTaskStatus) ||
-        normalizedTaskStatus.includes(key) ||
-        name.includes(normalizedTaskStatus) ||
-        normalizedTaskStatus.includes(name)
-      );
-    });
-    if (partialMatch) return partialMatch.key;
-
-    // Default fallback
-    return '';
-  }, []);
-
   const memberSelectOptions = useMemo(
     () =>
       (employeeOptions || []).map((emp) => ({
@@ -213,6 +186,42 @@ const ProjectDetails = () => {
       })),
     [employeeOptions]
   );
+
+  // Check if current employee is a manager or team lead on this project
+  const isProjectManagerOrLead = useMemo(() => {
+    if (!profile || !('_id' in profile) || !profile._id || !project) return false;
+
+    const employeeId = profile._id.toString();
+
+    // Check if in project managers
+    const isManager = project?.projectManager?.some((m: any) => {
+      const managerId = typeof m === 'string' ? m : m._id || m.id;
+      return managerId?.toString() === employeeId;
+    });
+
+    // Check if in team leaders
+    const isLead = project?.teamLeader?.some((lead: any) => {
+      const leadId = typeof lead === 'string' ? lead : lead._id || lead.id;
+      return leadId?.toString() === employeeId;
+    });
+
+    return isManager || isLead;
+  }, [profile, project]);
+
+  // Can manage team = Admin OR HR OR (Employee AND is manager/lead on this project)
+  const canManageTeam = isAdmin || isHR || (isEmployee && isProjectManagerOrLead);
+
+  // Debug logging for role-based access
+  useEffect(() => {
+    console.log('[ProjectDetails] 🔐 Role-based Access Control:', {
+      isAdmin,
+      isHR,
+      isEmployee,
+      isProjectManagerOrLead,
+      canManageTeam,
+      profileRole: profile?.role,
+    });
+  }, [isAdmin, isHR, isEmployee, isProjectManagerOrLead, canManageTeam, profile]);
 
   const loadProject = useCallback(async () => {
     if (!projectId) return;
@@ -276,24 +285,6 @@ const ProjectDetails = () => {
     }
   }, [tasksFromHook]);
 
-  // Sync task statuses from hook
-  useEffect(() => {
-    if (statusesFromHook && Array.isArray(statusesFromHook)) {
-      console.log('[ProjectDetails] Task statuses loaded:', statusesFromHook);
-      setTaskStatuses(statusesFromHook);
-
-      // Set default task status to "To Do" for add task modal
-      if (!taskStatus && statusesFromHook.length > 0) {
-        const todoStatus = statusesFromHook.find(
-          (s) => s.key.toLowerCase() === 'todo' || s.name.toLowerCase() === 'to do'
-        );
-        const defaultStatus = todoStatus || statusesFromHook[0];
-        console.log('[ProjectDetails] Setting default task status:', defaultStatus.key);
-        setTaskStatus(defaultStatus.key);
-      }
-    }
-  }, [statusesFromHook, taskStatus]);
-
   const loadProjectNotes = useCallback(async () => {
     if (!project?._id) return;
     try {
@@ -342,14 +333,6 @@ const ProjectDetails = () => {
       console.error('[ProjectDetails] Failed to load available sub-contracts:', err);
     }
   }, []);
-
-  const loadTaskStatuses = useCallback(async () => {
-    try {
-      await fetchTaskStatusesAPI();
-    } catch (error) {
-      console.error('[ProjectDetails] Error loading task statuses:', error);
-    }
-  }, [fetchTaskStatusesAPI]);
 
   const parseDateValue = useCallback((value: any): Dayjs | null => {
     if (!value) return null;
@@ -1589,7 +1572,7 @@ const ProjectDetails = () => {
     setTaskTitle('');
     setTaskDescription('');
     setTaskPriority('Medium');
-    // Keep taskStatus - it will be reset to default on next open
+    setTaskStatus('Active');
     setTaskDueDate(null);
     setTaskTags([]);
     setSelectedAssignees([]);
@@ -1622,7 +1605,7 @@ const ProjectDetails = () => {
         tags: validTags,
         assignee: selectedAssignees, // Send as array to match backend schema
         dueDate: taskDueDate ? taskDueDate.format('YYYY-MM-DD') : undefined,
-        status: taskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: taskStatus as 'Active' | 'Inactive',
       };
 
       const success = await createTaskAPI(taskData);
@@ -1657,7 +1640,6 @@ const ProjectDetails = () => {
     (task: any) => {
       console.log('[ProjectDetails] Opening edit task modal:', {
         taskStatus: task.status,
-        availableStatuses: taskStatuses,
       });
 
       setEditingTask(task);
@@ -1665,40 +1647,21 @@ const ProjectDetails = () => {
       setEditTaskDescription(task.description || '');
       setEditTaskPriority(task.priority || 'Medium');
       setEditTaskDueDate(task.dueDate ? dayjs(task.dueDate) : null);
-
-      // Match status more flexibly
-      let matchedStatus = '';
-      if (task.status && taskStatuses && taskStatuses.length > 0) {
-        matchedStatus = findMatchingStatus(task.status, taskStatuses);
-
-        // If no match found, try to find by partial match or use first status
-        if (!matchedStatus) {
-          console.warn('[ProjectDetails] No matching status found for:', task.status);
-          console.log(
-            '[ProjectDetails] Available statuses:',
-            taskStatuses.map((s) => ({ key: s.key, name: s.name }))
-          );
-          // Default to first status if no match
-          matchedStatus = taskStatuses[0]?.key || '';
-        }
-      }
-
-      console.log('[ProjectDetails] Matched status:', matchedStatus);
-      setEditTaskStatus(matchedStatus);
+      setEditTaskStatus(task.status || 'Active');
       setEditTaskTags(Array.isArray(task.tags) ? task.tags : []);
 
       // Map assignees - handle both ObjectId strings and employee objects
       const assigneeIds = Array.isArray(task.assignee)
         ? task.assignee
-            .map((a: any) => {
-              // If it's an object, try to get _id, id, or employeeId
-              if (typeof a === 'object' && a !== null) {
-                return (a._id || a.id || a.employeeId || '').toString();
-              }
-              // Otherwise treat as ID string
-              return a.toString();
-            })
-            .filter(Boolean)
+          .map((a: any) => {
+            // If it's an object, try to get _id, id, or employeeId
+            if (typeof a === 'object' && a !== null) {
+              return (a._id || a.id || a.employeeId || '').toString();
+            }
+            // Otherwise treat as ID string
+            return a.toString();
+          })
+          .filter(Boolean)
         : [];
 
       console.log('[ProjectDetails] Setting edit task assignees:', {
@@ -1711,7 +1674,7 @@ const ProjectDetails = () => {
       setEditTaskModalError(null);
       setEditTaskFieldErrors({});
     },
-    [findMatchingStatus, taskStatuses]
+    []
   );
 
   const closeEditTaskModal = useCallback(() => {
@@ -1788,7 +1751,7 @@ const ProjectDetails = () => {
         title: editTaskTitle,
         description: editTaskDescription,
         priority: editTaskPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
-        status: editTaskStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: editTaskStatus as 'Active' | 'Inactive',
         tags: validTags,
         assignee: editTaskAssignees, // Send as array to match backend schema
         dueDate: editTaskDueDate ? editTaskDueDate.format('YYYY-MM-DD') : undefined,
@@ -2082,9 +2045,8 @@ const ProjectDetails = () => {
   // Load data on mount
   useEffect(() => {
     loadProject();
-    loadTaskStatuses();
     loadEmployeesAndClients();
-  }, [loadProject, loadTaskStatuses, loadEmployeesAndClients]);
+  }, [loadProject, loadEmployeesAndClients]);
 
   const getModalContainer = () => {
     const modalElement = document.getElementById('modal-datepicker');
@@ -2328,11 +2290,11 @@ const ProjectDetails = () => {
                             const parsed = parseDateValue(project.endDate);
                             return parsed && parsed.isBefore(dayjs(), 'day');
                           })() && (
-                            <span className="badge badge-danger d-inline-flex align-items-center ms-2">
-                              <i className="ti ti-clock-stop" />
-                              Overdue
-                            </span>
-                          )}
+                              <span className="badge badge-danger d-inline-flex align-items-center ms-2">
+                                <i className="ti ti-clock-stop" />
+                                Overdue
+                              </span>
+                            )}
                         </div>
                       </div>
                     </div>
@@ -2351,13 +2313,12 @@ const ProjectDetails = () => {
                       <div className="d-flex align-items-center justify-content-between">
                         <span>Priority</span>
                         <span
-                          className={`badge d-inline-flex align-items-center ${
-                            project.priority === 'High'
-                              ? 'badge-soft-danger'
-                              : project.priority === 'Medium'
-                                ? 'badge-soft-warning'
-                                : 'badge-soft-success'
-                          }`}
+                          className={`badge d-inline-flex align-items-center ${project.priority === 'High'
+                            ? 'badge-soft-danger'
+                            : project.priority === 'Medium'
+                              ? 'badge-soft-warning'
+                              : 'badge-soft-success'
+                            }`}
                         >
                           <i className="ti ti-point-filled me-1" />
                           {project.priority || 'N/A'}
@@ -2428,15 +2389,14 @@ const ProjectDetails = () => {
                     </div>
                     <div className="col-sm-9">
                       <span
-                        className={`badge d-inline-flex align-items-center mb-3 ${
-                          project.status === 'Active'
-                            ? 'badge-soft-success'
-                            : project.status === 'Completed'
-                              ? 'badge-soft-primary'
-                              : project.status === 'On Hold'
-                                ? 'badge-soft-warning'
-                                : 'badge-soft-secondary'
-                        }`}
+                        className={`badge d-inline-flex align-items-center mb-3 ${project.status === 'Active'
+                          ? 'badge-soft-success'
+                          : project.status === 'Completed'
+                            ? 'badge-soft-primary'
+                            : project.status === 'On Hold'
+                              ? 'badge-soft-warning'
+                              : 'badge-soft-secondary'
+                          }`}
                       >
                         <i className="ti ti-point-filled me-1" />
                         {project.status || 'N/A'}
@@ -2460,8 +2420,8 @@ const ProjectDetails = () => {
                           return null;
                         })()}
                         {project.teamMembers &&
-                        Array.isArray(project.teamMembers) &&
-                        project.teamMembers.length > 0 ? (
+                          Array.isArray(project.teamMembers) &&
+                          project.teamMembers.length > 0 ? (
                           project.teamMembers.map((member: any, index: number) => (
                             <div
                               key={member.employeeId || index}
@@ -2486,7 +2446,18 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No team members assigned</p>
                         )}
-                        {!isEmployee && (
+                        {(() => {
+                          console.log('[ProjectDetails] Team Members Add Button Check:', {
+                            canManageTeam,
+                            isAdmin,
+                            isHR,
+                            isEmployee,
+                            isProjectManagerOrLead,
+                            willRender: canManageTeam,
+                          });
+                          return null;
+                        })()}
+                        {canManageTeam && (
                           <div>
                             <Link
                               to="#"
@@ -2511,8 +2482,8 @@ const ProjectDetails = () => {
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
                         {project.teamLeader &&
-                        Array.isArray(project.teamLeader) &&
-                        project.teamLeader.length > 0 ? (
+                          Array.isArray(project.teamLeader) &&
+                          project.teamLeader.length > 0 ? (
                           project.teamLeader.map((lead: any, index: number) => (
                             <div
                               key={lead.employeeId || index}
@@ -2537,7 +2508,18 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No team lead assigned</p>
                         )}
-                        {!isEmployee && (
+                        {(() => {
+                          console.log('[ProjectDetails] Team Lead Add Button Check:', {
+                            canManageTeam,
+                            isAdmin,
+                            isHR,
+                            isEmployee,
+                            isProjectManagerOrLead,
+                            willRender: canManageTeam,
+                          });
+                          return null;
+                        })()}
+                        {canManageTeam && (
                           <div>
                             <Link
                               to="#"
@@ -2562,8 +2544,8 @@ const ProjectDetails = () => {
                     <div className="col-sm-9">
                       <div className="d-flex align-items-center mb-3">
                         {project.projectManager &&
-                        Array.isArray(project.projectManager) &&
-                        project.projectManager.length > 0 ? (
+                          Array.isArray(project.projectManager) &&
+                          project.projectManager.length > 0 ? (
                           project.projectManager.map((manager: any, index: number) => (
                             <div
                               key={manager.employeeId || index}
@@ -2588,7 +2570,18 @@ const ProjectDetails = () => {
                         ) : (
                           <p className="text-muted mb-0">No project manager assigned</p>
                         )}
-                        {!isEmployee && (
+                        {(() => {
+                          console.log('[ProjectDetails] Project Manager Add Button Check:', {
+                            canManageTeam,
+                            isAdmin,
+                            isHR,
+                            isEmployee,
+                            isProjectManagerOrLead,
+                            willRender: canManageTeam,
+                          });
+                          return null;
+                        })()}
+                        {canManageTeam && (
                           <div>
                             <Link
                               to="#"
@@ -2617,9 +2610,8 @@ const ProjectDetails = () => {
                             <Link
                               key={index}
                               to="#"
-                              className={`badge task-tag rounded-pill me-2 ${
-                                index % 2 === 0 ? 'bg-pink' : 'badge-info'
-                              }`}
+                              className={`badge task-tag rounded-pill me-2 ${index % 2 === 0 ? 'bg-pink' : 'badge-info'
+                                }`}
                             >
                               {tag}
                             </Link>
@@ -2830,7 +2822,7 @@ const ProjectDetails = () => {
                                               <i className="ti ti-dots-vertical" />
                                             </Link>
                                             <ul className="dropdown-menu dropdown-menu-end p-2">
-                                              {!isEmployee && (
+                                              {canManageTeam && (
                                                 <li>
                                                   <Link
                                                     to="#"
@@ -2848,7 +2840,7 @@ const ProjectDetails = () => {
                                                   </Link>
                                                 </li>
                                               )}
-                                              {!isEmployee && (
+                                              {canManageTeam && (
                                                 <li>
                                                   <Link
                                                     to="#"
@@ -2892,7 +2884,7 @@ const ProjectDetails = () => {
                               </>
                             ))
                           )}
-                          {!isEmployee && (
+                          {canManageTeam && (
                             <button
                               className="btn bg-primary-transparent border-dashed border-primary w-100 text-start"
                               data-bs-toggle="modal"
@@ -3821,18 +3813,16 @@ const ProjectDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${
-                          confirmNoteTitle &&
+                        className={`form-control form-control-sm ${confirmNoteTitle &&
                           confirmNoteTitle.trim().toLowerCase() !==
-                            deletingNote.title.trim().toLowerCase()
-                            ? 'is-invalid'
-                            : ''
-                        } ${
-                          confirmNoteTitle.trim().toLowerCase() ===
                           deletingNote.title.trim().toLowerCase()
+                          ? 'is-invalid'
+                          : ''
+                          } ${confirmNoteTitle.trim().toLowerCase() ===
+                            deletingNote.title.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                        }`}
+                          }`}
                         placeholder={`Type "${deletingNote.title}" to confirm`}
                         value={confirmNoteTitle}
                         onChange={(e) => setConfirmNoteTitle(e.target.value)}
@@ -3840,7 +3830,7 @@ const ProjectDetails = () => {
                       />
                       {confirmNoteTitle &&
                         confirmNoteTitle.trim().toLowerCase() !==
-                          deletingNote.title.trim().toLowerCase() && (
+                        deletingNote.title.trim().toLowerCase() && (
                           <div className="invalid-feedback">Title does not match</div>
                         )}
                     </div>
@@ -3867,7 +3857,7 @@ const ProjectDetails = () => {
                       isDeletingNote ||
                       !deletingNote ||
                       confirmNoteTitle.trim().toLowerCase() !==
-                        deletingNote.title.trim().toLowerCase()
+                      deletingNote.title.trim().toLowerCase()
                     }
                   >
                     {isDeletingNote ? 'Deleting...' : 'Delete Note'}
@@ -3927,17 +3917,17 @@ const ProjectDetails = () => {
                       value={
                         subContractName
                           ? {
-                              value: subContractName,
-                              label: (() => {
-                                const found = availableSubContracts.find(
-                                  (sc) => (sc.contractId || sc._id) === subContractName
-                                );
-                                if (!found) return subContractName;
-                                return found.contractId
-                                  ? `${found.name} (${found.contractId.toUpperCase()})`
-                                  : found.name;
-                              })(),
-                            }
+                            value: subContractName,
+                            label: (() => {
+                              const found = availableSubContracts.find(
+                                (sc) => (sc.contractId || sc._id) === subContractName
+                              );
+                              if (!found) return subContractName;
+                              return found.contractId
+                                ? `${found.name} (${found.contractId.toUpperCase()})`
+                                : found.name;
+                            })(),
+                          }
                           : { value: '', label: 'Select Contractor' }
                       }
                       onChange={(option) => {
@@ -4990,21 +4980,13 @@ const ProjectDetails = () => {
                     </label>
                     <CommonSelect
                       className={`select ${editTaskFieldErrors.taskStatus ? 'is-invalid' : ''}`}
-                      options={taskStatuses.map((status) => ({
-                        value: status.key,
-                        label: status.name,
-                      }))}
-                      value={
-                        taskStatuses.find((status) => status.key === editTaskStatus)
-                          ? {
-                              value: editTaskStatus,
-                              label: taskStatuses.find((status) => status.key === editTaskStatus)
-                                ?.name,
-                            }
-                          : { value: '', label: '' }
-                      }
+                      options={[
+                        { value: 'Active', label: 'Active' },
+                        { value: 'Inactive', label: 'Inactive' },
+                      ]}
+                      value={{ value: editTaskStatus, label: editTaskStatus }}
                       onChange={(option: any) => {
-                        setEditTaskStatus(option?.value || '');
+                        setEditTaskStatus(option?.value || 'Active');
                         clearEditTaskFieldError('taskStatus');
                       }}
                     />
@@ -5153,18 +5135,16 @@ const ProjectDetails = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${
-                          confirmTaskTitle &&
+                        className={`form-control form-control-sm ${confirmTaskTitle &&
                           confirmTaskTitle.trim().toLowerCase() !==
-                            deletingTask.title.trim().toLowerCase()
-                            ? 'is-invalid'
-                            : ''
-                        } ${
-                          confirmTaskTitle.trim().toLowerCase() ===
                           deletingTask.title.trim().toLowerCase()
+                          ? 'is-invalid'
+                          : ''
+                          } ${confirmTaskTitle.trim().toLowerCase() ===
+                            deletingTask.title.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                        }`}
+                          }`}
                         placeholder={`Type "${deletingTask.title}" to confirm`}
                         value={confirmTaskTitle}
                         onChange={(e) => setConfirmTaskTitle(e.target.value)}
@@ -5172,7 +5152,7 @@ const ProjectDetails = () => {
                       />
                       {confirmTaskTitle &&
                         confirmTaskTitle.trim().toLowerCase() !==
-                          deletingTask.title.trim().toLowerCase() && (
+                        deletingTask.title.trim().toLowerCase() && (
                           <div className="invalid-feedback">Title does not match</div>
                         )}
                     </div>
@@ -5199,7 +5179,7 @@ const ProjectDetails = () => {
                       isDeletingTask ||
                       !deletingTask ||
                       confirmTaskTitle.trim().toLowerCase() !==
-                        deletingTask.title.trim().toLowerCase()
+                      deletingTask.title.trim().toLowerCase()
                     }
                   >
                     {isDeletingTask ? 'Deleting...' : 'Delete Task'}
@@ -5219,13 +5199,12 @@ const ProjectDetails = () => {
               <h4 className="modal-title text-white">{viewingTask?.title || 'Task Details'}</h4>
               {viewingTask?.priority && (
                 <span
-                  className={`badge d-inline-flex align-items-center ms-2 ${
-                    viewingTask.priority === 'High'
-                      ? 'badge-danger'
-                      : viewingTask.priority === 'Medium'
-                        ? 'badge-warning'
-                        : 'badge-success'
-                  }`}
+                  className={`badge d-inline-flex align-items-center ms-2 ${viewingTask.priority === 'High'
+                    ? 'badge-danger'
+                    : viewingTask.priority === 'Medium'
+                      ? 'badge-warning'
+                      : 'badge-success'
+                    }`}
                 >
                   <i className="ti ti-point-filled me-1" />
                   {viewingTask.priority}
@@ -5250,10 +5229,10 @@ const ProjectDetails = () => {
                       <p className="text-dark mb-0">
                         {viewingTask?.createdAt
                           ? new Date(viewingTask.createdAt).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })
                           : 'N/A'}
                       </p>
                     </div>
@@ -5264,10 +5243,10 @@ const ProjectDetails = () => {
                       <p className="text-dark mb-0">
                         {viewingTask?.updatedAt
                           ? new Date(viewingTask.updatedAt).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })
                           : 'N/A'}
                       </p>
                     </div>
@@ -5277,21 +5256,19 @@ const ProjectDetails = () => {
                       <span className="d-block mb-1 text-muted">Status</span>
                       {viewingTask?.status && (
                         <span
-                          className={`badge d-inline-flex align-items-center ${
-                            viewingTask.status.toLowerCase() === 'completed'
-                              ? 'badge-soft-success'
-                              : viewingTask.status.toLowerCase() === 'inprogress'
-                                ? 'badge-soft-primary'
-                                : viewingTask.status.toLowerCase() === 'pending'
-                                  ? 'badge-soft-warning'
-                                  : viewingTask.status.toLowerCase() === 'onhold'
-                                    ? 'badge-soft-danger'
-                                    : 'badge-soft-secondary'
-                          }`}
+                          className={`badge d-inline-flex align-items-center ${viewingTask.status.toLowerCase() === 'completed'
+                            ? 'badge-soft-success'
+                            : viewingTask.status.toLowerCase() === 'inprogress'
+                              ? 'badge-soft-primary'
+                              : viewingTask.status.toLowerCase() === 'pending'
+                                ? 'badge-soft-warning'
+                                : viewingTask.status.toLowerCase() === 'onhold'
+                                  ? 'badge-soft-danger'
+                                  : 'badge-soft-secondary'
+                            }`}
                         >
                           <i className="fas fa-circle fs-6 me-1" />
-                          {taskStatuses.find((s) => s.key === viewingTask.status.toLowerCase())
-                            ?.name || viewingTask.status}
+                          {viewingTask.status}
                         </span>
                       )}
                     </div>
@@ -5311,15 +5288,14 @@ const ProjectDetails = () => {
                     {viewingTask.tags.map((tag: string, index: number) => (
                       <span
                         key={index}
-                        className={`badge ${
-                          index % 4 === 0
-                            ? 'badge-danger'
-                            : index % 4 === 1
-                              ? 'badge-success'
-                              : index % 4 === 2
-                                ? 'badge-info'
-                                : 'badge-warning'
-                        }`}
+                        className={`badge ${index % 4 === 0
+                          ? 'badge-danger'
+                          : index % 4 === 1
+                            ? 'badge-success'
+                            : index % 4 === 2
+                              ? 'badge-info'
+                              : 'badge-warning'
+                          }`}
                       >
                         {tag}
                       </span>
@@ -5622,23 +5598,13 @@ const ProjectDetails = () => {
                       </label>
                       <CommonSelect
                         className="select"
-                        options={taskStatuses.map((status) => ({
-                          value: status.key,
-                          label: status.name,
-                        }))}
-                        value={
-                          taskStatuses.find((status) => status.key === taskStatus)
-                            ? {
-                                value: taskStatus,
-                                label: taskStatuses.find((status) => status.key === taskStatus)
-                                  ?.name,
-                              }
-                            : taskStatuses.length > 0
-                              ? { value: taskStatuses[0].key, label: taskStatuses[0].name }
-                              : { value: '', label: 'Select Status' }
-                        }
+                        options={[
+                          { value: 'Active', label: 'Active' },
+                          { value: 'Inactive', label: 'Inactive' },
+                        ]}
+                        value={{ value: taskStatus, label: taskStatus }}
                         onChange={(option: any) => {
-                          setTaskStatus(option?.value || '');
+                          setTaskStatus(option?.value || 'Active');
                         }}
                       />
                     </div>
