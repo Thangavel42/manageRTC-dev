@@ -67,11 +67,16 @@ export const validateEmployeeLifecycle = async (
       }
     }
 
-    // Check resignation (status: pending or on_notice)
+    // Check resignation (status: pending, on_notice, or multi-step workflow states)
     if (excludeProcess !== 'resignation') {
       const resignationQuery = {
         employeeId: employeeId.toString(),
-        resignationStatus: { $in: ["pending", "on_notice", "approved"] }
+        $or: [
+          { resignationStatus: { $in: ["pending", "on_notice", "approved"] } },
+          { finalStatus: { $in: ["PENDING_MANAGER_APPROVAL", "PENDING_HR_APPROVAL", "APPROVED"] } },
+          { workflowStatus: { $in: ["PENDING_MANAGER_APPROVAL", "PENDING_HR_APPROVAL", "APPROVED"] } },
+          { status: { $in: ["PENDING_MANAGER_APPROVAL", "PENDING_HR_APPROVAL", "APPROVED"] } },
+        ]
       };
 
       // Exclude specific record if provided

@@ -11,6 +11,7 @@ export interface Promotion {
   _id: string;
   promotionId: string;
   employeeId: string;
+  employeeCode?: string;
   employeeName?: string;
   promotionFrom: {
     departmentId: string;
@@ -27,7 +28,13 @@ export interface Promotion {
     salary?: number;
   };
   promotionDate: string;
-  promotionType?: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
+  promotionType?:
+    | 'Performance Based'
+    | 'Experience Based'
+    | 'Qualification Based'
+    | 'Special Achievement'
+    | 'Regular'
+    | 'Other';
   reason?: string;
   status: 'pending' | 'approved' | 'applied' | 'cancelled' | 'rejected';
   isDue?: boolean;
@@ -86,7 +93,13 @@ export interface CreatePromotionRequest {
     designationId: string;
   };
   promotionDate: string;
-  promotionType?: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
+  promotionType?:
+    | 'Performance Based'
+    | 'Experience Based'
+    | 'Qualification Based'
+    | 'Special Achievement'
+    | 'Regular'
+    | 'Other';
   reason?: string;
   notes?: string;
 }

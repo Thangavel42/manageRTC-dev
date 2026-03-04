@@ -17,8 +17,20 @@ import { useAuth } from "../../hooks/useAuth";
 import { useDepartmentsREST } from "../../hooks/useDepartmentsREST";
 import { useEmployeesREST } from "../../hooks/useEmployeesREST";
 import { useProfileRest } from "../../hooks/useProfileRest";
-import { useResignationsREST } from "../../hooks/useResignationsREST";
 import type { Resignation as APIResignation } from "../../hooks/useResignationsREST";
+import { useResignationsREST } from "../../hooks/useResignationsREST";
+
+type ReportingInfo = {
+  name: string;
+  route: "manager" | "hr";
+  message: string;
+};
+
+const DEFAULT_REPORTING_INFO: ReportingInfo = {
+  name: "",
+  route: "hr",
+  message: "",
+};
 
 type ResignationRow = {
   employeeName: string;
@@ -34,8 +46,15 @@ type ResignationRow = {
   resignationId: string;
   status: string; // Required for Resignation type compatibility
   resignationStatus?: 'pending' | 'on_notice' | 'rejected' | 'resigned' | 'withdrawn'; // Workflow status
+  workflowStatus?: 'PENDING_MANAGER_APPROVAL' | 'PENDING_HR_APPROVAL' | 'REJECTED_BY_MANAGER' | 'REJECTED_BY_HR' | 'APPROVED';
   reportingManagerId?: string;
   reportingManagerName?: string;
+  managerDecision?: string;
+  managerComments?: string;
+  hrDecision?: string;
+  hrComments?: string;
+  noticePeriodStartDate?: string;
+  noticePeriodEndDate?: string;
   effectiveDate?: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -119,7 +138,19 @@ const Resignation = () => {
     });
   }, [apiResignations, currentEmployee?._id, isEmployeeRole]);
 
-  const effectiveCanApply = isEmployeeRole ? canApply && !hasActiveResignation : true;
+  // Prefer the latest list view: if there is no active resignation, allow apply. If an active
+  // resignation exists, block regardless of previous eligibility responses.
+  const effectiveCanApply = isEmployeeRole ? !hasActiveResignation : true;
+
+  // If there is no active resignation, ensure the employee can apply again even if a stale
+  // eligibility response said otherwise (e.g., after a rejection).
+  useEffect(() => {
+    if (isEmployeeRole && !hasActiveResignation) {
+      setCanApply(true);
+      setEligibilityMessage('');
+      eligibilityToastShown.current = false;
+    }
+  }, [isEmployeeRole, hasActiveResignation]);
 
   // State for viewing resignation details - use API type
   const [viewingResignation, setViewingResignation] = useState<APIResignation | null>(null);
@@ -139,6 +170,9 @@ const Resignation = () => {
     reportingManagerId: "",
     reason: "",
   });
+
+  const [reportingManagerInfo, setReportingManagerInfo] = useState<ReportingInfo>(DEFAULT_REPORTING_INFO);
+  const eligibilityToastShown = useRef<boolean>(false);
 
   // Controlled edit form data
   const [editForm, setEditForm] = useState({
@@ -177,8 +211,13 @@ const Resignation = () => {
               ? 'Your resignation has been approved. You cannot apply again.'
               : result.message || 'Resignation already applied.';
         setEligibilityMessage(msg);
+        if (!eligibilityToastShown.current && msg) {
+          toast.warning(msg);
+          eligibilityToastShown.current = true;
+        }
       } else {
         setEligibilityMessage('');
+        eligibilityToastShown.current = false;
       }
     };
 
@@ -201,10 +240,17 @@ const Resignation = () => {
     if (!departmentId) {
       console.log("loadEmployeesByDepartment - departmentId missing", { departmentId });
       setEmployeeOptions([]);
+      setReportingManagerInfo(DEFAULT_REPORTING_INFO);
       return;
     }
-    console.log("Fetching employees by department via REST API:", departmentId);
-    await fetchEmployees({ departmentId });
+    try {
+      console.log("Fetching employees by department via REST API:", departmentId);
+      await fetchEmployees({ departmentId, status: "Active" });
+    } catch (error) {
+      console.error("[Resignation] Failed to load employees by department", error);
+      toast.error("Failed to load employees for the selected department. Please try again.");
+      setEmployeeOptions([]);
+    }
   }, [fetchEmployees]);
 
   const loadReportingManagers = useCallback(async (params?: { search?: string; departmentId?: string; employeeId?: string }) => {
@@ -285,10 +331,21 @@ const Resignation = () => {
       reason: "",
     };
 
+    setReportingManagerInfo(DEFAULT_REPORTING_INFO);
+
     if (isEmployeeRole && currentEmployee) {
       baseForm.employeeId = currentEmployee._id || "";
       baseForm.departmentId = currentEmployee.departmentId || "";
       baseForm.reportingManagerId = currentEmployee.reportingTo || currentUserProfile?.reportingManager?._id || "";
+      if (baseForm.reportingManagerId) {
+        const managerName = currentEmployee.reportingManagerName
+          || `${currentUserProfile?.reportingManager?.firstName || ""} ${currentUserProfile?.reportingManager?.lastName || ""}`.trim();
+        setReportingManagerInfo({
+          name: managerName || "Assigned Manager",
+          route: "manager",
+          message: "",
+        });
+      }
       setEmployeeOptions([
         {
           value: currentEmployee._id,
@@ -297,9 +354,6 @@ const Resignation = () => {
       ]);
       if (currentEmployee.departmentId) {
         loadEmployeesByDepartment(currentEmployee.departmentId);
-      }
-      if (baseForm.departmentId) {
-        loadReportingManagers({ departmentId: baseForm.departmentId, employeeId: baseForm.employeeId });
       }
     }
 
@@ -334,6 +388,7 @@ const Resignation = () => {
     });
     setEmployeeOptions([]);
     setReportingManagerOptions([]);
+    setReportingManagerInfo(DEFAULT_REPORTING_INFO);
     setIsSubmitting(false);
   };
 
@@ -482,11 +537,39 @@ const Resignation = () => {
 
   // Sync local state with REST API state
   useEffect(() => {
+    const allowedWorkflowStatuses: ResignationRow['workflowStatus'][] = [
+      'PENDING_MANAGER_APPROVAL',
+      'PENDING_HR_APPROVAL',
+      'REJECTED_BY_MANAGER',
+      'REJECTED_BY_HR',
+      'APPROVED',
+    ];
+
     const transformedResignations: ResignationRow[] = apiResignations.map(resignation => {
       const statusValue = resignation.resignationStatus as string | undefined;
       const normalizedStatus = (statusValue === 'approved' ? 'on_notice' : statusValue) as ResignationRow['resignationStatus'];
-      const noticeDate = pickDateValue(resignation.noticeDate, resignation.effectiveDate, resignation.approvedAt, resignation.created_at);
-      const resignationDate = pickDateValue(resignation.resignationDate, resignation.effectiveDate, resignation.processedAt, resignation.approvedAt);
+      const workflowStatusRaw = (resignation.workflowStatus || resignation.finalStatus || resignation.status || '').toString();
+      const workflowStatus = allowedWorkflowStatuses.includes(workflowStatusRaw as ResignationRow['workflowStatus'])
+        ? (workflowStatusRaw as ResignationRow['workflowStatus'])
+        : undefined;
+      const noticeDate = pickDateValue(resignation.noticeDate, resignation.effectiveDate, resignation.approvedAt, resignation.created_at, resignation.noticePeriodStartDate);
+      const resignationDate = pickDateValue(resignation.resignationDate, resignation.effectiveDate, resignation.processedAt, resignation.approvedAt, resignation.noticePeriodEndDate);
+
+      const legacyStatus = (() => {
+        switch (workflowStatus) {
+          case 'PENDING_MANAGER_APPROVAL':
+          case 'PENDING_HR_APPROVAL':
+            return 'pending';
+          case 'REJECTED_BY_MANAGER':
+          case 'REJECTED_BY_HR':
+            return 'rejected';
+          case 'APPROVED':
+            return 'on_notice';
+          default:
+            return normalizedStatus || 'pending';
+        }
+      })() as ResignationRow['resignationStatus'];
+
       return {
         ...resignation,
         employeeName: resignation.employeeName || 'Unknown',
@@ -497,10 +580,17 @@ const Resignation = () => {
         reason: resignation.reason || '',
         noticeDate,
         resignationDate,
-        status: resignation.status || normalizedStatus || 'pending',
-        resignationStatus: normalizedStatus,
+        status: resignation.status || legacyStatus || 'pending',
+        resignationStatus: legacyStatus,
+        workflowStatus,
         reportingManagerId: resignation.reportingManagerId || '',
         reportingManagerName: resignation.reportingManagerName || '',
+        managerDecision: resignation.managerDecision,
+        managerComments: resignation.managerComments,
+        hrDecision: resignation.hrDecision,
+        hrComments: resignation.hrComments,
+        noticePeriodStartDate: resignation.noticePeriodStartDate,
+        noticePeriodEndDate: resignation.noticePeriodEndDate,
       };
     });
 
@@ -531,13 +621,18 @@ const Resignation = () => {
   // Sync employees to dropdown options
   useEffect(() => {
     if (apiEmployees && apiEmployees.length > 0) {
-      const options = apiEmployees.map(emp => ({
-        value: emp._id,
-        label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
-      }));
+      const options = apiEmployees
+        .filter(emp => (emp.status || "").toLowerCase() === "active")
+        .map(emp => ({
+          value: emp._id,
+          label: `${emp.employeeId} - ${emp.firstName} ${emp.lastName}`
+        }));
       setEmployeeOptions(options);
       setReportingManagerOptions(options);
       console.log('[Resignation] Employee options updated:', options.length);
+    } else {
+      setEmployeeOptions([]);
+      setReportingManagerOptions([]);
     }
   }, [apiEmployees]);
 
@@ -547,10 +642,37 @@ const Resignation = () => {
     return isNaN(parsed.getTime()) ? null : parsed;
   };
 
+  const resolveReportingManagerInfo = useCallback(async (employeeId?: string) => {
+    if (!employeeId) return { id: "", name: "" };
+    try {
+      const employee = await getEmployeeById(employeeId);
+      if (!employee) return { id: "", name: "" };
+
+      const managerId = (employee as any).reportingTo || "";
+      let managerName = (employee as any).reportingManagerName || "";
+
+      if (!managerName && (employee as any).reportingManager) {
+        managerName = `${(employee as any).reportingManager.firstName || ""} ${(employee as any).reportingManager.lastName || ""}`.trim();
+      }
+
+      if (!managerName && managerId) {
+        const manager = await getEmployeeById(managerId);
+        if (manager) {
+          managerName = `${(manager as any).firstName || ""} ${(manager as any).lastName || ""}`.trim() || (manager as any).employeeId || "";
+        }
+      }
+
+      return { id: managerId, name: managerName };
+    } catch (error) {
+      console.error("[Resignation] Failed to resolve reporting manager", error);
+      return { id: "", name: "" };
+    }
+  }, [getEmployeeById]);
+
   const resolveReportingManagerId = (employeeId?: string) => {
     if (!employeeId) return "";
     const match = apiEmployees.find(emp => emp._id === employeeId);
-    return match?.reportingTo || currentUserProfile?.reportingManager?._id || "";
+    return match?.reportingTo || "";
   };
 
   const handleAddSave = async () => {
@@ -564,12 +686,21 @@ const Resignation = () => {
 
     if (isSubmitting) return;
 
+    const resolvedReportingManagerId = addForm.reportingManagerId || resolveReportingManagerId(addForm.employeeId) || "";
+
     const payload = {
       employeeId: addForm.employeeId || currentEmployee?._id || "",
       departmentId: addForm.departmentId || currentEmployee?.departmentId || "",
-      reportingManagerId: addForm.reportingManagerId || currentEmployee?.reportingTo || currentUserProfile?.reportingManager?._id || "",
       reason: addForm.reason,
+      ...(resolvedReportingManagerId ? { reportingManagerId: resolvedReportingManagerId } : {}),
     };
+
+    console.log("[Resignation] Submission audit", {
+      submittedBy: currentUserProfile?._id || "unknown",
+      employeeId: payload.employeeId,
+      routeTarget: resolvedReportingManagerId ? "manager" : "hr",
+      timestamp: new Date().toISOString(),
+    });
 
     console.log("[Resignation] Creating resignation via REST API:", payload);
     setIsSubmitting(true);
@@ -731,37 +862,53 @@ const Resignation = () => {
 
   const handleAddDepartmentChange = (opt: any) => {
     console.log("Add department selected - _id:", opt?.value);
-    setAddForm({
-      ...addForm,
+    setAddForm(prev => ({
+      ...prev,
       departmentId: opt?.value || "",
       employeeId: "",
       reportingManagerId: "",
-    });
+    }));
+    setReportingManagerInfo(DEFAULT_REPORTING_INFO);
     // Clear department and dependent field errors
     setAddErrors(prev => ({ ...prev, departmentId: "", employeeId: "", reportingManagerId: "" }));
     if (opt?.value) {
       loadEmployeesByDepartment(opt.value);
-      loadReportingManagers({ departmentId: opt.value });
     }
   };
 
-  const handleAddEmployeeChange = (opt: any) => {
+  const handleAddEmployeeChange = async (opt: any) => {
     console.log("[Resignation] Add employee selected - id:", opt?.value);
-    const reportingManagerId = resolveReportingManagerId(opt?.value);
-    if (reportingManagerId && !reportingManagerOptions.find(item => item.value === reportingManagerId)) {
-      setReportingManagerOptions(prev => [
-        ...prev,
-        { value: reportingManagerId, label: "Assigned Manager" }
-      ]);
-    }
-    setAddForm({
-      ...addForm,
-      employeeId: opt?.value || "",
-      reportingManagerId,
-    });
-    // Clear employee error initially
+    const employeeId = opt?.value || "";
+
+    setAddForm(prev => ({
+      ...prev,
+      employeeId,
+      reportingManagerId: "",
+    }));
     setAddErrors(prev => ({ ...prev, employeeId: "", reportingManagerId: "" }));
-    loadReportingManagers({ departmentId: addForm.departmentId, employeeId: opt?.value || "" });
+
+    if (!employeeId) {
+      setReportingManagerInfo(DEFAULT_REPORTING_INFO);
+      return;
+    }
+
+    try {
+      const { id, name } = await resolveReportingManagerInfo(employeeId);
+      setAddForm(prev => ({ ...prev, employeeId, reportingManagerId: id || "" }));
+      if (id) {
+        setReportingManagerInfo({
+          name: name || "Assigned Manager",
+          route: "manager",
+          message: "",
+        });
+      } else {
+        setReportingManagerInfo(DEFAULT_REPORTING_INFO);
+      }
+    } catch (error) {
+      console.error("[Resignation] Failed to handle employee change", error);
+      toast.error("Failed to load employee details. Please try again.");
+      setReportingManagerInfo(DEFAULT_REPORTING_INFO);
+    }
   };
 
   const handleEditDepartmentChange = (opt: any) => {
@@ -826,14 +973,6 @@ const Resignation = () => {
 
     if (!addForm.employeeId || addForm.employeeId === "") {
       errors.employeeId = "Please select a resigning employee";
-      isValid = false;
-    }
-
-    if (!addForm.reportingManagerId || addForm.reportingManagerId === "") {
-      errors.reportingManagerId = "Please select a reporting manager";
-      isValid = false;
-    } else if (addForm.employeeId && addForm.reportingManagerId === addForm.employeeId) {
-      errors.reportingManagerId = "Reporting manager cannot be the same employee";
       isValid = false;
     }
 
@@ -944,44 +1083,68 @@ const Resignation = () => {
   // Handle approve resignation (using REST API)
   const handleApproveResignation = async (
     resignationId: string,
-    dates?: { noticeDate: string; resignationDate: string }
+    dates?: { noticeDate?: string; resignationDate?: string; noticePeriodStartDate?: string; noticePeriodEndDate?: string; comments?: string },
+    comments?: string
   ) => {
+    const mergedComments = (dates?.comments ?? comments ?? "").trim();
+
+    // Manager path
+    if (isManagerRole && !isHrRole && !isAdminRole) {
+      const managerComment = mergedComments || window.prompt("Add approval comment (optional)") || "";
+      setIsSubmitting(true);
+      const ok = await approveResignation(resignationId, { comments: managerComment });
+      setIsSubmitting(false);
+      if (ok) {
+        await fetchList(filterType, customRange);
+        await fetchStats();
+      }
+      return;
+    }
+
+    // HR/Admin path
     if (!isHrRole && !isAdminRole) {
       toast.error("You do not have permission to approve resignations");
       return;
     }
 
-    if (!dates?.noticeDate || !dates?.resignationDate) {
-      toast.error("Notice date and resignation date are required to approve.");
+    const noticeStart = dates?.noticePeriodStartDate || dates?.noticeDate;
+    const noticeEnd = dates?.noticePeriodEndDate || dates?.resignationDate;
+    const resignationFinal = dates?.resignationDate;
+
+    if (!noticeStart || !noticeEnd || !resignationFinal) {
+      toast.error("Notice period start/end and resignation date are required to approve.");
       return;
     }
 
-    const notice = parse(dates.noticeDate, "dd-MM-yyyy", new Date());
-    const resignationDt = parse(dates.resignationDate, "dd-MM-yyyy", new Date());
-    if (isNaN(notice.getTime()) || isNaN(resignationDt.getTime())) {
+    const noticeStartDt = parse(noticeStart, "dd-MM-yyyy", new Date());
+    const noticeEndDt = parse(noticeEnd, "dd-MM-yyyy", new Date());
+    const resignationDt = parse(resignationFinal, "dd-MM-yyyy", new Date());
+    if (isNaN(noticeStartDt.getTime()) || isNaN(noticeEndDt.getTime()) || isNaN(resignationDt.getTime())) {
       toast.error("Please provide valid dates.");
       return;
     }
-    if (resignationDt < notice) {
-      toast.error("Resignation date cannot be earlier than notice date.");
+    if (noticeEndDt < noticeStartDt) {
+      toast.error("Notice period end cannot be before start date.");
+      return;
+    }
+    if (resignationDt < noticeEndDt) {
+      toast.error("Resignation date must be on or after notice period end date.");
       return;
     }
 
     console.log("[Resignation] Approving resignation via REST API:", resignationId, dates);
     setIsSubmitting(true);
-    const updated = await updateResignation(resignationId, {
-      // Backend Joi expects dd-MM-yyyy
-      noticeDate: dates.noticeDate,
-      resignationDate: dates.resignationDate,
+    const ok = await approveResignation(resignationId, {
+      noticePeriodStartDate: noticeStart,
+      noticePeriodEndDate: noticeEnd,
+      resignationDate: resignationFinal,
+      comments: mergedComments,
     });
+    setIsSubmitting(false);
 
-    if (!updated) {
-      setIsSubmitting(false);
+    if (!ok) {
       return;
     }
-
-    await approveResignation(resignationId);
-    setIsSubmitting(false);
 
     await fetchList(filterType, customRange);
     await fetchStats();
@@ -994,24 +1157,35 @@ const Resignation = () => {
   };
 
   // Handle reject resignation (using REST API)
-  const handleRejectResignation = async (resignationId: string) => {
-    if (!isHrRole && !isAdminRole) {
+  const handleRejectResignation = async (resignationId: string, reasonFromModal?: string) => {
+    const reason = reasonFromModal ?? window.prompt("Please enter reason for rejection (minimum 10 characters):");
+    if (reason === null || reason === undefined) return;
+    const trimmedReason = (reason || "").trim();
+
+    // Backend requires rejection reason between 10 and 500 characters (Joi validation)
+    if (trimmedReason.length < 10) {
+      toast.error("Rejection reason must be at least 10 characters.");
+      return;
+    }
+    if (trimmedReason.length > 500) {
+      toast.error("Rejection reason cannot exceed 500 characters.");
+      return;
+    }
+
+    if (!(isHrRole || isAdminRole || isManagerRole)) {
       toast.error("You do not have permission to reject resignations");
       return;
     }
-    const reason = window.prompt("Please enter reason for rejection (optional):");
-    if (reason !== null) { // User clicked OK (even if empty string)
-      console.log("[Resignation] Rejecting resignation via REST API:", resignationId);
-      await rejectResignation(resignationId, reason);
-      await fetchList(filterType, customRange);
-      await fetchStats();
 
-      const modalElement = document.getElementById("view_resignation");
-      if (modalElement) {
-        const modal = (window as any).bootstrap?.Modal?.getInstance(modalElement) || new (window as any).bootstrap.Modal(modalElement);
-        modal.hide();
-      }
-    }
+    console.log("[Resignation] Rejecting resignation via REST API:", resignationId);
+    await rejectResignation(resignationId, trimmedReason);
+    await fetchList(filterType, customRange);
+    await fetchStats();
+
+    // After rejection, allow employee to apply again
+    setCanApply(true);
+    setEligibilityMessage('');
+    eligibilityToastShown.current = false;
   };
 
   const filteredRows = rows
@@ -1047,6 +1221,20 @@ const Resignation = () => {
       const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
       return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
     });
+
+  const canManagerApproveViewed =
+    isManagerRole &&
+    viewingResignation?.workflowStatus === "PENDING_MANAGER_APPROVAL" &&
+    (!viewingResignation.reportingManagerId || viewingResignation.reportingManagerId === currentEmployee?._id);
+
+  const canHrApproveViewed =
+    (isHrRole || isAdminRole) && viewingResignation?.workflowStatus === "PENDING_HR_APPROVAL";
+
+  const modalApprovalStage: "manager" | "hr" | undefined = canManagerApproveViewed
+    ? "manager"
+    : canHrApproveViewed
+      ? "hr"
+      : (!viewingResignation?.workflowStatus && (isHrRole || isAdminRole) ? "hr" : undefined);
 
   // table columns (preserved look, wired to backend fields)
   const columns: any[] = [
@@ -1130,34 +1318,47 @@ const Resignation = () => {
     {
       title: "Status",
       dataIndex: "resignationStatus",
-      render: (status: string) => {
+      render: (_: string, record: ResignationRow) => {
+        const wf = record.workflowStatus || "";
+        const statusKey = wf || (record.resignationStatus || "").toLowerCase();
         const statusMap: Record<string, { className: string; text: string }> = {
+          PENDING_MANAGER_APPROVAL: { className: "badge badge-soft-warning", text: "Pending Manager" },
+          PENDING_HR_APPROVAL: { className: "badge badge-soft-info", text: "Pending HR" },
+          APPROVED: { className: "badge badge-soft-success", text: "Approved" },
+          REJECTED_BY_MANAGER: { className: "badge badge-soft-danger", text: "Rejected by Manager" },
+          REJECTED_BY_HR: { className: "badge badge-soft-danger", text: "Rejected by HR" },
           pending: { className: "badge badge-soft-warning", text: "Pending" },
           on_notice: { className: "badge badge-soft-info", text: "On Notice" },
           rejected: { className: "badge badge-soft-danger", text: "Rejected" },
           resigned: { className: "badge badge-soft-secondary", text: "Resigned" },
           withdrawn: { className: "badge badge-soft-secondary", text: "Withdrawn" },
         };
-        const statusInfo = statusMap[status?.toLowerCase()] || { className: "badge badge-soft-secondary", text: status || "Unknown" };
+        const statusInfo = statusMap[statusKey] || { className: "badge badge-soft-secondary", text: statusKey || "Unknown" };
         return <span className={statusInfo.className}>{statusInfo.text}</span>;
       },
       filters: [
-        { text: "Pending", value: "pending" },
-        { text: "On Notice", value: "on_notice" },
-        { text: "Rejected", value: "rejected" },
-        { text: "Resigned", value: "resigned" },
+        { text: "Pending Manager", value: "PENDING_MANAGER_APPROVAL" },
+        { text: "Pending HR", value: "PENDING_HR_APPROVAL" },
+        { text: "Approved", value: "APPROVED" },
+        { text: "Rejected by Manager", value: "REJECTED_BY_MANAGER" },
+        { text: "Rejected by HR", value: "REJECTED_BY_HR" },
       ],
-      onFilter: (val: any, rec: any) => rec.resignationStatus?.toLowerCase() === val,
+      onFilter: (val: any, rec: any) => (rec.workflowStatus || rec.resignationStatus || '').toString() === val,
     },
     {
       title: "",
       dataIndex: "actions",
       render: (_: any, record: ResignationRow) => {
-        const isPending = record.resignationStatus?.toLowerCase() === "pending" || !record.resignationStatus;
+        const workflow = record.workflowStatus || record.status || "";
         const isManagerAssignee = isManagerRole && currentEmployee?._id === record.reportingManagerId;
-        const canApproveReject = isPending && (isHrRole || isAdminRole || isManagerAssignee);
-        const canEdit = isPending && (isHrRole || isAdminRole);
-        const canDelete = isPending && (isHrRole || isAdminRole);
+        const managerPending = workflow === "PENDING_MANAGER_APPROVAL";
+        const hrPending = workflow === "PENDING_HR_APPROVAL" || (!workflow && (record.resignationStatus?.toLowerCase?.() === "pending"));
+
+        const canManagerAct = managerPending && isManagerAssignee;
+        const canHrAct = hrPending && (isHrRole || isAdminRole);
+        const canApproveReject = canManagerAct || canHrAct;
+        const canEdit = hrPending && (isHrRole || isAdminRole);
+        const canDelete = managerPending && (isHrRole || isAdminRole);
         return (
           <div className="action-icon d-inline-flex">
             <Link
@@ -1257,7 +1458,7 @@ const Resignation = () => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              {canAddResignation && (
+              {canAddResignation && !(isEmployeeRole && !effectiveCanApply) && (
                 <div className="mb-2">
                   <Link
                     to="#"
@@ -1265,17 +1466,10 @@ const Resignation = () => {
                     data-bs-toggle="modal"
                     data-bs-target="#new_resignation"
                     onClick={handleAddModalOpen}
-                    aria-disabled={isEmployeeRole && !effectiveCanApply}
-                    style={isEmployeeRole && !effectiveCanApply ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
                   >
                     <i className="ti ti-circle-plus me-2" />
-                    Add Resignation
+                    Apply Resignation
                   </Link>
-                </div>
-              )}
-              {isEmployeeRole && !effectiveCanApply && (
-                <div className="mb-2 text-danger fw-semibold">
-                  {eligibilityMessage || 'You already have an active resignation.'}
                 </div>
               )}
               <div className="head-icons ms-2">
@@ -1483,7 +1677,7 @@ const Resignation = () => {
         <div className="modal-dialog modal-dialog-centered modal-md">
           <div className="modal-content">
             <div className="modal-header">
-              <h4 className="modal-title">Add Resignation</h4>
+              <h4 className="modal-title">Apply Resignation</h4>
               <button
                 type="button"
                 className="btn-close custom-btn-close"
@@ -1519,29 +1713,19 @@ const Resignation = () => {
                         options={employeeOptions}
                         value={employeeOptions.find(opt => opt.value === addForm.employeeId) || null}
                         onChange={handleAddEmployeeChange}
-                        disabled={isEmployeeRole}
+                        disabled={isEmployeeRole || !addForm.departmentId}
                       />
                       {addErrors.employeeId && <div className="text-danger">{addErrors.employeeId}</div>}
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">
-                        Reporting Manager <span className="text-danger">*</span>
-                      </label>
-                      <CommonSelect
-                        className="select"
-                        options={reportingManagerOptions}
-                        value={reportingManagerOptions.find(opt => opt.value === addForm.reportingManagerId) || null}
-                        onChange={(opt) => {
-                          setAddForm({ ...addForm, reportingManagerId: opt?.value || "" });
-                          setAddErrors(prev => ({ ...prev, reportingManagerId: "" }));
-                        }}
-                        onInputChange={handleReportingManagerSearch}
-                        isLoading={reportingManagerLoading}
-                        placeholder="Select Reporting Manager"
-                      />
-                      {addErrors.reportingManagerId && <div className="text-danger">{addErrors.reportingManagerId}</div>}
+                      <label className="form-label">Reporting Manager</label>
+                      <div className="form-control-plaintext p-0">
+                        {reportingManagerInfo.route === "manager" && reportingManagerInfo.name ? (
+                          <div className="fw-semibold text-body">{reportingManagerInfo.name}</div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -1834,7 +2018,8 @@ const Resignation = () => {
       <ResignationDetailsModal
         resignation={viewingResignation}
         modalId="view_resignation"
-        canApproveReject={isHrRole || isAdminRole}
+        canApproveReject={Boolean(modalApprovalStage)}
+        approvalStage={modalApprovalStage}
         onApprove={handleApproveResignation}
         onReject={handleRejectResignation}
         isSubmitting={isSubmitting}

@@ -194,6 +194,11 @@ const createApiClient = (): AxiosInstance => {
 
         console.error('[API] Forbidden:', { errorCode, errorMessage });
 
+        // Suppress noisy permission toast on UI if the backend sends the generic message
+        if (errorMessage?.toLowerCase().includes('insufficient permissions')) {
+          (error as any).suppressPermissionToast = true;
+        }
+
         // If employee account is locked/inactive/resigned/terminated, logout and redirect
         if (errorCode === 'ACCOUNT_LOCKED' ||
             errorCode === 'EMPLOYEE_INACTIVE' ||

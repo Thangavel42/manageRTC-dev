@@ -122,6 +122,7 @@ const Promotion = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
+  const [departmentLookup, setDepartmentLookup] = useState<Record<string, string>>({});
   const [designationLookup, setDesignationLookup] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<PromotionStats>({
@@ -198,6 +199,30 @@ const Promotion = () => {
       return fallback || "N/A";
     },
     [designationLookup, designations]
+  );
+
+  const resolveDepartmentName = useCallback(
+    (departmentId?: string, fallback?: string) => {
+      if (fallback && fallback.trim()) return fallback;
+      if (!departmentId) return fallback || "N/A";
+
+      const key = typeof departmentId === "string" ? departmentId : String(departmentId);
+
+      const fromLookup = departmentLookup[key];
+      if (fromLookup) return fromLookup;
+
+      const found = departments.find((d: any) => {
+        const did = d.id || d._id || (d as any).departmentId;
+        return did && String(did) === key;
+      });
+
+      if ((found as any)?.department) return (found as any).department;
+      if ((found as any)?.name) return (found as any).name;
+      if ((found as any)?.title) return (found as any).title;
+
+      return fallback || "N/A";
+    },
+    [departmentLookup, departments]
   );
 
   // Validation errors for Edit Promotion
@@ -405,48 +430,61 @@ const Promotion = () => {
 
   // Sync REST API data to local state
   useEffect(() => {
-    const transformedPromotions = (apiPromotions || []).map(promo => ({
-      _id: promo._id,
-      promotionId: promo.promotionId,
-      employeeId: promo.employeeId,
-      status: promo.status,
-      createdAt: promo.createdAt,
-      updatedAt: promo.updatedAt,
-      promotionDate: promo.promotionDate,
-      promotionType: promo.promotionType,
-      reason: promo.reason,
-      notes: promo.notes,
-      employee: promo.employeeId ? {
-        id: promo.employeeId,
-        name: promo.employeeName || 'Unknown',
-        image: '',
+    const transformedPromotions = (apiPromotions || []).map(promo => {
+      const fromDepartmentId = promo.promotionFrom?.departmentId || '';
+      const toDepartmentId = promo.promotionTo?.departmentId || '';
+      const fromDesignationId = promo.promotionFrom?.designationId || '';
+      const toDesignationId = promo.promotionTo?.designationId || '';
+
+      const fromDepartmentName = resolveDepartmentName(fromDepartmentId, promo.promotionFrom?.department);
+      const toDepartmentName = resolveDepartmentName(toDepartmentId, promo.promotionTo?.department);
+      const fromDesignationName = resolveDesignationName(fromDesignationId, promo.promotionFrom?.designation);
+      const toDesignationName = resolveDesignationName(toDesignationId, promo.promotionTo?.designation);
+
+      return {
+        _id: promo._id,
+        promotionId: promo.promotionId,
         employeeId: promo.employeeId,
-      } : { id: '', name: 'Unknown', image: '', employeeId: '' },
-      promotionFrom: {
-        departmentId: promo.promotionFrom?.departmentId || '',
-        designationId: promo.promotionFrom?.designationId || '',
-        department: {
-          id: promo.promotionFrom?.departmentId || '',
-          name: promo.promotionFrom?.department || '',
+        employeeCode: (promo as any).employeeCode,
+        status: promo.status,
+        createdAt: promo.createdAt,
+        updatedAt: promo.updatedAt,
+        promotionDate: promo.promotionDate,
+        promotionType: promo.promotionType,
+        reason: promo.reason,
+        notes: promo.notes,
+        employee: promo.employeeId ? {
+          id: promo.employeeId,
+          name: promo.employeeName || 'Unknown',
+          image: '',
+          employeeId: (promo as any).employeeCode || promo.employeeId,
+        } : { id: '', name: 'Unknown', image: '', employeeId: '' },
+        promotionFrom: {
+          departmentId: fromDepartmentId,
+          designationId: fromDesignationId,
+          department: {
+            id: fromDepartmentId,
+            name: fromDepartmentName,
+          },
+          designation: {
+            id: fromDesignationId,
+            name: fromDesignationName,
+          },
         },
-        designation: {
-          id: promo.promotionFrom?.designationId || '',
-          name: promo.promotionFrom?.designation || '',
+        promotionTo: {
+          departmentId: toDepartmentId,
+          designationId: toDesignationId,
+          department: {
+            id: toDepartmentId,
+            name: toDepartmentName,
+          },
+          designation: {
+            id: toDesignationId,
+            name: toDesignationName,
+          },
         },
-      },
-      promotionTo: {
-        departmentId: promo.promotionTo?.departmentId || '',
-        designationId: promo.promotionTo?.designationId || '',
-        department: {
-          id: promo.promotionTo?.departmentId || '',
-          name: promo.promotionTo?.department || '',
-        },
-        designation: {
-          id: promo.promotionTo?.designationId || '',
-          name: promo.promotionTo?.designation || '',
-        },
-      },
-    }));
+      };
+    });
 
     setPromotions(transformedPromotions as any);
     setDepartments(apiDepartments || []);
@@ -458,6 +496,19 @@ const Promotion = () => {
       designation: designation.designation,
     }));
     setDesignations(transformedDesignations as any);
+
+    // Build a lookup map for department names by ID (merge to keep previously fetched ones)
+    setDepartmentLookup((prev) => {
+      const next = { ...prev } as Record<string, string>;
+      (apiDepartments || []).forEach((dept: any) => {
+        const id = dept._id || dept.id || dept.departmentId;
+        const name = dept.department || dept.name || dept.title;
+        if (id && name) {
+          next[String(id)] = name;
+        }
+      });
+      return next;
+    });
 
     // Build a lookup map for designation names by ID (merge to keep previously fetched ones)
     setDesignationLookup((prev) => {
@@ -479,7 +530,15 @@ const Promotion = () => {
       });
     }
     setLoading(apiLoading);
-  }, [apiPromotions, apiDepartments, apiDesignations, apiStats, apiLoading]);
+  }, [
+    apiPromotions,
+    apiDepartments,
+    apiDesignations,
+    apiStats,
+    apiLoading,
+    resolveDepartmentName,
+    resolveDesignationName,
+  ]);
 
   // Calculate stats when promotion data changes
   useEffect(() => {
@@ -862,7 +921,13 @@ const Promotion = () => {
         designationId: newPromotion.designationToId
       },
       promotionDate: newPromotion.promotionDate ? dayjs(newPromotion.promotionDate).toISOString() : undefined,
-      promotionType: (newPromotion.promotionType || 'Regular') as 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other',
+      promotionType: (newPromotion.promotionType || 'Regular') as
+        | 'Performance Based'
+        | 'Experience Based'
+        | 'Qualification Based'
+        | 'Special Achievement'
+        | 'Regular'
+        | 'Other',
       reason: (newPromotion.reason || "").trim(),
     };
 
@@ -1004,7 +1069,13 @@ const Promotion = () => {
         designationId: string;
       };
       promotionDate: string;
-      promotionType: 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other';
+      promotionType:
+        | 'Performance Based'
+        | 'Experience Based'
+        | 'Qualification Based'
+        | 'Special Achievement'
+        | 'Regular'
+        | 'Other';
       reason: string;
     }> = {
       promotionTo: {
@@ -1012,7 +1083,13 @@ const Promotion = () => {
         designationId: editForm.designationToId
       },
       promotionDate: editForm.promotionDate ? dayjs(editForm.promotionDate).toISOString() : undefined,
-      promotionType: (editForm.promotionType || 'Regular') as 'Regular' | 'Acting' | 'Charge' | 'Transfer' | 'Other',
+      promotionType: (editForm.promotionType || 'Regular') as
+        | 'Performance Based'
+        | 'Experience Based'
+        | 'Qualification Based'
+        | 'Special Achievement'
+        | 'Regular'
+        | 'Other',
       reason: (editForm.reason || "").trim(),
     };
 
@@ -1202,17 +1279,24 @@ const Promotion = () => {
 
   const data = sortedPromotions.map(promotion => {
     const employee = employees.find(emp => emp.id === promotion.employee.id);
-    const displayEmployeeId = promotion.employee.employeeId || employee?.employeeId || promotion.employee.id;
+    const displayEmployeeId = promotion.employee.employeeId
+      || employee?.employeeId
+      || promotion.employee.name
+      || promotion.employee.id
+      || "N/A";
 
-    const fromDepartment = promotion.promotionFrom?.department?.name
-      || promotion.promotionFrom?.departmentId
-      || "N/A";
-    const fromDesignation = promotion.promotionFrom?.designation?.name
-      || promotion.promotionFrom?.designationId
-      || "N/A";
-    const toDesignation = promotion.promotionTo?.designation?.name
-      || promotion.promotionTo?.designationId
-      || "N/A";
+    const fromDepartment = resolveDepartmentName(
+      promotion.promotionFrom?.department?.id || promotion.promotionFrom?.departmentId,
+      promotion.promotionFrom?.department?.name,
+    );
+    const fromDesignation = resolveDesignationName(
+      promotion.promotionFrom?.designation?.id || promotion.promotionFrom?.designationId,
+      promotion.promotionFrom?.designation?.name,
+    );
+    const toDesignation = resolveDesignationName(
+      promotion.promotionTo?.designation?.id || promotion.promotionTo?.designationId,
+      promotion.promotionTo?.designation?.name,
+    );
 
     return {
       key: promotion._id,
