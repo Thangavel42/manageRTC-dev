@@ -9,9 +9,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { clerkClient, verifyToken } from '@clerk/express';
-import { createClerkClient } from '@clerk/clerk-sdk-node';
-import { client, getTenantCollections } from '../config/db.js';
-import employeeStatusService, { isUserLockedInClerk } from '../services/employee/employeeStatus.service.js';
+import { getTenantCollections } from '../config/db.js';
+import employeeStatusService from '../services/employee/employeeStatus.service.js';
 
 // ⚠️ SECURITY WARNING: Development mode is hardcoded to true!
 // This is a DEVELOPMENT workaround that MUST be removed before production deployment.
@@ -19,7 +18,9 @@ const isDevelopment = process.env.NODE_ENV === 'development' || process.env.DEV_
 
 // Authorized parties — set EXTRA_ALLOWED_ORIGINS in .env as comma-separated list
 const extraParties = process.env.EXTRA_ALLOWED_ORIGINS
-  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  ? process.env.EXTRA_ALLOWED_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean)
   : [];
 const authorizedParties = [
   'http://localhost:3000',
@@ -125,7 +126,7 @@ export const authenticate = async (req, res, next) => {
     // SECURITY CHECK: If user is locked in Clerk, deny access immediately
     // This applies to ALL users regardless of role (employee, HR, Admin, etc.)
     // Even HR/Admin users are blocked when their account is locked/inactive
-    const isLocked = !!(user?.lockedAt);
+    const isLocked = !!user?.lockedAt;
     if (isLocked) {
       console.log(`   🔒 USER LOCKED IN CLERK: ${verifiedToken.sub} - lockedAt: ${user.lockedAt}`);
       return res.status(403).json({
@@ -150,7 +151,11 @@ export const authenticate = async (req, res, next) => {
     // This is a TEMPORARY FIX that MUST be removed before production deployment!
     // This matches the Socket.IO authentication behavior
     // Applies to all non-superadmin roles (employee, admin, hr, manager)
-    if (isDevelopment && (role === "admin" || role === "hr" || role === "manager" || role === "employee") && !companyId) {
+    if (
+      isDevelopment &&
+      (role === 'admin' || role === 'hr' || role === 'manager' || role === 'employee') &&
+      !companyId
+    ) {
       const devCompanyId = process.env.DEV_COMPANY_ID;
       if (devCompanyId) {
         companyId = devCompanyId;
@@ -186,12 +191,17 @@ export const authenticate = async (req, res, next) => {
       primaryEmailAddress: user.primaryEmailAddress,
     };
 
-    console.log(`   ✅ ${role.toUpperCase()} | ${user.id.substring(0, 10)}... | ${companyId || 'N/A'}`);
+    console.log(
+      `   ✅ ${role.toUpperCase()} | ${user.id.substring(0, 10)}... | ${companyId || 'N/A'}`
+    );
 
     next();
   } catch (error) {
     // Check if the error is due to token expiration (normal occurrence)
-    if (error.message && (error.message.includes('expired') || error.message.includes('JWT is expired'))) {
+    if (
+      error.message &&
+      (error.message.includes('expired') || error.message.includes('JWT is expired'))
+    ) {
       console.log(`   ⏰ Token expired - ${req.id}`);
       return res.status(401).json({
         success: false,
@@ -259,7 +269,7 @@ export const requireEmployeeActive = async (req, res, next) => {
     // Get employee from company database
     const collections = getTenantCollections(req.user.companyId);
     const employee = await collections.employees.findOne({
-      clerkUserId: req.user.userId
+      clerkUserId: req.user.userId,
     });
 
     // Validate employee access
@@ -287,10 +297,12 @@ export const requireEmployeeActive = async (req, res, next) => {
           code: validation.code,
           message: validation.reason,
           requestId: req.id || 'no-id',
-          details: validation.status ? {
-            status: validation.status,
-            note: 'Your account has been deactivated. Please contact HR or system administrator.'
-          } : undefined
+          details: validation.status
+            ? {
+                status: validation.status,
+                note: 'Your account has been deactivated. Please contact HR or system administrator.',
+              }
+            : undefined,
         },
       });
     }
@@ -348,6 +360,14 @@ export const requireOwnEmployee = async (req, res, next) => {
   }
 
   try {
+    // ✅ FIX: Allow admin users to pass through without employee check
+    // Admin users don't have employee records - they access company records instead
+    const userRole = user.role?.toLowerCase();
+    if (userRole === 'admin' || userRole === 'superadmin') {
+      console.log(`   ✅ Profile access verified for ${userRole} user ${user.userId}`);
+      return next();
+    }
+
     const collections = getTenantCollections(user.companyId);
 
     // ✅ SECURITY FIX: Verify employee record belongs to authenticated user
@@ -355,7 +375,7 @@ export const requireOwnEmployee = async (req, res, next) => {
     const employee = await collections.employees.findOne({
       clerkUserId: user.userId,
       companyId: user.companyId,
-      isDeleted: { $ne: true }
+      isDeleted: { $ne: true },
     });
 
     if (!employee) {
@@ -399,7 +419,7 @@ export const requireOwnEmployee = async (req, res, next) => {
  */
 export const requireRole = (...roles) => {
   // Normalize all required roles to lowercase for case-insensitive comparison
-  const normalizedRoles = roles.map(r => r?.toLowerCase());
+  const normalizedRoles = roles.map((r) => r?.toLowerCase());
   return (req, res, next) => {
     // First ensure user is authenticated
     if (!req.user) {

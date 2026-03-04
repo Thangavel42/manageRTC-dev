@@ -123,10 +123,31 @@ export const useUserProfileREST = (): UseUserProfileRESTReturn => {
         },
       });
 
+      console.log('[useUserProfileREST] Response status:', response.status, response.statusText);
+
       const result: UserProfileResponse = await response.json();
+      console.log('[useUserProfileREST] Response data:', result);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || result.message || 'Failed to fetch profile');
+        const errorDetails = {
+          status: response.status,
+          statusText: response.statusText,
+          error: result.error,
+          message: result.message,
+        };
+        console.error('[useUserProfileREST] Request failed:', errorDetails);
+
+        // Handle error being an object or string
+        let errorMessage = 'Failed to fetch profile';
+        if (typeof result.error === 'object' && result.error !== null) {
+          errorMessage = (result.error as any).message || JSON.stringify(result.error);
+        } else if (typeof result.error === 'string') {
+          errorMessage = result.error;
+        } else if (result.message) {
+          errorMessage = result.message;
+        }
+
+        throw new Error(errorMessage);
       }
 
       console.log('[useUserProfileREST] Profile fetched successfully:', result.data);
@@ -134,7 +155,12 @@ export const useUserProfileREST = (): UseUserProfileRESTReturn => {
       return result.data || null;
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to fetch profile';
-      console.error('[useUserProfileREST] Error:', err);
+      console.error('[useUserProfileREST] Error details:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        fullError: err,
+      });
       setError(errorMsg);
       // Don't throw - allow the app to continue even if profile fetch fails
       return null;
