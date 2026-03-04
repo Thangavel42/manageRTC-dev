@@ -1,10 +1,10 @@
 /**
  * Leave Days Calculator
  * Calculates working days between dates excluding weekends and holidays
- * Integrates with Holiday model for accurate leave duration calculation
+ * MULTI-TENANT: Uses company-specific MongoDB collections via getTenantCollections()
  */
 
-import Holiday from '../models/holiday/holiday.schema.js';
+import { getTenantCollections } from '../config/db.js';
 
 /**
  * Default weekend configuration (Sunday = 0, Saturday = 6)
@@ -74,6 +74,60 @@ const isHoliday = (date, holidays) => {
 };
 
 /**
+ * Get holidays in date range for a company (using tenant collections)
+ */
+const getHolidaysInRange = async (companyId, startDate, endDate) => {
+  const collections = getTenantCollections(companyId);
+  return await collections.holidays.find({
+    date: { $gte: startDate, $lte: endDate },
+    isActive: true
+  }).toArray();
+};
+
+/**
+ * Check if a specific date is a holiday (using tenant collections)
+ */
+const isHolidayDate = async (companyId, date, state = null) => {
+  const collections = getTenantCollections(companyId);
+  const query = {
+    date: {
+      $gte: new Date(date).setHours(0, 0, 0, 0),
+      $lte: new Date(date).setHours(23, 59, 59, 999)
+    },
+    isActive: true
+  };
+
+  // If state is provided, check for state-specific holidays or public holidays
+  if (state) {
+    query.$or = [
+      { type: 'public' },
+      { applicableStates: { $in: [state, null] } },
+      { applicableStates: { $exists: false } }
+    ];
+  }
+
+  const holiday = await collections.holidays.findOne(query);
+  return holiday ? { isHoliday: true, name: holiday.name, type: holiday.type } : { isHoliday: false };
+};
+
+/**
+ * Get upcoming holidays (using tenant collections)
+ */
+const getUpcomingHolidays = async (companyId, days = 30) => {
+  const collections = getTenantCollections(companyId);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const futureDate = new Date(today);
+  futureDate.setDate(futureDate.getDate() + days);
+
+  return await collections.holidays.find({
+    date: { $gte: today, $lte: futureDate },
+    isActive: true
+  }).sort({ date: 1 }).toArray();
+};
+
+/**
  * Calculate working days between two dates excluding weekends and holidays
  *
  * @param {string} companyId - Company ID
@@ -100,7 +154,7 @@ export const calculateWorkingDays = async (companyId, startDate, endDate, state 
   const weekendDays = await getWeekendDays(companyId);
 
   // Get holidays in the date range
-  const holidays = await Holiday.getHolidaysInRange(companyId, start, end);
+  const holidays = await getHolidaysInRange(companyId, start, end);
 
   // Filter holidays based on state if provided
   const applicableHolidays = state
@@ -139,7 +193,7 @@ export const calculateWorkingDays = async (companyId, startDate, endDate, state 
     let holidayName = null;
     if (dayIsHoliday) {
       const holiday = applicableHolidays.find(h =>
-        normalizeDate(new Date(h.date)).getTime() === dateTimestamp
+        normalizeDate(new Date(h.date), timezone).getTime() === dateTimestamp
       );
       holidayName = holiday ? holiday.name : 'Holiday';
     }
@@ -263,7 +317,7 @@ export const checkWorkingDay = async (companyId, date) => {
   const dayIsWeekend = isWeekend(checkDate, weekendDays);
 
   // Check if it's a holiday
-  const holiday = await Holiday.isHoliday(companyId, checkDate);
+  const holiday = await isHolidayDate(companyId, checkDate);
   const dayIsHoliday = holiday.isHoliday;
 
   return {
@@ -276,17 +330,6 @@ export const checkWorkingDay = async (companyId, date) => {
 };
 
 /**
- * Get upcoming holidays for a company
- *
- * @param {string} companyId - Company ID
- * @param {number} days - Number of days ahead to look
- * @returns {Promise<Array>} List of upcoming holidays
- */
-export const getUpcomingHolidays = async (companyId, days = 30) => {
-  return Holiday.getUpcomingHolidays(companyId, days);
-};
-
-/**
  * Get holidays for a specific month
  *
  * @param {string} companyId - Company ID
@@ -295,7 +338,14 @@ export const getUpcomingHolidays = async (companyId, days = 30) => {
  * @returns {Promise<Array>} List of holidays for the month
  */
 export const getMonthHolidays = async (companyId, year, month) => {
-  return Holiday.getHolidaysByMonth(companyId, year, month);
+  const collections = getTenantCollections(companyId);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+
+  return await collections.holidays.find({
+    date: { $gte: startDate, $lte: endDate },
+    isActive: true
+  }).sort({ date: 1 }).toArray();
 };
 
 /**
@@ -306,7 +356,14 @@ export const getMonthHolidays = async (companyId, year, month) => {
  * @returns {Promise<Array>} List of holidays for the year
  */
 export const getYearHolidays = async (companyId, year) => {
-  return Holiday.getHolidaysByYear(companyId, year);
+  const collections = getTenantCollections(companyId);
+  const startDate = new Date(year, 0, 1);
+  const endDate = new Date(year, 11, 31);
+
+  return await collections.holidays.find({
+    date: { $gte: startDate, $lte: endDate },
+    isActive: true
+  }).sort({ date: 1 }).toArray();
 };
 
 export default {

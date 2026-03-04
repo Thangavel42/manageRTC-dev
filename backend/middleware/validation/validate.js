@@ -91,7 +91,15 @@ export const validateQuery = (schema, options = {}) => {
       }
 
       // Replace req.query with validated and sanitized value
-      req.query = value;
+      // Note: req.query is read-only in Express 4.17+, so we modify in-place
+      // Clear existing properties
+      for (const key in req.query) {
+        delete req.query[key];
+      }
+      // Add validated properties
+      for (const key in value) {
+        req.query[key] = value[key];
+      }
       next();
     } catch (err) {
       next(err);
@@ -136,7 +144,15 @@ export const validateParams = (schema, options = {}) => {
       }
 
       // Replace req.params with validated and sanitized value
-      req.params = value;
+      // Note: req.params is read-only in Express 4.17+, so we modify in-place
+      // Clear existing properties
+      for (const key in req.params) {
+        delete req.params[key];
+      }
+      // Add validated properties
+      for (const key in value) {
+        req.params[key] = value[key];
+      }
       next();
     } catch (err) {
       next(err);
@@ -340,7 +356,15 @@ export const validate = (schemas = {}) => {
           );
         }
 
-        req.query = queryValue;
+        // Note: req.query is read-only in Express 4.17+, so we modify in-place
+        // Clear existing properties
+        for (const key in req.query) {
+          delete req.query[key];
+        }
+        // Add validated properties
+        for (const key in queryValue) {
+          req.query[key] = queryValue[key];
+        }
       }
 
       // Validate params
@@ -363,7 +387,15 @@ export const validate = (schemas = {}) => {
           );
         }
 
-        req.params = paramsValue;
+        // Note: req.params is read-only in Express 4.17+, so we modify in-place
+        // Clear existing properties
+        for (const key in req.params) {
+          delete req.params[key];
+        }
+        // Add validated properties
+        for (const key in paramsValue) {
+          req.params[key] = paramsValue[key];
+        }
       }
 
       next();

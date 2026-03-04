@@ -1177,10 +1177,15 @@ const AdminDashboard = () => {
     }
 
     return dashboardData.recentInvoices.filter((invoice) => {
+      const status = invoice.status?.toLowerCase() || '';
       if (invoiceFilter === 'paid') {
-        return invoice.status?.toLowerCase() === 'paid';
+        return status === 'paid';
       } else if (invoiceFilter === 'unpaid') {
-        return invoice.status?.toLowerCase() === 'unpaid';
+        return status === 'unpaid';
+      } else if (invoiceFilter === 'pending') {
+        return status === 'pending';
+      } else if (invoiceFilter === 'overdue') {
+        return status === 'overdue';
       }
       return true;
     });
@@ -1385,7 +1390,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.attendance?.percentage)}
                             </span>
                           </h3>
-                          <Link to="/attendance-employee" className="link-default">
+                          <Link to={routes.attendanceemployee} className="link-default">
                             View Details
                           </Link>
                         </div>
@@ -1414,7 +1419,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.projects?.percentage)}
                             </span>
                           </h3>
-                          <Link to="/projects" className="link-default">
+                          <Link to={routes.projectlist} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1442,7 +1447,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.clientsGrowth)}
                             </span>
                           </h3>
-                          <Link to="/clients" className="link-default">
+                          <Link to={routes.clientlist} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1471,7 +1476,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.tasksGrowth)}
                             </span>
                           </h3>
-                          <Link to="/tasks" className="link-default">
+                          <Link to={routes.tasks} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1499,7 +1504,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.earningsGrowth)}
                             </span>
                           </h3>
-                          <Link to="/expenses" className="link-default">
+                          <Link to={routes.expenses} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1527,7 +1532,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.profitGrowth)}
                             </span>
                           </h3>
-                          <Link to="/purchase-transaction" className="link-default">
+                          <Link to={routes.expensesreport} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1555,7 +1560,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.applicationsGrowth)}
                             </span>
                           </h3>
-                          <Link to="/job-list" className="link-default">
+                          <Link to={routes.joblist} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1583,7 +1588,7 @@ const AdminDashboard = () => {
                               {formatGrowthPercentage(dashboardData.stats?.employeesGrowth)}
                             </span>
                           </h3>
-                          <Link to="/employees" className="link-default">
+                          <Link to={routes.employeeList} className="link-default">
                             View All
                           </Link>
                         </div>
@@ -1947,7 +1952,7 @@ const AdminDashboard = () => {
                           </div>
                         </div>
                       )}
-                      <Link to="/employees" className="btn btn-light btn-md w-100">
+                      <Link to={routes.employeeList} className="btn btn-light btn-md w-100">
                         View All Employees
                       </Link>
                     </div>
@@ -2088,13 +2093,13 @@ const AdminDashboard = () => {
                             {dashboardData.attendanceOverview?.absentees
                               ?.slice(0, 4)
                               .map((absentee, index) => (
-                                <span key={absentee._id} className="avatar avatar-rounded">
+                                <Link key={absentee._id} to={routes.employeeDetailPage.replace(':employeeId', absentee._id)} className="avatar avatar-rounded">
                                   <ImageWithBasePath
                                     className="border border-white"
                                     src={absentee.avatar}
                                     alt="img"
                                   />
-                                </span>
+                                </Link>
                               ))}
                             {(dashboardData.attendanceOverview?.absentees?.length || 0) > 4 && (
                               <Link
@@ -2107,7 +2112,7 @@ const AdminDashboard = () => {
                           </div>
                         </div>
                         <Link
-                          to="/leaves"
+                          to={routes.leaveadmin}
                           className="fs-13 link-primary text-decoration-underline mb-2"
                         >
                           View Details
@@ -2244,7 +2249,7 @@ const AdminDashboard = () => {
                               } br-5`}
                           >
                             <div className="d-flex align-items-center">
-                              <Link to="#" className="avatar flex-shrink-0">
+                              <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)} className="avatar flex-shrink-0">
                                 <ImageWithBasePath
                                   src={employee.avatar}
                                   className="rounded-circle border border-2"
@@ -2281,13 +2286,13 @@ const AdminDashboard = () => {
                             className="d-flex align-items-center justify-content-between mb-3 p-2 border border-dashed br-5"
                           >
                             <div className="d-flex align-items-center">
-                              <span className="avatar flex-shrink-0">
+                              <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)} className="avatar flex-shrink-0">
                                 <ImageWithBasePath
                                   src={employee.avatar}
                                   className="rounded-circle border border-2"
                                   alt="img"
                                 />
-                              </span>
+                              </Link>
                               <div className="ms-2">
                                 <h6 className="fs-14 fw-medium text-truncate">
                                   {employee.name}{' '}
@@ -2310,7 +2315,7 @@ const AdminDashboard = () => {
                             </div>
                           </div>
                         ))}
-                      <Link to="/attendance-report" className="btn btn-light btn-md w-100">
+                      <Link to={routes.attendancereport} className="btn btn-light btn-md w-100">
                         View All Attendance
                       </Link>
                     </div>
@@ -2325,7 +2330,7 @@ const AdminDashboard = () => {
                   <div className="card flex-fill">
                     <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                       <h5 className="mb-2">Jobs Applicants</h5>
-                      <Link to="/job-list" className="btn btn-light btn-md mb-2">
+                      <Link to={routes.joblist} className="btn btn-light btn-md mb-2">
                         View All
                       </Link>
                     </div>
@@ -2448,7 +2453,7 @@ const AdminDashboard = () => {
                   <div className="card flex-fill">
                     <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                       <h5 className="mb-2">Employees</h5>
-                      <Link to="/employees" className="btn btn-light btn-md mb-2">
+                      <Link to={routes.employeeList} className="btn btn-light btn-md mb-2">
                         View All
                       </Link>
                     </div>
@@ -2466,7 +2471,7 @@ const AdminDashboard = () => {
                               <tr key={employee._id}>
                                 <td>
                                   <div className="d-flex align-items-center">
-                                    <Link to="#" className="avatar">
+                                    <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)} className="avatar">
                                       <ImageWithBasePath
                                         src={employee.avatar}
                                         className="img-fluid rounded-circle"
@@ -2475,7 +2480,7 @@ const AdminDashboard = () => {
                                     </Link>
                                     <div className="ms-2">
                                       <h6 className="fw-medium">
-                                        <Link to="#">{employee.name}</Link>
+                                        <Link to={routes.employeeDetailPage.replace(':employeeId', employee._id)}>{employee.name}</Link>
                                       </h6>
                                       <span className="fs-12">{employee.position}</span>
                                     </div>
@@ -2799,7 +2804,11 @@ const AdminDashboard = () => {
                                 ? 'Paid'
                                 : invoiceFilter === 'unpaid'
                                   ? 'Unpaid'
-                                  : 'All Invoices'}
+                                  : invoiceFilter === 'pending'
+                                    ? 'Pending'
+                                    : invoiceFilter === 'overdue'
+                                      ? 'Overdue'
+                                      : 'All Invoices'}
                           </Link>
                           <ul className="dropdown-menu  dropdown-menu-end p-3">
                             <li>
@@ -2839,6 +2848,32 @@ const AdminDashboard = () => {
                                 }}
                               >
                                 Unpaid
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${invoiceFilter === 'pending' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleInvoiceFilterChange('pending');
+                                }}
+                              >
+                                Pending
+                              </Link>
+                            </li>
+                            <li>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${invoiceFilter === 'overdue' ? 'active' : ''
+                                  }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleInvoiceFilterChange('overdue');
+                                }}
+                              >
+                                Overdue
                               </Link>
                             </li>
                           </ul>
@@ -2924,7 +2959,7 @@ const AdminDashboard = () => {
                                 <tr key={invoice._id}>
                                   <td className="px-0">
                                     <div className="d-flex align-items-center">
-                                      <Link to="/invoice-details" className="avatar">
+                                      <Link to={`${routes.invoiceDetails}/${invoice._id}`} className="avatar">
                                         <ImageWithBasePath
                                           src={invoice.clientLogo}
                                           className="img-fluid rounded-circle"
@@ -2933,7 +2968,7 @@ const AdminDashboard = () => {
                                       </Link>
                                       <div className="ms-2">
                                         <h6 className="fw-medium">
-                                          <Link to="/invoice-details">{invoice.title}</Link>
+                                          <Link to={`${routes.invoiceDetails}/${invoice._id}`}>{invoice.title}</Link>
                                         </h6>
                                         <span className="fs-13 d-inline-flex align-items-center">
                                           {invoice.invoiceNumber}
@@ -2949,12 +2984,23 @@ const AdminDashboard = () => {
                                   </td>
                                   <td className="px-0 text-end">
                                     <span
-                                      className={`badge ${invoice.status === 'Paid'
+                                      className={`badge ${invoice.status === 'Paid' || invoice.status === 'paid'
                                         ? 'badge-success-transparent'
-                                        : 'badge-danger-transparent'
+                                        : invoice.status === 'Pending' || invoice.status === 'pending'
+                                          ? 'badge-warning-transparent'
+                                          : invoice.status === 'Overdue' || invoice.status === 'overdue'
+                                            ? 'badge-danger-transparent'
+                                            : 'badge-secondary-transparent'
                                         } badge-xs d-inline-flex align-items-center`}
                                     >
-                                      <i className="ti ti-circle-filled fs-5 me-1" />
+                                      <i className={`ti ti-circle-filled fs-5 me-1 ${invoice.status === 'Paid' || invoice.status === 'paid'
+                                        ? 'text-success'
+                                        : invoice.status === 'Pending' || invoice.status === 'pending'
+                                          ? 'text-warning'
+                                          : invoice.status === 'Overdue' || invoice.status === 'overdue'
+                                            ? 'text-danger'
+                                            : 'text-secondary'
+                                        }`} />
                                       {invoice.status}
                                     </span>
                                   </td>
@@ -2972,7 +3018,7 @@ const AdminDashboard = () => {
                           </tbody>
                         </table>
                       </div>
-                      <Link to="/invoice" className="btn btn-light btn-md w-100 mt-2">
+                      <Link to={routes.invoices} className="btn btn-light btn-md w-100 mt-2">
                         View All
                       </Link>
                     </div>
@@ -3077,13 +3123,13 @@ const AdminDashboard = () => {
                             {dashboardData.projectsData?.slice(0, 7).map((project, index) => (
                               <tr key={project.id}>
                                 <td>
-                                  <Link to="/project-details" className="link-default">
+                                  <span className="link-default">
                                     {project.projectId || `PRO-${String(index + 1).padStart(4, '0')}`}
-                                  </Link>
+                                  </span>
                                 </td>
                                 <td>
                                   <h6 className="fw-medium">
-                                    <Link to="/project-details">{project.name}</Link>
+                                    {project.name}
                                   </h6>
                                 </td>
                                 <td>
@@ -3286,7 +3332,7 @@ const AdminDashboard = () => {
                           </h4>
                           <p className="fs-13 mb-0">Spent on Overall Tasks This Week</p>
                         </div>
-                        <Link to="/tasks" className="btn btn-sm btn-light mb-2 text-nowrap">
+                        <Link to={routes.tasks} className="btn btn-sm btn-light mb-2 text-nowrap">
                           View All
                         </Link>
                       </div>
@@ -3302,7 +3348,7 @@ const AdminDashboard = () => {
                   <div className="card flex-fill">
                     <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                       <h5 className="mb-2">Schedules</h5>
-                      <Link to="/candidates" className="btn btn-light btn-md mb-2">
+                      <Link to={routes.candidates} className="btn btn-light btn-md mb-2">
                         View All
                       </Link>
                     </div>
@@ -3360,7 +3406,7 @@ const AdminDashboard = () => {
                   <div className="card flex-fill">
                     <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                       <h5 className="mb-2">Recent Activities</h5>
-                      <Link to="/activity" className="btn btn-light btn-md mb-2">
+                      <Link to={routes.activity} className="btn btn-light btn-md mb-2">
                         View All
                       </Link>
                     </div>
