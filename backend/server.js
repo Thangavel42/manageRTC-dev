@@ -81,7 +81,7 @@ import clerkWebhookRoutes from './routes/webhooks/clerk.routes.js';
 
 // RBAC Routes
 import adminUsersRoutes from './routes/api/admin.users.js';
-import companyChangeRequestRoutes from "./routes/api/companyChangeRequest.js";
+import companyChangeRequestRoutes from './routes/api/companyChangeRequest.js';
 import companyPagesRoutes from './routes/api/companyPages.routes.js';
 import rbacModulesRoutes from './routes/api/rbac/modules.js';
 import rbacPageCategoriesRoutes from './routes/api/rbac/pageCategories.routes.js';

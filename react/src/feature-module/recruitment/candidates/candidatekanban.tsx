@@ -712,12 +712,12 @@ const CandidateKanban = () => {
                                       </div>
                                     )}
 
-                                    {candidate.applicationInfo?.recruiterName && (
+                                    {candidate.applicationInfo?.recruiterDetails?.fullName && (
                                       <div className="mt-2 pt-2 border-top">
                                         <div className="d-flex align-items-center">
                                           <i className="ti ti-user-check me-2 text-muted fs-12"></i>
                                           <span className="fs-12 text-muted">
-                                            {candidate.applicationInfo.recruiterName}
+                                            {candidate.applicationInfo.recruiterDetails.fullName}
                                           </span>
                                         </div>
                                       </div>
