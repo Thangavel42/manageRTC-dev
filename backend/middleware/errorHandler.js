@@ -3,6 +3,9 @@
  * Centralized error handling with proper HTTP status codes and logging
  */
 
+import logger from '../utils/logger.js';  // ✅ SECURITY FIX - Phase 6: Structured logging
+import { sanitizeError } from '../utils/logSanitization.js';  // ✅ SECURITY FIX - Phase 6: Log sanitization
+
 /**
  * Custom Error Classes
  */
@@ -100,12 +103,15 @@ const handleAuthError = (error) => {
  * Development vs Production Error Response
  */
 const sendErrorDev = (err, req, res) => {
-  console.error('[Error Details]', {
+  // ✅ SECURITY FIX - Phase 6: Log stack server-side only, never send to client
+  logger.error('Request error', {
     code: err.code,
     message: err.message,
-    details: err.details || [],  // ✅ Now logging validation details!
+    details: err.details || [],
     stack: err.stack,
-    requestId: req.id
+    requestId: req.id,
+    path: req.path,
+    method: req.method
   });
 
   return res.status(err.statusCode).json({
@@ -114,7 +120,6 @@ const sendErrorDev = (err, req, res) => {
       code: err.code,
       message: err.message,
       details: err.details || [],
-      stack: err.stack,
       requestId: req.id || 'no-id'
     }
   });
@@ -135,11 +140,13 @@ const sendErrorProd = (err, req, res) => {
   }
 
   // Programming or unknown errors: don't leak details
-  console.error('[Unexpected Error]', {
-    error: err.message,
+  logger.error('Unexpected error', sanitizeError({
+    message: err.message,
     stack: err.stack,
-    requestId: req.id
-  });
+    requestId: req.id,
+    path: req.path,
+    method: req.method
+  }));
 
   return res.status(500).json({
     success: false,
@@ -174,16 +181,16 @@ export const errorHandler = (err, req, res, next) => {
     error = new ValidationError('Invalid ID format');
   }
 
-  // Log error for debugging
-  console.error('[Error Logged]', {
+  // ✅ SECURITY FIX - Phase 6: Use sanitized structured logging
+  logger.error('Error handled', sanitizeError({
     code: error.code,
     message: error.message,
-    details: error.details || [],  // ✅ Now logging validation details!
+    details: error.details || [],
     statusCode: error.statusCode,
     requestId: req.id,
     path: req.path,
     method: req.method
-  });
+  }));
 
   // Send appropriate response based on environment
   const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -200,7 +207,7 @@ export const errorHandler = (err, req, res, next) => {
  * Handles requests to undefined routes
  */
 export const notFoundHandler = (req, res) => {
-  console.warn('[Route Not Found]', {
+  logger.warn('Route not found', {
     path: req.path,
     method: req.method,
     requestId: req.id

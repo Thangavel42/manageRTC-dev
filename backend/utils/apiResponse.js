@@ -3,6 +3,8 @@
  * Standardized response formatting with pagination support
  */
 
+import { escapeRegex, validateSearchInput } from './sanitization.js';
+
 /**
  * Success Response Builder
  *
@@ -149,19 +151,29 @@ export const filterAndPaginate = async (model, filter = {}, options = {}) => {
 
 /**
  * Search Helper
- * Creates text search filter for MongoDB
+ * Creates text search filter for MongoDB with NoSQL injection prevention
  *
- * @param {string} searchTerm - Search term
+ * SECURITY: This function sanitizes user input to prevent NoSQL injection attacks
+ *
+ * @param {string} searchTerm - Search term from user input
  * @param {Array<string>} fields - Fields to search in
  * @returns {Object} MongoDB filter
+ * @throws {Error} If searchTerm contains MongoDB operators
  */
 export const buildSearchFilter = (searchTerm, fields = ['name', 'email']) => {
   if (!searchTerm || searchTerm.trim() === '') {
     return {};
   }
 
+  // ✅ SECURITY FIX: Validate input to block MongoDB operators
+  const validated = validateSearchInput(searchTerm);
+
+  // ✅ SECURITY FIX: Escape regex special characters to prevent ReDoS
+  const escapedSearch = escapeRegex(validated.trim());
+
+  // Build safe regex filter
   const orConditions = fields.map((field) => ({
-    [field]: { $regex: searchTerm, $options: 'i' },
+    [field]: { $regex: escapedSearch, $options: 'i' },
   }));
 
   return { $or: orConditions };

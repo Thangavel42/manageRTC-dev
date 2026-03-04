@@ -799,6 +799,15 @@ export const createLeave = asyncHandler(async (req, res) => {
     logLeaveEvent('create', leave, user);
   }
 
+  // ✅ SECURITY FIX - Phase 6: Audit log for leave creation
+  auditLogService.logLeaveAction(
+    user.companyId,
+    'LEAVE_APPLIED',
+    leave,
+    user,
+    req
+  ).catch(err => logger.error('[Audit] Leave create audit failed:', { error: err.message }));
+
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
   if (io) {
@@ -1907,6 +1916,15 @@ export const cancelLeave = asyncHandler(async (req, res) => {
       logger.error('[Leave Cancellation] Attendance cleanup error (non-critical):', attendanceError);
     }
   }
+
+  // ✅ SECURITY FIX - Phase 6: Audit log for leave cancellation
+  auditLogService.logLeaveAction(
+    user.companyId,
+    'LEAVE_CANCELLED',
+    result.updatedLeave,
+    user,
+    req
+  ).catch(err => logger.error('[Audit] Leave cancel audit failed:', { error: err.message }));
 
   // Broadcast Socket.IO events
   const io = getSocketIO(req);

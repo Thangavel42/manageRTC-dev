@@ -28,7 +28,10 @@ import {
 } from '../../utils/avatarUtils.js';
 import { formatDDMMYYYY, isValidDDMMYYYY, parseDDMMYYYY } from '../../utils/dateFormat.js';
 import { sendEmployeeCredentialsEmail, sendPasswordChangedEmail } from '../../utils/emailer.js';
+import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js';  // ✅ SECURITY FIX: Mass assignment prevention
+import { employeeListDTO, employeeDetailDTO, employeeReferenceDTO } from '../../utils/responseDTO.js';  // ✅ SECURITY FIX: Data leakage prevention
 import { devError, devLog } from '../../utils/logger.js';
+import { createAuditLog } from '../../services/audit/auditLog.service.js';  // ✅ SECURITY FIX - Phase 6: Audit logging
 import { broadcastEmployeeEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
 
 /**
@@ -573,10 +576,13 @@ export const getEmployees = asyncHandler(async (req, res) => {
   const employees = await collections.employees.aggregate(pipeline).toArray();
   const formattedEmployees = employees.map(formatEmployeeDates);
 
+  // ✅ SECURITY FIX: Apply response DTO to prevent data leakage
+  const sanitizedEmployees = formattedEmployees.map(emp => employeeListDTO(emp, user.role));
+
   // Build pagination metadata
   const pagination = buildPagination(pageNum, limitNum, total);
 
-  return sendSuccess(res, formattedEmployees, 'Employees retrieved successfully', 200, pagination);
+  return sendSuccess(res, sanitizedEmployees, 'Employees retrieved successfully', 200, pagination);
 });
 
 /**
@@ -648,7 +654,15 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
 
   const employees = await collections.employees.aggregate(pipeline).toArray();
 
-  return sendSuccess(res, employees, 'Active employees retrieved successfully');
+  // ✅ SECURITY FIX: Apply reference DTO for dropdown data
+  const sanitizedEmployees = employees.map(emp => ({
+    ...employeeReferenceDTO(emp),
+    departmentId: emp.departmentId || '',
+    department: emp.department || '',
+    status: emp.status || 'Active',
+  }));
+
+  return sendSuccess(res, sanitizedEmployees, 'Active employees retrieved successfully');
 });
 
 /**
@@ -915,15 +929,16 @@ export const getEmployeeById = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee', id);
   }
 
-  // Remove sensitive fields for non-admin users
-  if (user.role !== 'admin' && user.role !== 'hr' && user.role !== 'superadmin') {
-    const { salary, bankDetails, emergencyContacts, ...sanitizedEmployee } = employee;
-    const formattedEmployee = formatEmployeeDates(sanitizedEmployee);
-    return sendSuccess(res, formattedEmployee);
-  }
+  // ✅ SECURITY FIX: Apply response DTO to prevent data leakage
+  // Check if user is viewing their own profile
+  const isSelf = employee.clerkUserId === user.userId ||
+    employee.employeeId === user.employeeId ||
+    employee._id?.toString() === user.employeeMongoId;
 
   const formattedEmployee = formatEmployeeDates(employee);
-  return sendSuccess(res, formattedEmployee);
+  const sanitizedEmployee = employeeDetailDTO(formattedEmployee, user.role, isSelf);
+
+  return sendSuccess(res, sanitizedEmployee);
 });
 
 /**
@@ -1285,6 +1300,20 @@ export const createEmployee = asyncHandler(async (req, res) => {
     // Continue anyway - employee is created
   }
 
+  // ✅ SECURITY FIX - Phase 6: Audit log for employee creation
+  createAuditLog({
+    companyId: user.companyId,
+    action: 'EMPLOYEE_CREATE',
+    entityType: 'employee',
+    entityId: result.insertedId.toString(),
+    userId: user.userId,
+    employeeId: user.employeeId,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent'),
+    changes: { after: { employeeId: employee.employeeId, email: employee.email, firstName: employee.firstName, lastName: employee.lastName } },
+    severity: 'info'
+  }).catch(err => devError('[Audit] Employee create audit failed:', err.message));
+
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
   if (io) {
@@ -1302,9 +1331,18 @@ export const createEmployee = asyncHandler(async (req, res) => {
 export const updateEmployee = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
-  const updateData = req.body;
+  const rawUpdateData = req.body;
 
   devLog('[Employee Controller] updateEmployee - id:', id, 'companyId:', user.companyId);
+
+  // ✅ SECURITY FIX: Apply role-based field sanitization to prevent mass assignment
+  // Only allow fields that the user's role is permitted to update
+  const updateData = sanitizeEmployeeUpdate(rawUpdateData, user.role || 'employee');
+
+  // Validate that at least one field remains after sanitization
+  if (!updateData || Object.keys(updateData).length === 0) {
+    throw buildValidationError('updateData', 'No valid fields to update');
+  }
 
   // Validate ObjectId
   if (!ObjectId.isValid(id)) {
@@ -1542,7 +1580,24 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     }
   }
 
+  // ✅ SECURITY FIX - Phase 6: Audit log for employee update
+  createAuditLog({
+    companyId: user.companyId,
+    action: 'EMPLOYEE_UPDATE',
+    entityType: 'employee',
+    entityId: id,
+    userId: user.userId,
+    employeeId: user.employeeId,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent'),
+    changes: { before: { status: employee.status }, after: { ...Object.keys(normalizedUpdateData).reduce((acc, k) => { if (k !== 'updatedAt' && k !== 'updatedBy') acc[k] = normalizedUpdateData[k]; return acc; }, {}) } },
+    severity: 'info'
+  }).catch(err => devError('[Audit] Employee update audit failed:', err.message));
+
   const formattedEmployee = formatEmployeeDates(updatedEmployee);
+
+  // ✅ SECURITY FIX: Apply response DTO
+  const sanitizedEmployee = employeeDetailDTO(formattedEmployee, user.role, false);
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -1550,7 +1605,7 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     broadcastEmployeeEvents.updated(io, user.companyId, updatedEmployee);
   }
 
-  return sendSuccess(res, formattedEmployee, 'Employee updated successfully');
+  return sendSuccess(res, sanitizedEmployee, 'Employee updated successfully');
 });
 
 /**
@@ -1612,6 +1667,20 @@ export const deleteEmployee = asyncHandler(async (req, res) => {
   if (result.matchedCount === 0) {
     throw buildNotFoundError('Employee', id);
   }
+
+  // ✅ SECURITY FIX - Phase 6: Audit log for employee deletion
+  createAuditLog({
+    companyId: user.companyId,
+    action: 'EMPLOYEE_DELETE',
+    entityType: 'employee',
+    entityId: id,
+    userId: user.userId,
+    employeeId: user.employeeId,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent'),
+    changes: { before: { employeeId: employee.employeeId, email: employee.email, firstName: employee.firstName, lastName: employee.lastName, status: employee.status } },
+    severity: 'warning'
+  }).catch(err => devError('[Audit] Employee delete audit failed:', err.message));
 
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
@@ -1804,9 +1873,10 @@ export const getMyProfile = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee profile');
   }
 
-  // Remove sensitive fields
-  const { salary, bankDetails, emergencyContacts, ...sanitizedEmployee } = employee;
-  const formattedEmployee = formatEmployeeDates(sanitizedEmployee);
+  const formattedEmployee = formatEmployeeDates(employee);
+
+  // ✅ SECURITY FIX: Apply detail DTO with self-access (strips clerkUserId, account)
+  const sanitizedEmployee = employeeDetailDTO(formattedEmployee, user.role, true);
 
   // Assign default avatar if employee has no profile image
   if (!sanitizedEmployee.profileImage || sanitizedEmployee.profileImage.trim() === '') {
@@ -1823,7 +1893,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
  */
 export const updateMyProfile = asyncHandler(async (req, res) => {
   const user = extractUser(req);
-  const updateData = req.body;
+  const rawUpdateData = req.body;
 
   devLog('[Employee Controller] updateMyProfile - userId:', user.userId, 'companyId:', user.companyId);
 
@@ -1839,29 +1909,14 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Employee profile');
   }
 
-  // Restrict what fields can be updated by users themselves
-  const allowedFields = [
-    'phone',
-    'dateOfBirth',
-    'gender',
-    'address',
-    'emergencyContact',
-    'socialProfiles',
-    'profileImage',
-    'avatarUrl',  // Support frontend avatarUrl field
-    'nationality',  // Personal information fields
-    'religion',
-    'maritalStatus',
-    'noOfChildren',
-    'passport'  // Passport information
-  ];
+  // ✅ SECURITY FIX: Apply role-based field sanitization to prevent mass assignment
+  // Employees can only update fields allowed for 'employee' role
+  const sanitizedUpdate = sanitizeEmployeeUpdate(rawUpdateData, 'employee');
 
-  const sanitizedUpdate = {};
-  allowedFields.forEach(field => {
-    if (updateData[field] !== undefined) {
-      sanitizedUpdate[field] = updateData[field];
-    }
-  });
+  // Validate that at least one field remains after sanitization
+  if (!sanitizedUpdate || Object.keys(sanitizedUpdate).length === 0) {
+    throw buildValidationError('updateData', 'No valid fields to update');
+  }
 
   // Map avatarUrl to profileImage for compatibility
   if (sanitizedUpdate.avatarUrl !== undefined) {
@@ -1917,7 +1972,25 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const updatedEmployee = await collections.employees.findOne({ _id: employee._id });
 
   const formattedEmployee = formatEmployeeDates(updatedEmployee);
-  return sendSuccess(res, formattedEmployee, 'Profile updated successfully');
+
+  // ✅ SECURITY FIX - Phase 6: Audit log for self-profile update
+  createAuditLog({
+    companyId: user.companyId,
+    action: 'PROFILE_UPDATE',
+    entityType: 'employee',
+    entityId: employee._id.toString(),
+    userId: user.userId,
+    employeeId: user.employeeId,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent'),
+    changes: { after: Object.keys(normalizedUpdate).filter(k => k !== 'updatedAt' && k !== 'updatedBy') },
+    severity: 'info'
+  }).catch(err => devError('[Audit] Profile update audit failed:', err.message));
+
+  // ✅ SECURITY FIX: Apply detail DTO with self-access
+  const sanitizedEmployee = employeeDetailDTO(formattedEmployee, user.role, true);
+
+  return sendSuccess(res, sanitizedEmployee, 'Profile updated successfully');
 });
 
 /**
@@ -1953,7 +2026,10 @@ export const getEmployeeReportees = asyncHandler(async (req, res) => {
     status: 'Active'
   }).toArray();
 
-  return sendSuccess(res, reportees, 'Reportees retrieved successfully');
+  // ✅ SECURITY FIX: Apply list DTO to prevent data leakage
+  const sanitizedReportees = reportees.map(emp => employeeListDTO(emp, user.role));
+
+  return sendSuccess(res, sanitizedReportees, 'Reportees retrieved successfully');
 });
 
 /**
@@ -2056,7 +2132,10 @@ export const searchEmployees = asyncHandler(async (req, res) => {
 
   const formattedEmployees = employees.map(formatEmployeeDates);
 
-  return sendSuccess(res, formattedEmployees, 'Search results retrieved successfully');
+  // ✅ SECURITY FIX: Apply list DTO to prevent data leakage
+  const sanitizedEmployees = formattedEmployees.map(emp => employeeListDTO(emp, user.role));
+
+  return sendSuccess(res, sanitizedEmployees, 'Search results retrieved successfully');
 });
 
 /**
@@ -2293,7 +2372,8 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   });
 
   if (existingEmployee) {
-    return sendSuccess(res, existingEmployee, 'Employee record already exists');
+    // ✅ SECURITY FIX: Apply detail DTO with self-access
+    return sendSuccess(res, employeeDetailDTO(existingEmployee, user.role, true), 'Employee record already exists');
   }
 
   // Get user data from Clerk
@@ -2332,7 +2412,8 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
         }
       }
     );
-    return sendSuccess(res, emailExists, 'Employee record linked to your account');
+    // ✅ SECURITY FIX: Apply detail DTO with self-access
+    return sendSuccess(res, employeeDetailDTO(emailExists, user.role, true), 'Employee record linked to your account');
   }
 
   // Get department and designations (use first available as default)
@@ -2385,7 +2466,8 @@ export const syncMyEmployeeRecord = asyncHandler(async (req, res) => {
   // Get the created employee
   const employee = await collections.employees.findOne({ _id: result.insertedId });
 
-  return sendCreated(res, employee, 'Employee record created successfully');
+  // ✅ SECURITY FIX: Apply detail DTO with self-access
+  return sendCreated(res, employeeDetailDTO(employee, user.role, true), 'Employee record created successfully');
 });
 
 /**
@@ -2692,6 +2774,20 @@ export const changeEmployeePassword = asyncHandler(async (req, res) => {
       }
     }
   );
+
+  // ✅ SECURITY FIX - Phase 6: Audit log for password change (high severity)
+  createAuditLog({
+    companyId: user.companyId,
+    action: 'PASSWORD_CHANGE',
+    entityType: 'employee',
+    entityId: id,
+    userId: user.userId,
+    employeeId: user.employeeId,
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent'),
+    metadata: { targetEmployeeId: employee.employeeId, targetEmail: employee.email },
+    severity: 'warning'
+  }).catch(err => devError('[Audit] Password change audit failed:', err.message));
 
   // Notify employee via email (non-fatal)
   sendPasswordChangedEmail({

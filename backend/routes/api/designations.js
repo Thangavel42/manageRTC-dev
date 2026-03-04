@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import Joi from 'joi';
 import { authenticate } from '../../middleware/auth.js';
 import {
   getAllDesignations,
@@ -13,6 +14,16 @@ import {
   updateDesignationStatus,
   deleteDesignationById
 } from '../../controllers/rest/designation.controller.js';
+// ✅ PHASE 3 SECURITY FIX: Input validation
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  createDesignationSchema,
+  updateDesignationSchema,
+  designationQuerySchema,
+  objectIdSchema
+} from '../../middleware/validation/index.js';
 
 const router = express.Router();
 
@@ -25,21 +36,21 @@ router.use(authenticate);
  * @query   departmentId - Filter by department ID
  * @query   status - Filter by status
  */
-router.get('/', getAllDesignations);
+router.get('/', validateQuery(designationQuerySchema), getAllDesignations);
 
 /**
  * @route   GET /api/designations/:id
  * @desc    Get single designation by ID
  * @param   { string } id - Designation ID
  */
-router.get('/:id', getDesignationById);
+router.get('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), getDesignationById);
 
 /**
  * @route   POST /api/designations
  * @desc    Create new designation
  * @body    { designation: string, departmentId: string, status?: string }
  */
-router.post('/', createDesignation);
+router.post('/', validateBody(createDesignationSchema), createDesignation);
 
 /**
  * @route   PUT /api/designations/:id
@@ -47,7 +58,7 @@ router.post('/', createDesignation);
  * @param   { string } id - Designation ID
  * @body    { designation?: string, departmentId?: string, status?: string }
  */
-router.put('/:id', updateDesignationById);
+router.put('/:id', validateBody(updateDesignationSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), updateDesignationById);
 
 /**
  * @route   PUT /api/designations/:id/status
@@ -55,7 +66,7 @@ router.put('/:id', updateDesignationById);
  * @param   { string } id - Designation ID
  * @body    { status: string } - New status (Active, Inactive, etc.)
  */
-router.put('/:id/status', updateDesignationStatus);
+router.put('/:id/status', validateBody(Joi.object({ isActive: Joi.boolean().required() })), validateParams(Joi.object({ id: objectIdSchema.required() })), updateDesignationStatus);
 
 /**
  * @route   DELETE /api/designations/:id
@@ -63,6 +74,6 @@ router.put('/:id/status', updateDesignationStatus);
  * @param   { string } id - Designation ID
  * @body    { reassignTo?: string } - Optional: Reassign employees to this designation ID
  */
-router.delete('/:id', deleteDesignationById);
+router.delete('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), deleteDesignationById);
 
 export default router;

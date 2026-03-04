@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import Joi from 'joi';
 import { authenticate } from '../../middleware/auth.js';
 import {
   getAllPolicies,
@@ -14,6 +15,16 @@ import {
   getPolicyStats,
   searchPolicies
 } from '../../controllers/rest/policy.controller.js';
+// ✅ PHASE 3 SECURITY FIX: Input validation
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  createPolicySchema,
+  updatePolicySchema,
+  policyQuerySchema,
+  objectIdSchema
+} from '../../middleware/validation/index.js';
 
 const router = express.Router();
 
@@ -31,7 +42,7 @@ router.use(authenticate);
  * @query   page - Page number (default: 1)
  * @query   limit - Items per page (default: 50)
  */
-router.get('/', getAllPolicies);
+router.get('/', validateQuery(policyQuerySchema), getAllPolicies);
 
 /**
  * @route   GET /api/policies/stats
@@ -50,7 +61,7 @@ router.get('/search', searchPolicies);
  * @route   GET /api/policies/:id
  * @desc    Get policy by ID
  */
-router.get('/:id', getPolicyById);
+router.get('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), getPolicyById);
 
 /**
  * @route   POST /api/policies
@@ -61,7 +72,7 @@ router.get('/:id', getPolicyById);
  * @body    applyToAll - Apply to all employees (default: false)
  * @body    assignTo - Array of department/designation assignments
  */
-router.post('/', createPolicy);
+router.post('/', validateBody(createPolicySchema), createPolicy);
 
 /**
  * @route   PUT /api/policies/:id
@@ -72,12 +83,12 @@ router.post('/', createPolicy);
  * @body    applyToAll - Apply to all employees
  * @body    assignTo - Array of department/designation assignments
  */
-router.put('/:id', updatePolicy);
+router.put('/:id', validateBody(updatePolicySchema), validateParams(Joi.object({ id: objectIdSchema.required() })), updatePolicy);
 
 /**
  * @route   DELETE /api/policies/:id
  * @desc    Delete policy (soft delete)
  */
-router.delete('/:id', deletePolicy);
+router.delete('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), deletePolicy);
 
 export default router;

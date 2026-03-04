@@ -22,6 +22,7 @@ import {
 import { getSystemDefaultAvatarUrl, isValidAvatar } from '../../utils/avatarUtils.js';
 import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { sendPasswordChangedEmail } from '../../utils/emailer.js';
+import { sanitizeEmployeeUpdate } from '../../utils/fieldSanitization.js';  // ✅ SECURITY FIX: Mass assignment prevention
 import otpService from '../../services/otp/otp.service.js';
 
 /**
@@ -250,7 +251,7 @@ export const getCurrentUserProfile = asyncHandler(async (req, res) => {
       joiningDate: employee.joiningDate || employee.dateOfJoining || null,
       // Full profile format (for profile page)
       _id: employee._id?.toString() || '',
-      userId: employee.clerkUserId || user.userId,
+      userId: user.userId,  // ✅ SECURITY FIX: Use auth userId, not clerkUserId from DB
       // Use canonical dateOfBirth field (with fallbacks for backward compatibility)
       dateOfBirth: employee.dateOfBirth || employee.personal?.birthday || employee.dateOfJoining || null,
       // Use canonical gender field (with fallback for backward compatibility)
@@ -460,47 +461,58 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
       throw buildNotFoundError('Employee profile');
     }
 
+    // ✅ SECURITY FIX: Apply role-based field sanitization to prevent mass assignment
+    // Use sanitizeEmployeeUpdate() to filter fields based on user role
+    const roleBasedUpdate = sanitizeEmployeeUpdate(updateData, userRole || 'employee');
+
+    // Validate that at least one field remains after sanitization
+    if (!roleBasedUpdate || Object.keys(roleBasedUpdate).length === 0) {
+      throw buildValidationError('updateData', 'No valid fields to update');
+    }
+
     // Build update object - handle nested objects
+    // Now work with the sanitized data instead of raw updateData
     const sanitizedUpdate = {
       updatedAt: new Date()
     };
 
+    // ✅ SECURITY FIX: Now using sanitized data from sanitizeEmployeeUpdate()
     // Basic fields
-    if (updateData.firstName !== undefined) sanitizedUpdate.firstName = updateData.firstName;
-    if (updateData.lastName !== undefined) sanitizedUpdate.lastName = updateData.lastName;
-    if (updateData.dateOfBirth !== undefined) sanitizedUpdate.dateOfBirth = updateData.dateOfBirth;
-    if (updateData.gender !== undefined) sanitizedUpdate.gender = updateData.gender;
-    if (updateData.profilePhoto !== undefined) sanitizedUpdate.profileImage = updateData.profilePhoto;
+    if (roleBasedUpdate.firstName !== undefined) sanitizedUpdate.firstName = roleBasedUpdate.firstName;
+    if (roleBasedUpdate.lastName !== undefined) sanitizedUpdate.lastName = roleBasedUpdate.lastName;
+    if (roleBasedUpdate.dateOfBirth !== undefined) sanitizedUpdate.dateOfBirth = roleBasedUpdate.dateOfBirth;
+    if (roleBasedUpdate.gender !== undefined) sanitizedUpdate.gender = roleBasedUpdate.gender;
+    if (roleBasedUpdate.profilePhoto !== undefined) sanitizedUpdate.profileImage = roleBasedUpdate.profilePhoto;
     // Canonical field: bio. Do NOT duplicate into 'notes' or 'about'.
-    if (updateData.bio !== undefined) sanitizedUpdate.bio = updateData.bio;
-    else if (updateData.about !== undefined) sanitizedUpdate.bio = updateData.about;
-    if (updateData.skills !== undefined) sanitizedUpdate.skills = updateData.skills;
+    if (roleBasedUpdate.bio !== undefined) sanitizedUpdate.bio = roleBasedUpdate.bio;
+    else if (roleBasedUpdate.about !== undefined) sanitizedUpdate.bio = roleBasedUpdate.about;
+    if (roleBasedUpdate.skills !== undefined) sanitizedUpdate.skills = roleBasedUpdate.skills;
 
     // Handle education - accept both 'education' and 'qualifications' keys, store in 'education'
-    if (updateData.education !== undefined) {
-      sanitizedUpdate.education = updateData.education;
+    if (roleBasedUpdate.education !== undefined) {
+      sanitizedUpdate.education = roleBasedUpdate.education;
     }
-    if (updateData.qualifications !== undefined) {
+    if (roleBasedUpdate.qualifications !== undefined) {
       // Also store under 'education' for consistency with employeedetails page
-      sanitizedUpdate.education = updateData.qualifications;
+      sanitizedUpdate.education = roleBasedUpdate.qualifications;
     }
 
     // Handle experience - normalize field names to canonical 'company'
-    if (updateData.experience !== undefined) {
-      sanitizedUpdate.experience = Array.isArray(updateData.experience)
-        ? updateData.experience.map(e => ({
+    if (roleBasedUpdate.experience !== undefined) {
+      sanitizedUpdate.experience = Array.isArray(roleBasedUpdate.experience)
+        ? roleBasedUpdate.experience.map(e => ({
             ...e,
             company: e.company || e.previousCompany || '',
             designation: e.designation || e.position || '',
             current: e.current || e.currentlyWorking || false,
           }))
-        : updateData.experience;
+        : roleBasedUpdate.experience;
     }
 
     // Handle family - normalize to match employeedetails format { Name, relationship, phone }
-    if (updateData.family !== undefined) {
-      sanitizedUpdate.family = Array.isArray(updateData.family)
-        ? updateData.family.map(member => ({
+    if (roleBasedUpdate.family !== undefined) {
+      sanitizedUpdate.family = Array.isArray(roleBasedUpdate.family)
+        ? roleBasedUpdate.family.map(member => ({
             Name: member.Name || member.familyMemberName || member.name || '',
             relationship: member.relationship || '',
             phone: member.phone || ''
@@ -509,67 +521,67 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     }
 
     // Handle phone (use canonical phone field at root level)
-    if (updateData.phone !== undefined) {
-      sanitizedUpdate.phone = updateData.phone;
+    if (roleBasedUpdate.phone !== undefined) {
+      sanitizedUpdate.phone = roleBasedUpdate.phone;
     }
 
     // Handle address (use canonical address field at root level)
-    if (updateData.address) {
+    if (roleBasedUpdate.address) {
       sanitizedUpdate.address = {
-        street: updateData.address.street || '',
-        city: updateData.address.city || '',
-        state: updateData.address.state || '',
-        country: updateData.address.country || '',
-        postalCode: updateData.address.postalCode || ''
+        street: roleBasedUpdate.address.street || '',
+        city: roleBasedUpdate.address.city || '',
+        state: roleBasedUpdate.address.state || '',
+        country: roleBasedUpdate.address.country || '',
+        postalCode: roleBasedUpdate.address.postalCode || ''
       };
     }
 
     // Handle emergency contact
-    if (updateData.emergencyContact) {
+    if (roleBasedUpdate.emergencyContact) {
       sanitizedUpdate.emergencyContact = {
-        name: updateData.emergencyContact.name || '',
-        phone: updateData.emergencyContact.phone || '',
-        phone2: updateData.emergencyContact.phone2 || '',
-        relationship: updateData.emergencyContact.relationship || ''
+        name: roleBasedUpdate.emergencyContact.name || '',
+        phone: roleBasedUpdate.emergencyContact.phone || '',
+        phone2: roleBasedUpdate.emergencyContact.phone2 || '',
+        relationship: roleBasedUpdate.emergencyContact.relationship || ''
       };
     }
 
     // Handle social links -> socialProfiles
-    if (updateData.socialLinks) {
+    if (roleBasedUpdate.socialLinks) {
       sanitizedUpdate.socialProfiles = {
-        linkedin: updateData.socialLinks.linkedin || '',
-        twitter: updateData.socialLinks.twitter || '',
-        facebook: updateData.socialLinks.facebook || '',
-        instagram: updateData.socialLinks.instagram || ''
+        linkedin: roleBasedUpdate.socialLinks.linkedin || '',
+        twitter: roleBasedUpdate.socialLinks.twitter || '',
+        facebook: roleBasedUpdate.socialLinks.facebook || '',
+        instagram: roleBasedUpdate.socialLinks.instagram || ''
       };
     }
 
     // Handle personal information (passport, nationality, religion, marital status, etc.)
-    if (updateData.personal) {
+    if (roleBasedUpdate.personal) {
       const personalUpdate = {};
 
       // Handle passport nested object
-      if (updateData.personal.passport) {
-        personalUpdate['personal.passport.number'] = updateData.personal.passport.number || '';
-        personalUpdate['personal.passport.expiryDate'] = updateData.personal.passport.expiryDate || null;
-        personalUpdate['personal.passport.country'] = updateData.personal.passport.country || '';
+      if (roleBasedUpdate.personal.passport) {
+        personalUpdate['personal.passport.number'] = roleBasedUpdate.personal.passport.number || '';
+        personalUpdate['personal.passport.expiryDate'] = roleBasedUpdate.personal.passport.expiryDate || null;
+        personalUpdate['personal.passport.country'] = roleBasedUpdate.personal.passport.country || '';
       }
 
       // Handle other personal fields
-      if (updateData.personal.nationality !== undefined) {
-        personalUpdate['personal.nationality'] = updateData.personal.nationality;
+      if (roleBasedUpdate.personal.nationality !== undefined) {
+        personalUpdate['personal.nationality'] = roleBasedUpdate.personal.nationality;
       }
-      if (updateData.personal.religion !== undefined) {
-        personalUpdate['personal.religion'] = updateData.personal.religion;
+      if (roleBasedUpdate.personal.religion !== undefined) {
+        personalUpdate['personal.religion'] = roleBasedUpdate.personal.religion;
       }
-      if (updateData.personal.maritalStatus !== undefined) {
-        personalUpdate['personal.maritalStatus'] = updateData.personal.maritalStatus;
+      if (roleBasedUpdate.personal.maritalStatus !== undefined) {
+        personalUpdate['personal.maritalStatus'] = roleBasedUpdate.personal.maritalStatus;
       }
-      if (updateData.personal.employmentOfSpouse !== undefined) {
-        personalUpdate['personal.employmentOfSpouse'] = updateData.personal.employmentOfSpouse;
+      if (roleBasedUpdate.personal.employmentOfSpouse !== undefined) {
+        personalUpdate['personal.employmentOfSpouse'] = roleBasedUpdate.personal.employmentOfSpouse;
       }
-      if (updateData.personal.noOfChildren !== undefined) {
-        personalUpdate['personal.noOfChildren'] = updateData.personal.noOfChildren;
+      if (roleBasedUpdate.personal.noOfChildren !== undefined) {
+        personalUpdate['personal.noOfChildren'] = roleBasedUpdate.personal.noOfChildren;
       }
 
       // Only set personal if there are updates
@@ -579,27 +591,27 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
     }
 
     // Handle bank details (bank name, account number, IFSC code, branch, account type)
-    if (updateData.bankDetails) {
+    if (roleBasedUpdate.bankDetails) {
       const bankDetailsUpdate = {};
 
-      if (updateData.bankDetails.accountHolderName !== undefined) {
-        bankDetailsUpdate['bankDetails.accountHolderName'] = updateData.bankDetails.accountHolderName;
+      if (roleBasedUpdate.bankDetails.accountHolderName !== undefined) {
+        bankDetailsUpdate['bankDetails.accountHolderName'] = roleBasedUpdate.bankDetails.accountHolderName;
       }
-      if (updateData.bankDetails.bankName !== undefined) {
-        bankDetailsUpdate['bankDetails.bankName'] = updateData.bankDetails.bankName;
+      if (roleBasedUpdate.bankDetails.bankName !== undefined) {
+        bankDetailsUpdate['bankDetails.bankName'] = roleBasedUpdate.bankDetails.bankName;
       }
-      if (updateData.bankDetails.accountNumber !== undefined) {
-        bankDetailsUpdate['bankDetails.accountNumber'] = updateData.bankDetails.accountNumber;
+      if (roleBasedUpdate.bankDetails.accountNumber !== undefined) {
+        bankDetailsUpdate['bankDetails.accountNumber'] = roleBasedUpdate.bankDetails.accountNumber;
       }
-      if (updateData.bankDetails.ifscCode !== undefined) {
+      if (roleBasedUpdate.bankDetails.ifscCode !== undefined) {
         // Convert IFSC code to uppercase before saving
-        bankDetailsUpdate['bankDetails.ifscCode'] = updateData.bankDetails.ifscCode.toUpperCase();
+        bankDetailsUpdate['bankDetails.ifscCode'] = roleBasedUpdate.bankDetails.ifscCode.toUpperCase();
       }
-      if (updateData.bankDetails.branch !== undefined) {
-        bankDetailsUpdate['bankDetails.branch'] = updateData.bankDetails.branch;
+      if (roleBasedUpdate.bankDetails.branch !== undefined) {
+        bankDetailsUpdate['bankDetails.branch'] = roleBasedUpdate.bankDetails.branch;
       }
-      if (updateData.bankDetails.accountType !== undefined) {
-        bankDetailsUpdate['bankDetails.accountType'] = updateData.bankDetails.accountType;
+      if (roleBasedUpdate.bankDetails.accountType !== undefined) {
+        bankDetailsUpdate['bankDetails.accountType'] = roleBasedUpdate.bankDetails.accountType;
       }
 
       // Only set bankDetails if there are updates
@@ -734,7 +746,7 @@ export const updateCurrentUserProfile = asyncHandler(async (req, res) => {
       joiningDate: updatedEmployee.joiningDate || updatedEmployee.dateOfJoining || null,
       // Full profile format (for profile page)
       _id: updatedEmployee._id?.toString() || '',
-      userId: updatedEmployee.clerkUserId || user.userId,
+      userId: user.userId,  // ✅ SECURITY FIX: Use auth userId, not clerkUserId from DB
       dateOfBirth: updatedEmployee.dateOfBirth || updatedEmployee.personal?.birthday || updatedEmployee.dateOfJoining || null,
       gender: updatedEmployee.gender || updatedEmployee.personal?.gender || '',
       // Alias for profile page - same as profileImage

@@ -296,6 +296,7 @@ export const sanitizeLeaveData = (data) => {
 
 /**
  * Middleware to sanitize request body
+ * ENHANCED: Now includes NoSQL injection protection
  * @param {Object} configs - Sanitization configurations
  * @returns {Function} Express middleware
  */
@@ -303,6 +304,10 @@ export const sanitizeBody = (configs = {}) => {
   return (req, res, next) => {
     try {
       if (req.body && typeof req.body === 'object') {
+        // ✅ SECURITY FIX: Remove MongoDB operators from request body
+        req.body = sanitizeMongoQuery(req.body);
+
+        // Apply type-specific sanitization
         if (configs.type === 'attendance') {
           req.body = sanitizeAttendanceData(req.body);
         } else if (configs.type === 'overtime') {
@@ -334,15 +339,56 @@ export const sanitizeBody = (configs = {}) => {
 
 /**
  * Middleware to sanitize query parameters
+ * ENHANCED: Now includes NoSQL injection protection
  * @returns {Function} Express middleware
  */
 export const sanitizeQuery = () => {
   return (req, res, next) => {
     try {
       if (req.query && typeof req.query === 'object') {
+        // ✅ SECURITY FIX: Validate search parameter for NoSQL injection
+        if (req.query.search) {
+          const searchValue = req.query.search;
+
+          // Block MongoDB operators in search strings
+          if (typeof searchValue === 'string') {
+            const blockedOperators = ['$where', '$regex', '$ne', '$gt', '$lt', '$gte', '$lte', '$in', '$nin', '$exists', '$type', '$expr', '$jsonSchema', '$text', '$mod', '$all', '$elemMatch', '$size'];
+            const searchLower = searchValue.toLowerCase();
+
+            for (const operator of blockedOperators) {
+              if (searchLower.includes(operator)) {
+                logger.warn('Blocked MongoDB operator in search query', { operator, search: searchValue });
+                return res.status(400).json({
+                  success: false,
+                  error: {
+                    code: 'INVALID_SEARCH_QUERY',
+                    message: `Invalid search query: MongoDB operator "${operator}" not allowed`
+                  }
+                });
+              }
+            }
+
+            // Block JSON object injection in search
+            if (searchValue.trim().startsWith('{') || searchValue.trim().startsWith('[')) {
+              logger.warn('Blocked JSON object injection in search query', { search: searchValue });
+              return res.status(400).json({
+                success: false,
+                error: {
+                  code: 'INVALID_SEARCH_QUERY',
+                  message: 'Invalid search query: JSON objects not allowed'
+                }
+              });
+            }
+          }
+        }
+
+        // ✅ SECURITY FIX: Block object injection in query parameters
         for (const [key, value] of Object.entries(req.query)) {
-          if (typeof value === 'string') {
-            // Be more lenient with query params - just escape dangerous chars
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            logger.warn('Blocked object injection in query parameter', { key, value });
+            delete req.query[key];
+          } else if (typeof value === 'string') {
+            // Escape dangerous chars for XSS protection
             req.query[key] = sanitizeString(value, {
               stripTags: false,
               escapeHtml: true,
@@ -350,6 +396,16 @@ export const sanitizeQuery = () => {
             });
           }
           // Keep other types (numbers, arrays) as-is
+        }
+
+        // ✅ SECURITY FIX: Enforce pagination limits
+        if (req.query.limit) {
+          const limit = parseInt(req.query.limit, 10);
+          const MAX_LIMIT = 100;
+          if (limit > MAX_LIMIT) {
+            logger.warn('Pagination limit exceeded, enforcing max', { requested: limit, max: MAX_LIMIT });
+            req.query.limit = MAX_LIMIT;
+          }
         }
       }
       next();
@@ -368,6 +424,19 @@ export const sanitizeQuery = () => {
 };
 
 /**
+ * Escape regex special characters to prevent ReDoS attacks
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string safe for regex
+ */
+export const escapeRegex = (str) => {
+  if (typeof str !== 'string') {
+    throw new TypeError('Input must be a string');
+  }
+  // Escape all regex special characters
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
  * Validate and sanitize MongoDB ObjectId
  * @param {string} id - ID to validate
  * @returns {boolean} True if valid ObjectId format
@@ -378,6 +447,53 @@ export const isValidObjectId = (id) => {
   }
   // MongoDB ObjectId hex string pattern (24 characters)
   return /^[0-9a-fA-F]{24}$/.test(id);
+};
+
+/**
+ * Middleware to sanitize URL parameters
+ * SECURITY: Validates ObjectId format for :id parameters
+ * @returns {Function} Express middleware
+ */
+export const sanitizeParams = () => {
+  return (req, res, next) => {
+    try {
+      if (req.params && typeof req.params === 'object') {
+        for (const [key, value] of Object.entries(req.params)) {
+          // If parameter name is 'id' or ends with 'Id', validate as ObjectId
+          if ((key === 'id' || key.endsWith('Id')) && typeof value === 'string') {
+            if (!isValidObjectId(value)) {
+              logger.warn('Invalid ObjectId format in URL parameter', { key, value });
+              return res.status(400).json({
+                success: false,
+                error: {
+                  code: 'INVALID_PARAMETER',
+                  message: `Invalid ${key} format`
+                }
+              });
+            }
+          } else if (typeof value === 'string') {
+            // Sanitize other string parameters
+            req.params[key] = sanitizeString(value, {
+              stripTags: true,
+              escapeHtml: true,
+              trim: true
+            });
+          }
+        }
+      }
+      next();
+    } catch (error) {
+      console.error('[SanitizeParams] Error:', error.message, error.stack);
+      logger.error('Error sanitizing URL parameters', { error: error.message, stack: error.stack });
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'SANITIZATION_ERROR',
+          message: 'Invalid URL parameters'
+        }
+      });
+    }
+  };
 };
 
 /**
@@ -438,7 +554,9 @@ export default {
   sanitizeLeaveData,
   sanitizeBody,
   sanitizeQuery,
+  sanitizeParams,
   isValidObjectId,
   sanitizeIdArray,
-  sanitizeMongoQuery
+  sanitizeMongoQuery,
+  escapeRegex
 };

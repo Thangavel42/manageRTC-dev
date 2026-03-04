@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import Joi from 'joi';
 import {
   getAllDepartments,
   getDepartmentById,
@@ -15,6 +16,17 @@ import {
   getDepartmentStats
 } from '../../controllers/rest/department.controller.js';
 import { authenticate } from '../../middleware/auth.js';
+// ✅ PHASE 3 SECURITY FIX: Input validation
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  createDepartmentSchema,
+  updateDepartmentSchema,
+  departmentQuerySchema,
+  objectIdSchema,
+  statusSchema
+} from '../../middleware/validation/index.js';
 
 const router = express.Router();
 
@@ -30,7 +42,7 @@ router.use(authenticate);
  * @query   { sortBy } string - Field to sort by (default: department)
  * @query   { sortOrder } string - Sort order (asc, desc)
  */
-router.get('/', getAllDepartments);
+router.get('/', validateQuery(departmentQuerySchema), getAllDepartments);
 
 /**
  * @route   GET /api/departments/stats
@@ -53,7 +65,7 @@ router.get('/search', searchDepartments);
  * @access  Private
  * @param   { string } id - Department ID
  */
-router.get('/:id', getDepartmentById);
+router.get('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), getDepartmentById);
 
 /**
  * @route   POST /api/departments
@@ -61,7 +73,7 @@ router.get('/:id', getDepartmentById);
  * @access  Private
  * @body    { department: string, status: string }
  */
-router.post('/', createDepartment);
+router.post('/', validateBody(createDepartmentSchema), createDepartment);
 
 /**
  * @route   PUT /api/departments/:id
@@ -70,7 +82,7 @@ router.post('/', createDepartment);
  * @param   { string } id - Department ID
  * @body    { department: string, status: string }
  */
-router.put('/:id', updateDepartment);
+router.put('/:id', validateBody(updateDepartmentSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), updateDepartment);
 
 /**
  * @route   PUT /api/departments/:id/status
@@ -79,7 +91,7 @@ router.put('/:id', updateDepartment);
  * @param   { string } id - Department ID
  * @body    { status: string } - New status (Active, Inactive)
  */
-router.put('/:id/status', updateDepartmentStatus);
+router.put('/:id/status', validateBody(Joi.object({ isActive: Joi.boolean().required() })), validateParams(Joi.object({ id: objectIdSchema.required() })), updateDepartmentStatus);
 
 /**
  * @route   DELETE /api/departments/:id
@@ -87,6 +99,6 @@ router.put('/:id/status', updateDepartmentStatus);
  * @access  Private
  * @param   { string } id - Department ID
  */
-router.delete('/:id', deleteDepartment);
+router.delete('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), deleteDepartment);
 
 export default router;
