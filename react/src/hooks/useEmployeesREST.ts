@@ -166,6 +166,15 @@ export interface EmployeeFilters {
   endDate?: string;
 }
 
+// Normalize filter keys to match backend validator expectations
+const normalizeEmployeeFilters = (filters: EmployeeFilters = {}): EmployeeFilters => {
+  // Backend expects `department`, but some callers send `departmentId`
+  if (filters.departmentId && !filters.department) {
+    return { ...filters, department: filters.departmentId };
+  }
+  return filters;
+};
+
 export interface EmployeeStats {
   totalEmployees: number;
   activeCount: number;
@@ -341,7 +350,7 @@ export const useEmployeesREST = (options: UseEmployeesRESTOptions = {}) => {
     setError(null);
     try {
       // Fetch employees list
-      const params = buildParams(filters);
+      const params = buildParams(normalizeEmployeeFilters(filters));
       const response: ApiResponse<Employee[]> = await get('/employees', { params });
 
       if (response.success && response.data) {
@@ -397,7 +406,7 @@ export const useEmployeesREST = (options: UseEmployeesRESTOptions = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const params = buildParams(filters);
+      const params = buildParams(normalizeEmployeeFilters(filters));
       const response: ApiResponse<Employee[]> = await get('/employees', { params });
 
       if (response.success && response.data) {

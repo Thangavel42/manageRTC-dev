@@ -7,16 +7,16 @@
 import { ObjectId } from 'mongodb';
 import { getTenantCollections } from '../../config/db.js';
 import {
-    asyncHandler,
-    buildConflictError,
-    buildNotFoundError,
-    buildValidationError
+  asyncHandler,
+  buildConflictError,
+  buildNotFoundError,
+  buildValidationError
 } from '../../middleware/errorHandler.js';
 import {
-    buildPagination,
-    extractUser,
-    sendCreated,
-    sendSuccess
+  buildPagination,
+  extractUser,
+  sendCreated,
+  sendSuccess
 } from '../../utils/apiResponse.js';
 import logger from '../../utils/logger.js';
 import { broadcastPromotionEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
@@ -82,9 +82,31 @@ export const getPromotions = asyncHandler(async (req, res) => {
     .limit(limitNum)
     .toArray();
 
+  // Enrich with employee codes so API returns human-readable IDs
+  const employeeIds = promotions
+    .map((p) => p.employeeId)
+    .filter((id) => ObjectId.isValid(id))
+    .map((id) => new ObjectId(id));
+
+  const employeeCodeMap = new Map();
+  if (employeeIds.length > 0) {
+    const employees = await collections.employees
+      .find({ _id: { $in: employeeIds } }, { projection: { employeeId: 1 } })
+      .toArray();
+
+    employees.forEach((emp) => {
+      employeeCodeMap.set(emp._id.toString(), emp.employeeId || '');
+    });
+  }
+
+  const promotionsWithCodes = promotions.map((p) => ({
+    ...p,
+    employeeCode: p.employeeCode || employeeCodeMap.get(p.employeeId) || '',
+  }));
+
   const pagination = buildPagination(pageNum, limitNum, total);
 
-  return sendSuccess(res, promotions, 'Promotions retrieved successfully', 200, pagination);
+  return sendSuccess(res, promotionsWithCodes, 'Promotions retrieved successfully', 200, pagination);
 });
 
 /**
@@ -114,7 +136,17 @@ export const getPromotionById = asyncHandler(async (req, res) => {
     throw buildNotFoundError('Promotion', id);
   }
 
-  return sendSuccess(res, promotion);
+  // Attach employeeCode for human-readable ID
+  let employeeCode = promotion.employeeCode || '';
+  if (!employeeCode && promotion.employeeId && ObjectId.isValid(promotion.employeeId)) {
+    const employee = await collections.employees.findOne(
+      { _id: new ObjectId(promotion.employeeId) },
+      { projection: { employeeId: 1 } }
+    );
+    employeeCode = employee?.employeeId || '';
+  }
+
+  return sendSuccess(res, { ...promotion, employeeCode });
 });
 
 /**
@@ -179,6 +211,7 @@ export const createPromotion = asyncHandler(async (req, res) => {
   const promotionToInsert = {
     ...promotionData,
     employeeId: employee._id.toString(),
+    employeeCode: employee.employeeId || '',
     employeeName: `${employee.firstName} ${employee.lastName}`,
     companyId: user.companyId,
     promotionFrom: {

@@ -191,6 +191,49 @@ const formatEmployeeDates = (employee) => {
   return formatted;
 };
 
+// Remove optional fields when they only contain placeholder values
+const OPTIONAL_EMPTY_FIELDS = new Set([
+  'shiftColor',
+  'shiftName',
+  'shiftTiming',
+  'bio',
+  'batchName',
+  'batchShiftColor',
+  'batchShiftName',
+  'batchShiftTiming',
+]);
+
+const isPlaceholderValue = (value) => {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed === '' || trimmed === '-' || value === ' - ';
+};
+
+const cleanOptionalFields = (data) => {
+  if (!data || typeof data !== 'object') {
+    return { cleanedData: data, unsetFields: null };
+  }
+
+  const cleanedData = { ...data };
+  const unsetFields = {};
+
+  for (const field of OPTIONAL_EMPTY_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(cleanedData, field)) {
+      const value = cleanedData[field];
+      if (isPlaceholderValue(value)) {
+        delete cleanedData[field];
+        unsetFields[field] = '';
+      }
+    }
+  }
+
+  return {
+    cleanedData,
+    unsetFields: Object.keys(unsetFields).length ? unsetFields : null,
+  };
+};
+
 const DEFAULT_EXPORT_COLUMNS = ['employeeId', 'name', 'email', 'phone', 'department', 'role', 'status'];
 
 const parseQueryDate = (value) => {
@@ -362,9 +405,18 @@ export const getEmployees = asyncHandler(async (req, res) => {
     });
   }
 
-  // Apply department filter
+  // Apply department filter (support both legacy departmentId string and canonical ObjectId field `department`)
   if (department) {
-    filter.departmentId = department;
+    const deptObjectId = ObjectId.isValid(department) ? new ObjectId(department) : null;
+    const departmentOrClauses = [];
+    if (deptObjectId) {
+      departmentOrClauses.push({ department: deptObjectId });
+    }
+    departmentOrClauses.push({ departmentId: department });
+
+    // Ensure we AND with other filters while supporting either field name
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: departmentOrClauses });
   }
 
   // Apply designation filter
@@ -1596,8 +1648,11 @@ export const createEmployee = asyncHandler(async (req, res) => {
   devLog('[Employee Controller] Password check - employeeToInsert.account.password exists:', !!employeeToInsert.account?.password);
   devLog('[Employee Controller] Password check - normalizedWithDates.account:', JSON.stringify(normalizedWithDates.account));
 
+  // Clean optional placeholder fields before insert
+  const { cleanedData: cleanEmployeeToInsert } = cleanOptionalFields(employeeToInsert);
+
   // Create employee
-  const result = await collections.employees.insertOne(employeeToInsert);
+  const result = await collections.employees.insertOne(cleanEmployeeToInsert);
 
   if (!result.insertedId) {
     // Rollback: Delete Clerk user if database insert fails
@@ -1899,10 +1954,18 @@ export const updateEmployee = asyncHandler(async (req, res) => {
     delete normalizedUpdateData.notes;
   }
 
+  // Clean optional placeholder fields before update
+  const { cleanedData: sanitizedUpdateData, unsetFields } = cleanOptionalFields(normalizedUpdateData);
+
+  const updatePayload = { $set: sanitizedUpdateData };
+  if (unsetFields) {
+    updatePayload.$unset = unsetFields;
+  }
+
   // Update employee
   const result = await collections.employees.updateOne(
     { _id: new ObjectId(id) },
-    { $set: normalizedUpdateData }
+    updatePayload
   );
 
   if (result.matchedCount === 0) {
