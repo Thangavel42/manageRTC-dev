@@ -330,17 +330,6 @@ export const checkWorkingDay = async (companyId, date) => {
 };
 
 /**
- * Get upcoming holidays for a company
- *
- * @param {string} companyId - Company ID
- * @param {number} days - Number of days ahead to look
- * @returns {Promise<Array>} List of upcoming holidays
- */
-export const getUpcomingHolidays = async (companyId, days = 30) => {
-  return getUpcomingHolidays(companyId, days);
-};
-
-/**
  * Get holidays for a specific month
  *
  * @param {string} companyId - Company ID
