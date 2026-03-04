@@ -21,6 +21,8 @@ import {
   updateTaskStatusBoard,
 } from '../../controllers/rest/task.controller.js';
 import { attachRequestId, authenticate, requireEmployeeActive, requireRole } from '../../middleware/auth.js';
+import { sanitizeQuery, sanitizeBody, sanitizeParams } from '../../middleware/inputSanitization.js';  // ✅ SECURITY FIX
+import { searchLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
 import { taskSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
@@ -71,12 +73,13 @@ router.get('/stats', authenticate, requireRole('admin', 'hr', 'superadmin'), get
  */
 
 // List all tasks with pagination and filtering
-router.get('/', authenticate, validateQuery(taskSchemas.list), getTasks);
+router.get('/', searchLimiter, authenticate, sanitizeQuery, validateQuery(taskSchemas.list), getTasks);  // ✅ SECURITY FIX - Phase 2: Rate limiting added
 
 // Create new task
 router.post(
   '/',
   authenticate,
+  sanitizeBody,  // ✅ SECURITY FIX: Remove MongoDB operators
   requireRole('admin', 'hr', 'superadmin'),
   validateBody(taskSchemas.create),
   createTask
@@ -87,12 +90,14 @@ router.post(
  */
 
 // Get single task by ID
-router.get('/:id', authenticate, getTaskById);
+router.get('/:id', authenticate, sanitizeParams, getTaskById);  // ✅ SECURITY FIX
 
 // Update task
 router.put(
   '/:id',
   authenticate,
+  sanitizeParams,  // ✅ SECURITY FIX: Validate ObjectId
+  sanitizeBody,    // ✅ SECURITY FIX: Remove MongoDB operators
   requireRole('admin', 'hr', 'superadmin'),
   validateBody(taskSchemas.update),
   updateTask

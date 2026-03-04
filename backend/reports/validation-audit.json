@@ -1,0 +1,2466 @@
+{
+  "totalFiles": 49,
+  "totalRoutes": 285,
+  "validatedRoutes": 27,
+  "unvalidatedRoutes": 258,
+  "fileStats": [
+    {
+      "file": "activities.js",
+      "totalRoutes": 12,
+      "validated": 0,
+      "unvalidated": 12,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "admin-dashboard.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "admin.users.js",
+      "totalRoutes": 5,
+      "validated": 0,
+      "unvalidated": 5,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "asset-categories.js",
+      "totalRoutes": 4,
+      "validated": 0,
+      "unvalidated": 4,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "assets.js",
+      "totalRoutes": 8,
+      "validated": 0,
+      "unvalidated": 8,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "assetUsers.js",
+      "totalRoutes": 7,
+      "validated": 0,
+      "unvalidated": 7,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "attendance.js",
+      "totalRoutes": 17,
+      "validated": 0,
+      "unvalidated": 17,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "audit.js",
+      "totalRoutes": 9,
+      "validated": 0,
+      "unvalidated": 9,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "batches.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "budgets.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "changeRequest.js",
+      "totalRoutes": 10,
+      "validated": 0,
+      "unvalidated": 10,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "clients.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "companyPages.routes.js",
+      "totalRoutes": 1,
+      "validated": 0,
+      "unvalidated": 1,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "csrf.js",
+      "totalRoutes": 1,
+      "validated": 0,
+      "unvalidated": 1,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "departments.js",
+      "totalRoutes": 8,
+      "validated": 0,
+      "unvalidated": 8,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "designations.js",
+      "totalRoutes": 6,
+      "validated": 0,
+      "unvalidated": 6,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "emailChange.routes.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "employee-dashboard.js",
+      "totalRoutes": 14,
+      "validated": 0,
+      "unvalidated": 14,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "employees.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "holiday-types.js",
+      "totalRoutes": 6,
+      "validated": 0,
+      "unvalidated": 6,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "holidays.js",
+      "totalRoutes": 10,
+      "validated": 0,
+      "unvalidated": 10,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "hr-dashboard.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "hrm.employees.js",
+      "totalRoutes": 5,
+      "validated": 0,
+      "unvalidated": 5,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "invoices.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "leads.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "leave.js",
+      "totalRoutes": 41,
+      "validated": 0,
+      "unvalidated": 41,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "leaveTypes.js",
+      "totalRoutes": 8,
+      "validated": 0,
+      "unvalidated": 8,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "milestones.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "overtime.js",
+      "totalRoutes": 11,
+      "validated": 9,
+      "unvalidated": 2,
+      "hasValidationImport": true,
+      "coverage": 82
+    },
+    {
+      "file": "pipelines.js",
+      "totalRoutes": 12,
+      "validated": 0,
+      "unvalidated": 12,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "policies.js",
+      "totalRoutes": 7,
+      "validated": 0,
+      "unvalidated": 7,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "project-notes.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "projectcontracts.js",
+      "totalRoutes": 7,
+      "validated": 0,
+      "unvalidated": 7,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "projects.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "promotions.js",
+      "totalRoutes": 10,
+      "validated": 4,
+      "unvalidated": 6,
+      "hasValidationImport": true,
+      "coverage": 40
+    },
+    {
+      "file": "resignations.js",
+      "totalRoutes": 12,
+      "validated": 7,
+      "unvalidated": 5,
+      "hasValidationImport": true,
+      "coverage": 58
+    },
+    {
+      "file": "resources.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "schedule.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "shifts.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "subcontracts.js",
+      "totalRoutes": 7,
+      "validated": 0,
+      "unvalidated": 7,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "superadmin.companies.js",
+      "totalRoutes": 8,
+      "validated": 0,
+      "unvalidated": 8,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "superadmin.routes.js",
+      "totalRoutes": 10,
+      "validated": 0,
+      "unvalidated": 10,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "syncRole.routes.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "tasks.js",
+      "totalRoutes": 9,
+      "validated": 1,
+      "unvalidated": 8,
+      "hasValidationImport": true,
+      "coverage": 11
+    },
+    {
+      "file": "terminations.js",
+      "totalRoutes": 8,
+      "validated": 6,
+      "unvalidated": 2,
+      "hasValidationImport": true,
+      "coverage": 75
+    },
+    {
+      "file": "timesheets.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": true,
+      "coverage": 0
+    },
+    {
+      "file": "timetracking.js",
+      "totalRoutes": 0,
+      "validated": 0,
+      "unvalidated": 0,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "training.js",
+      "totalRoutes": 7,
+      "validated": 0,
+      "unvalidated": 7,
+      "hasValidationImport": false,
+      "coverage": 0
+    },
+    {
+      "file": "user-profile.js",
+      "totalRoutes": 5,
+      "validated": 0,
+      "unvalidated": 5,
+      "hasValidationImport": false,
+      "coverage": 0
+    }
+  ],
+  "unvalidatedEndpoints": [
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', activityController.getActivities);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/type/:type",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/type/:type', activityController.getActivitiesByType);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', activityController.getActivityStats);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/owners",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/owners', activityController.getActivityOwners);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/upcoming",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.get('/upcoming', activityController.getUpcomingActivities);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/overdue",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.get('/overdue', activityController.getOverdueActivities);"
+    },
+    {
+      "file": "activities.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', activityController.getActivityById);"
+    },
+    {
+      "file": "activities.js",
+      "method": "POST",
+      "path": "/",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.post('/', activityController.createActivity);"
+    },
+    {
+      "file": "activities.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 76,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', activityController.updateActivity);"
+    },
+    {
+      "file": "activities.js",
+      "method": "PUT",
+      "path": "/:id/complete",
+      "line": 83,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/complete', activityController.markActivityComplete);"
+    },
+    {
+      "file": "activities.js",
+      "method": "PUT",
+      "path": "/:id/postpone",
+      "line": 90,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/postpone', activityController.postponeActivity);"
+    },
+    {
+      "file": "activities.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 97,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', activityController.deleteActivity);"
+    },
+    {
+      "file": "admin.users.js",
+      "method": "GET",
+      "path": "/",
+      "line": 29,
+      "hasValidation": false,
+      "snippet": "router.get('/', getAllUsers);"
+    },
+    {
+      "file": "admin.users.js",
+      "method": "POST",
+      "path": "/",
+      "line": 36,
+      "hasValidation": false,
+      "snippet": "router.post('/', createUser);"
+    },
+    {
+      "file": "admin.users.js",
+      "method": "GET",
+      "path": "/:userId",
+      "line": 43,
+      "hasValidation": false,
+      "snippet": "router.get('/:userId', getUserById);"
+    },
+    {
+      "file": "admin.users.js",
+      "method": "PUT",
+      "path": "/:userId",
+      "line": 50,
+      "hasValidation": false,
+      "snippet": "router.put('/:userId', updateUser);"
+    },
+    {
+      "file": "admin.users.js",
+      "method": "DELETE",
+      "path": "/:userId",
+      "line": 57,
+      "hasValidation": false,
+      "snippet": "router.delete('/:userId', deleteUser);"
+    },
+    {
+      "file": "asset-categories.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', requireRole('admin', 'hr', 'superadmin'), assetCategoryController.getCategories);"
+    },
+    {
+      "file": "asset-categories.js",
+      "method": "POST",
+      "path": "/",
+      "line": 38,
+      "hasValidation": false,
+      "snippet": "router.post('/', requireRole('admin', 'superadmin'), assetCategoryController.createCategory);"
+    },
+    {
+      "file": "asset-categories.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 45,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', requireRole('admin', 'superadmin'), assetCategoryController.updateCategory);"
+    },
+    {
+      "file": "asset-categories.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 52,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', requireRole('admin', 'superadmin'), assetCategoryController.deleteCategory);"
+    },
+    {
+      "file": "assets.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', assetController.getAssets);"
+    },
+    {
+      "file": "assets.js",
+      "method": "GET",
+      "path": "/category/:category",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/category/:category', assetController.getAssetsByCategory);"
+    },
+    {
+      "file": "assets.js",
+      "method": "GET",
+      "path": "/status/:status",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/status/:status', assetController.getAssetsByStatus);"
+    },
+    {
+      "file": "assets.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', assetController.getAssetStats);"
+    },
+    {
+      "file": "assets.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', assetController.getAssetById);"
+    },
+    {
+      "file": "assets.js",
+      "method": "POST",
+      "path": "/",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.post('/', assetController.createAsset);"
+    },
+    {
+      "file": "assets.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', assetController.updateAsset);"
+    },
+    {
+      "file": "assets.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', assetController.deleteAsset);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', assetUserController.getAssetUsers);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "GET",
+      "path": "/asset/:assetId/history",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/asset/:assetId/history', assetUserController.getAssetHistory);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "GET",
+      "path": "/employee/:employeeId",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/employee/:employeeId', assetUserController.getEmployeeAssets);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', assetUserController.getAssetUserById);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "POST",
+      "path": "/",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.post('/', assetUserController.createAssetUser);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', assetUserController.updateAssetUser);"
+    },
+    {
+      "file": "assetUsers.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', assetUserController.deleteAssetUser);"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/",
+      "line": 22,
+      "hasValidation": false,
+      "snippet": "router.get('/', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), attendanceController.getA"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/my",
+      "line": 29,
+      "hasValidation": false,
+      "snippet": "router.get('/my', sanitizeQuery(), attendanceController.getMyAttendance);"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/daterange",
+      "line": 36,
+      "hasValidation": false,
+      "snippet": "router.get('/daterange', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), attendanceContro"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 43,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', sanitizeQuery(), statsRateLimiter, requireRole('admin', 'hr', 'superadmin'), at"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/bulk",
+      "line": 50,
+      "hasValidation": false,
+      "snippet": "router.post('/bulk', sanitizeBody({ type: 'attendance' }), bulkRateLimiter, requireRole('admin', 'hr"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/employee/:employeeId",
+      "line": 57,
+      "hasValidation": false,
+      "snippet": "router.get('/employee/:employeeId', sanitizeQuery(), sanitizeParams(), requireRole('admin', 'hr', 's"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 64,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', sanitizeQuery(), sanitizeParams(), attendanceController.getAttendanceById);  // ✅"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/",
+      "line": 71,
+      "hasValidation": false,
+      "snippet": "router.post('/', sanitizeBody({ type: 'attendance' }), clockInOutRateLimiter, attendanceController.c"
+    },
+    {
+      "file": "attendance.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 78,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', sanitizeBody({ type: 'attendance' }), sanitizeParams(), clockInOutRateLimiter, at"
+    },
+    {
+      "file": "attendance.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 85,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', sanitizeParams(), requireRole('admin', 'superadmin'), attendanceController.del"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/:id/request-regularization",
+      "line": 92,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/request-regularization', sanitizeBody({ type: 'attendance' }), sanitizeParams(), c"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/:id/approve-regularization",
+      "line": 99,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/approve-regularization', sanitizeBody({ type: 'attendance' }), sanitizeParams(), c"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/:id/reject-regularization",
+      "line": 106,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/reject-regularization', sanitizeBody({ type: 'attendance' }), sanitizeParams(), cl"
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/regularization/pending",
+      "line": 113,
+      "hasValidation": false,
+      "snippet": "router.get('/regularization/pending', sanitizeQuery(), requireRole('admin', 'hr', 'manager', 'supera"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/report",
+      "line": 120,
+      "hasValidation": false,
+      "snippet": "router.post('/report', sanitizeBody({ type: 'attendance' }), bulkRateLimiter, requireRole('admin', '"
+    },
+    {
+      "file": "attendance.js",
+      "method": "POST",
+      "path": "/report/employee/:employeeId",
+      "line": 127,
+      "hasValidation": false,
+      "snippet": "router.post('/report/employee/:employeeId', sanitizeBody({ type: 'attendance' }), sanitizeParams(), "
+    },
+    {
+      "file": "attendance.js",
+      "method": "GET",
+      "path": "/export",
+      "line": 134,
+      "hasValidation": false,
+      "snippet": "router.get('/export', sanitizeQuery(), exportRateLimiter, requireRole('admin', 'hr', 'superadmin'), "
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/logs",
+      "line": 22,
+      "hasValidation": false,
+      "snippet": "router.get('/logs', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), auditController.getAu"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 29,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), auditController.getA"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/recent",
+      "line": 36,
+      "hasValidation": false,
+      "snippet": "router.get('/recent', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), auditController.get"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/my-activity",
+      "line": 43,
+      "hasValidation": false,
+      "snippet": "router.get('/my-activity', sanitizeQuery(), auditController.getMyActivity);"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/employee/:employeeId",
+      "line": 50,
+      "hasValidation": false,
+      "snippet": "router.get('/employee/:employeeId', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), audit"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/entity/:entityType/:entityId",
+      "line": 57,
+      "hasValidation": false,
+      "snippet": "router.get('/entity/:entityType/:entityId', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'"
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/security-events",
+      "line": 64,
+      "hasValidation": false,
+      "snippet": "router.get('/security-events', sanitizeQuery(), requireRole('admin', 'superadmin'), auditController."
+    },
+    {
+      "file": "audit.js",
+      "method": "GET",
+      "path": "/export",
+      "line": 71,
+      "hasValidation": false,
+      "snippet": "router.get('/export', sanitizeQuery(), exportRateLimiter, requireRole('admin', 'superadmin'), auditC"
+    },
+    {
+      "file": "audit.js",
+      "method": "POST",
+      "path": "/cleanup",
+      "line": 78,
+      "hasValidation": false,
+      "snippet": "router.post('/cleanup', requireRole('superadmin'), auditController.cleanupLogs);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "POST",
+      "path": "/",
+      "line": 37,
+      "hasValidation": false,
+      "snippet": "router.post('/', createChangeRequest);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "GET",
+      "path": "/my",
+      "line": 44,
+      "hasValidation": false,
+      "snippet": "router.get('/my', getMyChangeRequests);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "GET",
+      "path": "/",
+      "line": 51,
+      "hasValidation": false,
+      "snippet": "router.get('/', getAllChangeRequests);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/field/:fieldIdx/approve",
+      "line": 58,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/field/:fieldIdx/approve', approveField);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/field/:fieldIdx/reject",
+      "line": 65,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/field/:fieldIdx/reject', rejectField);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/bulk-approve",
+      "line": 72,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/bulk-approve', bulkApproveFields);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/bulk-reject",
+      "line": 79,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/bulk-reject', bulkRejectFields);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/cancel",
+      "line": 86,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/cancel', cancelChangeRequest);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/approve",
+      "line": 93,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/approve', approveChangeRequest);"
+    },
+    {
+      "file": "changeRequest.js",
+      "method": "PATCH",
+      "path": "/:id/reject",
+      "line": 100,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/reject', rejectChangeRequest);"
+    },
+    {
+      "file": "companyPages.routes.js",
+      "method": "GET",
+      "path": "/enabled-pages",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/enabled-pages', getEnabledPages);"
+    },
+    {
+      "file": "csrf.js",
+      "method": "GET",
+      "path": "/csrf-token",
+      "line": 18,
+      "hasValidation": false,
+      "snippet": "router.get('/csrf-token', csrfProtection, (req, res) => {"
+    },
+    {
+      "file": "departments.js",
+      "method": "GET",
+      "path": "/",
+      "line": 33,
+      "hasValidation": false,
+      "snippet": "router.get('/', getAllDepartments);"
+    },
+    {
+      "file": "departments.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', getDepartmentStats);"
+    },
+    {
+      "file": "departments.js",
+      "method": "GET",
+      "path": "/search",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.get('/search', searchDepartments);"
+    },
+    {
+      "file": "departments.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 56,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', getDepartmentById);"
+    },
+    {
+      "file": "departments.js",
+      "method": "POST",
+      "path": "/",
+      "line": 64,
+      "hasValidation": false,
+      "snippet": "router.post('/', createDepartment);"
+    },
+    {
+      "file": "departments.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 73,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', updateDepartment);"
+    },
+    {
+      "file": "departments.js",
+      "method": "PUT",
+      "path": "/:id/status",
+      "line": 82,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/status', updateDepartmentStatus);"
+    },
+    {
+      "file": "departments.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 90,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', deleteDepartment);"
+    },
+    {
+      "file": "designations.js",
+      "method": "GET",
+      "path": "/",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.get('/', getAllDesignations);"
+    },
+    {
+      "file": "designations.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 35,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', getDesignationById);"
+    },
+    {
+      "file": "designations.js",
+      "method": "POST",
+      "path": "/",
+      "line": 42,
+      "hasValidation": false,
+      "snippet": "router.post('/', createDesignation);"
+    },
+    {
+      "file": "designations.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 50,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', updateDesignationById);"
+    },
+    {
+      "file": "designations.js",
+      "method": "PUT",
+      "path": "/:id/status",
+      "line": 58,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/status', updateDesignationStatus);"
+    },
+    {
+      "file": "designations.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 66,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', deleteDesignationById);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.get('/',                  ctrl.getDashboardData);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/attendance-stats",
+      "line": 29,
+      "hasValidation": false,
+      "snippet": "router.get('/attendance-stats',  ctrl.getAttendanceStats);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/leave-stats",
+      "line": 30,
+      "hasValidation": false,
+      "snippet": "router.get('/leave-stats',       ctrl.getLeaveStats);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/working-hours",
+      "line": 31,
+      "hasValidation": false,
+      "snippet": "router.get('/working-hours',     ctrl.getWorkingHoursStats);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/projects",
+      "line": 32,
+      "hasValidation": false,
+      "snippet": "router.get('/projects',          ctrl.getProjects);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/tasks",
+      "line": 33,
+      "hasValidation": false,
+      "snippet": "router.get('/tasks',             ctrl.getTasks);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "PATCH",
+      "path": "/tasks/:taskId",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.patch('/tasks/:taskId',   ctrl.updateTask);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/performance",
+      "line": 35,
+      "hasValidation": false,
+      "snippet": "router.get('/performance',       ctrl.getPerformance);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/skills",
+      "line": 36,
+      "hasValidation": false,
+      "snippet": "router.get('/skills',            ctrl.getSkills);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "GET",
+      "path": "/meetings",
+      "line": 37,
+      "hasValidation": false,
+      "snippet": "router.get('/meetings',          ctrl.getMeetings);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "POST",
+      "path": "/punch-in",
+      "line": 38,
+      "hasValidation": false,
+      "snippet": "router.post('/punch-in',         ctrl.punchIn);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "POST",
+      "path": "/punch-out",
+      "line": 39,
+      "hasValidation": false,
+      "snippet": "router.post('/punch-out',        ctrl.punchOut);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "POST",
+      "path": "/start-break",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.post('/start-break',      ctrl.startBreak);"
+    },
+    {
+      "file": "employee-dashboard.js",
+      "method": "POST",
+      "path": "/end-break",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.post('/end-break',        ctrl.endBreak);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', holidayTypeController.getHolidayTypes);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "POST",
+      "path": "/initialize",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.post('/initialize', holidayTypeController.initializeDefaults);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', holidayTypeController.getHolidayTypeById);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "POST",
+      "path": "/",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.post('/', holidayTypeController.createHolidayType);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', holidayTypeController.updateHolidayType);"
+    },
+    {
+      "file": "holiday-types.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', holidayTypeController.deleteHolidayType);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "GET",
+      "path": "/",
+      "line": 24,
+      "hasValidation": false,
+      "snippet": "router.get('/', holidayController.getHolidays);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "GET",
+      "path": "/upcoming",
+      "line": 32,
+      "hasValidation": false,
+      "snippet": "router.get('/upcoming', holidayController.getUpcomingHolidaysHandler);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', holidayController.getHolidayStats);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "POST",
+      "path": "/calculate",
+      "line": 50,
+      "hasValidation": false,
+      "snippet": "router.post('/calculate', holidayController.calculateDaysHandler);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "GET",
+      "path": "/check",
+      "line": 59,
+      "hasValidation": false,
+      "snippet": "router.get('/check', holidayController.checkWorkingDayHandler);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "POST",
+      "path": "/validate",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.post('/validate', holidayController.validateLeaveDatesHandler);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 76,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', holidayController.getHolidayById);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "POST",
+      "path": "/",
+      "line": 83,
+      "hasValidation": false,
+      "snippet": "router.post('/', holidayController.createHoliday);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 90,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', holidayController.updateHoliday);"
+    },
+    {
+      "file": "holidays.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 97,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', holidayController.deleteHoliday);"
+    },
+    {
+      "file": "hrm.employees.js",
+      "method": "GET",
+      "path": "/",
+      "line": 22,
+      "hasValidation": false,
+      "snippet": "router.get('/',"
+    },
+    {
+      "file": "hrm.employees.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 49,
+      "hasValidation": false,
+      "snippet": "router.get('/:id',"
+    },
+    {
+      "file": "hrm.employees.js",
+      "method": "POST",
+      "path": "/",
+      "line": 71,
+      "hasValidation": false,
+      "snippet": "router.post('/',"
+    },
+    {
+      "file": "hrm.employees.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 99,
+      "hasValidation": false,
+      "snippet": "router.put('/:id',"
+    },
+    {
+      "file": "hrm.employees.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 126,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id',"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/', sanitizeQuery(), leaveController.getLeaves);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/my",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/my', sanitizeQuery(), leaveController.getMyLeaves);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/status/:status",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/status/:status', sanitizeQuery(), leaveController.getLeavesByStatus);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/balance",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.get('/balance', sanitizeQuery(), leaveController.getLeaveBalance);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/team",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.get('/team', sanitizeQuery(), leaveController.getTeamLeaves);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), leaveController.getL"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/my",
+      "line": 74,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/my', sanitizeQuery(), leaveLedgerController.getMyBalanceHistory);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/my/summary",
+      "line": 81,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/my/summary', sanitizeQuery(), leaveLedgerController.getMyBalanceSummary);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/employee/:employeeId",
+      "line": 88,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/employee/:employeeId', sanitizeQuery(), sanitizeParams(), leaveLedgerController."
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/employee/:employeeId/summary",
+      "line": 95,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/employee/:employeeId/summary', sanitizeQuery(), sanitizeParams(), leaveLedgerCon"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/financial-year/:financialYear",
+      "line": 102,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/financial-year/:financialYear', sanitizeQuery(), leaveLedgerController.getBalanc"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/export",
+      "line": 110,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/export', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), leaveLedgerC"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/ledger/export/:employeeId",
+      "line": 111,
+      "hasValidation": false,
+      "snippet": "router.get('/ledger/export/:employeeId', sanitizeQuery(), sanitizeParams(), requireRole('admin', 'hr"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/ledger/initialize/:employeeId",
+      "line": 118,
+      "hasValidation": false,
+      "snippet": "router.post('/ledger/initialize/:employeeId', sanitizeBody({ type: 'leave' }), sanitizeParams(), bul"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/carry-forward/config",
+      "line": 130,
+      "hasValidation": false,
+      "snippet": "router.get('/carry-forward/config', sanitizeQuery(), leaveCarryForwardController.getCarryForwardConf"
+    },
+    {
+      "file": "leave.js",
+      "method": "PUT",
+      "path": "/carry-forward/config",
+      "line": 137,
+      "hasValidation": false,
+      "snippet": "router.put('/carry-forward/config', sanitizeBody({ type: 'leave' }), leaveCarryForwardController.upd"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/carry-forward/calculate/:employeeId",
+      "line": 144,
+      "hasValidation": false,
+      "snippet": "router.get('/carry-forward/calculate/:employeeId', sanitizeQuery(), sanitizeParams(), leaveCarryForw"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/carry-forward/execute/:employeeId",
+      "line": 151,
+      "hasValidation": false,
+      "snippet": "router.post('/carry-forward/execute/:employeeId', sanitizeBody({ type: 'leave' }), sanitizeParams(),"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/carry-forward/execute-all",
+      "line": 158,
+      "hasValidation": false,
+      "snippet": "router.post('/carry-forward/execute-all', bulkRateLimiter, requireRole('admin', 'superadmin'), leave"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/carry-forward/history/:employeeId",
+      "line": 165,
+      "hasValidation": false,
+      "snippet": "router.get('/carry-forward/history/:employeeId', sanitizeQuery(), sanitizeParams(), leaveCarryForwar"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/carry-forward/summary/:financialYear",
+      "line": 172,
+      "hasValidation": false,
+      "snippet": "router.get('/carry-forward/summary/:financialYear', sanitizeQuery(), leaveCarryForwardController.get"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/encashment/config",
+      "line": 184,
+      "hasValidation": false,
+      "snippet": "router.get('/encashment/config', sanitizeQuery(), leaveEncashmentController.getEncashmentConfig);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/encashment/calculate/:leaveType",
+      "line": 191,
+      "hasValidation": false,
+      "snippet": "router.get('/encashment/calculate/:leaveType', sanitizeQuery(), leaveEncashmentController.calculateE"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/encashment/calculate/:leaveType/:employeeId",
+      "line": 192,
+      "hasValidation": false,
+      "snippet": "router.get('/encashment/calculate/:leaveType/:employeeId', sanitizeQuery(), sanitizeParams(), leaveE"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/encashment/execute/:leaveType",
+      "line": 199,
+      "hasValidation": false,
+      "snippet": "router.post('/encashment/execute/:leaveType', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/encashment/history/:employeeId",
+      "line": 206,
+      "hasValidation": false,
+      "snippet": "router.get('/encashment/history/:employeeId', sanitizeQuery(), sanitizeParams(), leaveEncashmentCont"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/encashment/summary",
+      "line": 213,
+      "hasValidation": false,
+      "snippet": "router.get('/encashment/summary', sanitizeQuery(), leaveEncashmentController.getEncashmentSummary);"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 232,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', sanitizeQuery(), sanitizeParams(), leaveController.getLeaveById);  // ✅ SECURITY "
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/",
+      "line": 239,
+      "hasValidation": false,
+      "snippet": "router.post('/', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveController.createLeave"
+    },
+    {
+      "file": "leave.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 246,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', sanitizeBody({ type: 'leave' }), sanitizeParams(), clockInOutRateLimiter, leaveCo"
+    },
+    {
+      "file": "leave.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 253,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', sanitizeParams(), leaveController.deleteLeave);  // ✅ SECURITY FIX"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/:id/approve",
+      "line": 260,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/approve', sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leav"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/:id/reject",
+      "line": 267,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/reject', sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leave"
+    },
+    {
+      "file": "leave.js",
+      "method": "PATCH",
+      "path": "/:id/manager-action",
+      "line": 274,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/manager-action', sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimit"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/:id/cancel",
+      "line": 281,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/cancel', sanitizeBody({ type: 'leave' }), sanitizeParams(), clockInOutRateLimiter,"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/:leaveId/attachments",
+      "line": 288,
+      "hasValidation": false,
+      "snippet": "router.post('/:leaveId/attachments',"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/:leaveId/attachments",
+      "line": 300,
+      "hasValidation": false,
+      "snippet": "router.get('/:leaveId/attachments',"
+    },
+    {
+      "file": "leave.js",
+      "method": "DELETE",
+      "path": "/:leaveId/attachments/:attachmentId",
+      "line": 311,
+      "hasValidation": false,
+      "snippet": "router.delete('/:leaveId/attachments/:attachmentId',"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/sync-attendance",
+      "line": 325,
+      "hasValidation": false,
+      "snippet": "router.post('/sync-attendance',"
+    },
+    {
+      "file": "leave.js",
+      "method": "GET",
+      "path": "/:leaveId/attendance",
+      "line": 337,
+      "hasValidation": false,
+      "snippet": "router.get('/:leaveId/attendance',"
+    },
+    {
+      "file": "leave.js",
+      "method": "POST",
+      "path": "/:leaveId/sync-attendance",
+      "line": 348,
+      "hasValidation": false,
+      "snippet": "router.post('/:leaveId/sync-attendance',"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', leaveTypeController.getLeaveTypes);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "GET",
+      "path": "/active",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/active', leaveTypeController.getActiveLeaveTypes);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', leaveTypeController.getLeaveTypeStats);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', leaveTypeController.getLeaveTypeById);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "POST",
+      "path": "/",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.post('/', leaveTypeController.createLeaveType);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', leaveTypeController.updateLeaveType);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "PATCH",
+      "path": "/:id/toggle",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/toggle', leaveTypeController.toggleLeaveTypeStatus);"
+    },
+    {
+      "file": "leaveTypes.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', leaveTypeController.deleteLeaveType);"
+    },
+    {
+      "file": "overtime.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 52,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', sanitizeQuery(), validate(overtimeSchemas.list), overtimeController.getOvertimeRe"
+    },
+    {
+      "file": "overtime.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 94,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', requireRole('admin', 'superadmin'), overtimeController.deleteOvertimeRequest);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', pipelineController.getPipelines);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/type/:type",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/type/:type', pipelineController.getPipelinesByType);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', pipelineController.getPipelineStats);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/overdue",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/overdue', pipelineController.getOverduePipelines);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/closing-soon",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.get('/closing-soon', pipelineController.getClosingSoonPipelines);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', pipelineController.getPipelineById);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "POST",
+      "path": "/",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.post('/', pipelineController.createPipeline);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', pipelineController.updatePipeline);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "PUT",
+      "path": "/:id/move-stage",
+      "line": 76,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/move-stage', pipelineController.movePipelineStage);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "PUT",
+      "path": "/:id/won",
+      "line": 83,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/won', pipelineController.markPipelineWon);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "PUT",
+      "path": "/:id/lost",
+      "line": 90,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/lost', pipelineController.markPipelineLost);"
+    },
+    {
+      "file": "pipelines.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 97,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', pipelineController.deletePipeline);"
+    },
+    {
+      "file": "policies.js",
+      "method": "GET",
+      "path": "/",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/', getAllPolicies);"
+    },
+    {
+      "file": "policies.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', getPolicyStats);"
+    },
+    {
+      "file": "policies.js",
+      "method": "GET",
+      "path": "/search",
+      "line": 47,
+      "hasValidation": false,
+      "snippet": "router.get('/search', searchPolicies);"
+    },
+    {
+      "file": "policies.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 53,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', getPolicyById);"
+    },
+    {
+      "file": "policies.js",
+      "method": "POST",
+      "path": "/",
+      "line": 64,
+      "hasValidation": false,
+      "snippet": "router.post('/', createPolicy);"
+    },
+    {
+      "file": "policies.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 75,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', updatePolicy);"
+    },
+    {
+      "file": "policies.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 81,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', deletePolicy);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "POST",
+      "path": "/",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.post('/', authenticate, createProjectContract);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "GET",
+      "path": "/detail/:subContractDetailId",
+      "line": 31,
+      "hasValidation": false,
+      "snippet": "router.get('/detail/:subContractDetailId', authenticate, getContractsByDetailId);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "GET",
+      "path": "/project/:projectId",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/project/:projectId', authenticate, getProjectContracts);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "GET",
+      "path": "/subcontract/:subContractId",
+      "line": 35,
+      "hasValidation": false,
+      "snippet": "router.get('/subcontract/:subContractId', authenticate, getSubContractProjects);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 38,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', authenticate, getProjectContractById);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', authenticate, updateProjectContract);"
+    },
+    {
+      "file": "projectcontracts.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 44,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', authenticate, deleteProjectContract);"
+    },
+    {
+      "file": "promotions.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 32,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', requireRole('admin', 'hr', 'superadmin'), promotionController.getPromotionStats"
+    },
+    {
+      "file": "promotions.js",
+      "method": "GET",
+      "path": "/departments",
+      "line": 39,
+      "hasValidation": false,
+      "snippet": "router.get('/departments', requireRole('admin', 'hr', 'superadmin'), promotionController.getDepartme"
+    },
+    {
+      "file": "promotions.js",
+      "method": "GET",
+      "path": "/designations",
+      "line": 46,
+      "hasValidation": false,
+      "snippet": "router.get('/designations', requireRole('admin', 'hr', 'superadmin'), promotionController.getDesigna"
+    },
+    {
+      "file": "promotions.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 53,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', requireRole('admin', 'hr', 'superadmin'), promotionController.getPromotionById);"
+    },
+    {
+      "file": "promotions.js",
+      "method": "PUT",
+      "path": "/:id/apply",
+      "line": 74,
+      "hasValidation": false,
+      "snippet": "router.put('/:id/apply', requireRole('admin', 'hr', 'superadmin'), promotionController.applyPromotio"
+    },
+    {
+      "file": "promotions.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 88,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', requireRole('admin', 'superadmin'), promotionController.deletePromotion);"
+    },
+    {
+      "file": "resignations.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 21,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignationCon"
+    },
+    {
+      "file": "resignations.js",
+      "method": "GET",
+      "path": "/departments",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.get('/departments', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resignat"
+    },
+    {
+      "file": "resignations.js",
+      "method": "GET",
+      "path": "/employees/:departmentId",
+      "line": 35,
+      "hasValidation": false,
+      "snippet": "router.get('/employees/:departmentId', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee"
+    },
+    {
+      "file": "resignations.js",
+      "method": "GET",
+      "path": "/check-status",
+      "line": 42,
+      "hasValidation": false,
+      "snippet": "router.get('/check-status', requireRole('admin', 'hr', 'superadmin', 'manager', 'employee'), resigna"
+    },
+    {
+      "file": "resignations.js",
+      "method": "DELETE",
+      "path": "/",
+      "line": 98,
+      "hasValidation": false,
+      "snippet": "router.delete('/', requireRole('admin', 'superadmin'), resignationController.deleteResignations);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', authenticate, requireRole('admin', 'hr', 'superadmin'), getSubContractStats);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "GET",
+      "path": "/with-projects",
+      "line": 31,
+      "hasValidation": false,
+      "snippet": "router.get('/with-projects', authenticate, getContractsWithProjects);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "GET",
+      "path": "/",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/', authenticate, getAllSubContracts);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 37,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', authenticate, getSubContractById);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "POST",
+      "path": "/",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.post('/', authenticate, requireRole('admin', 'hr', 'superadmin'), createSubContract);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 43,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', authenticate, requireRole('admin', 'hr', 'superadmin'), updateSubContract);"
+    },
+    {
+      "file": "subcontracts.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 46,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', authenticate, requireRole('admin', 'hr', 'superadmin'), deleteSubContract);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "GET",
+      "path": "/packages",
+      "line": 32,
+      "hasValidation": false,
+      "snippet": "router.get('/packages', fetchPackages);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "GET",
+      "path": "/companies/stats",
+      "line": 39,
+      "hasValidation": false,
+      "snippet": "router.get('/companies/stats', fetchCompanyStats);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "GET",
+      "path": "/companies",
+      "line": 49,
+      "hasValidation": false,
+      "snippet": "router.get('/companies', fetchCompanyList);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "POST",
+      "path": "/companies",
+      "line": 56,
+      "hasValidation": false,
+      "snippet": "router.post('/companies', addCompany);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "GET",
+      "path": "/companies/:id",
+      "line": 63,
+      "hasValidation": false,
+      "snippet": "router.get('/companies/:id', viewCompany);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "GET",
+      "path": "/companies/:id/edit",
+      "line": 70,
+      "hasValidation": false,
+      "snippet": "router.get('/companies/:id/edit', editCompanyView);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "PUT",
+      "path": "/companies/:id",
+      "line": 77,
+      "hasValidation": false,
+      "snippet": "router.put('/companies/:id', updateCompany);"
+    },
+    {
+      "file": "superadmin.companies.js",
+      "method": "DELETE",
+      "path": "/companies/:id",
+      "line": 84,
+      "hasValidation": false,
+      "snippet": "router.delete('/companies/:id', deleteCompany);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 16,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', superAdminController.getSuperAdminStats);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "GET",
+      "path": "/",
+      "line": 19,
+      "hasValidation": false,
+      "snippet": "router.get('/', superAdminController.getAllSuperAdmins);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 22,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', superAdminController.getSuperAdminById);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "POST",
+      "path": "/",
+      "line": 25,
+      "hasValidation": false,
+      "snippet": "router.post('/', superAdminController.createSuperAdmin);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 28,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', superAdminController.updateSuperAdmin);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 31,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', superAdminController.deleteSuperAdmin);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "POST",
+      "path": "/:id/reset-password",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/reset-password', superAdminController.resetSuperAdminPassword);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "PATCH",
+      "path": "/:id/toggle-status",
+      "line": 37,
+      "hasValidation": false,
+      "snippet": "router.patch('/:id/toggle-status', superAdminController.toggleSuperAdminStatus);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "POST",
+      "path": "/:id/resend-invite",
+      "line": 40,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/resend-invite', superAdminController.resendInvite);"
+    },
+    {
+      "file": "superadmin.routes.js",
+      "method": "POST",
+      "path": "/:id/refresh-metadata",
+      "line": 43,
+      "hasValidation": false,
+      "snippet": "router.post('/:id/refresh-metadata', superAdminController.refreshUserMetadata);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/statuses",
+      "line": 38,
+      "hasValidation": false,
+      "snippet": "router.get('/statuses', authenticate, getTaskStatuses);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "POST",
+      "path": "/statuses",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.post('/statuses', authenticate, requireRole('admin', 'superadmin'), createTaskStatus);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/my",
+      "line": 60,
+      "hasValidation": false,
+      "snippet": "router.get('/my', authenticate, requireEmployeeActive, getMyTasks);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/my/project/:projectId",
+      "line": 63,
+      "hasValidation": false,
+      "snippet": "router.get('/my/project/:projectId', authenticate, requireEmployeeActive, getEmployeeProjectTasks);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/project/:projectId",
+      "line": 66,
+      "hasValidation": false,
+      "snippet": "router.get('/project/:projectId', authenticate, getTasksByProject);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 69,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', authenticate, requireRole('admin', 'hr', 'superadmin'), getTaskStats);"
+    },
+    {
+      "file": "tasks.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 93,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', authenticate, sanitizeParams, getTaskById);  // ✅ SECURITY FIX"
+    },
+    {
+      "file": "tasks.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 107,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', authenticate, requireRole('admin', 'superadmin'), deleteTask);"
+    },
+    {
+      "file": "terminations.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 21,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', requireRole('admin', 'hr', 'superadmin'), terminationController.getStats);"
+    },
+    {
+      "file": "terminations.js",
+      "method": "DELETE",
+      "path": "/",
+      "line": 70,
+      "hasValidation": false,
+      "snippet": "router.delete('/', requireRole('admin', 'hr', 'superadmin'), terminationController.deleteTermination"
+    },
+    {
+      "file": "training.js",
+      "method": "GET",
+      "path": "/",
+      "line": 20,
+      "hasValidation": false,
+      "snippet": "router.get('/', trainingController.getTrainings);"
+    },
+    {
+      "file": "training.js",
+      "method": "GET",
+      "path": "/type/:type",
+      "line": 27,
+      "hasValidation": false,
+      "snippet": "router.get('/type/:type', trainingController.getTrainingsByType);"
+    },
+    {
+      "file": "training.js",
+      "method": "GET",
+      "path": "/stats",
+      "line": 34,
+      "hasValidation": false,
+      "snippet": "router.get('/stats', trainingController.getTrainingStats);"
+    },
+    {
+      "file": "training.js",
+      "method": "GET",
+      "path": "/:id",
+      "line": 41,
+      "hasValidation": false,
+      "snippet": "router.get('/:id', trainingController.getTrainingById);"
+    },
+    {
+      "file": "training.js",
+      "method": "POST",
+      "path": "/",
+      "line": 48,
+      "hasValidation": false,
+      "snippet": "router.post('/', trainingController.createTraining);"
+    },
+    {
+      "file": "training.js",
+      "method": "PUT",
+      "path": "/:id",
+      "line": 55,
+      "hasValidation": false,
+      "snippet": "router.put('/:id', trainingController.updateTraining);"
+    },
+    {
+      "file": "training.js",
+      "method": "DELETE",
+      "path": "/:id",
+      "line": 62,
+      "hasValidation": false,
+      "snippet": "router.delete('/:id', trainingController.deleteTraining);"
+    },
+    {
+      "file": "user-profile.js",
+      "method": "GET",
+      "path": "/work-info",
+      "line": 138,
+      "hasValidation": false,
+      "snippet": "router.get('/work-info', authenticate, requireOwnEmployee, getWorkInfo);"
+    },
+    {
+      "file": "user-profile.js",
+      "method": "GET",
+      "path": "/salary",
+      "line": 146,
+      "hasValidation": false,
+      "snippet": "router.get('/salary', authenticate, requireOwnEmployee, getSalaryInfo);"
+    },
+    {
+      "file": "user-profile.js",
+      "method": "GET",
+      "path": "/statutory",
+      "line": 154,
+      "hasValidation": false,
+      "snippet": "router.get('/statutory', authenticate, requireOwnEmployee, getStatutoryInfo);"
+    },
+    {
+      "file": "user-profile.js",
+      "method": "GET",
+      "path": "/assets",
+      "line": 162,
+      "hasValidation": false,
+      "snippet": "router.get('/assets', authenticate, requireOwnEmployee, getMyAssets);"
+    },
+    {
+      "file": "user-profile.js",
+      "method": "GET",
+      "path": "/career",
+      "line": 170,
+      "hasValidation": false,
+      "snippet": "router.get('/career', authenticate, requireOwnEmployee, getCareerHistory);"
+    }
+  ]
+}

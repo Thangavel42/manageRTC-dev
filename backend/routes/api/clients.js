@@ -30,6 +30,7 @@ import {
   validateQuery,
   clientSchemas
 } from '../../middleware/validate.js';
+import { exportLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
 
 const router = express.Router();
 
@@ -79,6 +80,7 @@ router.get(
 // Export clients as PDF
 router.get(
   '/export/pdf',
+  exportLimiter,  // ✅ SECURITY FIX - Phase 2: 10 exports per hour
   authenticate,
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),
@@ -88,6 +90,7 @@ router.get(
 // Export clients as Excel
 router.get(
   '/export/excel',
+  exportLimiter,  // ✅ SECURITY FIX - Phase 2: 10 exports per hour
   authenticate,
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),

@@ -4,8 +4,21 @@
  */
 
 import express from 'express';
+import Joi from 'joi';
 import * as holidayController from '../../controllers/rest/holiday/holiday.controller.js';
 import { authenticateUser } from '../../middleware/auth.js';
+// ✅ PHASE 3 SECURITY FIX: Input validation
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  createHolidaySchema,
+  updateHolidaySchema,
+  holidayQuerySchema,
+  validateHolidaySchema,
+  calculateWorkingDaysSchema,
+  objectIdSchema
+} from '../../middleware/validation/index.js';
 
 const router = express.Router();
 
@@ -21,7 +34,7 @@ router.use(authenticateUser);
  * @query   search - Search by name or description
  * @access  Private
  */
-router.get('/', holidayController.getHolidays);
+router.get('/', validateQuery(holidayQuerySchema), holidayController.getHolidays);
 
 /**
  * @route   GET /api/holidays/upcoming
@@ -47,7 +60,7 @@ router.get('/stats', holidayController.getHolidayStats);
  * @body    state - Optional state for region-specific holidays
  * @access  Private
  */
-router.post('/calculate', holidayController.calculateDaysHandler);
+router.post('/calculate', validateBody(calculateWorkingDaysSchema), holidayController.calculateDaysHandler);
 
 /**
  * @route   GET /api/holidays/check
@@ -66,34 +79,34 @@ router.get('/check', holidayController.checkWorkingDayHandler);
  * @body    employeeId - Employee ID
  * @access  Private
  */
-router.post('/validate', holidayController.validateLeaveDatesHandler);
+router.post('/validate', validateBody(validateHolidaySchema), holidayController.validateLeaveDatesHandler);
 
 /**
  * @route   GET /api/holidays/:id
  * @desc    Get holiday by ID
  * @access  Private
  */
-router.get('/:id', holidayController.getHolidayById);
+router.get('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), holidayController.getHolidayById);
 
 /**
  * @route   POST /api/holidays
  * @desc    Create new holiday
  * @access  Private (Admin, HR)
  */
-router.post('/', holidayController.createHoliday);
+router.post('/', validateBody(createHolidaySchema), holidayController.createHoliday);
 
 /**
  * @route   PUT /api/holidays/:id
  * @desc    Update holiday
  * @access  Private (Admin, HR)
  */
-router.put('/:id', holidayController.updateHoliday);
+router.put('/:id', validateBody(updateHolidaySchema), validateParams(Joi.object({ id: objectIdSchema.required() })), holidayController.updateHoliday);
 
 /**
  * @route   DELETE /api/holidays/:id
  * @desc    Delete holiday (soft delete)
  * @access  Private (Admin, HR)
  */
-router.delete('/:id', holidayController.deleteHoliday);
+router.delete('/:id', validateParams(Joi.object({ id: objectIdSchema.required() })), holidayController.deleteHoliday);
 
 export default router;

@@ -74,24 +74,90 @@ export const getTasks = asyncHandler(async (req, res) => {
     $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
   };
 
+  // ✅ SECURITY FIX - Phase 2: Apply employee-based filtering for restricted roles
+  if (['employee', 'manager'].includes(user.role?.toLowerCase())) {
+    const collections = getTenantCollections(user.companyId);
+
+    // Find employee's MongoDB _id
+    const employee = await collections.employees.findOne({
+      $or: [
+        { clerkUserId: user.userId },
+        { 'account.userId': user.userId }
+      ],
+      isDeleted: { $ne: true },
+    });
+
+    if (!employee) {
+      // ✅ SECURITY FIX: If employee record not found, return empty results
+      console.warn(
+        `[Security] Employee record not found for user ${user.userId} (role: ${user.role}). ` +
+        `Denying access to all tasks. RequestId: ${req.id}`
+      );
+
+      return sendSuccess(res, [], 'No tasks accessible', {
+        currentPage: 1,
+        totalPages: 0,
+        totalItems: 0,
+        itemsPerPage: parseInt(limit) || 20
+      });
+    }
+
+    // Filter tasks where employee is assigned
+    const employeeMongoId = employee._id;
+    const employeeMongoIdStr = employee._id.toString();
+
+    filter = {
+      $and: [
+        {
+          $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+        },
+        {
+          $or: [
+            { assignee: employeeMongoId },
+            { assignee: { $in: [employeeMongoIdStr] } },
+            { 'assignees.employee': employeeMongoId },
+            { 'assignees.employee': employeeMongoIdStr },
+            { createdBy: employee.clerkUserId },
+          ],
+        },
+      ],
+    };
+  }
+
   // Apply project filter
   if (project) {
-    filter.projectId = project;
+    if (filter.$and) {
+      filter.$and.push({ projectId: project });
+    } else {
+      filter.projectId = project;
+    }
   }
 
   // Apply assignee filter
   if (assignee) {
-    filter.assignee = { $in: [assignee] };
+    if (filter.$and) {
+      filter.$and.push({ assignee: { $in: [assignee] } });
+    } else {
+      filter.assignee = { $in: [assignee] };
+    }
   }
 
   // Apply status filter
   if (status) {
-    filter.status = status;
+    if (filter.$and) {
+      filter.$and.push({ status });
+    } else {
+      filter.status = status;
+    }
   }
 
   // Apply priority filter
   if (priority) {
-    filter.priority = priority;
+    if (filter.$and) {
+      filter.$and.push({ priority });
+    } else {
+      filter.priority = priority;
+    }
   }
 
   // Apply search filter

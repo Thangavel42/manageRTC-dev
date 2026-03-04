@@ -32,14 +32,18 @@ import {
     authenticate,
     requireCompany,
     requireEmployeeActive,
+    requireOwnEmployee,  // ✅ SECURITY FIX: Prevent IDOR
     requireRole
 } from '../../middleware/auth.js';
+import { sanitizeQuery, sanitizeBody, sanitizeParams } from '../../middleware/inputSanitization.js';  // ✅ SECURITY FIX
 import { requirePageAccess } from '../../middleware/pageAccess.js';
+import { searchLimiter, uploadLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
 import {
     employeeSchemas,
     validateBody,
     validateQuery
 } from '../../middleware/validate.js';
+import { validateFile } from '../../middleware/validation/index.js';  // ✅ PHASE 3 SECURITY: File upload validation
 import emailChangeRoutes from './emailChange.routes.js';
 
 const router = express.Router();
@@ -55,6 +59,7 @@ router.use(attachRequestId);
 router.get(
   '/me',
   authenticate,
+  requireOwnEmployee,  // ✅ SECURITY FIX: Prevent IDOR
   getMyProfile
 );
 
@@ -62,7 +67,8 @@ router.get(
 router.put(
   '/me',
   authenticate,
-  requireEmployeeActive,
+  requireOwnEmployee,  // ✅ SECURITY FIX: Prevent IDOR
+  sanitizeBody,        // ✅ SECURITY FIX: Remove MongoDB operators
   validateBody(employeeSchemas.update),
   updateMyProfile
 );
@@ -81,7 +87,9 @@ router.post(
 // List all employees with pagination and filtering
 router.get(
   '/',
+  searchLimiter,  // ✅ SECURITY FIX - Phase 2: 30 searches per minute
   authenticate,
+  sanitizeQuery,  // ✅ SECURITY FIX: Prevent NoSQL injection via search
   requireCompany,
   (req, res, next) => {
     const roleFilter = (req.query?.role || '').toString().toLowerCase();
@@ -145,6 +153,7 @@ router.post(
 // Search employees
 router.get(
   '/search',
+  searchLimiter,  // ✅ SECURITY FIX - Phase 2: 30 searches per minute
   authenticate,
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),
@@ -236,6 +245,7 @@ router.get(
 // Accessible by admin, hr, superadmin, or the employee themselves
 router.post(
   '/:id/image',
+  uploadLimiter,  // ✅ SECURITY FIX - Phase 2: 20 uploads per hour
   authenticate,
   requireCompany,
   (req, res, next) => {
@@ -250,7 +260,13 @@ router.post(
     }
     next();
   },
-  uploadEmployeeImage,
+  uploadEmployeeImage,  // Multer file upload
+  validateFile({  // ✅ PHASE 3 SECURITY: File validation
+    required: true,
+    maxSize: 2 * 1024 * 1024,  // 2MB for profile images
+    allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'],
+    allowedExtensions: ['.jpg', '.jpeg', '.png', '.webp']
+  }),
   uploadEmployeeProfileImage
 );
 

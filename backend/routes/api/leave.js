@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import Joi from 'joi';
 import { uploadSingleAttachment } from '../../config/multer.config.js';
 import leaveCarryForwardController from '../../controllers/leaves/leaveCarryForward.controller.js';
 import leaveEncashmentController from '../../controllers/leaves/leaveEncashment.controller.js';
@@ -12,7 +13,26 @@ import leaveAttendanceSyncController from '../../controllers/leaves/leaveAttenda
 import leaveController from '../../controllers/rest/leave.controller.js';
 import { authenticate, requireEmployeeActive, requireRole } from '../../middleware/auth.js';
 import { clockInOutRateLimiter, bulkRateLimiter } from '../../middleware/rateLimiter.js';
-import { sanitizeBody, sanitizeQuery } from '../../utils/sanitize.js';
+import { sanitizeBody, sanitizeQuery, sanitizeParams } from '../../utils/sanitize.js';  // ✅ SECURITY FIX: Added sanitizeParams
+// ✅ PHASE 3 SECURITY FIX: Input validation
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  validateFile,
+  createLeaveSchema,
+  updateLeaveSchema,
+  leaveActionSchema,
+  managerActionSchema,
+  cancelLeaveSchema,
+  leaveAttachmentSchema,
+  leaveQuerySchema,
+  leaveBalanceQuerySchema,
+  carryForwardConfigSchema,
+  leaveEncashmentSchema,
+  leaveLedgerInitSchema,
+  objectIdSchema
+} from '../../middleware/validation/index.js';
 
 const router = express.Router();
 
@@ -24,14 +44,14 @@ router.use(authenticate, requireEmployeeActive);
  * @desc    Get all leave requests with pagination and filtering
  * @access  Private (Admin, HR, Superadmin)
  */
-router.get('/', sanitizeQuery(), leaveController.getLeaves);
+router.get('/', validateQuery(leaveQuerySchema), sanitizeQuery(), leaveController.getLeaves);
 
 /**
  * @route   GET /api/leaves/my
  * @desc    Get current user's leave requests
  * @access  Private (All authenticated users)
  */
-router.get('/my', sanitizeQuery(), leaveController.getMyLeaves);
+router.get('/my', validateQuery(leaveQuerySchema), sanitizeQuery(), leaveController.getMyLeaves);
 
 /**
  * @route   GET /api/leaves/status/:status
@@ -45,7 +65,7 @@ router.get('/status/:status', sanitizeQuery(), leaveController.getLeavesByStatus
  * @desc    Get leave balance
  * @access  Private (All authenticated users)
  */
-router.get('/balance', sanitizeQuery(), leaveController.getLeaveBalance);
+router.get('/balance', validateQuery(leaveBalanceQuerySchema), sanitizeQuery(), leaveController.getLeaveBalance);
 
 /**
  * @route   GET /api/leaves/team
@@ -85,14 +105,14 @@ router.get('/ledger/my/summary', sanitizeQuery(), leaveLedgerController.getMyBal
  * @desc    Get specific employee's balance history
  * @access  Private (HR, Admin, Superadmin, or own employee)
  */
-router.get('/ledger/employee/:employeeId', sanitizeQuery(), leaveLedgerController.getEmployeeBalanceHistory);
+router.get('/ledger/employee/:employeeId', sanitizeQuery(), sanitizeParams(), leaveLedgerController.getEmployeeBalanceHistory);  // ✅ SECURITY FIX
 
 /**
  * @route   GET /api/leaves/ledger/employee/:employeeId/summary
  * @desc    Get specific employee's balance summary
  * @access  Private (HR, Admin, Superadmin, or own employee)
  */
-router.get('/ledger/employee/:employeeId/summary', sanitizeQuery(), leaveLedgerController.getEmployeeBalanceSummary);
+router.get('/ledger/employee/:employeeId/summary', sanitizeQuery(), sanitizeParams(), leaveLedgerController.getEmployeeBalanceSummary);  // ✅ SECURITY FIX
 
 /**
  * @route   GET /api/leaves/ledger/financial-year/:financialYear
@@ -108,14 +128,14 @@ router.get('/ledger/financial-year/:financialYear', sanitizeQuery(), leaveLedger
  * @access  Private (HR, Admin, Superadmin, or own data)
  */
 router.get('/ledger/export', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), leaveLedgerController.exportBalanceHistory);
-router.get('/ledger/export/:employeeId', sanitizeQuery(), requireRole('admin', 'hr', 'superadmin'), leaveLedgerController.exportBalanceHistory);
+router.get('/ledger/export/:employeeId', sanitizeQuery(), sanitizeParams(), requireRole('admin', 'hr', 'superadmin'), leaveLedgerController.exportBalanceHistory);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/ledger/initialize/:employeeId
  * @desc    Initialize ledger for employee
  * @access  Private (HR, Admin, Superadmin)
  */
-router.post('/ledger/initialize/:employeeId', sanitizeBody({ type: 'leave' }), bulkRateLimiter, requireRole('admin', 'hr', 'superadmin'), leaveLedgerController.initializeEmployeeLedger);
+router.post('/ledger/initialize/:employeeId', sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, requireRole('admin', 'hr', 'superadmin'), leaveLedgerController.initializeEmployeeLedger);  // ✅ SECURITY FIX
 
 // ============================================
 // LEAVE CARRY FORWARD ROUTES
@@ -134,21 +154,21 @@ router.get('/carry-forward/config', sanitizeQuery(), leaveCarryForwardController
  * @desc    Update carry forward configuration
  * @access  Private (Admin, HR, Superadmin)
  */
-router.put('/carry-forward/config', sanitizeBody({ type: 'leave' }), leaveCarryForwardController.updateCarryForwardConfig);
+router.put('/carry-forward/config', validateBody(carryForwardConfigSchema), sanitizeBody({ type: 'leave' }), leaveCarryForwardController.updateCarryForwardConfig);
 
 /**
  * @route   GET /api/leaves/carry-forward/calculate/:employeeId
  * @desc    Calculate carry forward for employee
  * @access  Private (Admin, HR, Superadmin, or own employee)
  */
-router.get('/carry-forward/calculate/:employeeId', sanitizeQuery(), leaveCarryForwardController.calculateEmployeeCarryForward);
+router.get('/carry-forward/calculate/:employeeId', sanitizeQuery(), sanitizeParams(), leaveCarryForwardController.calculateEmployeeCarryForward);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/carry-forward/execute/:employeeId
  * @desc    Execute carry forward for employee
  * @access  Private (Admin, HR, Superadmin)
  */
-router.post('/carry-forward/execute/:employeeId', sanitizeBody({ type: 'leave' }), bulkRateLimiter, leaveCarryForwardController.executeEmployeeCarryForward);
+router.post('/carry-forward/execute/:employeeId', sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leaveCarryForwardController.executeEmployeeCarryForward);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/carry-forward/execute-all
@@ -162,7 +182,7 @@ router.post('/carry-forward/execute-all', bulkRateLimiter, requireRole('admin', 
  * @desc    Get carry forward history for employee
  * @access  Private (Admin, HR, Superadmin, or own employee)
  */
-router.get('/carry-forward/history/:employeeId', sanitizeQuery(), leaveCarryForwardController.getCarryForwardHistory);
+router.get('/carry-forward/history/:employeeId', sanitizeQuery(), sanitizeParams(), leaveCarryForwardController.getCarryForwardHistory);  // ✅ SECURITY FIX
 
 /**
  * @route   GET /api/leaves/carry-forward/summary/:financialYear
@@ -189,21 +209,21 @@ router.get('/encashment/config', sanitizeQuery(), leaveEncashmentController.getE
  * @access  Private (All authenticated users)
  */
 router.get('/encashment/calculate/:leaveType', sanitizeQuery(), leaveEncashmentController.calculateEncashment);
-router.get('/encashment/calculate/:leaveType/:employeeId', sanitizeQuery(), leaveEncashmentController.calculateEncashment);
+router.get('/encashment/calculate/:leaveType/:employeeId', sanitizeQuery(), sanitizeParams(), leaveEncashmentController.calculateEncashment);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/encashment/execute/:leaveType
  * @desc    Execute leave encashment
  * @access  Private (All authenticated users)
  */
-router.post('/encashment/execute/:leaveType', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveEncashmentController.executeEncashment);
+router.post('/encashment/execute/:leaveType', validateBody(leaveEncashmentSchema), sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveEncashmentController.executeEncashment);
 
 /**
  * @route   GET /api/leaves/encashment/history/:employeeId
  * @desc    Get encashment history for employee
  * @access  Private (Admin, HR, Superadmin, or own employee)
  */
-router.get('/encashment/history/:employeeId', sanitizeQuery(), leaveEncashmentController.getEncashmentHistory);
+router.get('/encashment/history/:employeeId', sanitizeQuery(), sanitizeParams(), leaveEncashmentController.getEncashmentHistory);  // ✅ SECURITY FIX
 
 /**
  * @route   GET /api/leaves/encashment/summary
@@ -229,56 +249,56 @@ router.use('/custom-policies', customPolicyRoutes);
  * @desc    Get single leave request by ID
  * @access  Private (All authenticated users)
  */
-router.get('/:id', sanitizeQuery(), leaveController.getLeaveById);
+router.get('/:id', sanitizeQuery(), sanitizeParams(), leaveController.getLeaveById);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves
  * @desc    Create new leave request
  * @access  Private (All authenticated users)
  */
-router.post('/', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveController.createLeave);
+router.post('/', validateBody(createLeaveSchema), sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveController.createLeave);
 
 /**
  * @route   PUT /api/leaves/:id
  * @desc    Update leave request
  * @access  Private (Admin, HR, Owner)
  */
-router.put('/:id', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveController.updateLeave);
+router.put('/:id', validateBody(updateLeaveSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), sanitizeBody({ type: 'leave' }), sanitizeParams(), clockInOutRateLimiter, leaveController.updateLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   DELETE /api/leaves/:id
  * @desc    Delete leave request (soft delete)
  * @access  Private (Admin, Superadmin, Owner)
  */
-router.delete('/:id', leaveController.deleteLeave);
+router.delete('/:id', sanitizeParams(), leaveController.deleteLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/:id/approve
  * @desc    Approve leave request
  * @access  Private (Admin, HR, Manager)
  */
-router.post('/:id/approve', sanitizeBody({ type: 'leave' }), bulkRateLimiter, leaveController.approveLeave);
+router.post('/:id/approve', validateBody(leaveActionSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leaveController.approveLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/:id/reject
  * @desc    Reject leave request
  * @access  Private (Admin, HR, Manager)
  */
-router.post('/:id/reject', sanitizeBody({ type: 'leave' }), bulkRateLimiter, leaveController.rejectLeave);
+router.post('/:id/reject', validateBody(leaveActionSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leaveController.rejectLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   PATCH /api/leaves/:id/manager-action
  * @desc    Manager approval/rejection action
  * @access  Private (Manager, Admin, Superadmin)
  */
-router.patch('/:id/manager-action', sanitizeBody({ type: 'leave' }), bulkRateLimiter, leaveController.managerActionLeave);
+router.patch('/:id/manager-action', validateBody(managerActionSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), sanitizeBody({ type: 'leave' }), sanitizeParams(), bulkRateLimiter, leaveController.managerActionLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/:id/cancel
  * @desc    Cancel leave request (with balance restoration)
  * @access  Private (All authenticated users)
  */
-router.post('/:id/cancel', sanitizeBody({ type: 'leave' }), clockInOutRateLimiter, leaveController.cancelLeave);
+router.post('/:id/cancel', validateBody(cancelLeaveSchema), validateParams(Joi.object({ id: objectIdSchema.required() })), sanitizeBody({ type: 'leave' }), sanitizeParams(), clockInOutRateLimiter, leaveController.cancelLeave);  // ✅ SECURITY FIX
 
 /**
  * @route   POST /api/leaves/:leaveId/attachments
@@ -286,7 +306,14 @@ router.post('/:id/cancel', sanitizeBody({ type: 'leave' }), clockInOutRateLimite
  * @access  Private (Owner, Admin, HR)
  */
 router.post('/:leaveId/attachments',
-  uploadSingleAttachment,
+  uploadSingleAttachment,  // Multer file upload
+  validateFile({  // ✅ PHASE 3 SECURITY: File validation
+    required: true,
+    maxSize: 5 * 1024 * 1024,  // 5MB
+    allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
+    allowedExtensions: ['.jpg', '.jpeg', '.png', '.pdf']
+  }),
+  sanitizeParams(),  // ✅ SECURITY FIX
   clockInOutRateLimiter,
   leaveController.uploadAttachment
 );
@@ -298,6 +325,7 @@ router.post('/:leaveId/attachments',
  */
 router.get('/:leaveId/attachments',
   sanitizeQuery(),
+  sanitizeParams(),  // ✅ SECURITY FIX
   leaveController.getAttachments
 );
 
@@ -307,6 +335,7 @@ router.get('/:leaveId/attachments',
  * @access  Private (Owner, Admin, HR)
  */
 router.delete('/:leaveId/attachments/:attachmentId',
+  sanitizeParams(),  // ✅ SECURITY FIX
   leaveController.deleteAttachment
 );
 
@@ -333,6 +362,7 @@ router.post('/sync-attendance',
  */
 router.get('/:leaveId/attendance',
   sanitizeQuery(),
+  sanitizeParams(),  // ✅ SECURITY FIX
   leaveAttendanceSyncController.getAttendanceForLeave
 );
 
@@ -343,6 +373,7 @@ router.get('/:leaveId/attendance',
  */
 router.post('/:leaveId/sync-attendance',
   sanitizeBody({ type: 'leave' }),
+  sanitizeParams(),  // ✅ SECURITY FIX
   bulkRateLimiter,
   requireRole('admin', 'hr', 'superadmin'),
   leaveAttendanceSyncController.syncSingleLeaveToAttendance

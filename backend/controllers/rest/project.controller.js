@@ -104,8 +104,19 @@ export const getProjects = asyncHandler(async (req, res) => {
       };
       devLog('[getProjects] Employee filter applied:', JSON.stringify(filter, null, 2));
     } else {
-      devLog('[getProjects] Employee not found for userId:', user.userId);
-      devLog('[getProjects] Searched with clerkUserId and account.userId');
+      // ✅ SECURITY FIX - Phase 2: If employee record not found, return empty results
+      // This prevents unauthorized access to all projects
+      console.warn(
+        `[Security] Employee record not found for user ${user.userId} (role: ${user.role}). ` +
+        `Denying access to all projects. RequestId: ${req.id}`
+      );
+
+      return sendSuccess(res, [], 'No projects accessible', {
+        currentPage: 1,
+        totalPages: 0,
+        totalItems: 0,
+        itemsPerPage: parseInt(limit) || 10
+      });
     }
   } else {
     devLog('[getProjects] Not employee role, no filtering applied');

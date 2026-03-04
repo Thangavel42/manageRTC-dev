@@ -312,6 +312,84 @@ export const requireEmployeeActive = async (req, res, next) => {
 };
 
 /**
+ * requireOwnEmployee - Verify that authenticated user can only access their own employee profile
+ * Prevents IDOR (Insecure Direct Object Reference) vulnerabilities
+ * Use this on /me endpoints to ensure users can't access other employees' data
+ *
+ * SECURITY: This middleware is CRITICAL for preventing profile data breaches
+ * Any endpoint that returns employee-specific data should use this middleware
+ *
+ * @example
+ * router.get('/api/user-profile/current', authenticate, requireOwnEmployee, getCurrentUserProfile);
+ */
+export const requireOwnEmployee = async (req, res, next) => {
+  const user = req.user;
+
+  if (!user || !user.userId) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
+        requestId: req.id || 'no-id',
+      },
+    });
+  }
+
+  if (!user.companyId) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Must belong to a company',
+        requestId: req.id || 'no-id',
+      },
+    });
+  }
+
+  try {
+    const collections = getTenantCollections(user.companyId);
+
+    // ✅ SECURITY FIX: Verify employee record belongs to authenticated user
+    // This prevents IDOR attacks where users modify JWT to access other profiles
+    const employee = await collections.employees.findOne({
+      clerkUserId: user.userId,
+      companyId: user.companyId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!employee) {
+      console.warn(`[Security] IDOR attempt blocked: User ${user.userId} has no employee record`);
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only access your own profile',
+          requestId: req.id || 'no-id',
+        },
+      });
+    }
+
+    // ✅ Attach verified employee to request for use in controllers
+    // Controllers should use req.employee instead of fetching again
+    req.employee = employee;
+
+    console.log(`   ✅ Profile access verified for ${employee.employeeId}`);
+    next();
+  } catch (error) {
+    console.error(`[Security] requireOwnEmployee error: ${error.message} - ${req.id}`);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to verify profile access',
+        requestId: req.id || 'no-id',
+      },
+    });
+  }
+};
+
+/**
  * requireRole - Role-based authorization middleware
  * Checks if authenticated user has one of the required roles
  * All role comparisons are case-insensitive
@@ -447,6 +525,7 @@ export default {
   requireRole,
   requireCompany,
   requireEmployeeActive,
+  requireOwnEmployee,
   optionalAuth,
   attachRequestId,
 };

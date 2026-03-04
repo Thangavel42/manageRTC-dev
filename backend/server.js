@@ -2,9 +2,11 @@ import 'dotenv/config';
 
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import compression from 'compression';
+import cookieParser from 'cookie-parser'; // ✅ SECURITY FIX - Phase 2: CSRF protection
 import cors from 'cors';
 import express from 'express';
 import fs from 'fs';
+import helmet from 'helmet'; // ✅ SECURITY FIX - Phase 6: Security headers
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +14,8 @@ import { connectDB } from './config/db.js';
 import { startPromotionScheduler } from './jobs/promotionScheduler.js';
 import { startResignationScheduler } from './jobs/resignationScheduler.js';
 import { attachRequestId } from './middleware/auth.js';
+import { conditionalCsrf, csrfErrorHandler } from './middleware/csrf.js'; // ✅ SECURITY FIX - Phase 2
+import { apiLimiter } from './middleware/rateLimiting.js'; // ✅ SECURITY FIX - Phase 2
 import companiesRoutes from './routes/companies.routes.js';
 import contactRoutes from './routes/contacts.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -21,6 +25,7 @@ import socialFeedRoutes from './routes/socialfeed.routes.js';
 import ticketRoutes from './routes/tickets.routes.js';
 import { seedTicketCategories } from './seed/ticketCategories.seed.js';
 import { socketHandler } from './socket/index.js';
+import logger from './utils/logger.js'; // ✅ SECURITY FIX - Phase 6: Structured logging
 
 // Swagger/OpenAPI Documentation
 import { specs, swaggerUi } from './config/swagger.js';
@@ -42,6 +47,7 @@ import batchRoutes from './routes/api/batches.js';
 import candidatesRoutes from './routes/api/candidates.js';
 import changeRequestRoutes from './routes/api/changeRequest.js';
 import clientRoutes from './routes/api/clients.js';
+import csrfRoutes from './routes/api/csrf.js'; // ✅ SECURITY FIX - Phase 2: CSRF token endpoint
 import departmentRoutes from './routes/api/departments.js';
 import designationRoutes from './routes/api/designations.js';
 import emailChangeRoutes from './routes/api/emailChange.routes.js';
@@ -122,6 +128,13 @@ app.use(
   })
 );
 
+// ✅ SECURITY FIX - Phase 6: Security headers via helmet
+app.use(helmet({
+  contentSecurityPolicy: false,           // CSP handled separately to avoid breaking frontend
+  crossOriginEmbedderPolicy: false,       // Allow cross-origin images (Cloudinary, Clerk)
+  crossOriginResourcePolicy: false,       // Allow cross-origin resource loading
+}));
+
 // Compress all responses
 app.use(compression());
 
@@ -129,13 +142,14 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ✅ SECURITY FIX - Phase 2: Cookie parser (required for CSRF protection)
+app.use(cookieParser());
+
 // Attach unique request ID to all requests for tracing
 app.use(attachRequestId);
 
 // Note: We use manual token verification in the authenticate middleware
 // No need for clerkMiddleware() since we use verifyToken() directly
-
-console.log('[Deployment]: TEST TEST');
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
@@ -203,7 +217,20 @@ if (!fs.existsSync(tempDir)) {
 const initializeServer = async () => {
   try {
     await connectDB();
-    console.log('Database connection established successfully');
+    logger.info('Database connection established successfully');
+
+    // ✅ SECURITY FIX - Phase 2: Apply global rate limiting to all API routes
+    // This prevents DoS attacks and API abuse
+    // Individual routes can have stricter limits on top of this
+    app.use('/api/', apiLimiter);  // 100 requests per minute per user/IP
+
+    // ✅ SECURITY FIX - Phase 2: Apply CSRF protection to state-changing requests
+    // Skips GET/HEAD/OPTIONS and webhook endpoints
+    // Can be disabled in development with DISABLE_CSRF=true in .env
+    app.use('/api/', conditionalCsrf);
+
+    // CSRF Token Endpoint (must be before other routes to work)
+    app.use('/api', csrfRoutes);
 
     // Seed ticket categories into superadmin DB (only if not already present)
     try {
@@ -325,7 +352,6 @@ const initializeServer = async () => {
     app.post('/api/update-role', async (req, res) => {
       try {
         const { userId, companyId, role } = req.body;
-        console.log(userId, companyId, role);
 
         if (!userId) {
           return res.status(400).json({ error: 'User ID is required' });
@@ -341,7 +367,7 @@ const initializeServer = async () => {
 
         res.json({ message: 'User metadata updated', user: updatedUser });
       } catch (error) {
-        console.error('Error updating user:', error);
+        logger.error('Error updating user metadata', { error: error.message });
         res.status(500).json({ error: 'Failed to update user metadata' });
       }
     });
@@ -398,13 +424,14 @@ const initializeServer = async () => {
           res.status(404).json({ error: 'File not found' });
         }
       } catch (error) {
-        console.error('Download error:', error);
+        logger.error('Download error', { error: error.message });
         res.status(500).json({ error: 'Failed to download file' });
       }
     });
 
     // Error handling (must be after all routes)
     app.use(notFoundHandler);
+    app.use(csrfErrorHandler);  // ✅ SECURITY FIX - Phase 2: Handle CSRF errors
     app.use(errorHandler);
 
     // Socket setup - attach io to app for REST broadcasters
@@ -414,47 +441,43 @@ const initializeServer = async () => {
     // Start promotion scheduler for automatic promotion application
     try {
       await startPromotionScheduler();
-      console.log('✅ Promotion scheduler initialized');
+      logger.info('Promotion scheduler initialized');
     } catch (err) {
-      console.error('⚠️  Promotion scheduler failed to initialize:', err.message);
+      logger.warn('Promotion scheduler failed to initialize', { error: err.message });
       // Continue server startup even if scheduler fails
     }
 
     // Start resignation scheduler for automatic resignation processing
     try {
       await startResignationScheduler();
-      console.log('✅ Resignation scheduler initialized');
+      logger.info('Resignation scheduler initialized');
     } catch (err) {
-      console.error('⚠️  Resignation scheduler failed to initialize:', err.message);
+      logger.warn('Resignation scheduler failed to initialize', { error: err.message });
       // Continue server startup even if scheduler fails
     }
 
     // Server listen
-    console.log('📡 About to start HTTP server...');
     const PORT = process.env.PORT || 5000;
-    console.log(`📡 Starting server on port ${PORT}...`);
+    logger.info(`Starting server on port ${PORT}...`);
 
     httpServer.listen(PORT, (err) => {
       if (err) {
-        console.error('❌ Failed to start server:', err);
+        logger.error('Failed to start server', { error: err.message });
         process.exit(1);
       }
-      console.log(`🚀 Server running on port ${PORT}`);
-      // console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`Environment: Development`);
+      logger.info(`Server running on port ${PORT}`, { environment: process.env.NODE_ENV || 'development' });
     });
 
     // Handle server errors
     httpServer.on('error', (err) => {
-      console.error('❌ Server error:', err);
+      logger.error('Server error', { error: err.message, code: err.code });
       if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use`);
+        logger.error(`Port ${PORT} is already in use`);
       }
       process.exit(1);
     });
   } catch (error) {
-    console.error('Failed to initialize server:', error);
-    console.error('Stack trace:', error.stack);
+    logger.error('Failed to initialize server', { error: error.message, stack: error.stack });
     process.exit(1);
   }
 };

@@ -28,6 +28,8 @@ import {
   requireEmployeeActive,
   requireRole,
 } from '../../middleware/auth.js';
+import { sanitizeQuery, sanitizeBody, sanitizeParams } from '../../middleware/inputSanitization.js';  // ✅ SECURITY FIX
+import { searchLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
 import { projectSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
@@ -64,7 +66,9 @@ router.get(
 // List all projects with pagination and filtering
 router.get(
   '/',
+  searchLimiter,  // ✅ SECURITY FIX - Phase 2: 30 searches per minute
   authenticate,
+  sanitizeQuery,  // ✅ SECURITY FIX: Prevent NoSQL injection via search
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   validateQuery(projectSchemas.list),
   getProjects
@@ -74,6 +78,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  sanitizeBody,  // ✅ SECURITY FIX: Remove MongoDB operators from body
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   requireRole('admin', 'hr', 'superadmin'),
   validateBody(projectSchemas.create),
@@ -88,6 +93,7 @@ router.post(
 router.get(
   '/:id',
   authenticate,
+  sanitizeParams,  // ✅ SECURITY FIX: Validate ObjectId format
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   getProjectById
 );
@@ -96,6 +102,8 @@ router.get(
 router.put(
   '/:id',
   authenticate,
+  sanitizeParams,  // ✅ SECURITY FIX: Validate ObjectId
+  sanitizeBody,    // ✅ SECURITY FIX: Remove MongoDB operators
   // requireCompany, // Temporarily disabled - Clerk auth not working properly
   requireRole('admin', 'hr', 'superadmin'),
   validateBody(projectSchemas.update),

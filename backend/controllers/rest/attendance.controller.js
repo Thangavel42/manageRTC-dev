@@ -1062,6 +1062,15 @@ export const requestRegularization = asyncHandler(async (req, res) => {
   // Get updated attendance
   const updatedAttendance = await collections.attendance.findOne({ _id: new ObjectId(id) });
 
+  // ✅ SECURITY FIX - Phase 6: Audit log for regularization request
+  auditLogService.logAttendanceAction(
+    user.companyId,
+    'ATTENDANCE_REGULARIZATION_REQUESTED',
+    updatedAttendance,
+    user,
+    req
+  ).catch(err => devError('[Audit] Regularization request audit failed:', err.message));
+
   // Broadcast Socket.IO event
   const io = getSocketIO(req);
   if (io) {
