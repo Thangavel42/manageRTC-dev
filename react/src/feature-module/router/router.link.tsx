@@ -1672,19 +1672,19 @@ export const publicRoutes = [
     path: routes.tasks,
     element: <Task />,
     route: Route,
-    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin'],
+    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin', 'employee'],
   },
   {
     path: '/task-details/:taskId',
     element: <TaskDetails />,
     route: Route,
-    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin'],
+    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin', 'employee'],
   },
   {
     path: routes.taskboard,
     element: <TaskBoard />,
     route: Route,
-    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin'],
+    roles: ['admin', 'hr', 'manager', 'leads', 'superadmin', 'employee'],
   },
   {
     path: routes.invoices,
@@ -1822,7 +1822,7 @@ export const publicRoutes = [
     path: routes.leavemanager,
     element: <LeaveManager />,
     route: Route,
-    roles: ['manager', 'admin', 'hr', 'superadmin'],
+    roles: ['employee', 'manager', 'admin', 'hr', 'superadmin', 'leads'], // All roles can access, but page validates reporting manager status
   },
   {
     path: routes.leaveCalendar,
