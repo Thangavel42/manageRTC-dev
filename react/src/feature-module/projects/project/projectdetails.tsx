@@ -379,9 +379,9 @@ const ProjectDetails = () => {
 
   const loadEmployeesAndClients = useCallback(async () => {
     try {
-      // Load employees via REST API (limit max is 100 per API validation)
+      // Load employees via REST API - use active-list endpoint for all roles
       console.log('[ProjectDetails] Loading employees...');
-      const empResponse = await apiGet('/employees', { params: { limit: 100 } });
+      const empResponse = await apiGet('/employees/active-list');
       console.log('[ProjectDetails] Employee response:', empResponse);
 
       if (empResponse.success && empResponse.data) {

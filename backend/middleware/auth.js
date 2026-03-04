@@ -372,9 +372,9 @@ export const requireOwnEmployee = async (req, res, next) => {
 
     // ✅ SECURITY FIX: Verify employee record belongs to authenticated user
     // This prevents IDOR attacks where users modify JWT to access other profiles
+    // Note: No need to check companyId in query since we're already in the company-specific database
     const employee = await collections.employees.findOne({
       clerkUserId: user.userId,
-      companyId: user.companyId,
       isDeleted: { $ne: true },
     });
 
