@@ -118,6 +118,7 @@ const TimeSheet = () => {
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<TimeEntry | null>(null);
+  const [approverDetails, setApproverDetails] = useState<Employee | null>(null);
   const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
   const [taskOptions, setTaskOptions] = useState<{ value: string; label: string }[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -484,8 +485,8 @@ const TimeSheet = () => {
   // Build table columns
   const columns = useMemo(() => {
     const allColumns = [
-      // Employee column - only show for admins, HR, team leads, and project managers
-      ...(!isRegularTeamMember ? [{
+      // Employee column - always shown for all users
+      {
         title: "Employee",
         dataIndex: "employeeName",
         render: (text: string, record: TimeEntry) => (
@@ -527,7 +528,7 @@ const TimeSheet = () => {
           </div>
         ),
         sorter: (a: TimeEntry, b: TimeEntry) => (a.userDetails?.firstName || '').localeCompare(b.userDetails?.firstName || ''),
-      }] : []),
+      },
       {
         title: "Date",
         dataIndex: "date",
@@ -609,7 +610,7 @@ const TimeSheet = () => {
               <Link
                 to="#"
                 className="me-2"
-                onClick={() => setViewingEntry(record)}
+                onClick={() => handleViewEntry(record)}
                 data-bs-toggle="modal"
                 data-inert={true}
                 data-bs-target="#view_timesheet"
@@ -760,6 +761,24 @@ const TimeSheet = () => {
       billable: entry.billable,
       billRate: entry.billRate?.toString() || ""
     });
+  };
+
+  // Handle View Entry - Fetch approver details when viewing an entry
+  const handleViewEntry = async (entry: TimeEntry) => {
+    setViewingEntry(entry);
+
+    // Fetch employees if not already loaded
+    if (employees.length === 0) {
+      await fetchEmployees({ status: 'Active' } as any);
+    }
+
+    // Find approver by clerkUserId
+    if (entry.approvedBy) {
+      const approver = employees.find(emp => emp.clerkUserId === entry.approvedBy);
+      setApproverDetails(approver || null);
+    } else {
+      setApproverDetails(null);
+    }
   };
 
   // Handle form submission (create or update)
@@ -2444,7 +2463,12 @@ const TimeSheet = () => {
                                 <label className="form-label text-muted fs-12 mb-1">
                                   {viewingEntry.status === 'Approved' ? 'Approved By' : 'Rejected By'}
                                 </label>
-                                <p className="mb-0 fw-medium">{viewingEntry.approvedBy}</p>
+                                <p className="mb-0 fw-medium">
+                                  {approverDetails
+                                    ? `${approverDetails.employeeId} - ${approverDetails.firstName} ${approverDetails.lastName}`
+                                    : viewingEntry.approvedBy
+                                  }
+                                </p>
                               </div>
                             )}
                             {viewingEntry.approvedDate && (
