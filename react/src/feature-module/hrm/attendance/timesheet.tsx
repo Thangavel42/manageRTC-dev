@@ -118,6 +118,7 @@ const TimeSheet = () => {
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<TimeEntry | null>(null);
+  const [approverDetails, setApproverDetails] = useState<Employee | null>(null);
   const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
   const [taskOptions, setTaskOptions] = useState<{ value: string; label: string }[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -217,7 +218,7 @@ const TimeSheet = () => {
         await fetchStats();
         await fetchEmployees({ status: 'Active' } as any);
         (window as any).loaded_admin = true;
-      } else if (isProjectLevelManager) {
+      } else if (myManagedProjects.length > 0) {
         // Project Manager/Team Leader: Fetch managed project entries and active employees list
         await fetchManagedTimeEntries(filters);
         await fetchStats();
@@ -240,7 +241,7 @@ const TimeSheet = () => {
 
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, projects, isAdmin, isHR, isProjectLevelManager]);
+  }, [profile, projects, isAdmin, isHR, myManagedProjects]);
 
   // Load tasks when project changes in form
   useEffect(() => {
@@ -339,7 +340,9 @@ const TimeSheet = () => {
       const managedProjectIds = myManagedProjects.map(p => p._id);
       const managedEntries = timeEntries.filter(entry => {
         // Show entries that belong to managed projects
-        if (managedProjectIds.includes(entry.projectId)) {
+        // NOTE: entry.projectId might be ObjectId or string, convert to string for comparison
+        const entryProjectId = entry.projectId?.toString() || entry.projectId;
+        if (managedProjectIds.includes(entryProjectId)) {
           return true;
         }
         // Also show own entries from other projects
@@ -367,7 +370,8 @@ const TimeSheet = () => {
 
     if (isAdmin || isHR) {
       await fetchTimeEntries(filters);
-    } else if (isProjectLevelManager) {
+    } else if (myManagedProjects.length > 0) {
+      // Project Manager / Team Leader: use managed endpoint only if they have managed projects
       await fetchManagedTimeEntries(filters);
     } else {
       // Regular employee - use clerkUserId (not employeeId which is "EMP-XXXX" format)
@@ -378,7 +382,7 @@ const TimeSheet = () => {
       }
     }
     await fetchStats();
-  }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, isProjectLevelManager,
+  }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, myManagedProjects,
     fetchTimeEntries, fetchManagedTimeEntries, getTimeEntriesByUser, fetchStats]);
 
   // Apply status filter and additional client-side filters to entries
@@ -400,8 +404,12 @@ const TimeSheet = () => {
     }
 
     // Apply project filter (client-side to ensure consistency)
+    // NOTE: projectId might be ObjectId or string, handle both cases
     if (selectedProject) {
-      entries = entries.filter(e => e.projectId === selectedProject);
+      entries = entries.filter(e => {
+        const entryProjectId = e.projectId?.toString() || e.projectId;
+        return entryProjectId === selectedProject;
+      });
     }
 
     return entries;
@@ -437,7 +445,8 @@ const TimeSheet = () => {
    */
   const canApproveEntry = useCallback((entry: TimeEntry): boolean => {
     // Only PM/TL can approve (NOT Admin/HR per user requirement)
-    if (!isProjectLevelManager) return false;
+    // Must have at least one managed project to approve entries
+    if (myManagedProjects.length === 0) return false;
 
     // Entry must be in "Submitted" status
     if (entry.status !== 'Submitted') return false;
@@ -471,13 +480,13 @@ const TimeSheet = () => {
 
     // TIER 3: Team Member - Cannot approve anyone (returns false)
     return false;
-  }, [isProjectLevelManager, myManagedProjects, employeeId, clerkUserId, profile]);
+  }, [myManagedProjects, employeeId, clerkUserId, profile]);
 
   // Build table columns
   const columns = useMemo(() => {
     const allColumns = [
-      // Employee column - only show for admins, HR, team leads, and project managers
-      ...(!isRegularTeamMember ? [{
+      // Employee column - always shown for all users
+      {
         title: "Employee",
         dataIndex: "employeeName",
         render: (text: string, record: TimeEntry) => (
@@ -519,7 +528,7 @@ const TimeSheet = () => {
           </div>
         ),
         sorter: (a: TimeEntry, b: TimeEntry) => (a.userDetails?.firstName || '').localeCompare(b.userDetails?.firstName || ''),
-      }] : []),
+      },
       {
         title: "Date",
         dataIndex: "date",
@@ -601,7 +610,7 @@ const TimeSheet = () => {
               <Link
                 to="#"
                 className="me-2"
-                onClick={() => setViewingEntry(record)}
+                onClick={() => handleViewEntry(record)}
                 data-bs-toggle="modal"
                 data-inert={true}
                 data-bs-target="#view_timesheet"
@@ -752,6 +761,24 @@ const TimeSheet = () => {
       billable: entry.billable,
       billRate: entry.billRate?.toString() || ""
     });
+  };
+
+  // Handle View Entry - Fetch approver details when viewing an entry
+  const handleViewEntry = async (entry: TimeEntry) => {
+    setViewingEntry(entry);
+
+    // Fetch employees if not already loaded
+    if (employees.length === 0) {
+      await fetchEmployees({ status: 'Active' } as any);
+    }
+
+    // Find approver by clerkUserId
+    if (entry.approvedBy) {
+      const approver = employees.find(emp => emp.clerkUserId === entry.approvedBy);
+      setApproverDetails(approver || null);
+    } else {
+      setApproverDetails(null);
+    }
   };
 
   // Handle form submission (create or update)
@@ -946,8 +973,12 @@ const TimeSheet = () => {
     }
 
     // Apply project filter
+    // NOTE: projectId might be ObjectId or string, handle both cases
     if (selectedProject) {
-      entries = entries.filter(e => e.projectId === selectedProject);
+      entries = entries.filter(e => {
+        const entryProjectId = e.projectId?.toString() || e.projectId;
+        return entryProjectId === selectedProject;
+      });
     }
 
     return entries;
@@ -1397,7 +1428,7 @@ const TimeSheet = () => {
 
                   Regular employees (team members only) do NOT see this filter as they only see their own entries.
                 */}
-                {(isAdmin || isHR || isProjectLevelManager) && employeeOptions.length > 0 && (
+                {(isAdmin || isHR || myManagedProjects.length > 0) && employeeOptions.length > 0 && (
                   <div className="dropdown me-3">
                     <Link
                       to="#"
@@ -1669,7 +1700,7 @@ const TimeSheet = () => {
             </div>
             <div className="card-body p-0">
               {/* Actionable alert for PM/TL with pending approvals */}
-              {isProjectLevelManager && submittedCount > 0 && statusFilter !== 'Submitted' && (
+              {myManagedProjects.length > 0 && submittedCount > 0 && statusFilter !== 'Submitted' && (
                 <div
                   className="alert alert-warning border-0 rounded-0 m-0 mb-3"
                   role="alert"
@@ -2432,7 +2463,12 @@ const TimeSheet = () => {
                                 <label className="form-label text-muted fs-12 mb-1">
                                   {viewingEntry.status === 'Approved' ? 'Approved By' : 'Rejected By'}
                                 </label>
-                                <p className="mb-0 fw-medium">{viewingEntry.approvedBy}</p>
+                                <p className="mb-0 fw-medium">
+                                  {approverDetails
+                                    ? `${approverDetails.employeeId} - ${approverDetails.firstName} ${approverDetails.lastName}`
+                                    : viewingEntry.approvedBy
+                                  }
+                                </p>
                               </div>
                             )}
                             {viewingEntry.approvedDate && (

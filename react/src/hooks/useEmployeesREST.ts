@@ -140,6 +140,7 @@ export interface Employee {
   about?: string;
   companyName?: string;
   companyId?: string;
+  clerkUserId?: string; // Clerk authentication user ID
   role?: string;
   profileImage?: string;
   enabledModules?: Record<PermissionModule, boolean>;
