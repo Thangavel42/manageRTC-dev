@@ -412,13 +412,15 @@ const Task = () => {
             return 'Please select at least one assignee';
           return '';
         case 'dueDate':
-          if (!value) return 'Due date is required';
-          const selectedProjectData = projects.find((p) => p._id === addForm.projectId);
-          if (
-            selectedProjectData?.dueDate &&
-            dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
-          ) {
-            return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+          // Due date is optional - only validate if provided
+          if (value) {
+            const selectedProjectData = projects.find((p) => p._id === addForm.projectId);
+            if (
+              selectedProjectData?.dueDate &&
+              dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
+            ) {
+              return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+            }
           }
           return '';
         case 'priority':
@@ -446,13 +448,15 @@ const Task = () => {
           if (value.trim().length < 3) return 'Task title must be at least 3 characters';
           return '';
         case 'dueDate':
-          if (!value) return 'Due date is required';
-          const selectedProjectData = projects.find((p) => p._id === editForm.projectId);
-          if (
-            selectedProjectData?.dueDate &&
-            dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
-          ) {
-            return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+          // Due date is optional - only validate if provided
+          if (value) {
+            const selectedProjectData = projects.find((p) => p._id === editForm.projectId);
+            if (
+              selectedProjectData?.dueDate &&
+              dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
+            ) {
+              return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
+            }
           }
           return '';
         case 'priority':
@@ -482,8 +486,11 @@ const Task = () => {
     const titleError = validateEditField('title', editForm.title);
     if (titleError) errors.title = titleError;
 
-    const dueDateError = validateEditField('dueDate', editForm.dueDate);
-    if (dueDateError) errors.dueDate = dueDateError;
+    // Due date is optional - only validate if provided
+    if (editForm.dueDate) {
+      const dueDateError = validateEditField('dueDate', editForm.dueDate);
+      if (dueDateError) errors.dueDate = dueDateError;
+    }
 
     const priorityError = validateEditField('priority', editForm.priority);
     if (priorityError) errors.priority = priorityError;
@@ -521,8 +528,11 @@ const Task = () => {
     const assigneesError = validateField('assignees', addForm.assignees);
     if (assigneesError) errors.assignees = assigneesError;
 
-    const dueDateError = validateField('dueDate', addForm.dueDate);
-    if (dueDateError) errors.dueDate = dueDateError;
+    // Due date is optional - only validate if provided
+    if (addForm.dueDate) {
+      const dueDateError = validateField('dueDate', addForm.dueDate);
+      if (dueDateError) errors.dueDate = dueDateError;
+    }
 
     const priorityError = validateField('priority', addForm.priority);
     if (priorityError) errors.priority = priorityError;
@@ -1810,7 +1820,7 @@ const Task = () => {
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">
-                        Due Date <span className="text-danger">*</span>
+                        Due Date
                       </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
@@ -2084,7 +2094,7 @@ const Task = () => {
                   <div className="col-12">
                     <div className="mb-3">
                       <label className="form-label">
-                        Due Date <span className="text-danger">*</span>
+                        Due Date
                       </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker

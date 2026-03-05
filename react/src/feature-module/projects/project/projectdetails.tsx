@@ -531,8 +531,8 @@ const ProjectDetails = () => {
           return 'Please select at least one assignee';
         break;
       case 'taskDueDate':
-        if (!value) return 'Due date is required';
-        if (project?.endDate && dayjs(value).isAfter(dayjs(project.endDate))) {
+        // Due date is optional - only validate if provided
+        if (value && project?.endDate && dayjs(value).isAfter(dayjs(project.endDate))) {
           return `Due date cannot exceed project end date (${dayjs(project.endDate).format('DD-MM-YYYY')})`;
         }
         break;
@@ -563,8 +563,11 @@ const ProjectDetails = () => {
     const assigneeError = validateTaskField('taskAssignees', selectedAssignees);
     if (assigneeError) errors.taskAssignees = assigneeError;
 
-    const dueDateError = validateTaskField('taskDueDate', taskDueDate);
-    if (dueDateError) errors.taskDueDate = dueDateError;
+    // Due date is optional - only validate if provided
+    if (taskDueDate) {
+      const dueDateError = validateTaskField('taskDueDate', taskDueDate);
+      if (dueDateError) errors.taskDueDate = dueDateError;
+    }
 
     setTaskFieldErrors(errors);
 
@@ -607,8 +610,11 @@ const ProjectDetails = () => {
     const assigneeError = validateTaskField('taskAssignees', editTaskAssignees);
     if (assigneeError) errors.taskAssignees = assigneeError;
 
-    const dueDateError = validateTaskField('taskDueDate', editTaskDueDate);
-    if (dueDateError) errors.taskDueDate = dueDateError;
+    // Due date is optional - only validate if provided
+    if (editTaskDueDate) {
+      const dueDateError = validateTaskField('taskDueDate', editTaskDueDate);
+      if (dueDateError) errors.taskDueDate = dueDateError;
+    }
 
     setEditTaskFieldErrors(errors);
 
@@ -992,10 +998,10 @@ const ProjectDetails = () => {
         if (isNaN(numValue) || numValue < 0) return 'Project value must be a positive number';
         break;
       case 'startDate':
-        if (!value) return 'Start date is required';
+        // Start date is optional
         break;
       case 'endDate':
-        if (!value) return 'End date is required';
+        // End date is optional
         break;
       case 'priority':
         if (!value || value === 'Select') return 'Please select a priority level';
@@ -1021,16 +1027,22 @@ const ProjectDetails = () => {
     const valueError = validateField('projectValue', editValue.trim());
     if (valueError) errors.projectValue = valueError;
 
-    const startDateError = validateField('startDate', editStartDate);
-    if (startDateError) errors.startDate = startDateError;
+    // Start date is optional - only validate if provided
+    if (editStartDate) {
+      const startDateError = validateField('startDate', editStartDate);
+      if (startDateError) errors.startDate = startDateError;
+    }
 
-    const endDateError = validateField('endDate', editEndDate);
-    if (endDateError) errors.endDate = endDateError;
+    // End date is optional - only validate if provided
+    if (editEndDate) {
+      const endDateError = validateField('endDate', editEndDate);
+      if (endDateError) errors.endDate = endDateError;
+    }
 
     const priorityError = validateField('priority', editPriority);
     if (priorityError) errors.priority = priorityError;
 
-    // Date comparison validation
+    // Date comparison validation - only if both dates are provided
     if (editStartDate && editEndDate && editEndDate.isBefore(editStartDate)) {
       errors.endDate = 'End date must be after start date';
     }
@@ -4563,7 +4575,7 @@ const ProjectDetails = () => {
                             <div className="col-md-6">
                               <div className="mb-3">
                                 <label className="form-label">
-                                  Start Date <span className="text-danger">*</span>
+                                  Start Date
                                 </label>
                                 <div className="input-icon-end position-relative" id="startDate">
                                   <DatePicker
@@ -4594,7 +4606,7 @@ const ProjectDetails = () => {
                             <div className="col-md-6">
                               <div className="mb-3">
                                 <label className="form-label">
-                                  End Date <span className="text-danger">*</span>
+                                  End Date
                                 </label>
                                 <div className="input-icon-end position-relative" id="endDate">
                                   <DatePicker
@@ -5032,7 +5044,7 @@ const ProjectDetails = () => {
                 <div className="col-12">
                   <div className="mb-3">
                     <label className="form-label">
-                      Due Date <span className="text-danger">*</span>
+                      Due Date
                     </label>
                     <div className="input-icon-end position-relative">
                       <DatePicker
@@ -5569,7 +5581,7 @@ const ProjectDetails = () => {
                   <div className="col-12">
                     <div className="mb-3">
                       <label className="form-label">
-                        Due Date <span className="text-danger">*</span>
+                        Due Date
                       </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker

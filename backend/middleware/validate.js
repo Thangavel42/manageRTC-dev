@@ -530,13 +530,9 @@ export const projectSchemas = {
       'string.empty': 'Client cannot be empty',
     }),
 
-    startDate: commonSchemas.isoDate.required().messages({
-      'any.required': 'Start date is required',
-    }),
+    startDate: commonSchemas.isoDate.optional(),
 
-    dueDate: commonSchemas.isoDate.required().messages({
-      'any.required': 'Due date is required',
-    }),
+    dueDate: commonSchemas.isoDate.optional(),
 
     priority: Joi.string().valid('High', 'Medium', 'Low').default('Medium'),
 
@@ -553,8 +549,8 @@ export const projectSchemas = {
 
     projectValue: Joi.number().min(0).optional(),
   }).custom((value, helpers) => {
-    // Validate startDate is before dueDate
-    if (new Date(value.startDate) >= new Date(value.dueDate)) {
+    // Validate startDate is before dueDate - only if both dates are provided
+    if (value.startDate && value.dueDate && new Date(value.startDate) >= new Date(value.dueDate)) {
       return helpers.error('any.invalid', {
         message: 'Start date must be before due date',
       });
