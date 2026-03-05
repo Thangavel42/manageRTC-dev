@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import type { ApexOptions } from "apexcharts";
+import { useState } from "react";
 import ReactApexChart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
-import type { ApexOptions } from "apexcharts";
 const routes = all_routes;
 const Apexchart = () => {
   const [sline] = useState<ApexOptions>({
@@ -110,7 +110,7 @@ const Apexchart = () => {
       bar: {
         horizontal: false,
         columnWidth: "55%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     // colors: ['#888ea8', '#4361ee'],
@@ -156,7 +156,7 @@ const Apexchart = () => {
     },
     tooltip: {
       y: {
-        formatter: function (val:any) {
+        formatter: function (val: any) {
           return "$ " + val + " thousands";
         },
       },
@@ -385,7 +385,7 @@ const Apexchart = () => {
               <ul className="breadcrumb">
                 <li className="breadcrumb-item">
                   <Link to={routes.adminDashboard}
->Dashboard</Link>
+                  >Dashboard</Link>
                 </li>
                 <li className="breadcrumb-item active">Charts</li>
               </ul>
