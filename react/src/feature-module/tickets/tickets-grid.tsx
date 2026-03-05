@@ -760,7 +760,7 @@ const TicketGrid = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -846,7 +846,7 @@ const TicketGrid = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -932,7 +932,7 @@ const TicketGrid = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -1018,7 +1018,7 @@ const TicketGrid = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {

@@ -91,6 +91,7 @@ interface Employee {
   role?: string; // Top-level role field (mapped from account.role by DTO)
   email: string;
   phone: string;
+  phoneCode?: string;
   gender?: string;
   dateOfBirth?: string;
   address?: Address;
@@ -115,7 +116,6 @@ interface Employee {
   | "On Leave";
   dateOfJoining: string | null;
   about: string;
-  role: string;
   enabledModules?: Record<PermissionModule, boolean>;
   permissions?: Record<PermissionModule, PermissionSet>;
   totalProjects?: number;
@@ -1002,7 +1002,7 @@ const EmployeeList = () => {
       account: emp.account || { role: roleValue },
       email: emp.email || "",
       phone: emp.phone || "",
-      phoneCode: emp.phoneCode || "+1",
+      phoneCode: emp.phoneCode || "",
       gender: emp.gender || "",
       dateOfBirth: emp.dateOfBirth || null,
       // List API only returns partial address (city, state, country), so ensure all fields exist
@@ -1748,7 +1748,7 @@ const EmployeeList = () => {
       />
       {/* Edit Employee Modal */}
       <EditEmployeeModal
-        employee={editingEmployee}
+        employee={editingEmployee as any}
         modalId="edit_employee_list"
         onUpdate={(updatedEmployee) => {
           setEditingEmployee(updatedEmployee as Employee);

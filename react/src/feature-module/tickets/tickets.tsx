@@ -1036,7 +1036,7 @@ const Tickets = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -1122,7 +1122,7 @@ const Tickets = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -1208,7 +1208,7 @@ const Tickets = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -1294,7 +1294,7 @@ const Tickets = () => {
       bar: {
         horizontal: !1,
         columnWidth: "35%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {

@@ -637,7 +637,7 @@ const HRDashboard = () => {
         borderRadius: 5,
         horizontal: true,
         barHeight: "45%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -717,7 +717,7 @@ const HRDashboard = () => {
         borderRadius: 5,
         horizontal: false,
         columnWidth: "45%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     dataLabels: { enabled: false },

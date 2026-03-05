@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import type { ApexOptions } from "apexcharts";
+import { useState } from "react";
 import ReactApexChart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 const routes = all_routes;
 const Apexchart = () => {
-  const [sline] = useState<any>({
+  const [sline] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "line",
+      type: "line" as const,
       zoom: {
         enabled: false,
       },
@@ -20,7 +21,7 @@ const Apexchart = () => {
       enabled: false,
     },
     stroke: {
-      curve: "straight",
+      curve: "straight" as const,
     },
     series: [
       {
@@ -49,10 +50,10 @@ const Apexchart = () => {
       ],
     },
   })
-  const [sLineArea] = useState<any>({
+  const [sLineArea] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "area",
+      type: "area" as const,
       toolbar: {
         show: false,
       },
@@ -62,7 +63,7 @@ const Apexchart = () => {
       enabled: false,
     },
     stroke: {
-      curve: "smooth",
+      curve: "smooth" as const,
     },
     title: {
       text: "Product Trends by Month",
@@ -80,7 +81,7 @@ const Apexchart = () => {
     ],
 
     xaxis: {
-      type: "datetime",
+      type: "datetime" as const,
       categories: [
         "2018-09-19T00:00:00",
         "2018-09-19T01:30:00",
@@ -97,10 +98,10 @@ const Apexchart = () => {
       },
     },
   })
-  const [sCol] = useState<any>({
+  const [sCol] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "bar",
+      type: "bar" as const,
       toolbar: {
         show: false,
       },
@@ -109,7 +110,7 @@ const Apexchart = () => {
       bar: {
         horizontal: false,
         columnWidth: "55%",
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     // colors: ['#888ea8', '#4361ee'],
@@ -155,16 +156,16 @@ const Apexchart = () => {
     },
     tooltip: {
       y: {
-        formatter: function (val:any) {
+        formatter: function (val: any) {
           return "$ " + val + " thousands";
         },
       },
     },
   })
-  const [sColStacked] = useState<any>({
+  const [sColStacked] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "bar",
+      type: "bar" as const,
       stacked: true,
       toolbar: {
         show: false,
@@ -207,7 +208,7 @@ const Apexchart = () => {
       },
     ],
     xaxis: {
-      type: "datetime",
+      type: "datetime" as const,
       categories: [
         "01/01/2011 GMT",
         "01/02/2011 GMT",
@@ -225,10 +226,10 @@ const Apexchart = () => {
       opacity: 1,
     },
   })
-  const [sBar] = useState<any>({
+  const [sBar] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "bar",
+      type: "bar" as const,
       toolbar: {
         show: false,
       },
@@ -262,10 +263,10 @@ const Apexchart = () => {
       ],
     },
   })
-  const [options] = useState<any>({
+  const [options] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "line",
+      type: "line" as const,
       toolbar: {
         show: false,
       },
@@ -273,12 +274,12 @@ const Apexchart = () => {
     series: [
       {
         name: "Website Blog",
-        type: "column",
+        type: "column" as const,
         data: [440, 505, 414, 671, 227, 413, 201, 352, 752, 320, 257, 160],
       },
       {
         name: "Social Media",
-        type: "line",
+        type: "line" as const,
         data: [23, 42, 35, 27, 43, 22, 17, 31, 22, 22, 12, 16],
       },
     ],
@@ -303,7 +304,7 @@ const Apexchart = () => {
       "12 Jan 2001",
     ],
     xaxis: {
-      type: "datetime",
+      type: "datetime" as const,
     },
     yaxis: [
       {
@@ -319,10 +320,10 @@ const Apexchart = () => {
       },
     ],
   })
-  const [donutChart] = useState<any>({
+  const [donutChart] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "donut",
+      type: "donut" as const,
       toolbar: {
         show: false,
       },
@@ -342,10 +343,10 @@ const Apexchart = () => {
       },
     ],
   })
-  const [radialChart] = useState<any>({
+  const [radialChart] = useState<ApexOptions>({
     chart: {
       height: 350,
-      type: "radialBar",
+      type: "radialBar" as const,
       toolbar: {
         show: false,
       },
@@ -384,7 +385,7 @@ const Apexchart = () => {
               <ul className="breadcrumb">
                 <li className="breadcrumb-item">
                   <Link to={routes.adminDashboard}
->Dashboard</Link>
+                  >Dashboard</Link>
                 </li>
                 <li className="breadcrumb-item active">Charts</li>
               </ul>

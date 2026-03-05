@@ -64,7 +64,7 @@ const LayoutDemo = () => {
         borderRadius: 5,
         horizontal: true,
         barHeight: '35%',
-        endingShape: 'rounded',
+        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -114,7 +114,7 @@ const LayoutDemo = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: 'all',
         horizontal: false,
-        endingShape: 'rounded',
+        borderRadius: 4,
       },
     },
     series: [
