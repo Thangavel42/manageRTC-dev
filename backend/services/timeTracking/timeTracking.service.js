@@ -750,9 +750,10 @@ export const deleteTimeEntry = async (companyId, timeEntryId) => {
       return { done: false, error: 'Time entry not found' };
     }
 
-    // Check if time entry is editable
-    if (existingEntry.status !== 'Draft' && existingEntry.status !== 'Rejected') {
-      return { done: false, error: 'Cannot delete time entry that has been submitted' };
+    // Check if time entry is deletable (only Draft entries can be deleted)
+    // Rejected entries can be edited and resubmitted, but NOT deleted
+    if (existingEntry.status !== 'Draft') {
+      return { done: false, error: 'Cannot delete time entry that has been submitted, rejected, or approved. Only Draft entries can be deleted.' };
     }
 
     const result = await collections.timeEntries.updateOne(

@@ -639,8 +639,8 @@ export const taskSchemas = {
   list: Joi.object({
     ...commonSchemas.pagination,
     project: commonSchemas.objectId.optional(),
-    assignee: Joi.string().trim().optional(),
-    status: Joi.string().trim().optional(),
+    assignee: commonSchemas.objectId.optional(),
+    status: Joi.string().valid('To Do', 'In Progress', 'Review', 'Completed').optional(),
     priority: Joi.string().valid('High', 'Medium', 'Low').optional(),
     sortBy: Joi.string().valid('title', 'dueDate', 'priority', 'createdAt').default('createdAt'),
     order: Joi.string().valid('asc', 'desc').default('desc'),
@@ -1610,14 +1610,7 @@ export const promotionSchemas = {
       'any.required': 'Promotion date is required',
     }),
     promotionType: Joi.string()
-      .valid(
-        'Performance Based',
-        'Experience Based',
-        'Qualification Based',
-        'Special Achievement',
-        'Regular',
-        'Other'
-      )
+      .valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other')
       .default('Regular')
       .optional(),
     salaryChange: Joi.object({
@@ -1680,16 +1673,7 @@ export const promotionSchemas = {
       designationId: commonSchemas.objectId.optional(),
     }).optional(),
     promotionDate: commonSchemas.isoDate.optional(),
-    promotionType: Joi.string()
-      .valid(
-        'Performance Based',
-        'Experience Based',
-        'Qualification Based',
-        'Special Achievement',
-        'Regular',
-        'Other'
-      )
-      .optional(),
+    promotionType: Joi.string().valid('Regular', 'Acting', 'Charge', 'Transfer', 'Other').optional(),
     salaryChange: Joi.object({
       previousSalary: Joi.number().min(0).optional(),
       newSalary: Joi.number().min(0).optional(),
@@ -1728,8 +1712,9 @@ export const resignationSchemas = {
     departmentId: commonSchemas.objectId.required().messages({
       'any.required': 'Department is required',
     }),
-    reportingManagerId: commonSchemas.objectId.allow(null, '').optional(),
-    approvalFlow: Joi.string().valid('manager_then_hr', 'hr_only').optional(),
+    reportingManagerId: commonSchemas.objectId.required().messages({
+      'any.required': 'Reporting manager is required',
+    }),
     resignationDate: commonSchemas.ddmmyyyy.optional().allow(null, '').messages({
       'date.base': 'Resignation date must be in DD-MM-YYYY format',
     }),
@@ -1803,8 +1788,7 @@ export const resignationSchemas = {
     resignationDate: commonSchemas.ddmmyyyy.optional(),
     noticeDate: commonSchemas.ddmmyyyy.optional(),
     departmentId: commonSchemas.objectId.optional(),
-    reportingManagerId: commonSchemas.objectId.allow(null, '').optional(),
-    approvalFlow: Joi.string().valid('manager_then_hr', 'hr_only').optional(),
+    reportingManagerId: commonSchemas.objectId.optional(),
     noticePeriodDays: Joi.number().integer().min(0).max(180).optional(),
     reason: Joi.string().max(500).trim().optional(),
     notes: Joi.string().max(2000).allow('').optional(),
