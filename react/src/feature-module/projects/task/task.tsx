@@ -412,16 +412,7 @@ const Task = () => {
             return 'Please select at least one assignee';
           return '';
         case 'dueDate':
-          // Due date is optional - only validate if provided
-          if (value) {
-            const selectedProjectData = projects.find((p) => p._id === addForm.projectId);
-            if (
-              selectedProjectData?.dueDate &&
-              dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
-            ) {
-              return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
-            }
-          }
+          // Due date is optional - no validation needed
           return '';
         case 'priority':
           if (!value || value === 'Select') return 'Please select a priority';
@@ -448,16 +439,7 @@ const Task = () => {
           if (value.trim().length < 3) return 'Task title must be at least 3 characters';
           return '';
         case 'dueDate':
-          // Due date is optional - only validate if provided
-          if (value) {
-            const selectedProjectData = projects.find((p) => p._id === editForm.projectId);
-            if (
-              selectedProjectData?.dueDate &&
-              dayjs(value).isAfter(dayjs(selectedProjectData.dueDate))
-            ) {
-              return `Due date cannot exceed project end date (${dayjs(selectedProjectData.dueDate).format('DD-MM-YYYY')})`;
-            }
-          }
+          // Due date is optional - no validation needed
           return '';
         case 'priority':
           if (!value || value === 'Select') return 'Please select a priority';

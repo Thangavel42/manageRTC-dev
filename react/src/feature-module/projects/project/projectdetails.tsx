@@ -531,10 +531,7 @@ const ProjectDetails = () => {
           return 'Please select at least one assignee';
         break;
       case 'taskDueDate':
-        // Due date is optional - only validate if provided
-        if (value && project?.endDate && dayjs(value).isAfter(dayjs(project.endDate))) {
-          return `Due date cannot exceed project end date (${dayjs(project.endDate).format('DD-MM-YYYY')})`;
-        }
+        // Due date is optional - no validation needed
         break;
     }
     return '';

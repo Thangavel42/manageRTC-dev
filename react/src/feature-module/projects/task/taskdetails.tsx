@@ -582,10 +582,10 @@ const TaskDetails = () => {
                         Priority :{' '}
                         <span
                           className={`badge ${task.priority === 'High'
-                              ? 'badge-danger'
-                              : task.priority === 'Medium'
-                                ? 'badge-warning'
-                                : 'badge-success'
+                            ? 'badge-danger'
+                            : task.priority === 'Medium'
+                              ? 'badge-warning'
+                              : 'badge-success'
                             }`}
                         >
                           <i className="ti ti-point-filled me-1" />
@@ -754,12 +754,12 @@ const TaskDetails = () => {
                       <p className="mb-0">Status</p>
                       <span
                         className={`badge ${task.status === 'Completed'
-                            ? 'badge-success'
-                            : task.status === 'Inprogress'
-                              ? 'badge-warning'
-                              : task.status === 'Onhold'
-                                ? 'badge-secondary'
-                                : 'badge-info'
+                          ? 'badge-success'
+                          : task.status === 'Inprogress'
+                            ? 'badge-warning'
+                            : task.status === 'Onhold'
+                              ? 'badge-secondary'
+                              : 'badge-info'
                           }`}
                       >
                         <i className="ti ti-point-filled me-1" />
@@ -819,26 +819,26 @@ const TaskDetails = () => {
                                 <div className="d-flex overflow-hidden">
                                   <span
                                     className={`avatar avatar-md me-3 rounded-circle flex-shrink-0 ${activity.type === 'task_created'
-                                        ? 'bg-info'
-                                        : activity.type === 'task_updated'
-                                          ? 'bg-warning'
-                                          : activity.type === 'task_completed'
-                                            ? 'bg-success'
-                                            : activity.type === 'file_uploaded'
-                                              ? 'bg-secondary'
-                                              : 'bg-purple'
+                                      ? 'bg-info'
+                                      : activity.type === 'task_updated'
+                                        ? 'bg-warning'
+                                        : activity.type === 'task_completed'
+                                          ? 'bg-success'
+                                          : activity.type === 'file_uploaded'
+                                            ? 'bg-secondary'
+                                            : 'bg-purple'
                                       }`}
                                   >
                                     <i
                                       className={`fs-16 ${activity.type === 'task_created'
-                                          ? 'ti ti-checkup-list'
-                                          : activity.type === 'task_updated'
-                                            ? 'ti ti-circle-dot'
-                                            : activity.type === 'task_completed'
-                                              ? 'ti ti-check'
-                                              : activity.type === 'file_uploaded'
-                                                ? 'ti ti-photo'
-                                                : 'ti ti-activity'
+                                        ? 'ti ti-checkup-list'
+                                        : activity.type === 'task_updated'
+                                          ? 'ti ti-circle-dot'
+                                          : activity.type === 'task_completed'
+                                            ? 'ti ti-check'
+                                            : activity.type === 'file_uploaded'
+                                              ? 'ti ti-photo'
+                                              : 'ti ti-activity'
                                         }`}
                                     />
                                   </span>
@@ -998,7 +998,7 @@ const TaskDetails = () => {
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">
-                        Due Date <span className="text-danger">*</span>
+                        Due Date
                       </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
