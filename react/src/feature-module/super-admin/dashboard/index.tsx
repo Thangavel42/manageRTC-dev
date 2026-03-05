@@ -48,7 +48,7 @@ const SuperAdminDashboard = () => {
         borderRadius: 10,
         borderRadiusWhenStacked: "all" as const,
         horizontal: false,
-        endingShape: "rounded",
+        borderRadius: 4,
         colors: {
           backgroundBarColors: ["#f3f4f5"],
           backgroundBarOpacity: 0.5,
@@ -129,7 +129,7 @@ const SuperAdminDashboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all" as const,
         horizontal: false,
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     series: [

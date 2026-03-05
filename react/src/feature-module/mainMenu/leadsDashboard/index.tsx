@@ -92,7 +92,7 @@ const LeadsDasboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all",
         horizontal: false,
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     series: [
@@ -218,7 +218,7 @@ const LeadsDasboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all",
         horizontal: false,
-        endingShape: "rounded",
+        borderRadius: 4,
       },
     },
     series: [
