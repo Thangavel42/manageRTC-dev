@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
 import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
@@ -22,6 +23,61 @@ interface FormData {
   billable: boolean;
   billRate?: string;
 }
+
+// Skeleton Loader Components
+const StatCardSkeleton = () => (
+  <div className="card">
+    <div className="card-body">
+      <div className="skeleton-text skeleton-stat-label mb-2"></div>
+      <div className="skeleton-text skeleton-stat-value"></div>
+    </div>
+  </div>
+);
+
+const TableRowSkeleton = ({ showEmployee }: { showEmployee: boolean }) => (
+  <tr>
+    {showEmployee && (
+      <td>
+        <div className="d-flex align-items-center">
+          <div className="skeleton-avatar me-2"></div>
+          <div>
+            <div className="skeleton-text skeleton-employee-name mb-1"></div>
+            <div className="skeleton-text skeleton-emp-id"></div>
+          </div>
+        </div>
+      </td>
+    )}
+    <td><div className="skeleton-text skeleton-date"></div></td>
+    <td><div className="skeleton-text skeleton-project"></div></td>
+    <td><div className="skeleton-text skeleton-description"></div></td>
+    <td><div className="skeleton-text skeleton-hours"></div></td>
+    <td><div className="skeleton-badge"></div></td>
+    <td><div className="skeleton-actions"></div></td>
+  </tr>
+);
+
+const TableSkeleton = ({ showEmployee }: { showEmployee: boolean }) => (
+  <div className="table-responsive">
+    <table className="table datanew">
+      <thead>
+        <tr>
+          {showEmployee && <th>Employee</th>}
+          <th>Date</th>
+          <th>Project</th>
+          <th>Description</th>
+          <th>Hours</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <TableRowSkeleton key={i} showEmployee={showEmployee} />
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 
 const TimeSheet = () => {
   // Auth & Role detection
@@ -80,6 +136,8 @@ const TimeSheet = () => {
   const [approving, setApproving] = useState<string | null>(null);
   const [rejectEntryId, setRejectEntryId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Search state for filter dropdowns
@@ -767,16 +825,21 @@ const TimeSheet = () => {
   // Handle delete confirmation
   const handleDelete = async () => {
     if (deleteEntryId) {
-      const success = await deleteTimeEntry(deleteEntryId);
-      if (success) {
-        setDeleteEntryId(null);
-        // Close modal
-        const modalElement = document.getElementById('delete_modal');
-        const bootstrapModal = (window as any).bootstrap;
-        if (bootstrapModal && modalElement) {
-          const modal = bootstrapModal.Modal.getInstance(modalElement);
-          if (modal) modal.hide();
+      setDeleting(true);
+      try {
+        const success = await deleteTimeEntry(deleteEntryId);
+        if (success) {
+          setDeleteEntryId(null);
+          // Close modal
+          const modalElement = document.getElementById('delete_modal');
+          const bootstrapModal = (window as any).bootstrap;
+          if (bootstrapModal && modalElement) {
+            const modal = bootstrapModal.Modal.getInstance(modalElement);
+            if (modal) modal.hide();
+          }
         }
+      } finally {
+        setDeleting(false);
       }
     }
   };
@@ -832,6 +895,7 @@ const TimeSheet = () => {
       message.error('Please provide a rejection reason');
       return;
     }
+    setRejecting(true);
     try {
       const entry = displayedEntries.find(e => e._id === rejectEntryId);
       if (!entry) return;
@@ -851,6 +915,8 @@ const TimeSheet = () => {
       }
     } catch (error) {
       console.error('Reject failed:', error);
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -1022,6 +1088,89 @@ const TimeSheet = () => {
 
   return (
     <>
+      {/* Skeleton Loader Styles */}
+      <style>{`
+        /* Skeleton Loader Styles */
+        .skeleton-text {
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          border-radius: 4px;
+          height: 16px;
+        }
+
+        .skeleton-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-badge {
+          width: 80px;
+          height: 24px;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-actions {
+          width: 100px;
+          height: 20px;
+          border-radius: 4px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-stat-label {
+          width: 100px;
+          height: 14px;
+        }
+
+        .skeleton-stat-value {
+          width: 70px;
+          height: 28px;
+        }
+
+        .skeleton-employee-name {
+          width: 120px;
+          height: 14px;
+        }
+
+        .skeleton-emp-id {
+          width: 80px;
+          height: 12px;
+        }
+
+        .skeleton-date {
+          width: 90px;
+          height: 14px;
+        }
+
+        .skeleton-project {
+          width: 140px;
+          height: 14px;
+        }
+
+        .skeleton-description {
+          width: 200px;
+          height: 14px;
+        }
+
+        .skeleton-hours {
+          width: 50px;
+          height: 14px;
+        }
+
+        @keyframes skeleton-loading {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
       {/* Page Wrapper */}
       <div className="page-wrapper">
         <div className="content">
@@ -1050,20 +1199,21 @@ const TimeSheet = () => {
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
                   >
-                    <i className="ti ti-file-export me-1" />
+                    <i className="ti ti-file-export me-2" />
                     Export
                   </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-2">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-pdf me-1" />
+                      <Link to="#" className="dropdown-item rounded-1 d-flex align-items-center">
+                        <i className="ti ti-file-type-pdf me-2 text-danger" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-xls me-1" />
+                      <Link to="#" className="dropdown-item rounded-1 d-flex align-items-center">
+                        <i className="ti ti-file-type-xls me-2 text-success" />
                         Export as Excel
                       </Link>
                     </li>
@@ -1099,10 +1249,10 @@ const TimeSheet = () => {
                     data-bs-toggle="modal"
                     data-inert={true}
                     data-bs-target="#add_timesheet"
-                    className="btn btn-primary d-flex align-items-center"
+                    className="btn btn-primary d-inline-flex align-items-center"
                     onClick={() => resetForm()}
                   >
-                    <i className="ti ti-circle-plus me-2" />
+                    <i className="ti ti-plus me-2" />
                     Add Today's Work
                   </Link>
                 </div>
@@ -1116,42 +1266,55 @@ const TimeSheet = () => {
 
           {/* Stats Cards */}
           <div className="row g-3 mb-3">
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Total Hours</h6>
-                  <h4 className="mb-0">{totalHours.toFixed(1)}h</h4>
+            {loading && !initialLoadDone.current ? (
+              <>
+                {/* Skeleton Loaders for Stats Cards */}
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="col-md-3">
+                    <StatCardSkeleton />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Total Hours</h6>
+                      <h4 className="mb-0">{totalHours.toFixed(1)}h</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Billable Hours</h6>
-                  <h4 className="mb-0">{billableHours.toFixed(1)}h</h4>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Billable Hours</h6>
+                      <h4 className="mb-0">{billableHours.toFixed(1)}h</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Entries</h6>
-                  <h4 className="mb-0">{filteredTimeEntries.length}</h4>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Entries</h6>
+                      <h4 className="mb-0">{filteredTimeEntries.length}</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Date Range</h6>
-                  <p className="mb-0 text-truncate" style={{ fontSize: '13px' }}>
-                    {dateRange.startDate && dateRange.endDate
-                      ? `${new Date(dateRange.startDate).toLocaleDateString('en-GB')} - ${new Date(dateRange.endDate).toLocaleDateString('en-GB')}`
-                      : 'All Time'}
-                  </p>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Date Range</h6>
+                      <p className="mb-0 text-truncate" style={{ fontSize: '13px' }}>
+                        {dateRange.startDate && dateRange.endDate
+                          ? `${new Date(dateRange.startDate).toLocaleDateString('en-GB')} - ${new Date(dateRange.endDate).toLocaleDateString('en-GB')}`
+                          : 'All Time'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
 
           {/* Performance Indicator list */}
@@ -1165,6 +1328,7 @@ const TimeSheet = () => {
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
                     onClick={() => setProjectSearchQuery('')}
                   >
                     {selectedProject
@@ -1239,6 +1403,7 @@ const TimeSheet = () => {
                       to="#"
                       className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                       data-bs-toggle="dropdown"
+                      aria-expanded="false"
                       onClick={() => setEmployeeSearchQuery('')}
                     >
                       {selectedEmployee
@@ -1304,8 +1469,9 @@ const TimeSheet = () => {
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
                   >
-                    <i className="ti ti-filter me-1" />
+                    <i className="ti ti-filter me-2" />
                     {dateRange.startDate
                       ? dateRange.startDate === dateRange.endDate
                         ? dayjs(dateRange.startDate).format('MMM D, YYYY')
@@ -1495,7 +1661,7 @@ const TimeSheet = () => {
                     onClick={clearAllFilters}
                     title="Clear all filters"
                   >
-                    <i className="ti ti-filter-x me-1" />
+                    <i className="ti ti-filter-x me-2" />
                     Clear Filters
                   </button>
                 )}
@@ -1541,10 +1707,7 @@ const TimeSheet = () => {
               </div>
 
               {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status"></div>
-                  <p className="mt-2">Loading timesheets...</p>
-                </div>
+                <TableSkeleton showEmployee={!isRegularTeamMember} />
               ) : error ? (
                 <div className="text-center py-5">
                   <p className="text-danger">{error}</p>
@@ -1573,7 +1736,7 @@ const TimeSheet = () => {
       {/* /Page Wrapper */}
 
       {/* Add Timesheet */}
-      <div className="modal fade" id="add_timesheet">
+      <div className="modal fade" id="add_timesheet" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -1595,38 +1758,43 @@ const TimeSheet = () => {
                       <label className="form-label">
                         Project <span className="text-danger">*</span>
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.projectId}
-                        onChange={(e) => handleInputChange('projectId', e.target.value)}
-                        required
-                      >
-                        <option value="">Select Project</option>
-                        {projectOptions.map(project => (
-                          <option key={project.value} value={project.value}>{project.label}</option>
-                        ))}
-                      </select>
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: "Select Project" },
+                          ...projectOptions
+                        ]}
+                        value={projectOptions.find(p => p.value === formData.projectId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('projectId', selected?.value || '');
+                        }}
+                        placeholder="Select Project"
+                        isSearchable={true}
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">
+                      <label className="form-label d-flex align-items-center">
                         Task <span className="text-danger">*</span>
+                        {loadingTasks && (
+                          <span className="spinner-border spinner-border-sm ms-2 text-primary" role="status" aria-hidden="true"></span>
+                        )}
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.taskId || ''}
-                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: !formData.projectId ? "Select a project first" : loadingTasks ? "Loading tasks..." : "Select Task" },
+                          ...taskOptions
+                        ]}
+                        value={taskOptions.find(t => t.value === formData.taskId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('taskId', selected?.value || '');
+                        }}
+                        placeholder="Select Task"
+                        isSearchable={true}
                         disabled={!formData.projectId || loadingTasks}
-                        required
-                      >
-                        <option value="">Select Task</option>
-                        {!formData.projectId && <option disabled>Select a project first</option>}
-                        {loadingTasks && <option disabled>Loading tasks...</option>}
-                        {taskOptions.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                      />
                       {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
                         <small className="text-warning">No tasks assigned to you in this project.</small>
                       )}
@@ -1720,6 +1888,7 @@ const TimeSheet = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
@@ -1728,7 +1897,14 @@ const TimeSheet = () => {
                   className="btn btn-primary"
                   disabled={loading}
                 >
-                  {loading ? 'Adding...' : 'Add Time Entry'}
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Time Entry'
+                  )}
                 </button>
               </div>
             </form>
@@ -1738,7 +1914,7 @@ const TimeSheet = () => {
       {/* /Add Timesheet */}
 
       {/* Edit Timesheet */}
-      <div className="modal fade" id="edit_timesheet">
+      <div className="modal fade" id="edit_timesheet" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -1760,38 +1936,43 @@ const TimeSheet = () => {
                       <label className="form-label">
                         Project <span className="text-danger">*</span>
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.projectId}
-                        onChange={(e) => handleInputChange('projectId', e.target.value)}
-                        required
-                      >
-                        <option value="">Select Project</option>
-                        {projectOptions.map(project => (
-                          <option key={project.value} value={project.value}>{project.label}</option>
-                        ))}
-                      </select>
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: "Select Project" },
+                          ...projectOptions
+                        ]}
+                        value={projectOptions.find(p => p.value === formData.projectId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('projectId', selected?.value || '');
+                        }}
+                        placeholder="Select Project"
+                        isSearchable={true}
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">
+                      <label className="form-label d-flex align-items-center">
                         Task <span className="text-danger">*</span>
+                        {loadingTasks && (
+                          <span className="spinner-border spinner-border-sm ms-2 text-primary" role="status" aria-hidden="true"></span>
+                        )}
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.taskId || ''}
-                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: !formData.projectId ? "Select a project first" : loadingTasks ? "Loading tasks..." : "Select Task" },
+                          ...taskOptions
+                        ]}
+                        value={taskOptions.find(t => t.value === formData.taskId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('taskId', selected?.value || '');
+                        }}
+                        placeholder="Select Task"
+                        isSearchable={true}
                         disabled={!formData.projectId || loadingTasks}
-                        required
-                      >
-                        <option value="">Select Task</option>
-                        {!formData.projectId && <option disabled>Select a project first</option>}
-                        {loadingTasks && <option disabled>Loading tasks...</option>}
-                        {taskOptions.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                      />
                       {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
                         <small className="text-warning">No tasks assigned to you in this project.</small>
                       )}
@@ -1885,6 +2066,7 @@ const TimeSheet = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
@@ -1893,7 +2075,14 @@ const TimeSheet = () => {
                   className="btn btn-primary"
                   disabled={loading}
                 >
-                  {loading ? 'Updating...' : 'Save Changes'}
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Updating...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
                 </button>
               </div>
             </form>
@@ -1903,7 +2092,7 @@ const TimeSheet = () => {
       {/* /Edit Timesheet */}
 
       {/* Delete Confirmation Modal */}
-      <div className="modal fade" id="delete_modal">
+      <div className="modal fade" id="delete_modal" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
@@ -1925,6 +2114,7 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-light"
                 data-bs-dismiss="modal"
+                disabled={deleting}
               >
                 Cancel
               </button>
@@ -1932,9 +2122,16 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-danger"
                 onClick={handleDelete}
-                data-bs-dismiss="modal"
+                disabled={deleting}
               >
-                Delete
+                {deleting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
               </button>
             </div>
           </div>
@@ -1942,7 +2139,7 @@ const TimeSheet = () => {
       </div>
 
       {/* Reject Timesheet Modal */}
-      <div className="modal fade" id="reject_modal">
+      <div className="modal fade" id="reject_modal" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
@@ -1983,6 +2180,7 @@ const TimeSheet = () => {
                   setRejectEntryId(null);
                   setRejectReason('');
                 }}
+                disabled={rejecting}
               >
                 Cancel
               </button>
@@ -1990,9 +2188,16 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-danger"
                 onClick={handleRejectConfirm}
-                disabled={!rejectReason.trim()}
+                disabled={!rejectReason.trim() || rejecting}
               >
-                Reject Timesheet
+                {rejecting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Rejecting...
+                  </>
+                ) : (
+                  'Reject Timesheet'
+                )}
               </button>
             </div>
           </div>
@@ -2000,7 +2205,7 @@ const TimeSheet = () => {
       </div>
 
       {/* View Timesheet Details Modal */}
-      <div className="modal fade" id="view_timesheet">
+      <div className="modal fade" id="view_timesheet" data-bs-backdrop="true" data-bs-keyboard="true">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
