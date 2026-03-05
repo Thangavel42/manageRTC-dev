@@ -307,11 +307,31 @@ const TimeSheet = () => {
   }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, isProjectLevelManager,
     fetchTimeEntries, fetchManagedTimeEntries, getTimeEntriesByUser, fetchStats]);
 
-  // Apply status filter to entries
+  // Apply status filter and additional client-side filters to entries
   const displayedEntries = useMemo(() => {
-    if (statusFilter === 'all') return filteredTimeEntries;
-    return filteredTimeEntries.filter(e => e.status === statusFilter);
-  }, [filteredTimeEntries, statusFilter]);
+    let entries = filteredTimeEntries;
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      entries = entries.filter(e => e.status === statusFilter);
+    }
+
+    // Apply employee filter (client-side to ensure consistency)
+    // Match by userDetails.employeeId (like "EMP-5785")
+    if (selectedEmployee) {
+      entries = entries.filter(e => {
+        const entryEmployeeId = e.userDetails?.employeeId;
+        return entryEmployeeId === selectedEmployee;
+      });
+    }
+
+    // Apply project filter (client-side to ensure consistency)
+    if (selectedProject) {
+      entries = entries.filter(e => e.projectId === selectedProject);
+    }
+
+    return entries;
+  }, [filteredTimeEntries, statusFilter, selectedEmployee, selectedProject]);
 
   // Fetch data when filters change (after initial load is complete)
   useEffect(() => {
@@ -320,8 +340,7 @@ const TimeSheet = () => {
 
     // Refetch when any filter changes
     refetchEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, selectedProject, selectedEmployee]);
+  }, [dateRange, selectedProject, selectedEmployee, refetchEntries]);
 
   /**
    * Approval Hierarchy Decision Logic:
@@ -604,14 +623,9 @@ const TimeSheet = () => {
     }
   };
 
-  // Handle project filter change
+  // Handle project filter change - just set state, useEffect will handle refetch
   const handleProjectFilter = (value: string) => {
     setSelectedProject(value);
-    if (value) {
-      fetchTimeEntries({ page: 1, limit: 50, projectId: value });
-    } else {
-      fetchTimeEntries({ page: 1, limit: 50 });
-    }
   };
 
   // Reset form
@@ -805,17 +819,34 @@ const TimeSheet = () => {
     setSelectedEmployee(employeeId);
   };
 
-  // Calculate total hours for display (use filtered entries which respects draft privacy)
-  const totalHours = filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
-  const billableHours = filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  // Base filtered entries (with employee/project filters but without status filter)
+  // Used for calculating counts that reflect the current employee/project selection
+  const baseFilteredEntries = useMemo(() => {
+    let entries = filteredTimeEntries;
 
-  // Status counts - ALWAYS use filteredTimeEntries to respect draft privacy
-  // (drafts are only visible to their creator, so counts must reflect what user can see)
-  const totalEntriesCount = filteredTimeEntries.length;
-  const draftCount = filteredTimeEntries.filter(e => e.status === 'Draft').length;
-  const submittedCount = filteredTimeEntries.filter(e => e.status === 'Submitted').length;
-  const approvedCount = filteredTimeEntries.filter(e => e.status === 'Approved').length;
-  const rejectedCount = filteredTimeEntries.filter(e => e.status === 'Rejected').length;
+    // Apply employee filter
+    if (selectedEmployee) {
+      entries = entries.filter(e => e.userDetails?.employeeId === selectedEmployee);
+    }
+
+    // Apply project filter
+    if (selectedProject) {
+      entries = entries.filter(e => e.projectId === selectedProject);
+    }
+
+    return entries;
+  }, [filteredTimeEntries, selectedEmployee, selectedProject]);
+
+  // Calculate total hours for display (use base filtered entries)
+  const totalHours = baseFilteredEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  const billableHours = baseFilteredEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+
+  // Status counts - reflect current employee/project filters
+  const totalEntriesCount = baseFilteredEntries.length;
+  const draftCount = baseFilteredEntries.filter(e => e.status === 'Draft').length;
+  const submittedCount = baseFilteredEntries.filter(e => e.status === 'Submitted').length;
+  const approvedCount = baseFilteredEntries.filter(e => e.status === 'Approved').length;
+  const rejectedCount = baseFilteredEntries.filter(e => e.status === 'Rejected').length;
 
   // Build status tabs configuration
   const statusTabs = [
@@ -827,11 +858,12 @@ const TimeSheet = () => {
   ];
 
   // Employee options for filter dropdown (sorted A-Z)
+  // Use employeeId (like "EMP-5785") as value since it matches userDetails.employeeId in time entries
   const employeeOptions = useMemo(() => {
     if (!employees || employees.length === 0) return [];
     return employees
       .map((emp: Employee) => ({
-        value: emp._id,
+        value: emp.employeeId || emp._id,
         label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
