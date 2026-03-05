@@ -26,7 +26,7 @@ export const withRoleCheck = (Component, allowedRoles: string[] = [], routePath?
     }
 
     // Get user role (default to "public" if not found)
-    const userRole = (user?.publicMetadata?.role || "public").toLowerCase();
+    const userRole = ((user?.publicMetadata?.role as string) || "public").toLowerCase();
     console.log(`[RoleCheck] Checking access: userRole=${userRole}, allowedRoles=${allowedRoles?.join(',') || 'none'}`);
 
     // If user is public (not authenticated), redirect to login
