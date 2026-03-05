@@ -85,18 +85,28 @@ const TimeSheet = () => {
   // Track if initial data load is complete
   const initialLoadDone = useRef(false);
 
-  // Load PM/TL projects via getMyProjects() which adds userRole field
+  // Load projects based on user role
+  // Admin/HR: fetchProjects() to get ALL projects
+  // Others: getMyProjects() to get only assigned projects (with userRole field)
   useEffect(() => {
-    const loadManagedProjects = async () => {
+    // Wait for profile to load to determine admin/HR status
+    if (!profile) return;
+
+    const loadProjects = async () => {
       try {
-        await getMyProjects();
-        // getMyProjects will populate `projects` state with userRole field
+        if (isAdmin || isHR) {
+          // Admin/HR should see ALL projects in the filter dropdown
+          await fetchProjects({ limit: 100 });
+        } else {
+          // Non-admin users: load only their assigned projects
+          await getMyProjects();
+        }
       } catch (error) {
-        console.error('Failed to load managed projects:', error);
+        console.error('Failed to load projects:', error);
       }
     };
-    loadManagedProjects();
-  }, [getMyProjects]);
+    loadProjects();
+  }, [profile, isAdmin, isHR, fetchProjects, getMyProjects]);
 
   // Populate myManagedProjects from projects state after getMyProjects() returns
   useEffect(() => {
@@ -235,36 +245,45 @@ const TimeSheet = () => {
   }, [profile, projects, isAdmin, isHR]);
 
   // Filter timesheet entries based on user role
+  // IMPORTANT: Draft entries are PRIVATE - only visible to their creator
   const filteredTimeEntries = useMemo(() => {
-    // Admin and HR can see all entries
-    if (isAdmin || isHR) {
-      return timeEntries;
-    }
-
     // Use clerkUserId (not employeeId) since entries store userId as clerkUserId
     const currentUserId = clerkUserId || (profile as any)?._id || (profile as any)?.userId || (profile as any)?.employeeId;
+
+    // Helper: Check if entry is user's own entry
+    const isOwnEntry = (entry: TimeEntry) =>
+      entry.userId === currentUserId || entry.createdBy === currentUserId;
+
+    // Helper: Filter out other users' draft entries (drafts are private)
+    const filterDrafts = (entries: TimeEntry[]) =>
+      entries.filter(entry => entry.status !== 'Draft' || isOwnEntry(entry));
+
+    // Admin and HR can see all entries (except other users' drafts)
+    if (isAdmin || isHR) {
+      return filterDrafts(timeEntries);
+    }
 
     // PM/TL: use myManagedProjects (already computed from getMyProjects userRole field)
     if (myManagedProjects.length > 0) {
       const managedProjectIds = myManagedProjects.map(p => p._id);
-      return timeEntries.filter(entry => {
+      const managedEntries = timeEntries.filter(entry => {
         // Show entries that belong to managed projects
         if (managedProjectIds.includes(entry.projectId)) {
           return true;
         }
         // Also show own entries from other projects
-        if (entry.userId === currentUserId || entry.createdBy === currentUserId) {
+        if (isOwnEntry(entry)) {
           return true;
         }
         return false;
       });
+      // Filter out other users' drafts
+      return filterDrafts(managedEntries);
     }
 
-    // Regular team member - show only own entries
-    return timeEntries.filter(entry =>
-      entry.userId === currentUserId || entry.createdBy === currentUserId
-    );
-  }, [timeEntries, profile, myManagedProjects, isAdmin, isHR]);
+    // Regular team member - show only own entries (already shows only their own drafts)
+    return timeEntries.filter(entry => isOwnEntry(entry));
+  }, [timeEntries, profile, myManagedProjects, isAdmin, isHR, clerkUserId]);
 
   // Helper: Re-fetch entries with current filters (used after submit/approve/reject)
   const refetchEntries = useCallback(async () => {
@@ -562,10 +581,12 @@ const TimeSheet = () => {
     return allColumns;
   }, [isRegularTeamMember, canApproveEntry, approving, submitting, employeeId, clerkUserId, profile, role]);
 
-  // Build project options for dropdowns
+  // Build project options for dropdowns (sorted A-Z)
   const projectOptions = useMemo(() => {
     if (!projects) return [];
-    return projects.map(p => ({ value: p._id, label: p.name }));
+    return projects
+      .map(p => ({ value: p._id, label: p.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [projects]);
 
   // Handle form input change
@@ -784,16 +805,17 @@ const TimeSheet = () => {
     setSelectedEmployee(employeeId);
   };
 
-  // Calculate total hours for display (use filtered entries)
-  const totalHours = stats?.totalHours ?? filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
-  const billableHours = stats?.billableHours ?? filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  // Calculate total hours for display (use filtered entries which respects draft privacy)
+  const totalHours = filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  const billableHours = filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
 
-  // Status counts from API or local calculation
-  const totalEntriesCount = stats?.totalEntries ?? filteredTimeEntries.length;
-  const draftCount = stats?.draftEntries ?? filteredTimeEntries.filter(e => e.status === 'Draft').length;
-  const submittedCount = stats?.submittedEntries ?? filteredTimeEntries.filter(e => e.status === 'Submitted').length;
-  const approvedCount = stats?.approvedEntries ?? filteredTimeEntries.filter(e => e.status === 'Approved').length;
-  const rejectedCount = stats?.rejectedEntries ?? filteredTimeEntries.filter(e => e.status === 'Rejected').length;
+  // Status counts - ALWAYS use filteredTimeEntries to respect draft privacy
+  // (drafts are only visible to their creator, so counts must reflect what user can see)
+  const totalEntriesCount = filteredTimeEntries.length;
+  const draftCount = filteredTimeEntries.filter(e => e.status === 'Draft').length;
+  const submittedCount = filteredTimeEntries.filter(e => e.status === 'Submitted').length;
+  const approvedCount = filteredTimeEntries.filter(e => e.status === 'Approved').length;
+  const rejectedCount = filteredTimeEntries.filter(e => e.status === 'Rejected').length;
 
   // Build status tabs configuration
   const statusTabs = [
@@ -804,13 +826,15 @@ const TimeSheet = () => {
     { key: 'Rejected', label: 'Rejected', count: rejectedCount },
   ];
 
-  // Employee options for filter dropdown
+  // Employee options for filter dropdown (sorted A-Z)
   const employeeOptions = useMemo(() => {
     if (!employees || employees.length === 0) return [];
-    return employees.map((emp: Employee) => ({
-      value: emp._id,
-      label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
-    }));
+    return employees
+      .map((emp: Employee) => ({
+        value: emp._id,
+        label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [employees]);
 
   const getModalContainer = () => {
