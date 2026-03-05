@@ -1,7 +1,7 @@
-import { Navigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
-import { all_routes } from "./all_routes";
+import { Navigate } from "react-router-dom";
 import { useCompanyPages } from "../../contexts/CompanyPagesContext";
+import { all_routes } from "./all_routes";
 
 const routes = all_routes;
 
