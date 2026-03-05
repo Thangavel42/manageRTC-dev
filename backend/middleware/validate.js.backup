@@ -639,8 +639,8 @@ export const taskSchemas = {
   list: Joi.object({
     ...commonSchemas.pagination,
     project: commonSchemas.objectId.optional(),
-    assignee: Joi.string().trim().optional(),
-    status: Joi.string().trim().optional(),
+    assignee: commonSchemas.objectId.optional(),
+    status: Joi.string().valid('To Do', 'In Progress', 'Review', 'Completed').optional(),
     priority: Joi.string().valid('High', 'Medium', 'Low').optional(),
     sortBy: Joi.string().valid('title', 'dueDate', 'priority', 'createdAt').default('createdAt'),
     order: Joi.string().valid('asc', 'desc').default('desc'),

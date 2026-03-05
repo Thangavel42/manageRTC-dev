@@ -5,6 +5,7 @@ import { all_routes } from "../../router/all_routes";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import PredefinedDateRanges from "../../../core/common/datePicker";
 import ReactApexChart from "react-apexcharts";
+import type { ApexOptions } from "apexcharts";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import Footer from "../../../core/common/footer";
 import { useAttendanceREST, MonthlySummaryData } from "../../../hooks/useAttendanceREST";
@@ -271,11 +272,11 @@ const AttendanceReport = () => {
   const chartData = getChartData();
 
   // Chart configuration
-  const attendancechart = {
+  const attendancechart: ApexOptions = {
     series: chartData.series,
     chart: {
       height: 200,
-      type: "line",
+      type: "line" as const,
       zoom: {
         enabled: false,
       },
@@ -284,7 +285,7 @@ const AttendanceReport = () => {
       enabled: false,
     },
     stroke: {
-      curve: "smooth",
+      curve: "smooth" as const,
     },
     grid: {
       row: {

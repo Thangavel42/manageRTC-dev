@@ -144,8 +144,9 @@ const TimeSheet = () => {
         await fetchActiveEmployeesList();
         (window as any).loaded_manager = true;
       } else {
-        // Regular employee - use their employeeId or clerkUserId
-        const userId = employeeId || clerkUserId || (profile as any)?._id;
+        // Regular employee - use clerkUserId (not employeeId which is "EMP-XXXX" format)
+        // Time entries are stored with userId = clerkUserId, not employeeId
+        const userId = clerkUserId || (profile as any)?._id || employeeId;
         if (userId) {
           await getTimeEntriesByUser(userId, filters);
           await fetchStats();
@@ -240,7 +241,8 @@ const TimeSheet = () => {
       return timeEntries;
     }
 
-    const currentUserId = (profile as any)?._id || (profile as any)?.userId || (profile as any)?.employeeId;
+    // Use clerkUserId (not employeeId) since entries store userId as clerkUserId
+    const currentUserId = clerkUserId || (profile as any)?._id || (profile as any)?.userId || (profile as any)?.employeeId;
 
     // PM/TL: use myManagedProjects (already computed from getMyProjects userRole field)
     if (myManagedProjects.length > 0) {
@@ -275,8 +277,9 @@ const TimeSheet = () => {
     } else if (isProjectLevelManager) {
       await fetchManagedTimeEntries(filters);
     } else {
-      // Regular employee - use their employeeId or clerkUserId
-      const userId = employeeId || clerkUserId || (profile as any)?._id;
+      // Regular employee - use clerkUserId (not employeeId which is "EMP-XXXX" format)
+      // Time entries are stored with userId = clerkUserId, not employeeId
+      const userId = clerkUserId || (profile as any)?._id || employeeId;
       if (userId) {
         await getTimeEntriesByUser(userId, filters);
       }
@@ -300,6 +303,63 @@ const TimeSheet = () => {
     refetchEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, selectedProject, selectedEmployee]);
+
+  /**
+   * Approval Hierarchy Decision Logic:
+   *
+   * TIER 1: Project Manager (Top Tier)
+   * - Can approve ANYONE including themselves (self-approval enabled)
+   * - Full approval authority over their managed project entries
+   *
+   * TIER 2: Team Lead (Middle Tier)
+   * - Can approve team members but NOT themselves
+   * - Their own entries require Project Manager approval
+   *
+   * TIER 3: Team Member (Bottom Tier)
+   * - Cannot approve anyone
+   * - Requires Team Lead or Project Manager approval
+   *
+   * EXCLUDED: Admin/HR
+   * - Cannot approve timesheet entries (view-only access)
+   * - Approval is project-management responsibility only
+   */
+  const canApproveEntry = useCallback((entry: TimeEntry): boolean => {
+    // Only PM/TL can approve (NOT Admin/HR per user requirement)
+    if (!isProjectLevelManager) return false;
+
+    // Entry must be in "Submitted" status
+    if (entry.status !== 'Submitted') return false;
+
+    // Check if this entry belongs to one of my managed projects
+    const entryProjectId = entry.projectId?.toString();
+    const isManagedProject = myManagedProjects.some(
+      p => p._id?.toString() === entryProjectId
+    );
+    if (!isManagedProject) return false;
+
+    // Get current user's ID for ownership check (use clerkUserId, not employeeId)
+    const currentUserId = clerkUserId || (profile as any)?._id || employeeId;
+    const entryOwnerId = entry.userId || entry.createdBy;
+    const isOwnEntry = currentUserId && currentUserId === entryOwnerId;
+
+    // Get the specific project to check user's role in it
+    const projectForThisEntry = myManagedProjects.find(
+      p => p._id?.toString() === entryProjectId
+    );
+
+    // TIER 1: Project Manager - Can approve all including self
+    if (projectForThisEntry?.userRole === 'projectManager') {
+      return true; // PM self-approval enabled
+    }
+
+    // TIER 2: Team Lead - Can approve others but not self
+    else if (projectForThisEntry?.userRole === 'teamLeader') {
+      return !isOwnEntry; // TL requires PM approval for their own entries
+    }
+
+    // TIER 3: Team Member - Cannot approve anyone (returns false)
+    return false;
+  }, [isProjectLevelManager, myManagedProjects, employeeId, clerkUserId, profile]);
 
   // Build table columns
   const columns = useMemo(() => {
@@ -402,7 +462,8 @@ const TimeSheet = () => {
         title: "Actions",
         dataIndex: "actions",
         render: (_: any, record: TimeEntry) => {
-          const currentUserId = employeeId || clerkUserId || (profile as any)?._id;
+          // Use clerkUserId (not employeeId) since entries store userId as clerkUserId
+          const currentUserId = clerkUserId || (profile as any)?._id || employeeId;
           const entryOwnerId = record.userId || record.createdBy;
           const isOwnEntry = currentUserId && currentUserId === entryOwnerId;
           const isDraft = record.status === 'Draft';
@@ -424,36 +485,6 @@ const TimeSheet = () => {
                 </button>
               )}
 
-              {/* Approve button for PM/TL on submitted entries they can approve */}
-              {isSubmitted && canApprove && (
-                <button
-                  onClick={() => handleApprove(record.userId || record.createdBy, record._id)}
-                  disabled={approving === record._id}
-                  className="btn btn-sm btn-success me-2 d-inline-flex align-items-center"
-                  title="Approve timesheet"
-                >
-                  {approving === record._id ? (
-                    <span className="spinner-border spinner-border-sm" />
-                  ) : (
-                    <i className="ti ti-check fs-16" />
-                  )}
-                </button>
-              )}
-
-              {/* Reject button for PM/TL on submitted entries they can approve */}
-              {isSubmitted && canApprove && (
-                <button
-                  onClick={() => setRejectEntryId(record._id)}
-                  data-bs-toggle="modal"
-                  data-inert={true}
-                  data-bs-target="#reject_modal"
-                  className="btn btn-sm btn-danger me-2 d-inline-flex align-items-center"
-                  title="Reject timesheet"
-                >
-                  <i className="ti ti-x fs-16" />
-                </button>
-              )}
-
               {/* View button - always available */}
               <Link
                 to="#"
@@ -466,6 +497,34 @@ const TimeSheet = () => {
               >
                 <i className="ti ti-eye" />
               </Link>
+
+              {/* Approve/Reject buttons for PM/TL on submitted entries - placed next to view icon */}
+              {isSubmitted && canApprove && (
+                <>
+                  <button
+                    onClick={() => handleApprove(record.userId || record.createdBy, record._id)}
+                    disabled={approving === record._id}
+                    className="btn btn-sm btn-success me-2 d-inline-flex align-items-center"
+                    title="Approve timesheet"
+                  >
+                    {approving === record._id ? (
+                      <span className="spinner-border spinner-border-sm" />
+                    ) : (
+                      <i className="ti ti-check fs-16" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setRejectEntryId(record._id)}
+                    data-bs-toggle="modal"
+                    data-inert={true}
+                    data-bs-target="#reject_modal"
+                    className="btn btn-sm btn-danger me-2 d-inline-flex align-items-center"
+                    title="Reject timesheet"
+                  >
+                    <i className="ti ti-x fs-16" />
+                  </button>
+                </>
+              )}
 
               {/* Edit button - only for own draft entries (not for admin) */}
               {isDraft && isOwnEntry && isNotAdmin && (
@@ -501,64 +560,7 @@ const TimeSheet = () => {
       }];
 
     return allColumns;
-  }, [isRegularTeamMember]);
-
-  /**
-   * Approval Hierarchy Decision Logic:
-   *
-   * TIER 1: Project Manager (Top Tier)
-   * - Can approve ANYONE including themselves (self-approval enabled)
-   * - Full approval authority over their managed project entries
-   *
-   * TIER 2: Team Lead (Middle Tier)
-   * - Can approve team members but NOT themselves
-   * - Their own entries require Project Manager approval
-   *
-   * TIER 3: Team Member (Bottom Tier)
-   * - Cannot approve anyone
-   * - Requires Team Lead or Project Manager approval
-   *
-   * EXCLUDED: Admin/HR
-   * - Cannot approve timesheet entries (view-only access)
-   * - Approval is project-management responsibility only
-   */
-  const canApproveEntry = useCallback((entry: TimeEntry): boolean => {
-    // Only PM/TL can approve (NOT Admin/HR per user requirement)
-    if (!isProjectLevelManager) return false;
-
-    // Entry must be in "Submitted" status
-    if (entry.status !== 'Submitted') return false;
-
-    // Check if this entry belongs to one of my managed projects
-    const entryProjectId = entry.projectId?.toString();
-    const isManagedProject = myManagedProjects.some(
-      p => p._id?.toString() === entryProjectId
-    );
-    if (!isManagedProject) return false;
-
-    // Get current user's ID for ownership check
-    const currentUserId = employeeId || clerkUserId || (profile as any)?._id;
-    const entryOwnerId = entry.userId || entry.createdBy;
-    const isOwnEntry = currentUserId && currentUserId === entryOwnerId;
-
-    // Get the specific project to check user's role in it
-    const projectForThisEntry = myManagedProjects.find(
-      p => p._id?.toString() === entryProjectId
-    );
-
-    // TIER 1: Project Manager - Can approve all including self
-    if (projectForThisEntry?.userRole === 'projectManager') {
-      return true; // PM self-approval enabled
-    }
-
-    // TIER 2: Team Lead - Can approve others but not self
-    else if (projectForThisEntry?.userRole === 'teamLeader') {
-      return !isOwnEntry; // TL requires PM approval for their own entries
-    }
-
-    // TIER 3: Team Member - Cannot approve anyone (returns false)
-    return false;
-  }, [isProjectLevelManager, myManagedProjects, employeeId, clerkUserId, profile]);
+  }, [isRegularTeamMember, canApproveEntry, approving, submitting, employeeId, clerkUserId, profile, role]);
 
   // Build project options for dropdowns
   const projectOptions = useMemo(() => {
@@ -1928,6 +1930,59 @@ const TimeSheet = () => {
                   <i className="ti ti-edit me-1"></i>
                   Edit Entry
                 </button>
+              )}
+              {viewingEntry && viewingEntry.status === 'Submitted' && canApproveEntry(viewingEntry) && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-success me-2"
+                    onClick={async () => {
+                      const entryOwnerId = viewingEntry.userId || viewingEntry.createdBy;
+                      await handleApprove(entryOwnerId, viewingEntry._id);
+                      // Close modal after approval
+                      const viewModal = document.getElementById('view_timesheet');
+                      const bootstrapModal = (window as any).bootstrap;
+                      if (bootstrapModal && viewModal) {
+                        const modal = bootstrapModal.Modal.getInstance(viewModal);
+                        if (modal) modal.hide();
+                      }
+                    }}
+                    disabled={approving === viewingEntry._id}
+                  >
+                    {approving === viewingEntry._id ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ti ti-check me-1"></i>
+                        Approve
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      setRejectEntryId(viewingEntry._id);
+                      // Close view modal and open reject modal
+                      const viewModal = document.getElementById('view_timesheet');
+                      const bootstrapModal = (window as any).bootstrap;
+                      if (bootstrapModal && viewModal) {
+                        const modal = bootstrapModal.Modal.getInstance(viewModal);
+                        if (modal) modal.hide();
+                      }
+                      setTimeout(() => {
+                        const rejectModal = new (window as any).bootstrap.Modal(document.getElementById('reject_modal'));
+                        rejectModal.show();
+                      }, 300);
+                    }}
+                  >
+                    <i className="ti ti-x me-1"></i>
+                    Reject
+                  </button>
+                </>
               )}
             </div>
           </div>
