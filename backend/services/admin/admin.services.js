@@ -440,7 +440,7 @@ export const getEmployeeStatus = async (
               position: topPerformer.position || 'Employee',
               performance: topPerformer.performance || null,
               avatar:
-                topPerformer.avatar || "assets/img/profiles/avatar-24.jpg",
+                topPerformer.profileImage || topPerformer.avatar || topPerformer.avatarUrl || "assets/img/profiles/avatar-24.jpg",
             }
           : null,
       },
@@ -534,7 +534,14 @@ export const getAttendanceOverview = async (
         {
           $project: {
             name: { $concat: ["$firstName", " ", "$lastName"] },
-            avatar: "$avatar",
+            avatar: {
+              $ifNull: [
+                "$profileImage",
+                "$avatar",
+                "$avatarUrl",
+                "assets/img/profiles/avatar-01.jpg"
+              ]
+            },
             position: "$position",
           },
         },
@@ -612,7 +619,14 @@ export const getClockInOutData = async (
             $concat: ["$employee.firstName", " ", "$employee.lastName"],
           },
           position: "$employee.position",
-          avatar: "$employee.avatar",
+          avatar: {
+            $ifNull: [
+              "$employee.profileImage",
+              "$employee.avatar",
+              "$employee.avatarUrl",
+              "assets/img/profiles/avatar-01.jpg"
+            ]
+          },
           department: "$employee.department",
           clockIn: 1,
           clockOut: 1,
@@ -842,7 +856,14 @@ export const getEmployeesList = async (companyId, year = null) => {
             name: { $concat: ["$firstName", " ", "$lastName"] },
             position: 1,
             department: 1,
-            avatar: 1,
+            avatar: {
+              $ifNull: [
+                "$profileImage",
+                "$avatar",
+                "$avatarUrl",
+                "assets/img/profiles/avatar-01.jpg"
+              ]
+            },
           },
         },
       ])
@@ -896,7 +917,14 @@ export const getJobApplicants = async (companyId, year = null) => {
               position: 1,
               experience: 1,
               location: 1,
-              avatar: 1,
+              avatar: {
+                $ifNull: [
+                  "$profileImage",
+                  "$avatar",
+                  "$avatarUrl",
+                  "assets/img/profiles/avatar-01.jpg"
+                ]
+              },
             },
           },
         ])
@@ -949,7 +977,14 @@ export const getRecentActivities = async (companyId, year = null) => {
             employeeName: {
               $concat: ["$employee.firstName", " ", "$employee.lastName"],
             },
-            employeeAvatar: "$employee.avatar",
+            employeeAvatar: {
+              $ifNull: [
+                "$employee.profileImage",
+                "$employee.avatar",
+                "$employee.avatarUrl",
+                "assets/img/profiles/avatar-01.jpg"
+              ]
+            },
           },
         },
       ])
@@ -1017,17 +1052,17 @@ export const getBirthdays = async (companyId, year = null) => {
         today: todayBirthdays.map((emp) => ({
           name: `${emp.firstName} ${emp.lastName}`,
           position: emp.position,
-          avatar: emp.avatar,
+          avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
         })),
         tomorrow: tomorrowBirthdays.map((emp) => ({
           name: `${emp.firstName} ${emp.lastName}`,
           position: emp.position,
-          avatar: emp.avatar,
+          avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
         })),
         upcoming: upcomingBirthdays.map((emp) => ({
           name: `${emp.firstName} ${emp.lastName}`,
           position: emp.position,
-          avatar: emp.avatar,
+          avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
           date: emp.dateOfBirth,
         })),
       },
@@ -1179,7 +1214,14 @@ export const getProjectsData = async (
                   name: {
                     $concat: ["$$member.firstName", " ", "$$member.lastName"],
                   },
-                  avatar: "$$member.avatar",
+                  avatar: {
+                    $ifNull: [
+                      "$$member.profileImage",
+                      "$$member.avatar",
+                      "$$member.avatarUrl",
+                      "assets/img/profiles/avatar-01.jpg"
+                    ]
+                  },
                 },
               },
             },
@@ -1326,7 +1368,14 @@ export const getSchedules = async (companyId, year = null) => {
                       "$$participant.lastName",
                     ],
                   },
-                  avatar: "$$participant.avatar",
+                  avatar: {
+                    $ifNull: [
+                      "$$participant.profileImage",
+                      "$$participant.avatar",
+                      "$$participant.avatarUrl",
+                      "assets/img/profiles/avatar-01.jpg"
+                    ]
+                  },
                 },
               },
             },
@@ -1499,7 +1548,7 @@ export const getTodoAssignees = async (companyId) => {
       label: `${emp.firstName} ${emp.lastName}`,
       position: emp.position,
       email: emp.email,
-      avatar: emp.avatar,
+      avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
     }));
 
     return {
@@ -1554,7 +1603,7 @@ export const getProjectEmployees = async (companyId) => {
       label: `${emp.firstName} ${emp.lastName}`,
       position: emp.position,
       department: emp.department,
-      avatar: emp.avatar,
+      avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
     }));
 
     return {
@@ -1747,7 +1796,7 @@ export const getLeaveRequestEmployees = async (companyId) => {
       position: emp.position,
       department: emp.department,
       email: emp.email,
-      avatar: emp.avatar,
+      avatar: emp.profileImage || emp.avatar || emp.avatarUrl || "assets/img/profiles/avatar-01.jpg",
       employeeId: emp.employeeId,
       remainingLeaves: emp.remainingLeaves || 0,
       totalLeaves: emp.totalLeaves || 21,

@@ -1811,7 +1811,7 @@ const EmployeeDashboard = () => {
 
                               {/* Leader */}
                               <div className="d-flex align-items-center mb-3">
-                                <Link to="#" className="avatar">
+                                <span className="avatar">
                                   <img
                                     src={
                                       project.leadDetails?.avatarUrl ||
@@ -1820,15 +1820,13 @@ const EmployeeDashboard = () => {
                                     className="img-fluid rounded-circle"
                                     alt="lead"
                                   />
-                                </Link>
+                                </span>
                                 <div className="ms-2">
                                   <h6 className="fw-normal">
-                                    <Link to="#">
-                                      {project.leadDetails?.firstName &&
-                                        project.leadDetails?.lastName
-                                        ? `${project.leadDetails.firstName} ${project.leadDetails.lastName}`
-                                        : "lead"}
-                                    </Link>
+                                    {project.leadDetails?.firstName &&
+                                      project.leadDetails?.lastName
+                                      ? `${project.leadDetails.firstName} ${project.leadDetails.lastName}`
+                                      : "lead"}
                                   </h6>
                                   <span className="fs-13 d-block">
                                     Project Leader
@@ -2266,7 +2264,7 @@ const EmployeeDashboard = () => {
                           : "No policies available"}
                       </p>
                     </div>
-                    <Link to="#" className="btn btn-white btn-sm px-3">
+                    <Link to={routes.leavesettings} className="btn btn-white btn-sm px-3">
                       View All
                     </Link>
                   </div>
@@ -2282,7 +2280,7 @@ const EmployeeDashboard = () => {
                       </p>
                     </div>
                     <Link
-                      to={routes.adminDashboard}
+                      to={routes.holidays}
                       className="btn btn-white btn-sm px-3"
                     >
                       View All
@@ -2299,7 +2297,7 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center justify-content-between flex-wrap">
                     <h5>Team Members</h5>
                     <div>
-                      <Link to="#" className="btn btn-light btn-sm">
+                      <Link to={routes.employeeList} className="btn btn-light btn-sm">
                         View All
                       </Link>
                     </div>
@@ -2318,7 +2316,7 @@ const EmployeeDashboard = () => {
                       key={member._id}
                     >
                       <div className="d-flex align-items-center">
-                        <Link to="#" className="avatar flex-shrink-0">
+                        <Link to={routes.employeeDetailPage.replace(':employeeId', member._id)} className="avatar flex-shrink-0">
                           <img
                             src={
                               member.avatar ||
@@ -2330,7 +2328,7 @@ const EmployeeDashboard = () => {
                         </Link>
                         <div className="ms-2">
                           <h6 className="fs-14 fw-medium text-truncate mb-1">
-                            <Link to="#">
+                            <Link to={routes.employeeDetailPage.replace(':employeeId', member._id)}>
                               {member.firstName} {member.lastName}
                             </Link>
                           </h6>

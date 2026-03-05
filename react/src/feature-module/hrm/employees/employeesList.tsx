@@ -88,6 +88,7 @@ interface Employee {
     role: string;
     userName?: string;
   };
+  role?: string; // Top-level role field (mapped from account.role by DTO)
   email: string;
   phone: string;
   gender?: string;
@@ -990,19 +991,27 @@ const EmployeeList = () => {
 
   // Helper function to safely prepare employee for editing
   const prepareEmployeeForEdit = (emp: Employee): Employee => {
+    // Get role from either top-level field or account.role (for backwards compatibility)
+    // Normalize to lowercase to match roleOptions values
+    const rawRoleValue = emp.role || emp.account?.role || "";
+    const roleValue = rawRoleValue ? rawRoleValue.toLowerCase() : "";
+
     return {
       ...emp,
-      account: emp.account || { role: "" },
+      role: roleValue,
+      account: emp.account || { role: roleValue },
       email: emp.email || "",
       phone: emp.phone || "",
+      phoneCode: emp.phoneCode || "+1",
       gender: emp.gender || "",
       dateOfBirth: emp.dateOfBirth || null,
-      address: emp.address || {
-        street: "",
-        city: "",
-        state: "",
-        postalCode: "",
-        country: "",
+      // List API only returns partial address (city, state, country), so ensure all fields exist
+      address: {
+        street: emp.address?.street || "",
+        city: emp.address?.city || "",
+        state: emp.address?.state || "",
+        postalCode: emp.address?.postalCode || "",
+        country: emp.address?.country || "",
       },
       personal: emp.personal || {
         nationality: "",
@@ -1026,7 +1035,7 @@ const EmployeeList = () => {
       about: emp.about || "",
       avatarUrl: emp.avatarUrl || "",
       status: normalizeStatus(emp.status),
-      dateOfJoining: emp.dateOfJoining || null,
+      dateOfJoining: emp.dateOfJoining || (emp as any).joiningDate || null,
     };
   };
 

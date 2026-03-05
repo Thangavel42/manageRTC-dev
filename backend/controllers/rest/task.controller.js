@@ -78,7 +78,7 @@ export const getTasks = asyncHandler(async (req, res) => {
 
   // ✅ SECURITY FIX - Phase 2: Apply employee-based filtering for restricted roles
   if (['employee', 'manager'].includes(user.role?.toLowerCase())) {
-    const collections = getTenantCollections(user.companyId);
+    const EmployeeModel = getEmployeeModel(user.companyId);
 
     // Find employee's MongoDB _id
     const employee = await collections.employees.findOne({
@@ -132,12 +132,38 @@ export const getTasks = asyncHandler(async (req, res) => {
     }
   }
 
-  // Apply assignee filter
+  // Apply assignee filter - resolve employeeId string to MongoDB ObjectId
   if (assignee) {
+    let assigneeId = assignee;
+
+    // If assignee is a string (not an ObjectId format), look up employee's MongoDB _id
+    if (typeof assignee === 'string' && !mongoose.Types.ObjectId.isValid(assignee)) {
+      const EmployeeModel = getEmployeeModel(user.companyId);
+      const employee = await EmployeeModel.findOne({
+        $or: [
+          { employeeId: assignee },  // String employeeId like "EMP-1234"
+          { clerkUserId: assignee }, // Or clerkUserId
+        ],
+        isDeleted: { $ne: true },
+      });
+
+      if (employee) {
+        assigneeId = employee._id;
+      } else {
+        // If employee not found, filter will return no results (expected behavior)
+        assigneeId = new mongoose.Types.ObjectId('000000000000000000000000'); // Invalid ObjectId = no match
+      }
+    }
+
+    // Convert to ObjectId if it's a valid string representation
+    if (typeof assigneeId === 'string' && mongoose.Types.ObjectId.isValid(assigneeId)) {
+      assigneeId = new mongoose.Types.ObjectId(assigneeId);
+    }
+
     if (filter.$and) {
-      filter.$and.push({ assignee: { $in: [assignee] } });
+      filter.$and.push({ assignee: { $in: [assigneeId] } });
     } else {
-      filter.assignee = { $in: [assignee] };
+      filter.assignee = { $in: [assigneeId] };
     }
   }
 

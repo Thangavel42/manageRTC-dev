@@ -37,6 +37,9 @@ export interface Attendance {
   attendanceId?: string;
   employeeId?: string;
   employeeName?: string;
+  employeeAvatar?: string;
+  employeePosition?: string;
+  employeeDepartment?: string;
   date: string;
   clockIn?: {
     time: string;
@@ -99,6 +102,39 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+// Monthly Attendance Summary Types
+export interface MonthlySummaryData {
+  period: {
+    month: number;
+    year: number;
+  };
+  companyStats: {
+    totalEmployees: number;
+    avgAttendancePercentage: string;
+    totalPresent: number;
+    totalAbsent: number;
+    totalWorkHours: string;
+  };
+  departmentSummaries: Array<{
+    department: string;
+    totalEmployees: number;
+    avgAttendancePercentage: string;
+    totalPresent: number;
+    totalAbsent: number;
+  }>;
+  employeeSummaries: Array<{
+    employeeId: string;
+    name: string;
+    department: string;
+    present: number;
+    absent: number;
+    halfDay: number;
+    leave: number;
+    totalWorkHours: string;
+    attendancePercentage: string;
+  }>;
+}
+
 /**
  * Format date for display
  */
@@ -138,8 +174,8 @@ export const toTableFormat = (attendance: Attendance): any => {
   return {
     key: attendance._id,
     Employee: attendance.employeeName || 'Unknown',
-    Image: 'user-49.jpg', // TODO: Get from employee data
-    Role: 'Employee', // TODO: Get from employee data
+    Image: attendance.employeeAvatar || 'assets/img/profiles/avatar-01.jpg',
+    Role: attendance.employeePosition || 'Employee',
     Status: attendance.status.charAt(0).toUpperCase() + attendance.status.slice(1).replace('-', ' '),
     CheckIn: attendance.clockIn?.time ? formatAttendanceTime(attendance.clockIn.time) : '-',
     CheckOut: attendance.clockOut?.time ? formatAttendanceTime(attendance.clockOut.time) : '-',
@@ -161,6 +197,7 @@ export const useAttendanceREST = () => {
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [needsEmployeeSync, setNeedsEmployeeSync] = useState(false);
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryData | null>(null);
 
   /**
    * Sync employee record (create if not exists)
@@ -477,6 +514,36 @@ export const useAttendanceREST = () => {
   }, []);
 
   /**
+   * Fetch monthly attendance summary
+   * @param month - Month (1-12)
+   * @param year - Year (e.g., 2024)
+   */
+  const fetchMonthlySummary = useCallback(async (month?: number, year?: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params: any = {};
+      if (month) params.month = month;
+      if (year) params.year = year;
+
+      const response: ApiResponse<MonthlySummaryData> = await get('/reports/attendance/monthly-summary', { params });
+
+      if (response.success && response.data) {
+        setMonthlySummary(response.data);
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to fetch monthly summary');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to fetch monthly summary';
+      setError(errorMessage);
+      message.error(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Bulk attendance action
    */
   const bulkAction = useCallback(async (action: string, attendanceIds: string[], data?: any): Promise<boolean> => {
@@ -512,6 +579,7 @@ export const useAttendanceREST = () => {
     error,
     pagination,
     needsEmployeeSync,
+    monthlySummary,
 
     // Methods
     fetchAttendance,
@@ -524,6 +592,7 @@ export const useAttendanceREST = () => {
     fetchAttendanceByDateRange,
     fetchEmployeeAttendance,
     fetchStats,
+    fetchMonthlySummary,
     bulkAction,
     syncEmployeeRecord
   };

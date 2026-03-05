@@ -112,6 +112,83 @@ const API_BASE_URL =
   process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 const API_TIMEOUT = 30000; // 30 seconds
 
+// Simple in-memory cache for read-only lookup endpoints
+// Prevents duplicate API calls when multiple modals/components fetch the same data
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const lookupCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 30000; // 30 seconds cache TTL for lookup data
+
+/**
+ * Get cached data if available and fresh
+ */
+const getCachedData = (key: string): any | null => {
+  const entry = lookupCache.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
+    console.log(`[API Cache] HIT: ${key}`);
+    return entry.data;
+  }
+  if (entry) {
+    lookupCache.delete(key); // Remove stale entry
+  }
+  console.log(`[API Cache] MISS: ${key}`);
+  return null;
+};
+
+/**
+ * Set cached data
+ */
+const setCachedData = (key: string, data: any): void => {
+  lookupCache.set(key, { data, timestamp: Date.now() });
+};
+
+/**
+ * Check if URL should be cached (read-only lookup endpoints)
+ */
+const shouldCache = (url?: string): boolean => {
+  if (!url) return false;
+  const cacheablePaths = [
+    '/shifts',
+    '/batches',
+    '/departments',
+    '/designations',
+    '/employees/active', // Active employees list for dropdowns
+  ];
+  return cacheablePaths.some(path => url.includes(path));
+};
+
+/**
+ * Generate cache key from URL and params
+ */
+const generateCacheKey = (url?: string, params?: any): string => {
+  if (!url) return '';
+  const paramsStr = params ? JSON.stringify(params) : '';
+  return `${url}:${paramsStr}`;
+};
+
+/**
+ * Invalidate related cache entries when data is modified
+ */
+const invalidateRelatedCache = (url: string): void => {
+  const cacheablePaths = ['/shifts', '/batches', '/departments', '/designations', '/employees/active'];
+
+  // Find which cache category this URL belongs to
+  const category = cacheablePaths.find(path => url.includes(path));
+
+  if (category) {
+    console.log(`[API Cache] Invalidating cache for category: ${category}`);
+    // Remove all cache entries for this category
+    for (const key of lookupCache.keys()) {
+      if (key.startsWith(category)) {
+        lookupCache.delete(key);
+      }
+    }
+  }
+};
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -344,7 +421,23 @@ export const get = async <T = any>(
   url: string,
   config?: RequestConfig
 ): Promise<ApiResponse<T>> => {
+  // Check cache for read-only lookup endpoints
+  if (shouldCache(url)) {
+    const cacheKey = generateCacheKey(url, config?.params);
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData !== null) {
+      return cachedData;
+    }
+  }
+
   const response = await apiClient.get<ApiResponse<T>>(url, config);
+
+  // Cache successful responses for lookup endpoints
+  if (shouldCache(url) && response.data.success) {
+    const cacheKey = generateCacheKey(url, config?.params);
+    setCachedData(cacheKey, response.data);
+  }
+
   return response.data;
 };
 
@@ -355,6 +448,10 @@ export const post = async <T = any>(
   config?: RequestConfig
 ): Promise<ApiResponse<T>> => {
   const response = await apiClient.post<ApiResponse<T>>(url, data, config);
+  // Invalidate related cache entries on successful POST
+  if (response.data.success) {
+    invalidateRelatedCache(url);
+  }
   return response.data;
 };
 
@@ -365,6 +462,10 @@ export const put = async <T = any>(
   config?: RequestConfig
 ): Promise<ApiResponse<T>> => {
   const response = await apiClient.put<ApiResponse<T>>(url, data, config);
+  // Invalidate related cache entries on successful PUT
+  if (response.data.success) {
+    invalidateRelatedCache(url);
+  }
   return response.data;
 };
 
@@ -375,6 +476,10 @@ export const patch = async <T = any>(
   config?: RequestConfig
 ): Promise<ApiResponse<T>> => {
   const response = await apiClient.patch<ApiResponse<T>>(url, data, config);
+  // Invalidate related cache entries on successful PATCH
+  if (response.data.success) {
+    invalidateRelatedCache(url);
+  }
   return response.data;
 };
 
@@ -386,6 +491,10 @@ export const del = async <T = any>(
   config?: RequestConfig
 ): Promise<ApiResponse<T>> => {
   const response = await apiClient.delete<ApiResponse<T>>(url, data ? { data, ...config } : config);
+  // Invalidate related cache entries on successful DELETE
+  if (response.data.success) {
+    invalidateRelatedCache(url);
+  }
   return response.data;
 };
 

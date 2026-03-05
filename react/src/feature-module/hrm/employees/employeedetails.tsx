@@ -336,11 +336,13 @@ export interface Employee {
 type DepartmentDesignationMapping = PolicyAssignment;
 
 const EmployeeDetails = () => {
-  // Dropdown options
+  // Dropdown options - Only show hr, manager, employee roles
+  // Admin/Superadmin roles are managed separately and should not be assignable here
   const roleOptions = [
     { value: '', label: 'Select Role' },
-    { value: 'HR', label: 'HR' },
-    { value: 'Employee', label: 'Employee' },
+    { value: 'hr', label: 'HR' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'employee', label: 'Employee' },
   ];
 
   const [permissions, setPermissions] = useState<PermissionsState>(initialPermissionsState);
@@ -2321,19 +2323,26 @@ const EmployeeDetails = () => {
 
   // Helper function to safely prepare employee for editing
   const prepareEmployeeForEdit = (emp: Employee): Employee => {
+    // Get role from either top-level field or account.role (for backwards compatibility)
+    // Normalize to lowercase to match roleOptions values
+    const rawRoleValue = emp.role || emp.account?.role || "";
+    const roleValue = rawRoleValue ? rawRoleValue.toLowerCase() : "";
+
     return {
       ...emp,
-      account: emp.account || ({ role: '', userName: '', password: '' } as AccountInfo),
+      role: roleValue,
+      account: emp.account || ({ role: roleValue, userName: '', password: '' } as AccountInfo),
       email: emp.email || '',
       phone: emp.phone || '',
       gender: emp.gender || '',
       dateOfBirth: emp.dateOfBirth || null,
-      address: emp.address || {
-        street: '',
-        city: '',
-        state: '',
-        postalCode: '',
-        country: '',
+      // Ensure all address fields are present (detail API returns full address, but we should be defensive)
+      address: {
+        street: emp.address?.street || '',
+        city: emp.address?.city || '',
+        state: emp.address?.state || '',
+        postalCode: emp.address?.postalCode || '',
+        country: emp.address?.country || '',
       },
       firstName: emp.firstName || '',
       lastName: emp.lastName || '',
@@ -2351,7 +2360,7 @@ const EmployeeDetails = () => {
       avatarUrl: emp.avatarUrl || '',
       profileImage: emp.profileImage || '',
       status: emp.status,
-      dateOfJoining: emp.dateOfJoining || null,
+      dateOfJoining: emp.dateOfJoining || (emp as any).joiningDate || null,
     };
   };
 

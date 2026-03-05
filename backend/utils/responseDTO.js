@@ -16,7 +16,7 @@
  */
 const NEVER_EXPOSE = [
   'clerkUserId',
-  'account',
+  'account.password', // Only password is sensitive, not the entire account object
   'isDeleted',
   'deletedAt',
   'deletedBy',
@@ -40,12 +40,24 @@ function pick(obj, keys) {
 
 /**
  * Remove NEVER_EXPOSE fields from an object (shallow).
+ * Special handling for nested paths like 'account.password'
  */
 function stripSensitive(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   const cleaned = { ...obj };
   for (const field of NEVER_EXPOSE) {
-    delete cleaned[field];
+    if (field.includes('.')) {
+      // Handle nested path like 'account.password'
+      const [parent, child] = field.split('.');
+      if (cleaned[parent] && typeof cleaned[parent] === 'object') {
+        const parentObj = { ...cleaned[parent] };
+        delete parentObj[child];
+        cleaned[parent] = parentObj;
+      }
+    } else {
+      // Handle top-level field
+      delete cleaned[field];
+    }
   }
   return cleaned;
 }
@@ -80,7 +92,8 @@ const LIST_BASE_FIELDS = [
   '_id', 'employeeId', 'firstName', 'lastName', 'fullName',
   'profileImage', 'email', 'department', 'departmentName',
   'designation', 'designationTitle', 'employmentType',
-  'status', 'joiningDate', 'gender', 'departmentId', 'designationId',
+  'status', 'joiningDate', 'dateOfJoining', 'gender', 'departmentId', 'designationId',
+  'role', 'phoneCode', 'phone', 'about', // Add about field for editing
 ];
 
 /** Additional fields visible to HR+ in list views */
@@ -109,6 +122,16 @@ export function employeeListDTO(employee, userRole) {
   // Start with base fields
   const result = pick(employee, LIST_BASE_FIELDS);
 
+  // Map account.role to top-level role if role is not set
+  if (!result.role && employee.account?.role) {
+    result.role = employee.account.role;
+  }
+
+  // Map bio to about (frontend uses 'about', database stores as 'bio')
+  if (!result.about && employee.bio) {
+    result.about = employee.bio;
+  }
+
   // Stringify _id
   if (result._id) {
     result._id = result._id.toString?.() || result._id;
@@ -119,11 +142,13 @@ export function employeeListDTO(employee, userRole) {
     const hrFields = pick(employee, LIST_HR_FIELDS);
     Object.assign(result, hrFields);
 
-    // Address - city/state only (not full street address)
+    // Full address for HR+ (needed for editing in modal)
     if (employee.address) {
       result.address = {
+        street: employee.address.street || '',
         city: employee.address.city || '',
         state: employee.address.state || '',
+        postalCode: employee.address.postalCode || '',
         country: employee.address.country || '',
       };
     }
@@ -177,6 +202,11 @@ export function employeeDetailDTO(employee, userRole, isSelf = false) {
 
   const role = (userRole || 'employee').toLowerCase();
 
+  // Map account.role to top-level role before stripping (in case role is only in account)
+  if (!employee.role && employee.account?.role) {
+    employee.role = employee.account.role;
+  }
+
   // Self-access: return everything except NEVER_EXPOSE fields
   if (isSelf) {
     const result = stripSensitive(employee);
@@ -216,7 +246,7 @@ export function employeeDetailDTO(employee, userRole, isSelf = false) {
     return result;
   }
 
-  // HR: list fields + address, emergency contacts, documents, personal (no passport)
+  // HR: list fields + address, emergency contacts, documents, personal (no passport), account (no password)
   if (role === 'hr') {
     const result = employeeListDTO(employee, 'hr');
 
@@ -250,8 +280,8 @@ export function employeeDetailDTO(employee, userRole, isSelf = false) {
     result.experience = employee.experience || [];
     result.family = employee.family || [];
 
-    // Bio and skills
-    result.bio = employee.bio || '';
+    // About and skills (database uses 'about' field, not 'bio')
+    result.about = employee.about || employee.bio || '';
     result.skills = employee.skills || [];
     result.socialProfiles = employee.socialProfiles || null;
 
@@ -259,6 +289,16 @@ export function employeeDetailDTO(employee, userRole, isSelf = false) {
     result.dateOfBirth = employee.dateOfBirth || null;
     result.createdAt = employee.createdAt || null;
     result.updatedAt = employee.updatedAt || null;
+
+    // Account object (without password) - HR needs to see/edit role
+    if (employee.account) {
+      result.account = {
+        userName: employee.account.userName || '',
+        role: employee.account.role || 'employee',
+      };
+      // Explicitly exclude password
+      delete result.account.password;
+    }
 
     return result;
   }

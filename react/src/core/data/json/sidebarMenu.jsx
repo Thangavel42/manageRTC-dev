@@ -2143,7 +2143,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [
                 { label: 'Admin Dashboard', link: routes.adminDashboard, roles: ['admin'] },
                 {
@@ -3093,7 +3092,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [
                 { label: 'HR Dashboard', link: routes.hrDashboard },
                 {
@@ -3789,7 +3787,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [
                 { label: 'Admin Dashboard', link: routes.adminDashboard },
                 { label: 'Employee Dashboard', link: routes.employeeDashboard },
@@ -4279,7 +4276,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [
                 { label: 'Employee Dashboard', link: routes.employeeDashboard },
                 { label: 'Deals Dashboard', link: routes.dealsDashboard },
@@ -4421,7 +4417,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [{ label: 'Employee Dashboard', link: routes.employeeDashboard }],
             },
             {
@@ -4779,7 +4774,6 @@ const useSidebarData = () => {
               icon: 'smart-home',
               base: 'dashboard',
               materialicons: 'start',
-              dot: true,
               submenuItems: [
                 {
                   label: 'Admin Dashboard',
