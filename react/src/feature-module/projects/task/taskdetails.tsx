@@ -67,14 +67,14 @@ const TaskDetails = () => {
         // Handle assignee - could be string, array of strings, or array of populated objects
         const assigneeArray = Array.isArray(taskData.assignee)
           ? taskData.assignee
-              .map((a: any) => {
-                // Handle populated employee objects with _id
-                if (typeof a === 'object' && a !== null) {
-                  return (a._id || a.id || a).toString();
-                }
-                return a.toString();
-              })
-              .filter(Boolean)
+            .map((a: any) => {
+              // Handle populated employee objects with _id
+              if (typeof a === 'object' && a !== null) {
+                return (a._id || a.id || a).toString();
+              }
+              return a.toString();
+            })
+            .filter(Boolean)
           : typeof taskData.assignee === 'string'
             ? taskData.assignee.split(',').filter((a) => a.trim())
             : [];
@@ -362,13 +362,13 @@ const TaskDetails = () => {
     // Handle assignee - extract IDs from populated objects
     const assigneeIds = Array.isArray(task.assignee)
       ? task.assignee
-          .map((a: any) => {
-            if (typeof a === 'object' && a !== null) {
-              return (a._id || a.id || a).toString();
-            }
-            return a?.toString();
-          })
-          .filter(Boolean)
+        .map((a: any) => {
+          if (typeof a === 'object' && a !== null) {
+            return (a._id || a.id || a).toString();
+          }
+          return a?.toString();
+        })
+        .filter(Boolean)
       : [];
     setEditAssignees(assigneeIds);
     console.log('[TaskDetails] Edit modal assignee IDs:', assigneeIds);
@@ -390,7 +390,7 @@ const TaskDetails = () => {
       const updateData: Partial<Task> = {
         title: editTitle.trim(),
         description: editDescription,
-        status: editStatus as 'Pending' | 'In Progress' | 'Completed' | 'Cancelled',
+        status: editStatus as 'Active' | 'Inactive',
         priority: editPriority as 'Low' | 'Medium' | 'High' | 'Urgent',
         dueDate: editDueDate ? editDueDate.format('YYYY-MM-DD') : undefined,
         tags: validTags,
@@ -581,13 +581,12 @@ const TaskDetails = () => {
                       <p>
                         Priority :{' '}
                         <span
-                          className={`badge ${
-                            task.priority === 'High'
+                          className={`badge ${task.priority === 'High'
                               ? 'badge-danger'
                               : task.priority === 'Medium'
                                 ? 'badge-warning'
                                 : 'badge-success'
-                          }`}
+                            }`}
                         >
                           <i className="ti ti-point-filled me-1" />
                           {task.priority || 'Low'}
@@ -701,9 +700,8 @@ const TaskDetails = () => {
                             <Link
                               key={index}
                               to="#"
-                              className={`badge task-tag rounded-pill me-2 ${
-                                index % 2 === 0 ? 'bg-pink' : 'badge-info'
-                              }`}
+                              className={`badge task-tag rounded-pill me-2 ${index % 2 === 0 ? 'bg-pink' : 'badge-info'
+                                }`}
                             >
                               {typeof tag === 'string' ? tag : tag?.name || 'Tag'}
                             </Link>
@@ -755,15 +753,14 @@ const TaskDetails = () => {
                     <div className="d-flex align-items-center justify-content-between border-bottom p-3">
                       <p className="mb-0">Status</p>
                       <span
-                        className={`badge ${
-                          task.status === 'Completed'
+                        className={`badge ${task.status === 'Completed'
                             ? 'badge-success'
                             : task.status === 'Inprogress'
                               ? 'badge-warning'
                               : task.status === 'Onhold'
                                 ? 'badge-secondary'
                                 : 'badge-info'
-                        }`}
+                          }`}
                       >
                         <i className="ti ti-point-filled me-1" />
                         {task.status || 'Pending'}
@@ -821,8 +818,7 @@ const TaskDetails = () => {
                               >
                                 <div className="d-flex overflow-hidden">
                                   <span
-                                    className={`avatar avatar-md me-3 rounded-circle flex-shrink-0 ${
-                                      activity.type === 'task_created'
+                                    className={`avatar avatar-md me-3 rounded-circle flex-shrink-0 ${activity.type === 'task_created'
                                         ? 'bg-info'
                                         : activity.type === 'task_updated'
                                           ? 'bg-warning'
@@ -831,11 +827,10 @@ const TaskDetails = () => {
                                             : activity.type === 'file_uploaded'
                                               ? 'bg-secondary'
                                               : 'bg-purple'
-                                    }`}
+                                      }`}
                                   >
                                     <i
-                                      className={`fs-16 ${
-                                        activity.type === 'task_created'
+                                      className={`fs-16 ${activity.type === 'task_created'
                                           ? 'ti ti-checkup-list'
                                           : activity.type === 'task_updated'
                                             ? 'ti ti-circle-dot'
@@ -844,7 +839,7 @@ const TaskDetails = () => {
                                               : activity.type === 'file_uploaded'
                                                 ? 'ti ti-photo'
                                                 : 'ti ti-activity'
-                                      }`}
+                                        }`}
                                     />
                                   </span>
                                   <div className="overflow-hidden">

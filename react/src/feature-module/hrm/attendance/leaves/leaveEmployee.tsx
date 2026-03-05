@@ -1,6 +1,6 @@
-import { DatePicker, message, Spin } from "antd";
+import { DatePicker, message } from "antd";
 import dayjs from "dayjs";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../../core/common/collapse-header/collapse-header";
 import CommonSelect from "../../../../core/common/commonSelect";
@@ -15,13 +15,6 @@ import { statusDisplayMap, useLeaveREST, type LeaveStatus, type LeaveTypeCode } 
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
 import { useSocket } from "../../../../SocketContext";
 import { all_routes } from "../../../router/all_routes";
-
-// Loading spinner component
-const LoadingSpinner = () => (
-  <div style={{ textAlign: 'center', padding: '50px' }}>
-    <Spin size="large" />
-  </div>
-);
 
 // Skeleton Loader Components
 const StatCardSkeleton = () => (
@@ -126,10 +119,78 @@ const calculateLeaveDays = (startDate: any, endDate: any, session: string): numb
 const LeaveEmployee = () => {
   // API hook for employee's leaves
   const { leaves, loading, fetchMyLeaves, cancelLeave, getLeaveBalance, createLeave, updateLeave, leaveTypeDisplayMap } = useLeaveREST();
-  const { activeOptions, fetchActiveLeaveTypes, loading: leaveTypesLoading } = useLeaveTypesREST();
+  const { activeOptions, fetchActiveLeaveTypes } = useLeaveTypesREST();
   const socket = useSocket();
   const { employeeId, isLoaded, isSignedIn, role } = useAuth();
-  const { employees, fetchEmployees, fetchActiveEmployeesList, loading: employeesLoading } = useEmployeesREST({ autoFetch: false });
+  const { employees, fetchEmployees, fetchActiveEmployeesList } = useEmployeesREST({ autoFetch: false });
+
+  // Fetch balance data - directly uses backend types (sick, casual, earned, etc.)
+  const fetchBalanceData = useCallback(async () => {
+    try {
+      setBalanceLoading(true);
+      const balanceData = await getLeaveBalance();
+      console.log('[fetchBalanceData] API Response received, type:', typeof balanceData);
+      console.log('[fetchBalanceData] Response:', balanceData);
+
+      if (!balanceData) {
+        console.error('[fetchBalanceData] API returned null/undefined');
+        message.error('Failed to load leave balance. Please refresh the page.');
+        setBalanceLoading(false);
+        return;
+      }
+
+      if (Array.isArray(balanceData)) {
+        console.error('[fetchBalanceData] Received array instead of object:', balanceData);
+        message.error('Invalid balance data format received');
+        setBalanceLoading(false);
+        return;
+      }
+
+      if (typeof balanceData !== 'object') {
+        console.error('[fetchBalanceData] Received non-object data:', typeof balanceData);
+        message.error('Invalid balance data format received');
+        setBalanceLoading(false);
+        return;
+      }
+
+      // Log specific balance values for debugging
+      const keys = Object.keys(balanceData);
+      console.log('[fetchBalanceData] Balance keys:', keys);
+
+      if ('earned' in balanceData) {
+        console.log('[fetchBalanceData] earned balance:', balanceData.earned);
+      }
+      if ('sick' in balanceData) {
+        console.log('[fetchBalanceData] sick balance:', balanceData.sick);
+      }
+
+      // Check if data has expected structure
+      const hasValidData = keys.some(key => {
+        const item = balanceData[key];
+        return item && typeof item === 'object' && 'balance' in item;
+      });
+
+      if (!hasValidData) {
+        console.warn('[fetchBalanceData] No valid balance items found');
+      }
+
+      console.log('[fetchBalanceData] Setting balances state with', keys.length, 'items');
+      // getLeaveBalance already returns response.data which is the balances object
+      setBalances(balanceData as Record<string, {
+        total: number;
+        used: number;
+        balance: number;
+        hasCustomPolicy?: boolean;
+        customPolicyId?: string;
+        customPolicyName?: string;
+      }>);
+      setBalanceLoading(false);
+    } catch (error) {
+      console.error('[fetchBalanceData] Error fetching balance:', error);
+      message.error('Failed to fetch leave balance');
+      setBalanceLoading(false);
+    }
+  }, [getLeaveBalance]);
 
   // Loading states
   const [balanceLoading, setBalanceLoading] = useState(true);
@@ -210,7 +271,7 @@ const LeaveEmployee = () => {
         fetchActiveEmployeesList();
       }
     }
-  }, [isLoaded, isSignedIn, employeeId, role, fetchEmployees, fetchActiveEmployeesList]);
+  }, [isLoaded, isSignedIn, employeeId, role, fetchEmployees, fetchActiveEmployeesList, fetchMyLeaves, fetchBalanceData]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -266,75 +327,7 @@ const LeaveEmployee = () => {
     }
     const days = calculateLeaveDays(editFormData.startDate, editFormData.endDate, editFormData.session);
     setEditFormData(prev => (prev && prev.noOfDays === days ? prev : prev ? { ...prev, noOfDays: days } : prev));
-  }, [editFormData?.leaveType, editFormData?.startDate, editFormData?.endDate, editFormData?.session]);
-
-  // Fetch balance data - directly uses backend types (sick, casual, earned, etc.)
-  const fetchBalanceData = async () => {
-    try {
-      setBalanceLoading(true);
-      const balanceData = await getLeaveBalance();
-      console.log('[fetchBalanceData] API Response received, type:', typeof balanceData);
-      console.log('[fetchBalanceData] Response:', balanceData);
-
-      if (!balanceData) {
-        console.error('[fetchBalanceData] API returned null/undefined');
-        message.error('Failed to load leave balance. Please refresh the page.');
-        setBalanceLoading(false);
-        return;
-      }
-
-      if (Array.isArray(balanceData)) {
-        console.error('[fetchBalanceData] Received array instead of object:', balanceData);
-        message.error('Invalid balance data format received');
-        setBalanceLoading(false);
-        return;
-      }
-
-      if (typeof balanceData !== 'object') {
-        console.error('[fetchBalanceData] Received non-object data:', typeof balanceData);
-        message.error('Invalid balance data format received');
-        setBalanceLoading(false);
-        return;
-      }
-
-      // Log specific balance values for debugging
-      const keys = Object.keys(balanceData);
-      console.log('[fetchBalanceData] Balance keys:', keys);
-
-      if ('earned' in balanceData) {
-        console.log('[fetchBalanceData] earned balance:', balanceData.earned);
-      }
-      if ('sick' in balanceData) {
-        console.log('[fetchBalanceData] sick balance:', balanceData.sick);
-      }
-
-      // Check if data has expected structure
-      const hasValidData = keys.some(key => {
-        const item = balanceData[key];
-        return item && typeof item === 'object' && 'balance' in item;
-      });
-
-      if (!hasValidData) {
-        console.warn('[fetchBalanceData] No valid balance items found');
-      }
-
-      console.log('[fetchBalanceData] Setting balances state with', keys.length, 'items');
-      // getLeaveBalance already returns response.data which is the balances object
-      setBalances(balanceData as Record<string, {
-        total: number;
-        used: number;
-        balance: number;
-        hasCustomPolicy?: boolean;
-        customPolicyId?: string;
-        customPolicyName?: string;
-      }>);
-      setBalanceLoading(false);
-    } catch (error) {
-      console.error('[fetchBalanceData] Error fetching balance:', error);
-      message.error('Failed to fetch leave balance');
-      setBalanceLoading(false);
-    }
-  };
+  }, [editFormData]);
 
   // Re-fetch balance when the manager approves this employee's leave (real-time update)
   useEffect(() => {
@@ -349,7 +342,7 @@ const LeaveEmployee = () => {
       socket.off('leave:balance_updated', handleBalanceRefresh);
       socket.off('leave:approved', handleBalanceRefresh);
     };
-  }, [socket]);
+  }, [socket, fetchBalanceData, fetchMyLeaves]);
 
   // Transform leaves for table display
   const data = leaves.map((leave) => {
@@ -476,19 +469,6 @@ const LeaveEmployee = () => {
       // Refresh data using auto-reload
       refetchAfterAction();
     }
-  };
-
-  // Handler for Edit Leave button click
-  const handleEditClick = (leave: any) => {
-    setEditFormData({
-      _id: leave._id,
-      leaveType: leave.leaveType,
-      startDate: leave.startDate,
-      endDate: leave.endDate,
-      session: 'Full Day',
-      reason: leave.reason || '',
-      noOfDays: calculateLeaveDays(leave.startDate, leave.endDate, 'Full Day'),
-    });
   };
 
   // Handler for Edit Leave form submission
@@ -652,14 +632,6 @@ const LeaveEmployee = () => {
   const handleLeaveTypeFilter = (leaveType: string) => {
     // Re-fetch with leave type filter
     fetchMyLeaves({ leaveType: leaveType as LeaveTypeCode }).then(() => fetchBalanceData());
-  };
-
-  // Calculate stats from leaves data
-  const stats = {
-    annualLeaves: leaves.filter(l => l.leaveType === 'earned').length,
-    medicalLeaves: leaves.filter(l => l.leaveType === 'sick').length,
-    casualLeaves: leaves.filter(l => l.leaveType === 'casual').length,
-    otherLeaves: leaves.filter(l => !['sick', 'casual', 'earned'].includes(l.leaveType)).length,
   };
 
   // Calculate total leaves and total remaining
@@ -873,7 +845,6 @@ const LeaveEmployee = () => {
                   // Show all active leave types from database
                   // Display balance data, or show zeros if no balance exists yet
                   const total = balance?.total ?? 0;
-                  const used = balance?.used ?? 0;
                   const remaining = balance?.balance ?? 0;
                   const hasCustomPolicy = balance?.hasCustomPolicy || false;
                   const customPolicyName = balance?.customPolicyName;

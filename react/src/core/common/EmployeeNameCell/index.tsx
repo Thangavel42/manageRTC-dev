@@ -23,17 +23,17 @@ interface EmployeeNameCellProps {
 
 /**
  * EmployeeNameCell Component
- * 
+ *
  * A reusable component for displaying employee profile image and name
  * consistently across all list-based views (employees, promotions, resignations, etc.)
- * 
+ *
  * Features:
  * - Displays profile image with automatic fallback to initial avatar
  * - Handles empty, null, or invalid image URLs gracefully
  * - Consistent styling and layout
  * - Supports navigation to employee detail page
  * - Customizable avatar size and color theme
- * 
+ *
  * @example
  * ```tsx
  * <EmployeeNameCell
@@ -56,13 +56,13 @@ const EmployeeNameCell: React.FC<EmployeeNameCellProps> = ({
 }) => {
   // Validate image URL - check if it's a valid non-empty string
   const hasValidImage = image && typeof image === "string" && image.trim() !== "";
-  
-  // Extract first letter for fallback avatar
-  const initial = name ? name.charAt(0).toUpperCase() : "?";
-  
+  // Use a consistent default avatar when no image is present
+  const fallbackImage = 'assets/img/profiles/profile.png';
+  const displayImage = hasValidImage ? image! : fallbackImage;
+
   // Avatar size classes
   const avatarSizeClass = `avatar-${avatarSize}`;
-  
+
   // Theme color classes for fallback avatar
   const avatarThemeClass = `bg-${avatarTheme}-transparent`;
   const textThemeClass = `text-${avatarTheme}`;
@@ -71,20 +71,12 @@ const EmployeeNameCell: React.FC<EmployeeNameCellProps> = ({
     <div className={`d-flex align-items-center ${className}`}>
       {/* Profile Image or Fallback Avatar */}
       <div className={`avatar ${avatarSizeClass} me-2`}>
-        {hasValidImage ? (
-          // Valid image URL - render image with error handling
-          <ImageWithBasePath
-            src={image}
-            className="rounded-circle img-fluid"
-            alt={name}
-            isLink={true}
-          />
-        ) : (
-          // No valid image - render fallback with initial
-          <div className={`avatar-title ${avatarThemeClass} rounded-circle ${textThemeClass}`}>
-            {initial}
-          </div>
-        )}
+        <ImageWithBasePath
+          src={displayImage}
+          className="rounded-circle img-fluid"
+          alt={name}
+          isLink={true}
+        />
       </div>
 
       {/* Name and Optional Secondary Text */}

@@ -7,7 +7,6 @@ import CommonSelect from "../../../../core/common/commonSelect";
 import Footer from "../../../../core/common/footer";
 import ImageWithBasePath from "../../../../core/common/imageWithBasePath";
 import { useAuth } from "../../../../hooks/useAuth";
-import { useAutoReloadActions } from "../../../../hooks/useAutoReload";
 import { useEmployeesREST } from "../../../../hooks/useEmployeesREST";
 import { useLeaveREST, type Leave } from "../../../../hooks/useLeaveREST";
 import { useLeaveTypesREST } from "../../../../hooks/useLeaveTypesREST";
@@ -26,22 +25,9 @@ interface LeaveEvent {
 
 const LeaveCalendar = () => {
   const { leaves, loading, fetchLeaves, fetchMyLeaves, leaveTypeDisplayMap } = useLeaveREST();
-  const { role, userId } = useAuth();
+  const { role } = useAuth();
   const { activeOptions, fetchActiveLeaveTypes, loading: leaveTypesLoading } = useLeaveTypesREST();
   const { employees, fetchEmployees, fetchActiveEmployeesList, loading: employeesLoading } = useEmployeesREST({ autoFetch: false });
-
-  // Auto-reload hook for refetching data
-  const { refetchAfterAction } = useAutoReloadActions({
-    fetchFn: () => {
-      // Only admin/HR/superadmin can use the admin leaves endpoint; others use their own list to avoid 403s
-      if (role === 'hr' || role === 'admin' || role === 'superadmin') {
-        fetchLeaves({ limit: 1000 });
-      } else {
-        fetchMyLeaves({ limit: 1000 });
-      }
-    },
-    debug: false, // Calendar doesn't need verbose logging
-  });
 
   // Calendar state
   const [currentDate, setCurrentDate] = useState(dayjs());
@@ -113,7 +99,6 @@ const LeaveCalendar = () => {
   // Get calendar days for the current month view
   const getCalendarDays = () => {
     const startOfMonth = currentDate.startOf('month');
-    const endOfMonth = currentDate.endOf('month');
 
     // Get days from previous month to fill first week
     const startDayOfWeek = startOfMonth.day(); // 0 = Sunday
@@ -149,9 +134,11 @@ const LeaveCalendar = () => {
         const leaveStart = dayjs(leave.startDate);
         const leaveEnd = dayjs(leave.endDate);
 
-        return dateStart.isSame(leaveEnd, 'day') ||
-          dateStart.isBefore(leaveEnd) && dateEnd.isAfter(leaveStart) ||
-          dateStart.isAfter(leaveStart) && dateStart.isBefore(leaveEnd);
+        return (
+          dateStart.isSame(leaveEnd, 'day') ||
+          (dateStart.isBefore(leaveEnd) && dateEnd.isAfter(leaveStart)) ||
+          (dateStart.isAfter(leaveStart) && dateStart.isBefore(leaveEnd))
+        );
       })
       .map(leave => {
         const colors = getLeaveTypeColor(leave.leaveType);
@@ -192,7 +179,6 @@ const LeaveCalendar = () => {
   };
 
   const calendarDays = getCalendarDays();
-  const currentMonthStart = currentDate.startOf('month');
 
   // Dynamic leave type filter options built from active leave types in database
   const leaveTypeOptions = useMemo(() => [
@@ -506,7 +492,6 @@ const LeaveCalendar = () => {
                             ) : (
                               events.map((event) => {
                                 const empData = employeeDataMap.get(event.leave.employeeId || '');
-                                const avatarUrl = empData?.avatarUrl || empData?.profileImage || empData?.avatar;
                                 const roleOrDesignation = empData?.role || empData?.designation || 'Employee';
                                 const employeeName = empData ? `${empData.firstName} ${empData.lastName}`.trim() : (event.leave.employeeName || 'Employee');
 

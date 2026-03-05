@@ -9,8 +9,19 @@ interface ResignationDetailsModalProps {
   resignation: Resignation | null;
   modalId?: string;
   canApproveReject?: boolean;
-  onApprove?: (resignationId: string, payload: { noticeDate: string; resignationDate: string }) => void | Promise<void>;
-  onReject?: (resignationId: string) => void | Promise<void>;
+  approvalStage?: "manager" | "hr";
+  onApprove?: (
+    resignationId: string,
+    payload?: {
+      noticeDate?: string;
+      resignationDate?: string;
+      noticePeriodStartDate?: string;
+      noticePeriodEndDate?: string;
+      comments?: string;
+    },
+    comments?: string
+  ) => void | Promise<void>;
+  onReject?: (resignationId: string, reason?: string) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
@@ -18,6 +29,7 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
   resignation,
   modalId = "view_resignation_details",
   canApproveReject = false,
+  approvalStage,
   onApprove,
   onReject,
   isSubmitting = false,
@@ -37,7 +49,11 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
   const displayName = resignation ? getDisplayName(resignation.employeeName) : '';
 
   const [noticeDate, setNoticeDate] = useState<string>("");
+  const [noticePeriodStartDate, setNoticePeriodStartDate] = useState<string>("");
+  const [noticePeriodEndDate, setNoticePeriodEndDate] = useState<string>("");
   const [resignationDate, setResignationDate] = useState<string>("");
+  const [comments, setComments] = useState<string>("");
+  const [rejectReason, setRejectReason] = useState<string>("");
   const [actionError, setActionError] = useState<string>("");
 
   const formatDateDisplay = (...values: Array<string | Date | null | undefined>): string => {
@@ -60,38 +76,64 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
   useEffect(() => {
     if (resignation) {
       setNoticeDate(resignation.noticeDate || "");
+      setNoticePeriodStartDate(resignation.noticePeriodStartDate || resignation.noticeDate || "");
+      setNoticePeriodEndDate(resignation.noticePeriodEndDate || resignation.resignationDate || "");
       setResignationDate(resignation.resignationDate || "");
+      setComments("");
+      setRejectReason("");
       setActionError("");
     }
   }, [resignation]);
 
   const handleApproveClick = () => {
     if (!resignation) return;
-    if (!noticeDate || !resignationDate) {
-      setActionError("Notice date and resignation date are required to approve.");
+    // Manager stage: only comments
+    if (approvalStage === "manager") {
+      setActionError("");
+      onApprove?.(resignation.resignationId || resignation._id || "", {}, comments.trim());
       return;
     }
-    const notice = dayjs(noticeDate, ["YYYY-MM-DD", "DD-MM-YYYY"], true);
-    const resign = dayjs(resignationDate, ["YYYY-MM-DD", "DD-MM-YYYY"], true);
-    if (!notice.isValid() || !resign.isValid()) {
+
+    // HR/Admin stage: dates are required
+    const startValue = noticePeriodStartDate || noticeDate;
+    const endValue = noticePeriodEndDate || resignationDate;
+    const finalValue = resignationDate;
+
+    if (!startValue || !endValue || !finalValue) {
+      setActionError("Notice period start/end and resignation date are required to approve.");
+      return;
+    }
+
+    const formats = ["DD-MM-YYYY", "YYYY-MM-DD", "DD/MM/YYYY", "YYYY/MM/DD"];
+    const noticeStart = dayjs(startValue, formats, true);
+    const noticeEnd = dayjs(endValue, formats, true);
+    const resignationFinal = dayjs(finalValue, formats, true);
+
+    if (!noticeStart.isValid() || !noticeEnd.isValid() || !resignationFinal.isValid()) {
       setActionError("Please enter valid dates.");
       return;
     }
-    if (resign.isBefore(notice)) {
-      setActionError("Resignation date cannot be earlier than notice date.");
+    if (noticeEnd.isBefore(noticeStart)) {
+      setActionError("Notice period end cannot be before start date.");
       return;
     }
+    if (resignationFinal.isBefore(noticeEnd)) {
+      setActionError("Resignation date must be on or after notice period end date.");
+      return;
+    }
+
     setActionError("");
     onApprove?.(resignation.resignationId || resignation._id || "", {
-      // Send dates as DD-MM-YYYY to satisfy backend Joi (ddmmyyyy)
-      noticeDate: notice.format("DD-MM-YYYY"),
-      resignationDate: resign.format("DD-MM-YYYY"),
+      noticePeriodStartDate: noticeStart.format("DD-MM-YYYY"),
+      noticePeriodEndDate: noticeEnd.format("DD-MM-YYYY"),
+      resignationDate: resignationFinal.format("DD-MM-YYYY"),
+      comments: comments.trim(),
     });
   };
 
   const handleRejectClick = () => {
     if (!resignation) return;
-    onReject?.(resignation.resignationId || resignation._id || "");
+    onReject?.(resignation.resignationId || resignation._id || "", rejectReason.trim());
   };
 
   // Always render modal structure, just show empty/loading state when no data
@@ -145,6 +187,16 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
     resignation.approvedAt,
     resignation.created_at
   );
+
+  const workflowStatus = (resignation.workflowStatus || "").toUpperCase();
+  const legacyStatus = (resignation.resignationStatus || resignation.status || "").toLowerCase();
+  const isManagerStage = approvalStage === "manager";
+  const isHrStage = approvalStage === "hr";
+  const canShowActions =
+    canApproveReject &&
+    ((isManagerStage && workflowStatus === "PENDING_MANAGER_APPROVAL") ||
+      (isHrStage && workflowStatus === "PENDING_HR_APPROVAL") ||
+      (!workflowStatus && legacyStatus === "pending"));
 
   return (
     <div className="modal fade" id={modalId}>
@@ -238,6 +290,18 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                         </div>
                       )}
 
+                      {/* Workflow Status */}
+                      {workflowStatus && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label text-muted mb-1">Workflow Status</label>
+                          <p className="mb-0">
+                            <span className={`badge badge-soft-${workflowStatus.includes("REJECTED") ? "danger" : workflowStatus.includes("PENDING") ? "warning" : "success"}`}>
+                              {workflowStatus.replace(/_/g, " ")}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+
                       {/* Status if available */}
                       {(resignation.resignationStatus || resignation.status) && (
                         <div className="col-md-6 mb-3">
@@ -283,35 +347,89 @@ const ResignationDetailsModal: React.FC<ResignationDetailsModalProps> = ({
                 </div>
               </div>
 
-              {canApproveReject && (resignation.resignationStatus || resignation.status || "").toLowerCase() === "pending" && (
+              {canShowActions && (
                 <div className="col-md-12">
                   <div className="card border">
                     <div className="card-body">
                       <div className="row g-3">
-                        <div className="col-md-6">
-                          <label className="form-label">Notice Date <span className="text-danger">*</span></label>
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format={{ format: "DD-MM-YYYY", type: "mask" }}
-                            value={noticeDate ? dayjs(noticeDate, ["YYYY-MM-DD", "DD-MM-YYYY"]) : null}
-                            onChange={(_, dateString) => {
-                              const next = Array.isArray(dateString) ? dateString[0] || "" : dateString;
-                              setNoticeDate(next || "");
-                              if (actionError) setActionError("");
-                            }}
-                          />
-                        </div>
-                        <div className="col-md-6">
-                          <label className="form-label">Resignation Date <span className="text-danger">*</span></label>
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format={{ format: "DD-MM-YYYY", type: "mask" }}
-                            value={resignationDate ? dayjs(resignationDate, ["YYYY-MM-DD", "DD-MM-YYYY"]) : null}
-                            onChange={(_, dateString) => {
-                              const next = Array.isArray(dateString) ? dateString[0] || "" : dateString;
-                              setResignationDate(next || "");
-                              if (actionError) setActionError("");
-                            }}
+                        {isHrStage && (
+                          <>
+                            <div className="col-md-6">
+                              <label className="form-label">Notice Period Start <span className="text-danger">*</span></label>
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{ format: "DD-MM-YYYY", type: "mask" }}
+                                value={noticePeriodStartDate ? dayjs(noticePeriodStartDate, ["YYYY-MM-DD", "DD-MM-YYYY"]) : null}
+                                onChange={(_, dateString) => {
+                                  const next = Array.isArray(dateString) ? dateString[0] || "" : dateString;
+                                  setNoticePeriodStartDate(next || "");
+                                  if (actionError) setActionError("");
+                                }}
+                              />
+                            </div>
+                            <div className="col-md-6">
+                              <label className="form-label">Notice Period End <span className="text-danger">*</span></label>
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{ format: "DD-MM-YYYY", type: "mask" }}
+                                value={noticePeriodEndDate ? dayjs(noticePeriodEndDate, ["YYYY-MM-DD", "DD-MM-YYYY"]) : null}
+                                onChange={(_, dateString) => {
+                                  const next = Array.isArray(dateString) ? dateString[0] || "" : dateString;
+                                  setNoticePeriodEndDate(next || "");
+                                  if (actionError) setActionError("");
+                                }}
+                              />
+                            </div>
+                            <div className="col-md-6">
+                              <label className="form-label">Resignation Date <span className="text-danger">*</span></label>
+                              <DatePicker
+                                className="form-control datetimepicker"
+                                format={{ format: "DD-MM-YYYY", type: "mask" }}
+                                value={resignationDate ? dayjs(resignationDate, ["YYYY-MM-DD", "DD-MM-YYYY"]) : null}
+                                onChange={(_, dateString) => {
+                                  const next = Array.isArray(dateString) ? dateString[0] || "" : dateString;
+                                  setResignationDate(next || "");
+                                  if (actionError) setActionError("");
+                                }}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {isManagerStage && (
+                          <div className="col-md-12">
+                            <label className="form-label">Comments (optional)</label>
+                            <textarea
+                              className="form-control"
+                              rows={3}
+                              value={comments}
+                              onChange={(e) => setComments(e.target.value)}
+                              placeholder="Add approval comment"
+                            />
+                          </div>
+                        )}
+
+                        {isHrStage && (
+                          <div className="col-md-12">
+                            <label className="form-label">Comments (optional)</label>
+                            <textarea
+                              className="form-control"
+                              rows={3}
+                              value={comments}
+                              onChange={(e) => setComments(e.target.value)}
+                              placeholder="Add approval comment"
+                            />
+                          </div>
+                        )}
+
+                        <div className="col-md-12">
+                          <label className="form-label">Rejection Reason (optional)</label>
+                          <textarea
+                            className="form-control"
+                            rows={2}
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="Provide context if rejecting"
                           />
                         </div>
                         {actionError && (

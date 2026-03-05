@@ -11,6 +11,10 @@ import { signOutAndClear } from './clerkLogout';
 let cachedToken: string | null = null;
 let tokenRefreshCallback: (() => Promise<string | null>) | null = null;
 
+// CSRF token cache
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string | null> | null = null;
+
 /**
  * Set the authentication token (called by AuthProvider)
  */
@@ -47,6 +51,60 @@ const refreshAuthToken = async (): Promise<string | null> => {
     }
   }
   return null;
+};
+
+/**
+ * Fetch CSRF token from the server
+ */
+const fetchCsrfToken = async (): Promise<string | null> => {
+  try {
+    console.log('[API] Fetching CSRF token...');
+    const response = await axios.get(`${API_BASE_URL}/api/csrf-token`, {
+      withCredentials: true, // Required to include cookies
+    });
+
+    if (response.data?.success && response.data?.data?.csrfToken) {
+      csrfToken = response.data.data.csrfToken;
+      console.log('[API] CSRF token fetched successfully');
+      return csrfToken;
+    }
+
+    console.warn('[API] Failed to get CSRF token from response');
+    return null;
+  } catch (error) {
+    console.error('[API] Failed to fetch CSRF token:', error);
+    return null;
+  }
+};
+
+/**
+ * Get CSRF token (fetch if not cached)
+ */
+const getCsrfToken = async (): Promise<string | null> => {
+  // Return cached token if available
+  if (csrfToken) {
+    return csrfToken;
+  }
+
+  // If already fetching, wait for that promise
+  if (csrfTokenPromise) {
+    return csrfTokenPromise;
+  }
+
+  // Fetch new token
+  csrfTokenPromise = fetchCsrfToken();
+  const token = await csrfTokenPromise;
+  csrfTokenPromise = null;
+
+  return token;
+};
+
+/**
+ * Clear CSRF token cache (call when token becomes invalid)
+ */
+const clearCsrfToken = () => {
+  csrfToken = null;
+  csrfTokenPromise = null;
 };
 
 // API Configuration
@@ -163,12 +221,13 @@ const createApiClient = (): AxiosInstance => {
   const client = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     timeout: API_TIMEOUT,
+    withCredentials: true, // Required for CSRF cookies
     headers: {
       'Content-Type': 'application/json',
     },
   });
 
-  // Request interceptor - Add Clerk JWT token
+  // Request interceptor - Add Clerk JWT token and CSRF token
   // Company ID is extracted server-side from the token's public metadata (same as Socket.IO)
   client.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
@@ -192,9 +251,19 @@ const createApiClient = (): AxiosInstance => {
           config.signal = controller.signal;
         }
 
+        // Add CSRF token for state-changing methods
+        const methodsRequiringCsrf = ['post', 'put', 'patch', 'delete'];
+        if (config.method && methodsRequiringCsrf.includes(config.method.toLowerCase())) {
+          const csrf = await getCsrfToken();
+          if (csrf && config.headers) {
+            config.headers['X-CSRF-Token'] = csrf;
+          }
+        }
+
         console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
           params: config.params || '',
           hasToken: !!token,
+          hasCsrf: !!config.headers?.['X-CSRF-Token'],
           data: config.data,
         });
         // Log full request body for PUT/POST
@@ -264,20 +333,51 @@ const createApiClient = (): AxiosInstance => {
         }
       }
 
-      // Handle 403 Forbidden - Includes inactive employees, insufficient permissions
+      // Handle 403 Forbidden - Includes inactive employees, insufficient permissions, CSRF errors
       if (error.response?.status === 403) {
         const errorCode = error.response?.data?.error?.code;
         const errorMessage = error.response?.data?.error?.message;
 
         console.error('[API] Forbidden:', { errorCode, errorMessage });
 
+        // Handle CSRF token errors
+        if (errorCode === 'CSRF_TOKEN_INVALID') {
+          console.log('[API] CSRF token invalid, clearing cache and retrying...');
+          clearCsrfToken();
+
+          // Retry the request once
+          if (!originalRequest._retry) {
+            originalRequest._retry = true;
+
+            // Get fresh CSRF token
+            const newCsrfToken = await getCsrfToken();
+
+            if (newCsrfToken && originalRequest.headers) {
+              // Parse request data if it's stringified
+              if (typeof originalRequest.data === 'string') {
+                try {
+                  originalRequest.data = JSON.parse(originalRequest.data);
+                } catch (parseError) {
+                  console.warn('[API] Failed to parse retry request body:', parseError);
+                }
+              }
+
+              originalRequest.headers['X-CSRF-Token'] = newCsrfToken;
+              console.log('[API] Retrying request with new CSRF token');
+              return client(originalRequest);
+            }
+          }
+        }
+
         // If employee account is locked/inactive/resigned/terminated, logout and redirect
-        if (errorCode === 'ACCOUNT_LOCKED' ||
-            errorCode === 'EMPLOYEE_INACTIVE' ||
-            errorCode === 'EMPLOYEE_STATUS_BLOCKED' ||
-            errorCode === 'EMPLOYEE_DELETED' ||
-            errorMessage?.toLowerCase().includes('deactivated') ||
-            errorMessage?.toLowerCase().includes('account has been')) {
+        if (
+          errorCode === 'ACCOUNT_LOCKED' ||
+          errorCode === 'EMPLOYEE_INACTIVE' ||
+          errorCode === 'EMPLOYEE_STATUS_BLOCKED' ||
+          errorCode === 'EMPLOYEE_DELETED' ||
+          errorMessage?.toLowerCase().includes('deactivated') ||
+          errorMessage?.toLowerCase().includes('account has been')
+        ) {
           console.error('[API] Employee account is locked/inactive - signing out');
 
           // Sign out from Clerk, clear storage, and redirect
@@ -287,7 +387,7 @@ const createApiClient = (): AxiosInstance => {
           return Promise.reject({
             ...error,
             handled: true,
-            logoutReason: 'account_locked'
+            logoutReason: 'account_locked',
           });
         }
       }
@@ -403,7 +503,10 @@ export const del = async <T = any>(
  */
 export const handleApiError = (error: any): string => {
   // Check for validation errors with details
-  if (error.response?.data?.error?.code === 'VALIDATION_ERROR' && error.response?.data?.error?.details?.length > 0) {
+  if (
+    error.response?.data?.error?.code === 'VALIDATION_ERROR' &&
+    error.response?.data?.error?.details?.length > 0
+  ) {
     const details = error.response.data.error.details;
     // Return the first validation error message with field name
     const firstError = details[0];
