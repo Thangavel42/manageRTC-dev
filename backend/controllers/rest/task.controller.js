@@ -4,8 +4,10 @@
  */
 
 import mongoose from 'mongoose';
+import { getTenantCollections } from '../../config/db.js';
 import {
   asyncHandler,
+  buildForbiddenError,
   buildNotFoundError,
   buildValidationError,
 } from '../../middleware/errorHandler.js';
@@ -19,9 +21,9 @@ import {
   sendSuccess,
 } from '../../utils/apiResponse.js';
 import { generateTaskId } from '../../utils/idGenerator.js';
+import { devLog, devWarn } from '../../utils/logger.js';
 import { getTenantModel } from '../../utils/mongooseMultiTenant.js';
 import { broadcastTaskEvents, getSocketIO } from '../../utils/socketBroadcaster.js';
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 
 /**
  * Helper function to get tenant-specific Task model
@@ -79,11 +81,8 @@ export const getTasks = asyncHandler(async (req, res) => {
     const EmployeeModel = getEmployeeModel(user.companyId);
 
     // Find employee's MongoDB _id
-    const employee = await EmployeeModel.findOne({
-      $or: [
-        { clerkUserId: user.userId },
-        { 'account.userId': user.userId }
-      ],
+    const employee = await collections.employees.findOne({
+      $or: [{ clerkUserId: user.userId }, { 'account.userId': user.userId }],
       isDeleted: { $ne: true },
     });
 
@@ -91,14 +90,14 @@ export const getTasks = asyncHandler(async (req, res) => {
       // ✅ SECURITY FIX: If employee record not found, return empty results
       console.warn(
         `[Security] Employee record not found for user ${user.userId} (role: ${user.role}). ` +
-        `Denying access to all tasks.`
+          `Denying access to all tasks. RequestId: ${req.id}`
       );
 
       return sendSuccess(res, [], 'No tasks accessible', {
         currentPage: 1,
         totalPages: 0,
         totalItems: 0,
-        itemsPerPage: parseInt(limit) || 20
+        itemsPerPage: parseInt(limit) || 20,
       });
     }
 
@@ -264,6 +263,7 @@ export const createTask = asyncHandler(async (req, res) => {
   // Get tenant-specific models
   const TaskModel = getTaskModel(user.companyId);
   const ProjectModel = getProjectModel(user.companyId);
+  const { employees: EmployeeModel } = getTenantCollections(user.companyId);
 
   // Verify project exists
   const project = await ProjectModel.findOne({
@@ -273,6 +273,32 @@ export const createTask = asyncHandler(async (req, res) => {
 
   if (!project) {
     throw buildNotFoundError('Project', taskData.projectId);
+  }
+
+  // Permission check: Admin/HR can create tasks, employees must be team lead or project manager on this project
+  const userRole = user.role?.toLowerCase();
+  if (userRole !== 'admin' && userRole !== 'hr' && userRole !== 'superadmin') {
+    // Employee - check if they're a team lead or project manager on this project
+    const employee = await EmployeeModel.findOne({
+      clerkUserId: user.userId,
+      isDeleted: { $ne: true },
+    });
+
+    if (!employee) {
+      throw buildForbiddenError('Employee record not found');
+    }
+
+    const employeeId = employee._id.toString();
+    const isProjectManager = project.projectManager?.some(
+      (manager) => manager.toString() === employeeId
+    );
+    const isTeamLead = project.teamLeader?.some((lead) => lead.toString() === employeeId);
+
+    if (!isProjectManager && !isTeamLead) {
+      throw buildForbiddenError(
+        'Only project managers and team leads can create tasks on this project'
+      );
+    }
   }
 
   // Generate task ID
@@ -302,15 +328,17 @@ export const createTask = asyncHandler(async (req, res) => {
 /**
  * @desc    Update task
  * @route   PUT /api/tasks/:id
- * @access  Private (Admin, HR, Superadmin, Project Managers, Assignees)
+ * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leads)
  */
 export const updateTask = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
   const updateData = req.body;
 
-  // Get tenant-specific model
+  // Get tenant-specific models
   const TaskModel = getTaskModel(user.companyId);
+  const ProjectModel = getProjectModel(user.companyId);
+  const { employees: EmployeeModel } = getTenantCollections(user.companyId);
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -325,6 +353,42 @@ export const updateTask = asyncHandler(async (req, res) => {
 
   if (!task) {
     throw buildNotFoundError('Task', id);
+  }
+
+  // Get project to check permissions
+  const project = await ProjectModel.findOne({
+    _id: task.projectId,
+    isDeleted: false,
+  });
+
+  if (!project) {
+    throw buildNotFoundError('Project', task.projectId);
+  }
+
+  // Permission check: Admin/HR can update tasks, employees must be team lead or project manager on this project
+  const userRole = user.role?.toLowerCase();
+  if (userRole !== 'admin' && userRole !== 'hr' && userRole !== 'superadmin') {
+    // Employee - check if they're a team lead or project manager on this project
+    const employee = await EmployeeModel.findOne({
+      clerkUserId: user.userId,
+      isDeleted: { $ne: true },
+    });
+
+    if (!employee) {
+      throw buildForbiddenError('Employee record not found');
+    }
+
+    const employeeId = employee._id.toString();
+    const isProjectManager = project.projectManager?.some(
+      (manager) => manager.toString() === employeeId
+    );
+    const isTeamLead = project.teamLeader?.some((lead) => lead.toString() === employeeId);
+
+    if (!isProjectManager && !isTeamLead) {
+      throw buildForbiddenError(
+        'Only project managers and team leads can update tasks on this project'
+      );
+    }
   }
 
   // Update task
@@ -353,8 +417,10 @@ export const deleteTask = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = extractUser(req);
 
-  // Get tenant-specific model
+  // Get tenant-specific models
   const TaskModel = getTaskModel(user.companyId);
+  const ProjectModel = getProjectModel(user.companyId);
+  const { employees: EmployeeModel } = getTenantCollections(user.companyId);
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -369,6 +435,42 @@ export const deleteTask = asyncHandler(async (req, res) => {
 
   if (!task) {
     throw buildNotFoundError('Task', id);
+  }
+
+  // Get project to check permissions
+  const project = await ProjectModel.findOne({
+    _id: task.projectId,
+    isDeleted: false,
+  });
+
+  if (!project) {
+    throw buildNotFoundError('Project', task.projectId);
+  }
+
+  // Permission check: Admin/HR can delete tasks, employees must be team lead or project manager on this project
+  const userRole = user.role?.toLowerCase();
+  if (userRole !== 'admin' && userRole !== 'hr' && userRole !== 'superadmin') {
+    // Employee - check if they're a team lead or project manager on this project
+    const employee = await EmployeeModel.findOne({
+      clerkUserId: user.userId,
+      isDeleted: { $ne: true },
+    });
+
+    if (!employee) {
+      throw buildForbiddenError('Employee record not found');
+    }
+
+    const employeeId = employee._id.toString();
+    const isProjectManager = project.projectManager?.some(
+      (manager) => manager.toString() === employeeId
+    );
+    const isTeamLead = project.teamLeader?.some((lead) => lead.toString() === employeeId);
+
+    if (!isProjectManager && !isTeamLead) {
+      throw buildForbiddenError(
+        'Only project managers and team leads can delete tasks on this project'
+      );
+    }
   }
 
   // Soft delete

@@ -258,9 +258,9 @@ const ProjectDetails = () => {
     console.log('[ProjectDetails] loadProjectTasks called with projectId:', project?._id);
     if (!project?._id) return;
     try {
-      // If employee role, use dedicated employee project tasks API
-      if (isEmployee && profile && '_id' in profile && profile._id) {
-        console.log('[ProjectDetails] Loading tasks for employee from dedicated API:', {
+      // If regular employee (not team lead or project manager), use dedicated employee project tasks API
+      if (isEmployee && !isProjectManagerOrLead && profile && '_id' in profile && profile._id) {
+        console.log('[ProjectDetails] Loading tasks for regular employee from dedicated API:', {
           _id: profile._id,
           employeeId: profile.employeeId,
           name: `${profile.firstName} ${profile.lastName}`,
@@ -268,7 +268,14 @@ const ProjectDetails = () => {
         });
         await getEmployeeProjectTasksAPI(project._id);
       } else {
-        // Admin/HR: load all project tasks
+        // Admin/HR/TeamLead/ProjectManager: load all project tasks
+        console.log('[ProjectDetails] Loading all project tasks for:', {
+          isAdmin,
+          isHR,
+          isEmployee,
+          isProjectManagerOrLead,
+          projectId: project._id,
+        });
         await getTasksByProjectAPI(project._id);
       }
       // Tasks will be available via tasksFromHook, sync via useEffect
@@ -276,7 +283,7 @@ const ProjectDetails = () => {
       console.error('[ProjectDetails] Error loading tasks:', error);
       message.error('Failed to load tasks');
     }
-  }, [project?._id, getTasksByProjectAPI, getEmployeeProjectTasksAPI, isEmployee, profile]);
+  }, [project?._id, getTasksByProjectAPI, getEmployeeProjectTasksAPI, isEmployee, isProjectManagerOrLead, isAdmin, isHR, profile]);
 
   // Sync tasks from hook to local state
   useEffect(() => {
@@ -379,9 +386,9 @@ const ProjectDetails = () => {
 
   const loadEmployeesAndClients = useCallback(async () => {
     try {
-      // Load employees via REST API (limit max is 100 per API validation)
+      // Load employees via REST API - use active-list endpoint for all roles
       console.log('[ProjectDetails] Loading employees...');
-      const empResponse = await apiGet('/employees', { params: { limit: 100 } });
+      const empResponse = await apiGet('/employees/active-list');
       console.log('[ProjectDetails] Employee response:', empResponse);
 
       if (empResponse.success && empResponse.data) {
@@ -2082,8 +2089,12 @@ const ProjectDetails = () => {
   const assigneeChoose = useMemo(() => {
     const baseOption = [{ value: 'Select', label: 'Select' }];
 
-    // Combine team members and team leaders
-    const allMembers = [...(project?.teamMembers || []), ...(project?.teamLeader || [])];
+    // Combine team members, team leaders, and project managers
+    const allMembers = [
+      ...(project?.teamMembers || []),
+      ...(project?.teamLeader || []),
+      ...(project?.projectManager || []),
+    ];
 
     if (allMembers.length === 0) {
       return baseOption;
@@ -2105,7 +2116,7 @@ const ProjectDetails = () => {
     }, []);
 
     return [...baseOption, ...teamOptions];
-  }, [project?.teamMembers, project?.teamLeader]);
+  }, [project?.teamMembers, project?.teamLeader, project?.projectManager]);
 
   if (loading) {
     return (
