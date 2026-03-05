@@ -2089,8 +2089,12 @@ const ProjectDetails = () => {
   const assigneeChoose = useMemo(() => {
     const baseOption = [{ value: 'Select', label: 'Select' }];
 
-    // Combine team members and team leaders
-    const allMembers = [...(project?.teamMembers || []), ...(project?.teamLeader || [])];
+    // Combine team members, team leaders, and project managers
+    const allMembers = [
+      ...(project?.teamMembers || []),
+      ...(project?.teamLeader || []),
+      ...(project?.projectManager || []),
+    ];
 
     if (allMembers.length === 0) {
       return baseOption;
@@ -2112,7 +2116,7 @@ const ProjectDetails = () => {
     }, []);
 
     return [...baseOption, ...teamOptions];
-  }, [project?.teamMembers, project?.teamLeader]);
+  }, [project?.teamMembers, project?.teamLeader, project?.projectManager]);
 
   if (loading) {
     return (

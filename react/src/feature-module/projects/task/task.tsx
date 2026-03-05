@@ -11,7 +11,6 @@ import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CommonTagsInput from '../../../core/common/Taginput';
 import { useProjectsREST } from '../../../hooks/useProjectsREST';
 import { useTasksREST } from '../../../hooks/useTasksREST';
-import { useTaskStatusREST } from '../../../hooks/useTaskStatusREST';
 import { useUserProfileREST } from '../../../hooks/useUserProfileREST';
 import { get } from '../../../services/api';
 import { all_routes } from '../../router/all_routes';
@@ -40,7 +39,6 @@ const Task = () => {
     fetchProjects,
     getProjectTeamMembers,
   } = useProjectsREST();
-  const { statuses: taskStatuses, fetchTaskStatuses } = useTaskStatusREST();
   const { profile, isAdmin, isHR, isEmployee } = useUserProfileREST();
   const [employees, setEmployees] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +59,7 @@ const Task = () => {
     projectId: '',
     assignees: [] as string[],
     dueDate: null as Dayjs | null,
-    status: 'To do',
+    status: 'Active',
     priority: 'Medium',
     description: '',
     tags: [] as string[],
@@ -71,7 +69,7 @@ const Task = () => {
     projectId: '',
     assignees: [] as string[],
     dueDate: null as Dayjs | null,
-    status: 'To do',
+    status: 'Active',
     priority: 'Medium',
     description: '',
     tags: [] as string[],
@@ -137,6 +135,34 @@ const Task = () => {
 
     return { total, completed, inProgress, pending };
   }, [tasks, isEmployee, profile]);
+
+  // Check if employee is a team lead or project manager on any project
+  const isTeamLeadOrManager = React.useMemo(() => {
+    if (!isEmployee || !profile || !('_id' in profile) || !profile._id) {
+      return false;
+    }
+
+    const employeeId = profile._id.toString();
+
+    return projects.some((project: any) => {
+      // Check if in team leaders
+      const isTeamLead = project?.teamLeader?.some((lead: any) => {
+        const leadId = typeof lead === 'string' ? lead : lead._id || lead.id;
+        return leadId?.toString() === employeeId;
+      });
+
+      // Check if in project managers
+      const isProjectManager = project?.projectManager?.some((manager: any) => {
+        const managerId = typeof manager === 'string' ? manager : manager._id || manager.id;
+        return managerId?.toString() === employeeId;
+      });
+
+      return isTeamLead || isProjectManager;
+    });
+  }, [isEmployee, profile, projects]);
+
+  // Can manage tasks = Admin OR HR OR (Employee AND is team lead/manager)
+  const canManageTasks = isAdmin || isHR || (isEmployee && isTeamLeadOrManager);
 
   const getProjectCounts = React.useCallback(
     (projectId: string) => {
@@ -279,24 +305,13 @@ const Task = () => {
     [projectTeamMembers]
   );
 
-  // Dynamic status options from task statuses collection
+  // Dynamic status options - Active and Inactive only
   const statusChoose = React.useMemo(() => {
-    if (!taskStatuses || taskStatuses.length === 0) {
-      return [
-        { value: 'To do', label: 'To do' },
-        { value: 'Pending', label: 'Pending' },
-        { value: 'Inprogress', label: 'Inprogress' },
-        { value: 'Completed', label: 'Completed' },
-        { value: 'Onhold', label: 'Onhold' },
-        { value: 'Review', label: 'Review' },
-        { value: 'Cancelled', label: 'Cancelled' },
-      ];
-    }
-    return taskStatuses.map((status) => ({
-      value: status.key,
-      label: status.name || status.key,
-    }));
-  }, [taskStatuses]);
+    return [
+      { value: 'Active', label: 'Active' },
+      { value: 'Inactive', label: 'Inactive' },
+    ];
+  }, []);
   const priorityChoose = [
     { value: 'Medium', label: 'Medium' },
     { value: 'High', label: 'High' },
@@ -311,8 +326,19 @@ const Task = () => {
 
     setError(null);
 
-    // If employee role, use dedicated employee project tasks API
-    if (isEmployee && profile && '_id' in profile && profile._id) {
+    // If employee role BUT is team lead or project manager, load all project tasks
+    if (isEmployee && isTeamLeadOrManager) {
+      const employeeProfile = profile && '_id' in profile ? profile : null;
+      console.log('[Task] Loading all project tasks for team lead/project manager:', {
+        _id: employeeProfile?._id,
+        employeeId: employeeProfile?.employeeId,
+        name: employeeProfile ? `${employeeProfile.firstName} ${employeeProfile.lastName}` : 'Unknown',
+        projectId: filters.project,
+        isTeamLeadOrManager: true,
+      });
+      getTasksByProject(filters.project);
+    } else if (isEmployee && profile && '_id' in profile && profile._id) {
+      // Regular employee: use dedicated employee project tasks API
       console.log('[Task] Loading tasks for employee from dedicated API:', {
         _id: profile._id,
         employeeId: profile.employeeId,
@@ -324,7 +350,7 @@ const Task = () => {
       // Admin/HR: load all project tasks
       getTasksByProject(filters.project);
     }
-  }, [filters.project, getTasksByProject, getEmployeeProjectTasks, isEmployee, profile]);
+  }, [filters.project, getTasksByProject, getEmployeeProjectTasks, isEmployee, isTeamLeadOrManager, profile]);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -351,14 +377,6 @@ const Task = () => {
       message.error('Failed to load projects');
     }
   }, [fetchProjects, profile]);
-
-  const loadTaskStatuses = useCallback(async () => {
-    try {
-      await fetchTaskStatuses();
-    } catch (err) {
-      console.error('[Task] Failed to load task statuses:', err);
-    }
-  }, [fetchTaskStatuses]);
 
   const loadAllEmployeeTasks = useCallback(async () => {
     if (!isEmployee || !profile || !('_id' in profile)) {
@@ -568,15 +586,12 @@ const Task = () => {
   }, []);
 
   const resetAddForm = useCallback(() => {
-    // Use first status from loaded statuses or default to 'To do'
-    const defaultStatus = taskStatuses && taskStatuses.length > 0 ? taskStatuses[0].key : 'To do';
-
     setAddForm({
       title: '',
       projectId: '',
       assignees: [],
       dueDate: null,
-      status: defaultStatus,
+      status: 'Active',
       priority: 'Medium',
       description: '',
       tags: [],
@@ -586,7 +601,7 @@ const Task = () => {
     setLoadingTeamMembers(false);
     setFormError(null);
     setFieldErrors({});
-  }, [taskStatuses]);
+  }, []);
 
   const closeAddModal = useCallback(() => {
     const modalElement = document.getElementById('add_task');
@@ -839,15 +854,14 @@ const Task = () => {
     [employees]
   );
 
-  // Initial load - load projects and task statuses on mount (tasks loaded by filter changes)
+  // Initial load - load projects on mount (tasks loaded by filter changes)
   useEffect(() => {
     loadProjects();
-    loadTaskStatuses();
     // Load all employee tasks for count calculations (only for employees)
     if (isEmployee) {
       loadAllEmployeeTasks();
     }
-  }, [loadProjects, loadTaskStatuses, loadAllEmployeeTasks, isEmployee]);
+  }, [loadProjects, loadAllEmployeeTasks, isEmployee]);
 
   // Debug: Log when allEmployeeTasks changes
   useEffect(() => {
@@ -865,6 +879,19 @@ const Task = () => {
       });
     }
   }, [allEmployeeTasks, isEmployee]);
+
+  // Debug: Log team lead/manager status
+  useEffect(() => {
+    if (isEmployee && profile && '_id' in profile) {
+      console.log('[Task] 🔐 Role-based Access Control:', {
+        isEmployee,
+        isTeamLeadOrManager,
+        canManageTasks,
+        profileRole: profile.role,
+        employeeId: profile.employeeId,
+      });
+    }
+  }, [isEmployee, isTeamLeadOrManager, canManageTasks, profile]);
 
   // Console log employee _id from profile (case-insensitive)
   useEffect(() => {
@@ -911,13 +938,12 @@ const Task = () => {
 
     const resetModalState = () => {
       resetAddForm();
-      const defaultStatus = taskStatuses && taskStatuses.length > 0 ? taskStatuses[0].key : 'To do';
       setEditForm({
         title: '',
         projectId: '',
         assignees: [],
         dueDate: null,
-        status: defaultStatus,
+        status: 'Active',
         priority: 'Medium',
         description: '',
         tags: [],
@@ -939,7 +965,7 @@ const Task = () => {
         editTaskModal.removeEventListener('show.bs.modal', resetModalState);
       }
     };
-  }, [resetAddForm, taskStatuses]);
+  }, [resetAddForm]);
 
   return (
     <>
@@ -961,7 +987,7 @@ const Task = () => {
               </nav>
             </div>
             <div className="my-xl-auto right-content d-flex">
-              {!isEmployee && (
+              {canManageTasks && (
                 <div className="mb-2">
                   <Link
                     to="#"
@@ -1023,13 +1049,12 @@ const Task = () => {
                           <div>
                             <h6 className="mb-1">
                               <span
-                                className={`text-truncate d-inline-block ${
-                                  filters.project === project._id
-                                    ? 'text-primary fw-bold'
-                                    : hoveredProjectId === project._id
-                                      ? 'text-primary'
-                                      : 'text-dark'
-                                }`}
+                                className={`text-truncate d-inline-block ${filters.project === project._id
+                                  ? 'text-primary fw-bold'
+                                  : hoveredProjectId === project._id
+                                    ? 'text-primary'
+                                    : 'text-dark'
+                                  }`}
                               >
                                 {project.name || 'Untitled Project'}
                                 {filters.project === project._id && (
@@ -1055,10 +1080,10 @@ const Task = () => {
                               <p className="text-dark">
                                 {project.dueDate
                                   ? new Date(project.dueDate).toLocaleDateString('en-GB', {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: 'numeric',
-                                    })
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
                                   : 'No deadline'}
                               </p>
                             </div>
@@ -1076,7 +1101,7 @@ const Task = () => {
                                 {(() => {
                                   const teamLead =
                                     Array.isArray(project.teamLeader) &&
-                                    project.teamLeader.length > 0
+                                      project.teamLeader.length > 0
                                       ? project.teamLeader[0]
                                       : project.teamLeader && typeof project.teamLeader === 'object'
                                         ? project.teamLeader
@@ -1310,8 +1335,7 @@ const Task = () => {
                         >
                           {filters.status === 'all'
                             ? 'All Status'
-                            : taskStatuses?.find((s) => s.key === filters.status)?.name ||
-                              filters.status}
+                            : filters.status}
                         </Link>
                         <ul className="dropdown-menu dropdown-menu-end p-3">
                           <li>
@@ -1326,61 +1350,30 @@ const Task = () => {
                               All Status
                             </Link>
                           </li>
-                          {taskStatuses && taskStatuses.length > 0 ? (
-                            taskStatuses.map((status) => (
-                              <li key={status.key}>
-                                <Link
-                                  to="#"
-                                  className={`dropdown-item rounded-1 ${filters.status === status.key ? 'active' : ''}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleStatusFilter(status.key);
-                                  }}
-                                >
-                                  {status.name || status.key}
-                                </Link>
-                              </li>
-                            ))
-                          ) : (
-                            <>
-                              <li>
-                                <Link
-                                  to="#"
-                                  className={`dropdown-item rounded-1 ${filters.status === 'Pending' ? 'active' : ''}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleStatusFilter('Pending');
-                                  }}
-                                >
-                                  Pending
-                                </Link>
-                              </li>
-                              <li>
-                                <Link
-                                  to="#"
-                                  className={`dropdown-item rounded-1 ${filters.status === 'Inprogress' ? 'active' : ''}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleStatusFilter('Inprogress');
-                                  }}
-                                >
-                                  Inprogress
-                                </Link>
-                              </li>
-                              <li>
-                                <Link
-                                  to="#"
-                                  className={`dropdown-item rounded-1 ${filters.status === 'Completed' ? 'active' : ''}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleStatusFilter('Completed');
-                                  }}
-                                >
-                                  Completed
-                                </Link>
-                              </li>
-                            </>
-                          )}
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.status === 'Active' ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleStatusFilter('Active');
+                              }}
+                            >
+                              Active
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${filters.status === 'Inactive' ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleStatusFilter('Inactive');
+                              }}
+                            >
+                              Inactive
+                            </Link>
+                          </li>
                         </ul>
                       </div>
                     </div>
@@ -1508,17 +1501,16 @@ const Task = () => {
                               </span>
                             )}
                             <span
-                              className={`badge d-inline-flex align-items-center me-3 ${
-                                task.status === 'Completed'
-                                  ? 'badge-soft-success'
-                                  : task.status === 'Inprogress'
-                                    ? 'badge-soft-purple'
-                                    : task.status === 'Pending'
-                                      ? 'badge-soft-warning'
-                                      : task.status === 'Onhold'
-                                        ? 'badge-soft-pink'
-                                        : 'badge-soft-secondary'
-                              }`}
+                              className={`badge d-inline-flex align-items-center me-3 ${task.status === 'Completed'
+                                ? 'badge-soft-success'
+                                : task.status === 'Inprogress'
+                                  ? 'badge-soft-purple'
+                                  : task.status === 'Pending'
+                                    ? 'badge-soft-warning'
+                                    : task.status === 'Onhold'
+                                      ? 'badge-soft-pink'
+                                      : 'badge-soft-secondary'
+                                }`}
                             >
                               <i className="fas fa-circle fs-6 me-1" />
                               {task.status || 'Pending'}
@@ -1539,9 +1531,9 @@ const Task = () => {
                                     // Get all team members from the project
                                     const allMembers = taskProject
                                       ? [
-                                          ...(taskProject.teamMembers || []),
-                                          ...(taskProject.teamLeader || []),
-                                        ]
+                                        ...(taskProject.teamMembers || []),
+                                        ...(taskProject.teamLeader || []),
+                                      ]
                                       : [];
 
                                     return (
@@ -1642,7 +1634,7 @@ const Task = () => {
                                       View
                                     </Link>
                                   </li>
-                                  {!isEmployee && (
+                                  {canManageTasks && (
                                     <li>
                                       <Link
                                         to="#"
@@ -1651,12 +1643,17 @@ const Task = () => {
                                         data-bs-target="#edit_task"
                                         onClick={async () => {
                                           setEditTaskId(task._id);
+                                          // Extract assignee IDs properly (handle both object and string formats)
+                                          const assigneeIds = (task.assignee || []).map((a: any) => {
+                                            if (typeof a === 'string') return a;
+                                            return a._id || a.id || a;
+                                          });
                                           setEditForm({
                                             title: task.title || '',
                                             projectId: task.projectId || '',
-                                            assignees: task.assignee || [],
+                                            assignees: assigneeIds,
                                             dueDate: task.dueDate ? dayjs(task.dueDate) : null,
-                                            status: task.status || 'To do',
+                                            status: task.status || 'Active',
                                             priority: task.priority || 'Medium',
                                             description: task.description || '',
                                             tags: task.tags || [],
@@ -1679,7 +1676,7 @@ const Task = () => {
                                       </Link>
                                     </li>
                                   )}
-                                  {!isEmployee && (
+                                  {canManageTasks && (
                                     <li>
                                       <Link
                                         to="#"
@@ -2202,9 +2199,8 @@ const Task = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${
-                          confirmTaskName && !taskNameMatches ? 'is-invalid' : ''
-                        } ${taskNameMatches ? 'is-valid' : ''}`}
+                        className={`form-control form-control-sm ${confirmTaskName && !taskNameMatches ? 'is-invalid' : ''
+                          } ${taskNameMatches ? 'is-valid' : ''}`}
                         placeholder={`Type "${taskToDelete.title}" to confirm`}
                         value={confirmTaskName}
                         onChange={(e) => setConfirmTaskName(e.target.value)}

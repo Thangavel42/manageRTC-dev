@@ -257,10 +257,11 @@ export const useProjectsREST = () => {
       const response: ApiResponse<Project> = await get(`/projects/${projectId}`);
 
       if (response.success && response.data) {
-        // Combine team members and team leaders
+        // Combine team members, team leaders, and project managers
         const allMembers = [
           ...(response.data.teamMembers || []),
           ...(response.data.teamLeader || []),
+          ...(response.data.projectManager || []),
         ];
 
         // Remove duplicates based on _id or string value
