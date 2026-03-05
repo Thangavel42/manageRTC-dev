@@ -655,14 +655,7 @@ const TaskBoard = () => {
           return 'Please select at least one assignee';
         break;
       case 'taskDueDate':
-        if (!value) return 'Due date is required';
-        // Get current project
-        const currentProject = projects.find(
-          (p) => p._id === selectedProject || p.projectId === selectedProject
-        );
-        if (currentProject?.endDate && dayjs(value).isAfter(dayjs(currentProject.endDate))) {
-          return `Due date cannot exceed project end date (${dayjs(currentProject.endDate).format('DD-MM-YYYY')})`;
-        }
+        // Due date is optional - no validation needed
         break;
     }
     return '';
@@ -850,14 +843,7 @@ const TaskBoard = () => {
           return 'Please select at least one assignee';
         break;
       case 'taskDueDate':
-        if (!value) return 'Due date is required';
-        // Get current project
-        const currentProject = projects.find(
-          (p) => p._id === selectedProject || p.projectId === selectedProject
-        );
-        if (currentProject?.endDate && dayjs(value).isAfter(dayjs(currentProject.endDate))) {
-          return `Due date cannot exceed project end date (${dayjs(currentProject.endDate).format('DD-MM-YYYY')})`;
-        }
+        // Due date is optional - no validation needed
         break;
     }
     return '';
@@ -1865,7 +1851,7 @@ const TaskBoard = () => {
                   <div className="col-12">
                     <div className="mb-3">
                       <label className="form-label">
-                        Due Date <span className="text-danger">*</span>
+                        Due Date
                       </label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
@@ -2096,7 +2082,7 @@ const TaskBoard = () => {
                 <div className="col-12">
                   <div className="mb-3">
                     <label className="form-label">
-                      Due Date <span className="text-danger">*</span>
+                      Due Date
                     </label>
                     <div className="input-icon-end position-relative">
                       <DatePicker
@@ -2534,10 +2520,10 @@ const TaskBoard = () => {
                       <input
                         type="text"
                         className={`form-control form-control-sm ${confirmBoardName &&
-                            confirmBoardName.trim().toLowerCase() !==
-                            deletingBoard.name.trim().toLowerCase()
-                            ? 'is-invalid'
-                            : ''
+                          confirmBoardName.trim().toLowerCase() !==
+                          deletingBoard.name.trim().toLowerCase()
+                          ? 'is-invalid'
+                          : ''
                           } ${confirmBoardName.trim().toLowerCase() ===
                             deletingBoard.name.trim().toLowerCase()
                             ? 'is-valid'
@@ -2626,10 +2612,10 @@ const TaskBoard = () => {
                       <input
                         type="text"
                         className={`form-control form-control-sm ${confirmTaskName &&
-                            confirmTaskName.trim().toLowerCase() !==
-                            deletingTask.title.trim().toLowerCase()
-                            ? 'is-invalid'
-                            : ''
+                          confirmTaskName.trim().toLowerCase() !==
+                          deletingTask.title.trim().toLowerCase()
+                          ? 'is-invalid'
+                          : ''
                           } ${confirmTaskName.trim().toLowerCase() ===
                             deletingTask.title.trim().toLowerCase()
                             ? 'is-valid'
