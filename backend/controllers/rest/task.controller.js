@@ -6,19 +6,19 @@
 import mongoose from 'mongoose';
 import { getTenantCollections } from '../../config/db.js';
 import {
-  asyncHandler,
-  buildForbiddenError,
-  buildNotFoundError,
-  buildValidationError,
+    asyncHandler,
+    buildForbiddenError,
+    buildNotFoundError,
+    buildValidationError
 } from '../../middleware/errorHandler.js';
 import Task from '../../models/task/task.schema.js';
 import TaskStatus from '../../models/task/taskstatus.schema.js';
 import {
-  buildSearchFilter,
-  extractUser,
-  filterAndPaginate,
-  sendCreated,
-  sendSuccess,
+    buildSearchFilter,
+    extractUser,
+    filterAndPaginate,
+    sendCreated,
+    sendSuccess
 } from '../../utils/apiResponse.js';
 import { generateTaskId } from '../../utils/idGenerator.js';
 import { devLog, devWarn } from '../../utils/logger.js';
@@ -80,17 +80,35 @@ export const getTasks = asyncHandler(async (req, res) => {
   if (['employee', 'manager'].includes(user.role?.toLowerCase())) {
     const EmployeeModel = getEmployeeModel(user.companyId);
 
+    // Debug logging - to help diagnose Clerk ID mismatch issues
+    console.log(`[Task.getAllTasks] 🔍 Searching for employee:`, {
+      clerkUserId: user.userId,
+      companyId: user.companyId,
+      role: user.role,
+      requestId: req.id,
+    });
+
     // Find employee's MongoDB _id
-    const employee = await collections.employees.findOne({
+    const employee = await EmployeeModel.findOne({
       $or: [{ clerkUserId: user.userId }, { 'account.userId': user.userId }],
       isDeleted: { $ne: true },
+    });
+
+    // Debug logging - what did we find?
+    console.log(`[Task.getAllTasks] 📋 Employee lookup result:`, {
+      found: !!employee,
+      employeeId: employee?.employeeId,
+      firstName: employee?.firstName,
+      lastName: employee?.lastName,
+      storedClerkUserId: employee?.clerkUserId,
+      requestId: req.id,
     });
 
     if (!employee) {
       // ✅ SECURITY FIX: If employee record not found, return empty results
       console.warn(
         `[Security] Employee record not found for user ${user.userId} (role: ${user.role}). ` +
-          `Denying access to all tasks. RequestId: ${req.id}`
+          `Denying access to all tasks. CompanyId: ${user.companyId}. RequestId: ${req.id}`
       );
 
       return sendSuccess(res, [], 'No tasks accessible', {
