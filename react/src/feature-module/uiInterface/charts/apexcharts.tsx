@@ -364,7 +364,7 @@ const Apexchart = () => {
             show: true,
             label: "Total",
             formatter: function () {
-              return 249;
+              return '249';
             },
           },
         },

@@ -1,17 +1,16 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { all_routes } from "../../router/all_routes";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import ReactApexChart from "react-apexcharts";
-import { Nullable } from "primereact/ts-helpers";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
 import dayjs from "dayjs";
-import PredefinedDateRanges from "../../../core/common/datePicker";
+import { Nullable } from "primereact/ts-helpers";
+import React, { useEffect, useState } from "react";
+import ReactApexChart from "react-apexcharts";
+import { Link } from "react-router-dom";
+import "slick-carousel/slick/slick-theme.css";
+import "slick-carousel/slick/slick.css";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useEffect } from "react";
-import { useSocket } from "../../../SocketContext";
+import PredefinedDateRanges from "../../../core/common/datePicker";
 import Footer from "../../../core/common/footer";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import { useSocket } from "../../../SocketContext";
+import { all_routes } from "../../router/all_routes";
 
 // Type definitions for dashboard data arrays
 interface CompanyLead {
@@ -92,7 +91,6 @@ const LeadsDasboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all",
         horizontal: false,
-        borderRadius: 4,
       },
     },
     series: [
@@ -218,7 +216,6 @@ const LeadsDasboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all",
         horizontal: false,
-        borderRadius: 4,
       },
     },
     series: [
@@ -1828,9 +1825,8 @@ const LeadsDasboard = () => {
                           (year) => (
                             <li key={year}>
                               <button
-                                className={`dropdown-item${
-                                  selectedPipelineYear === year ? " active" : ""
-                                }`}
+                                className={`dropdown-item${selectedPipelineYear === year ? " active" : ""
+                                  }`}
                                 onClick={() => setSelectedPipelineYear(year)}
                               >
                                 {year}
@@ -1921,8 +1917,8 @@ const LeadsDasboard = () => {
                         {newLeadsDashboardFilter === "week"
                           ? "This Week"
                           : newLeadsDashboardFilter === "month"
-                          ? "This Month"
-                          : "This Year"}
+                            ? "This Month"
+                            : "This Year"}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
@@ -1993,8 +1989,8 @@ const LeadsDasboard = () => {
                         {lostLeadsReasonFilter === "thisMonth"
                           ? "This Month"
                           : lostLeadsReasonFilter === "thisWeek"
-                          ? "This Week"
-                          : "Last Week"}
+                            ? "This Week"
+                            : "Last Week"}
                       </Link>
                       <ul className="dropdown-menu dropdown-menu-end p-3">
                         <li>
@@ -2037,7 +2033,7 @@ const LeadsDasboard = () => {
                 <div className="card-body py-0">
                   <div>
                     {dashboardData?.lostLeadsByReason &&
-                    Object.keys(dashboardData.lostLeadsByReason).length > 0 ? (
+                      Object.keys(dashboardData.lostLeadsByReason).length > 0 ? (
                       (() => {
                         // Check if we have "No Data" indicator
                         const hasNoData =
@@ -2125,8 +2121,8 @@ const LeadsDasboard = () => {
                         {leadsByCompaniesFilter === "thisMonth"
                           ? "This Month"
                           : leadsByCompaniesFilter === "thisWeek"
-                          ? "This Week"
-                          : "Last Week"}
+                            ? "This Week"
+                            : "Last Week"}
                       </Link>
                       <ul className="dropdown-menu dropdown-menu-end p-3">
                         <li>
@@ -2169,7 +2165,7 @@ const LeadsDasboard = () => {
                 <div className="card-body">
                   <div>
                     {dashboardData?.leadsByCompanies &&
-                    dashboardData.leadsByCompanies.length > 0 ? (
+                      dashboardData.leadsByCompanies.length > 0 ? (
                       dashboardData.leadsByCompanies.map(
                         (company: any, index: number) => (
                           <div
@@ -2183,9 +2179,8 @@ const LeadsDasboard = () => {
                                   className="avatar avatar-md rounded-circle bg-gray-100 flex-shrink-0 me-2"
                                 >
                                   <ImageWithBasePath
-                                    src={`assets/img/company/company-${
-                                      24 + index
-                                    }.svg`}
+                                    src={`assets/img/company/company-${24 + index
+                                      }.svg`}
                                     className="w-auto h-auto"
                                     alt="Img"
                                   />
@@ -2200,17 +2195,16 @@ const LeadsDasboard = () => {
                                 </div>
                               </div>
                               <span
-                                className={`badge d-inline-flex align-items-center ${
-                                  company.status === "Closed"
+                                className={`badge d-inline-flex align-items-center ${company.status === "Closed"
                                     ? "badge-success"
                                     : company.status === "Contacted"
-                                    ? "badge-secondary"
-                                    : company.status === "Lost"
-                                    ? "badge-danger"
-                                    : company.status === "Opportunity"
-                                    ? "badge-warning"
-                                    : "badge-purple"
-                                }`}
+                                      ? "badge-secondary"
+                                      : company.status === "Lost"
+                                        ? "badge-danger"
+                                        : company.status === "Opportunity"
+                                          ? "badge-warning"
+                                          : "badge-purple"
+                                  }`}
                               >
                                 <i className="ti ti-point-filled me-1" />
                                 {company.status || "Not Contacted"}
@@ -2245,8 +2239,8 @@ const LeadsDasboard = () => {
                         {leadsBySourceFilter === "thisMonth"
                           ? "This Month"
                           : leadsBySourceFilter === "thisWeek"
-                          ? "This Week"
-                          : "Last Week"}
+                            ? "This Week"
+                            : "Last Week"}
                       </Link>
                       <ul className="dropdown-menu dropdown-menu-end p-3">
                         <li>
@@ -2288,14 +2282,14 @@ const LeadsDasboard = () => {
                 </div>
                 <div className="card-body">
                   {donutchart2.series &&
-                  donutchart2.labels &&
-                  Array.isArray(donutchart2.series) &&
-                  Array.isArray(donutchart2.labels) &&
-                  donutchart2.series.length > 0 &&
-                  donutchart2.labels.length > 0 &&
-                  donutchart2.series.every(
-                    (val: any) => typeof val === "number"
-                  ) ? (
+                    donutchart2.labels &&
+                    Array.isArray(donutchart2.series) &&
+                    Array.isArray(donutchart2.labels) &&
+                    donutchart2.series.length > 0 &&
+                    donutchart2.labels.length > 0 &&
+                    donutchart2.series.every(
+                      (val: any) => typeof val === "number"
+                    ) ? (
                     <ReactApexChart
                       id="donut-chart-2"
                       key={`donut-chart-2-${Date.now()}`}
@@ -2315,8 +2309,8 @@ const LeadsDasboard = () => {
                   <div>
                     <h6 className="mb-3">Status</h6>
                     {dashboardData?.leadsBySource &&
-                    Array.isArray(dashboardData.leadsBySource) &&
-                    dashboardData.leadsBySource.length > 0 ? (
+                      Array.isArray(dashboardData.leadsBySource) &&
+                      dashboardData.leadsBySource.length > 0 ? (
                       (() => {
                         console.log(
                           "[LeadDashboard] Rendering leadsBySource status section with data:",
@@ -2549,20 +2543,18 @@ const LeadsDasboard = () => {
                   {dashboardData?.recentActivities && dashboardData.recentActivities.length > 0 ? (
                     dashboardData.recentActivities.map((activity: any, index: number) => (
                       <div key={index} className="d-flex align-items-start">
-                        <div className={`avatar avatar-md avatar-rounded ${
-                          activity.type === 'call' ? 'bg-success' :
-                          activity.type === 'message' ? 'bg-info' :
-                          activity.type === 'meeting' ? 'bg-purple' :
-                          activity.type === 'email' ? 'bg-warning' :
-                          'bg-secondary'
-                        } flex-shrink-0`}>
-                          <i className={`ti ${
-                            activity.type === 'call' ? 'ti-phone' :
-                            activity.type === 'message' ? 'ti-message-circle-2' :
-                            activity.type === 'meeting' ? 'ti-user-circle' :
-                            activity.type === 'email' ? 'ti-mail' :
-                            'ti-activity'
-                          } fs-20`} />
+                        <div className={`avatar avatar-md avatar-rounded ${activity.type === 'call' ? 'bg-success' :
+                            activity.type === 'message' ? 'bg-info' :
+                              activity.type === 'meeting' ? 'bg-purple' :
+                                activity.type === 'email' ? 'bg-warning' :
+                                  'bg-secondary'
+                          } flex-shrink-0`}>
+                          <i className={`ti ${activity.type === 'call' ? 'ti-phone' :
+                              activity.type === 'message' ? 'ti-message-circle-2' :
+                                activity.type === 'meeting' ? 'ti-user-circle' :
+                                  activity.type === 'email' ? 'ti-mail' :
+                                    'ti-activity'
+                            } fs-20`} />
                         </div>
                         <div className={`flex-fill ps-3 ${index < dashboardData.recentActivities.length - 1 ? 'pb-4' : ''} timeline-flow`}>
                           <p className="fw-medium text-gray-9 mb-1">
@@ -2570,7 +2562,7 @@ const LeadsDasboard = () => {
                               {activity.description || activity.title || 'Activity'}
                             </Link>
                           </p>
-                          <span>{activity.time || new Date(activity.createdAt || activity.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          <span>{activity.time || new Date(activity.createdAt || activity.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       </div>
                     ))
@@ -2608,7 +2600,7 @@ const LeadsDasboard = () => {
                         </div>
                         <div className="ms-2">
                           <h6 className="fs-14 fw-medium text-truncate mb-1">
-                            New lead: {lead.name || lead.firstName || 'Unknown'} 
+                            New lead: {lead.name || lead.firstName || 'Unknown'}
                             {lead.company && ` from ${lead.company}`}
                           </h6>
                           <p className="fs-13 mb-0">
@@ -2648,8 +2640,8 @@ const LeadsDasboard = () => {
                         {topCountriesFilter === "thisMonth"
                           ? "This Month"
                           : topCountriesFilter === "thisWeek"
-                          ? "This Week"
-                          : "Last Week"}
+                            ? "This Week"
+                            : "Last Week"}
                       </Link>
                       <ul className="dropdown-menu dropdown-menu-end p-3">
                         <li>
@@ -2694,7 +2686,7 @@ const LeadsDasboard = () => {
                     <div className="col-xxl-5 col-sm-6">
                       <div className="pe-3 border-end">
                         {dashboardData?.topCountries &&
-                        dashboardData.topCountries.length > 0 ? (
+                          dashboardData.topCountries.length > 0 ? (
                           (() => {
                             // Check if we have "No Data" indicator
                             const hasNoData = dashboardData.topCountries.some(
@@ -2776,14 +2768,14 @@ const LeadsDasboard = () => {
                     </div>
                     <div className="col-xxl-7 col-sm-6">
                       {donutchart3.series &&
-                      donutchart3.labels &&
-                      Array.isArray(donutchart3.series) &&
-                      Array.isArray(donutchart3.labels) &&
-                      donutchart3.series.length > 0 &&
-                      donutchart3.labels.length > 0 &&
-                      donutchart3.series.every(
-                        (val: any) => typeof val === "number"
-                      ) ? (
+                        donutchart3.labels &&
+                        Array.isArray(donutchart3.series) &&
+                        Array.isArray(donutchart3.labels) &&
+                        donutchart3.series.length > 0 &&
+                        donutchart3.labels.length > 0 &&
+                        donutchart3.series.every(
+                          (val: any) => typeof val === "number"
+                        ) ? (
                         <ReactApexChart
                           id="donut-chart-3"
                           key={`donut-chart-3-${Date.now()}`}
@@ -2834,14 +2826,14 @@ const LeadsDasboard = () => {
                       </thead>
                       <tbody>
                         {dashboardData?.recentLeads &&
-                        dashboardData.recentLeads.length > 0 ? (
+                          dashboardData.recentLeads.length > 0 ? (
                           dashboardData.recentLeads.map(
                             (lead: any, index: number) => {
                               // Format the date
                               const createdDate = lead.createdAt
                                 ? new Date(lead.createdAt).toLocaleDateString(
-                                    "en-GB"
-                                  )
+                                  "en-GB"
+                                )
                                 : "N/A";
 
                               // Get badge class based on stage
