@@ -105,7 +105,6 @@ const getUserProjectScope = async (user, collections) => {
  * @desc    Get all time entries with pagination and filtering
  * @route   GET /api/timetracking
  * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leaders, Team Members)
- *           Own entries are always visible regardless of role or project assignment
  */
 export const getTimeEntries = asyncHandler(async (req, res) => {
   const { page, limit, userId, projectId, taskId, status, billable, search, sortBy, order, startDate, endDate } = req.query;
@@ -115,11 +114,8 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
   // Determine access scope
   const scope = await getUserProjectScope(user, collections);
 
-  // Check if requesting own entries (always allowed)
-  const isRequestingOwnEntries = !userId || userId === user.userId;
-
-  // Only check project assignment if NOT requesting own entries AND not admin
-  if (!scope.isAdmin && !isRequestingOwnEntries && scope.projectIds.length === 0) {
+  // Check if user has any project access (as PM, TL, or team member)
+  if (!scope.isAdmin && scope.projectIds.length === 0) {
     return res.status(403).json({
       success: false,
       error: {
@@ -131,11 +127,7 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
 
   // Build filters object
   const filters = {};
-  if (isRequestingOwnEntries) {
-    filters.userId = user.userId; // Always add userId filter for own entries
-  } else if (userId) {
-    filters.userId = userId;
-  }
+  if (userId) filters.userId = userId;
   if (taskId) filters.taskId = taskId;
   if (status) filters.status = status;
   if (billable !== undefined) filters.billable = billable;
@@ -147,9 +139,8 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
     filters.sortOrder = order || 'desc';
   }
 
-  // Only apply project scoping if NOT requesting own entries
-  if (!scope.isAdmin && !isRequestingOwnEntries) {
-    // Non-admin users viewing OTHER users' entries: scope to their assigned projects only
+  if (!scope.isAdmin) {
+    // Non-admin users (PM, TL, or team member): scope to their assigned projects only
     if (projectId) {
       // Validate the requested projectId is in their scope
       const isAuthorized = scope.projectIds.some(
@@ -169,8 +160,8 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
       // No specific project requested — return entries for all assigned projects
       filters.projectIds = scope.projectIds.map(id => id.toString());
     }
-  } else if (scope.isAdmin || isRequestingOwnEntries) {
-    // Admin/HR OR requesting own entries: honour incoming projectId filter as-is
+  } else {
+    // Admin/HR: honour incoming projectId filter as-is
     if (projectId) filters.projectId = projectId;
   }
 
@@ -262,7 +253,7 @@ export const getTimeEntriesByUser = asyncHandler(async (req, res) => {
 /**
  * @desc    Get time entries by project
  * @route   GET /api/timetracking/project/:projectId
- * @access  Private (All authenticated users - own entries always visible)
+ * @access  Private (All authenticated users - must be assigned to the project)
  */
 export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
   const { projectId } = req.params;
@@ -278,11 +269,8 @@ export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
   // Check if user is admin/HR/superadmin
   const isAdmin = ['admin', 'hr', 'superadmin'].includes(user.role?.toLowerCase());
 
-  // Check if requesting own entries (always allowed)
-  const isRequestingOwnEntries = !userId || userId === user.userId;
-
-  if (!isAdmin && !isRequestingOwnEntries) {
-    // For non-admin users requesting OTHER users' entries: verify project assignment
+  if (!isAdmin) {
+    // For non-admin users: verify they are assigned to this project
     const employee = await collections.employees.findOne(
       {
         $or: [
@@ -335,14 +323,10 @@ export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
     }
   }
 
-  // Build filters - if requesting own entries, automatically add userId filter
+  // Build filters
   const filters = {};
   if (status) filters.status = status;
-  if (isRequestingOwnEntries) {
-    filters.userId = user.userId; // Always add userId filter for own entries
-  } else if (userId) {
-    filters.userId = userId;
-  }
+  if (userId) filters.userId = userId;
   if (startDate) filters.startDate = startDate;
   if (endDate) filters.endDate = endDate;
 
@@ -358,11 +342,11 @@ export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
 /**
  * @desc    Get time entries by task
  * @route   GET /api/timetracking/task/:taskId
- * @access  Private (All authenticated users - own entries always visible)
+ * @access  Private (All authenticated users - must be assigned to the task's project)
  */
 export const getTimeEntriesByTask = asyncHandler(async (req, res) => {
   const { taskId } = req.params;
-  const { status, userId } = req.query;
+  const { status } = req.query;
   const user = extractUser(req);
   const collections = getTenantCollections(user.companyId);
 
@@ -394,11 +378,8 @@ export const getTimeEntriesByTask = asyncHandler(async (req, res) => {
   // Check if user is admin/HR/superadmin
   const isAdmin = ['admin', 'hr', 'superadmin'].includes(user.role?.toLowerCase());
 
-  // Check if requesting own entries (always allowed)
-  const isRequestingOwnEntries = !userId || userId === user.userId;
-
-  if (!isAdmin && !isRequestingOwnEntries) {
-    // For non-admin users requesting OTHER users' entries: verify project assignment
+  if (!isAdmin) {
+    // For non-admin users: verify they are assigned to this task's project
     const employee = await collections.employees.findOne(
       {
         $or: [
@@ -451,14 +432,9 @@ export const getTimeEntriesByTask = asyncHandler(async (req, res) => {
     }
   }
 
-  // Build filters - if requesting own entries, automatically add userId filter
+  // Build filters
   const filters = {};
   if (status) filters.status = status;
-  if (isRequestingOwnEntries) {
-    filters.userId = user.userId; // Always add userId filter for own entries
-  } else if (userId) {
-    filters.userId = userId;
-  }
 
   const result = await timeTrackingService.getTimeEntriesByTask(user.companyId, taskId, filters);
 
