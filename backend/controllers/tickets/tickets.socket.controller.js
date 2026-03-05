@@ -1,7 +1,7 @@
-import { devLog, devDebug, devWarn, devError } from '../../utils/logger.js';
 import { getTenantCollections } from '../../config/db.js';
-import * as ticketsService from '../../services/tickets/tickets.services.js';
 import * as ticketCategoriesService from '../../services/tickets/ticketCategories.service.js';
+import * as ticketsService from '../../services/tickets/tickets.services.js';
+import { devError, devLog, devWarn } from '../../utils/logger.js';
 
 const ticketsSocketController = (socket, io) => {
   // Get current employee data (for ticket creation)
@@ -9,15 +9,87 @@ const ticketsSocketController = (socket, io) => {
     try {
       const collections = getTenantCollections(socket.companyId);
       const clerkUserId = socket.userId;
+      const userEmail = socket.clerkUser?.primaryEmailAddress?.emailAddress;
+      const userRole = socket.role || 'employee';
 
       devLog('Fetching current employee for clerkUserId:', clerkUserId);
+      devLog('User email:', userEmail);
+      devLog('User role:', userRole);
       devLog('Socket companyId:', socket.companyId);
 
-      // Find employee by clerkUserId
-      const employee = await collections.employees.findOne(
+      // Try multiple lookup strategies to find the employee
+      let employee = null;
+
+      // Strategy 1: Find by clerkUserId (preferred method)
+      employee = await collections.employees.findOne(
         { clerkUserId: clerkUserId },
         { projection: { _id: 1, employeeId: 1, firstName: 1, lastName: 1, email: 1, avatarUrl: 1, avatar: 1, department: 1 } }
       );
+
+      // Strategy 2: If not found by clerkUserId, try by email
+      if (!employee && userEmail) {
+        devWarn('Employee not found by clerkUserId, trying email lookup:', userEmail);
+        employee = await collections.employees.findOne(
+          { email: userEmail },
+          { projection: { _id: 1, employeeId: 1, firstName: 1, lastName: 1, email: 1, avatarUrl: 1, avatar: 1, department: 1 } }
+        );
+
+        // If found by email, update the employee record with clerkUserId for future lookups
+        if (employee) {
+          devLog('Employee found by email, updating clerkUserId field');
+          await collections.employees.updateOne(
+            { _id: employee._id },
+            { $set: { clerkUserId: clerkUserId } }
+          );
+          devLog('Updated employee record with clerkUserId:', clerkUserId);
+        }
+      }
+
+      // Strategy 3: For admin/superadmin users without employee records, auto-create one
+      const isAdmin = ['admin', 'superadmin'].includes(userRole);
+      if (!employee && isAdmin && userEmail) {
+        devLog('Admin/Superadmin user without employee record. Creating placeholder employee...');
+
+        // Get user info from Clerk
+        const clerkFirstName = socket.clerkUser?.firstName || 'Admin';
+        const clerkLastName = socket.clerkUser?.lastName || 'User';
+        const clerkAvatar = socket.clerkUser?.imageUrl || null;
+
+        // Generate a unique employee ID
+        const employeeId = `ADM-${Date.now().toString().slice(-6)}`;
+
+        // Create placeholder employee record
+        const placeholderEmployee = {
+          employeeId: employeeId,
+          clerkUserId: clerkUserId,
+          firstName: clerkFirstName,
+          lastName: clerkLastName,
+          email: userEmail,
+          avatarUrl: clerkAvatar,
+          avatar: clerkAvatar,
+          role: userRole,
+          account: {
+            role: userRole,
+            userName: userEmail,
+          },
+          employmentType: 'Full-time',
+          employmentStatus: 'Active',
+          status: 'Active',
+          joiningDate: new Date(),
+          companyId: socket.companyId,
+          isActive: true,
+          isDeleted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const result = await collections.employees.insertOne(placeholderEmployee);
+        employee = {
+          _id: result.insertedId,
+          ...placeholderEmployee,
+        };
+        devLog('✅ Created placeholder employee for admin user:', employeeId);
+      }
 
       devLog('Found employee:', employee);
 
@@ -33,10 +105,10 @@ const ticketsSocketController = (socket, io) => {
           data: employeeData
         });
       } else {
-        devError('Employee not found for clerkUserId:', clerkUserId);
+        devError('Employee not found for clerkUserId:', clerkUserId, 'or email:', userEmail);
         socket.emit('tickets/get-current-employee-response', {
           done: false,
-          error: 'Employee not found'
+          error: `Employee record not found. Please contact your administrator to link your account (${userEmail || clerkUserId})`
         });
       }
     } catch (error) {
@@ -503,15 +575,75 @@ const ticketsSocketController = (socket, io) => {
 
       // Get current employee _id from clerkUserId
       const collections = getTenantCollections(socket.companyId);
-      const currentEmployee = await collections.employees.findOne(
+      const userEmail = socket.clerkUser?.primaryEmailAddress?.emailAddress;
+      const userRole = socket.role || 'employee';
+      const isAdmin = ['admin', 'superadmin'].includes(userRole);
+
+      // Try multiple lookup strategies
+      let currentEmployee = await collections.employees.findOne(
         { clerkUserId: socket.userId },
         { projection: { _id: 1 } }
       );
 
+      // Fallback to email lookup if clerkUserId not found
+      if (!currentEmployee && userEmail) {
+        devWarn('Current employee not found by clerkUserId, trying email lookup:', userEmail);
+        currentEmployee = await collections.employees.findOne(
+          { email: userEmail },
+          { projection: { _id: 1 } }
+        );
+
+        // Update clerkUserId if found by email
+        if (currentEmployee) {
+          await collections.employees.updateOne(
+            { _id: currentEmployee._id },
+            { $set: { clerkUserId: socket.userId } }
+          );
+        }
+      }
+
+      // For admin/superadmin users without employee records, auto-create one
+      if (!currentEmployee && isAdmin && userEmail) {
+        devLog('Admin/Superadmin user without employee record. Creating placeholder employee...');
+
+        const clerkFirstName = socket.clerkUser?.firstName || 'Admin';
+        const clerkLastName = socket.clerkUser?.lastName || 'User';
+        const clerkAvatar = socket.clerkUser?.imageUrl || null;
+        const employeeId = `ADM-${Date.now().toString().slice(-6)}`;
+
+        const placeholderEmployee = {
+          employeeId: employeeId,
+          clerkUserId: socket.userId,
+          firstName: clerkFirstName,
+          lastName: clerkLastName,
+          email: userEmail,
+          avatarUrl: clerkAvatar,
+          avatar: clerkAvatar,
+          role: userRole,
+          account: {
+            role: userRole,
+            userName: userEmail,
+          },
+          employmentType: 'Full-time',
+          employmentStatus: 'Active',
+          status: 'Active',
+          joiningDate: new Date(),
+          companyId: socket.companyId,
+          isActive: true,
+          isDeleted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const result = await collections.employees.insertOne(placeholderEmployee);
+        currentEmployee = { _id: result.insertedId, ...placeholderEmployee };
+        devLog('✅ Created placeholder employee for admin user:', employeeId);
+      }
+
       if (!currentEmployee) {
         socket.emit('tickets/assign-ticket-response', {
           done: false,
-          error: 'Current employee not found',
+          error: `Current employee not found. Please contact administrator to link your account (${userEmail || socket.userId})`,
         });
         return;
       }
@@ -548,13 +680,15 @@ const ticketsSocketController = (socket, io) => {
     try {
       const userRole = socket.role || 'employee';
       const userId = socket.userId;
+      const userEmail = socket.clerkUser?.primaryEmailAddress?.emailAddress;
 
-      devLog('Getting tickets for user:', { userId, userRole, data });
+      devLog('Getting tickets for user:', { userId, userEmail, userRole, data });
 
       const result = await ticketsService.getTicketsByUser(
         socket.companyId,
         userRole,
         userId,
+        userEmail,
         data
       );
 
@@ -575,11 +709,13 @@ const ticketsSocketController = (socket, io) => {
     try {
       const userRole = socket.role || 'employee';
       const userId = socket.userId;
+      const userEmail = socket.clerkUser?.primaryEmailAddress?.emailAddress;
 
       const result = await ticketsService.getTicketTabCounts(
         socket.companyId,
         userRole,
-        userId
+        userId,
+        userEmail
       );
 
       socket.emit('tickets/get-tab-counts-response', result);
