@@ -114,24 +114,25 @@ export const commonSchemas = {
   }),
 
   // Date validation (DD-MM-YYYY or ISO 8601 format)
-  ddmmyyyy: Joi.alternatives().try(
-    Joi.string()
-      .custom((value, helpers) => {
-        if (value === '' || value === null) return value;
-        // Try DD-MM-YYYY format
-        const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-        if (dt.isValid) return value;
-        // Try ISO format (ISO 8601 strings from MongoDB)
-        const dtIso = DateTime.fromISO(value, { zone: 'utc' });
-        if (dtIso.isValid) return value;
-        return helpers.message('Date must be in DD-MM-YYYY format');
-      })
-      .messages({
-        'string.base': 'Date must be a string in DD-MM-YYYY format',
-      }),
-    Joi.date().iso()
-  )
-  .allow('', null),
+  ddmmyyyy: Joi.alternatives()
+    .try(
+      Joi.string()
+        .custom((value, helpers) => {
+          if (value === '' || value === null) return value;
+          // Try DD-MM-YYYY format
+          const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
+          if (dt.isValid) return value;
+          // Try ISO format (ISO 8601 strings from MongoDB)
+          const dtIso = DateTime.fromISO(value, { zone: 'utc' });
+          if (dtIso.isValid) return value;
+          return helpers.message('Date must be in DD-MM-YYYY format');
+        })
+        .messages({
+          'string.base': 'Date must be a string in DD-MM-YYYY format',
+        }),
+      Joi.date().iso()
+    )
+    .allow('', null),
 
   // Pagination
   pagination: {
@@ -169,19 +170,22 @@ export const employeeSchemas = {
     phone: commonSchemas.phone.optional(),
 
     // Support both flat and nested structures
-    dateOfBirth: commonSchemas.ddmmyyyy.optional().allow('', null).custom((value, helpers) => {
-      if (value === '' || value === null) return value;
-      const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-      if (!dt.isValid) return value;
-      if (dt > DateTime.utc().startOf('day')) {
-        return helpers.message('Date of birth cannot be in the future');
-      }
-      const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
-      if (dt > minAgeDate) {
-        return helpers.message('Employee must be at least 15 years old');
-      }
-      return value;
-    }),
+    dateOfBirth: commonSchemas.ddmmyyyy
+      .optional()
+      .allow('', null)
+      .custom((value, helpers) => {
+        if (value === '' || value === null) return value;
+        const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
+        if (!dt.isValid) return value;
+        if (dt > DateTime.utc().startOf('day')) {
+          return helpers.message('Date of birth cannot be in the future');
+        }
+        const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
+        if (dt > minAgeDate) {
+          return helpers.message('Employee must be at least 15 years old');
+        }
+        return value;
+      }),
 
     dateOfJoining: commonSchemas.ddmmyyyy.optional().allow('', null),
 
@@ -282,19 +286,22 @@ export const employeeSchemas = {
     lastName: Joi.string().min(1).max(50).trim().optional(),
     email: commonSchemas.email.optional(),
     phone: commonSchemas.phone.optional(),
-    dateOfBirth: commonSchemas.ddmmyyyy.optional().allow('', null).custom((value, helpers) => {
-      if (value === '' || value === null) return value;
-      const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
-      if (!dt.isValid) return value;
-      if (dt > DateTime.utc().startOf('day')) {
-        return helpers.message('Date of birth cannot be in the future');
-      }
-      const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
-      if (dt > minAgeDate) {
-        return helpers.message('Employee must be at least 15 years old');
-      }
-      return value;
-    }),
+    dateOfBirth: commonSchemas.ddmmyyyy
+      .optional()
+      .allow('', null)
+      .custom((value, helpers) => {
+        if (value === '' || value === null) return value;
+        const dt = DateTime.fromFormat(value, 'dd-MM-yyyy', { zone: 'utc' });
+        if (!dt.isValid) return value;
+        if (dt > DateTime.utc().startOf('day')) {
+          return helpers.message('Date of birth cannot be in the future');
+        }
+        const minAgeDate = DateTime.utc().minus({ years: 15 }).startOf('day');
+        if (dt > minAgeDate) {
+          return helpers.message('Employee must be at least 15 years old');
+        }
+        return value;
+      }),
     gender: Joi.string().valid('Male', 'Female', 'Other', 'Prefer not to say').optional(),
     address: Joi.object({
       street: Joi.string().max(200).allow('').optional(),
@@ -357,27 +364,20 @@ export const employeeSchemas = {
         .messages({
           'string.pattern.base': 'Account number must be 8-18 digits',
         }),
-      bankName: Joi.string()
-        .min(3)
-        .allow('')
-        .optional()
-        .messages({
-          'string.min': 'Bank name must be at least 3 characters',
-        }),
-      branch: Joi.string()
-        .min(2)
-        .allow('')
-        .optional()
-        .messages({
-          'string.min': 'Branch name must be at least 2 characters',
-        }),
+      bankName: Joi.string().min(3).allow('').optional().messages({
+        'string.min': 'Bank name must be at least 3 characters',
+      }),
+      branch: Joi.string().min(2).allow('').optional().messages({
+        'string.min': 'Branch name must be at least 2 characters',
+      }),
       ifscCode: Joi.string()
         .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
         .uppercase()
         .allow('')
         .optional()
         .messages({
-          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+          'string.pattern.base':
+            'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
         }),
       accountType: Joi.string()
         .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
@@ -393,68 +393,69 @@ export const employeeSchemas = {
         .messages({
           'string.pattern.base': 'Account number must be 8-18 digits',
         }),
-      bankName: Joi.string()
-        .min(3)
-        .allow('')
-        .optional()
-        .messages({
-          'string.min': 'Bank name must be at least 3 characters',
-        }),
-      branch: Joi.string()
-        .min(2)
-        .allow('')
-        .optional()
-        .messages({
-          'string.min': 'Branch name must be at least 2 characters',
-        }),
+      bankName: Joi.string().min(3).allow('').optional().messages({
+        'string.min': 'Bank name must be at least 3 characters',
+      }),
+      branch: Joi.string().min(2).allow('').optional().messages({
+        'string.min': 'Branch name must be at least 2 characters',
+      }),
       ifscCode: Joi.string()
         .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
         .uppercase()
         .allow('')
         .optional()
         .messages({
-          'string.pattern.base': 'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
+          'string.pattern.base':
+            'Invalid IFSC format (e.g., SBIN0001234). Must be 11 characters: 4 letters + 0 + 6 alphanumeric',
         }),
       accountType: Joi.string()
         .valid('Savings Account', 'Salary Account', 'NRI Account', 'Savings', 'Current')
         .optional(),
     }).optional(),
     // Emergency contacts
-    emergencyContacts: Joi.array().items(
-      Joi.object({
-        name: Joi.string().allow('').optional(),
-        relationship: Joi.string().allow('').optional(),
-        phone: Joi.array().items(Joi.string().allow('')).optional(),
-      }).unknown(true)
-    ).optional(),
+    emergencyContacts: Joi.array()
+      .items(
+        Joi.object({
+          name: Joi.string().allow('').optional(),
+          relationship: Joi.string().allow('').optional(),
+          phone: Joi.array().items(Joi.string().allow('')).optional(),
+        }).unknown(true)
+      )
+      .optional(),
     // Family information
-    family: Joi.array().items(
-      Joi.object({
-        Name: Joi.string().allow('').optional(),
-        relationship: Joi.string().allow('').optional(),
-        phone: Joi.string().allow('').optional(),
-      }).unknown(true)
-    ).optional(),
+    family: Joi.array()
+      .items(
+        Joi.object({
+          Name: Joi.string().allow('').optional(),
+          relationship: Joi.string().allow('').optional(),
+          phone: Joi.string().allow('').optional(),
+        }).unknown(true)
+      )
+      .optional(),
     // Education information
-    education: Joi.array().items(
-      Joi.object({
-        degree: Joi.string().allow('').optional(),
-        institution: Joi.string().allow('').optional(),
-        startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
-        endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
-        grade: Joi.string().allow('').optional(),
-      }).unknown(true)
-    ).optional(),
+    education: Joi.array()
+      .items(
+        Joi.object({
+          degree: Joi.string().allow('').optional(),
+          institution: Joi.string().allow('').optional(),
+          startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+          endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+          grade: Joi.string().allow('').optional(),
+        }).unknown(true)
+      )
+      .optional(),
     // Experience information
-    experience: Joi.array().items(
-      Joi.object({
-        previousCompany: Joi.string().allow('').optional(),
-        designation: Joi.string().allow('').optional(),
-        startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
-        endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
-        currentlyWorking: Joi.boolean().optional(),
-      }).unknown(true)
-    ).optional(),
+    experience: Joi.array()
+      .items(
+        Joi.object({
+          previousCompany: Joi.string().allow('').optional(),
+          designation: Joi.string().allow('').optional(),
+          startDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+          endDate: commonSchemas.ddmmyyyy.optional().allow('', null),
+          currentlyWorking: Joi.boolean().optional(),
+        }).unknown(true)
+      )
+      .optional(),
     // Account information
     account: Joi.object({
       role: Joi.string().allow('').optional(),
@@ -501,9 +502,7 @@ export const employeeSchemas = {
     status: Joi.string()
       .valid('Active', 'Probation', 'Resigned', 'Terminated', 'On Leave')
       .optional(),
-    role: Joi.string()
-      .valid('employee', 'manager', 'hr', 'admin', 'superadmin')
-      .optional(),
+    role: Joi.string().valid('employee', 'manager', 'hr', 'admin', 'superadmin').optional(),
     reportingManagerList: Joi.boolean().optional(),
     excludeEmployeeId: commonSchemas.objectId.optional(),
     sortBy: Joi.string()
@@ -626,7 +625,7 @@ export const taskSchemas = {
     title: Joi.string().min(3).max(200).trim().optional(),
     description: Joi.string().max(1000).allow('').optional(),
     assignee: Joi.array().items(commonSchemas.objectId).min(1).optional(),
-    status: Joi.string().valid('To Do', 'In Progress', 'Review', 'Completed').optional(),
+    status: Joi.string().valid('Active', 'Inactive').optional(),
     priority: Joi.string().valid('High', 'Medium', 'Low').optional(),
     startDate: commonSchemas.isoDate.optional(),
     dueDate: commonSchemas.isoDate.optional(),
@@ -640,7 +639,7 @@ export const taskSchemas = {
     ...commonSchemas.pagination,
     project: commonSchemas.objectId.optional(),
     assignee: commonSchemas.objectId.optional(),
-    status: Joi.string().valid('To Do', 'In Progress', 'Review', 'Completed').optional(),
+    status: Joi.string().valid('Active', 'Inactive').optional(),
     priority: Joi.string().valid('High', 'Medium', 'Low').optional(),
     sortBy: Joi.string().valid('title', 'dueDate', 'priority', 'createdAt').default('createdAt'),
     order: Joi.string().valid('asc', 'desc').default('desc'),
@@ -1259,33 +1258,40 @@ export const weeklyTimesheetSchemas = {
     weekStart: commonSchemas.isoDate.required().messages({
       'any.required': 'Week start date is required',
     }),
-    entries: Joi.array().items(
-      Joi.object({
-        date: commonSchemas.isoDate.required(),
-        project: commonSchemas.objectId.optional(),
-        task: Joi.string().max(200).optional(),
-        description: Joi.string().min(5).max(500).required(),
-        hours: Joi.number().min(0.25).max(24).required(),
-        isBillable: Joi.boolean().default(false),
-      })
-    ).min(1).required().messages({
-      'array.min': 'At least one entry is required',
-      'any.required': 'Entries are required',
-    }),
+    entries: Joi.array()
+      .items(
+        Joi.object({
+          date: commonSchemas.isoDate.required(),
+          project: commonSchemas.objectId.optional(),
+          task: Joi.string().max(200).optional(),
+          description: Joi.string().min(5).max(500).required(),
+          hours: Joi.number().min(0.25).max(24).required(),
+          isBillable: Joi.boolean().default(false),
+        })
+      )
+      .min(1)
+      .required()
+      .messages({
+        'array.min': 'At least one entry is required',
+        'any.required': 'Entries are required',
+      }),
     notes: Joi.string().max(1000).allow('').optional(),
   }),
 
   update: Joi.object({
-    entries: Joi.array().items(
-      Joi.object({
-        date: commonSchemas.isoDate.required(),
-        project: commonSchemas.objectId.optional(),
-        task: Joi.string().max(200).optional(),
-        description: Joi.string().min(5).max(500).required(),
-        hours: Joi.number().min(0.25).max(24).required(),
-        isBillable: Joi.boolean().default(false),
-      })
-    ).min(1).required(),
+    entries: Joi.array()
+      .items(
+        Joi.object({
+          date: commonSchemas.isoDate.required(),
+          project: commonSchemas.objectId.optional(),
+          task: Joi.string().max(200).optional(),
+          description: Joi.string().min(5).max(500).required(),
+          hours: Joi.number().min(0.25).max(24).required(),
+          isBillable: Joi.boolean().default(false),
+        })
+      )
+      .min(1)
+      .required(),
     notes: Joi.string().max(1000).allow('').optional(),
   }),
 
@@ -1296,7 +1302,9 @@ export const weeklyTimesheetSchemas = {
 
   list: Joi.object({
     ...commonSchemas.pagination,
-    status: Joi.string().valid('draft', 'submitted', 'approved', 'rejected', 'cancelled').optional(),
+    status: Joi.string()
+      .valid('draft', 'submitted', 'approved', 'rejected', 'cancelled')
+      .optional(),
     employee: Joi.string().optional(),
     weekStart: commonSchemas.isoDate.optional(),
     weekEnd: commonSchemas.isoDate.optional(),
@@ -1327,9 +1335,12 @@ export const departmentSchemas = {
     parentDepartmentId: commonSchemas.objectId.optional().messages({
       'string.pattern.name': 'Invalid parent department ID format',
     }),
-    color: Joi.string().pattern(/^#[0-9A-Fa-f]{6}$/).optional().messages({
-      'string.pattern.base': 'Color must be a valid hex code (e.g., #FF5733)',
-    }),
+    color: Joi.string()
+      .pattern(/^#[0-9A-Fa-f]{6}$/)
+      .optional()
+      .messages({
+        'string.pattern.base': 'Color must be a valid hex code (e.g., #FF5733)',
+      }),
     location: Joi.string().max(200).allow('').optional(),
     budget: Joi.number().min(0).optional(),
     status: Joi.string().valid('Active', 'Inactive').default('Active').optional(),
@@ -1345,13 +1356,17 @@ export const departmentSchemas = {
     description: Joi.string().max(1000).allow('').optional(),
     managerId: commonSchemas.objectId.optional(),
     parentDepartmentId: commonSchemas.objectId.optional(),
-    color: Joi.string().pattern(/^#[0-9A-Fa-f]{6}$/).optional(),
+    color: Joi.string()
+      .pattern(/^#[0-9A-Fa-f]{6}$/)
+      .optional(),
     location: Joi.string().max(200).allow('').optional(),
     budget: Joi.number().min(0).optional(),
     status: Joi.string().valid('Active', 'Inactive').optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   list: Joi.object({
     ...commonSchemas.pagination,
@@ -1381,7 +1396,19 @@ export const designationSchemas = {
     code: Joi.string().min(1).max(20).trim().uppercase().optional(),
     description: Joi.string().max(1000).allow('').optional(),
     level: Joi.string()
-      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .valid(
+        'Entry',
+        'Junior',
+        'Mid',
+        'Senior',
+        'Lead',
+        'Manager',
+        'Senior Manager',
+        'Director',
+        'VP',
+        'C-Level',
+        'Executive'
+      )
       .required()
       .messages({
         'any.required': 'Designation level is required',
@@ -1421,7 +1448,19 @@ export const designationSchemas = {
     code: Joi.string().min(1).max(20).trim().uppercase().optional(),
     description: Joi.string().max(1000).allow('').optional(),
     level: Joi.string()
-      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .valid(
+        'Entry',
+        'Junior',
+        'Mid',
+        'Senior',
+        'Lead',
+        'Manager',
+        'Senior Manager',
+        'Director',
+        'VP',
+        'C-Level',
+        'Executive'
+      )
       .optional(),
     levelNumber: Joi.number().integer().min(1).max(12).optional(),
     rank: Joi.number().min(0).optional(),
@@ -1435,17 +1474,33 @@ export const designationSchemas = {
       max: Joi.number().min(0).optional(),
       median: Joi.number().min(0).optional(),
     }).optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   list: Joi.object({
     ...commonSchemas.pagination,
     level: Joi.string()
-      .valid('Entry', 'Junior', 'Mid', 'Senior', 'Lead', 'Manager', 'Senior Manager', 'Director', 'VP', 'C-Level', 'Executive')
+      .valid(
+        'Entry',
+        'Junior',
+        'Mid',
+        'Senior',
+        'Lead',
+        'Manager',
+        'Senior Manager',
+        'Director',
+        'VP',
+        'C-Level',
+        'Executive'
+      )
       .optional(),
     departmentId: commonSchemas.objectId.optional(),
-    sortBy: Joi.string().valid('title', 'code', 'level', 'levelNumber', 'createdAt').default('levelNumber'),
+    sortBy: Joi.string()
+      .valid('title', 'code', 'level', 'levelNumber', 'createdAt')
+      .default('levelNumber'),
     order: Joi.string().valid('asc', 'desc').default('asc'),
   }),
 };
@@ -1469,12 +1524,14 @@ export const policySchemas = {
       'any.required': 'Effective date is required',
     }),
     applyToAll: Joi.boolean().default(false).optional(),
-    assignTo: Joi.array().items(
-      Joi.object({
-        departmentId: commonSchemas.objectId.required(),
-        designationIds: Joi.array().items(commonSchemas.objectId).optional(),
-      })
-    ).optional(),
+    assignTo: Joi.array()
+      .items(
+        Joi.object({
+          departmentId: commonSchemas.objectId.required(),
+          designationIds: Joi.array().items(commonSchemas.objectId).optional(),
+        })
+      )
+      .optional(),
   }).custom((value, helpers) => {
     // If not applyToAll, must have at least one assignment
     if (!value.applyToAll && (!value.assignTo || value.assignTo.length === 0)) {
@@ -1499,15 +1556,19 @@ export const policySchemas = {
     policyDescription: Joi.string().min(10).max(5000).trim().optional(),
     effectiveDate: commonSchemas.isoDate.optional(),
     applyToAll: Joi.boolean().optional(),
-    assignTo: Joi.array().items(
-      Joi.object({
-        departmentId: commonSchemas.objectId.required(),
-        designationIds: Joi.array().items(commonSchemas.objectId).optional(),
-      })
-    ).optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+    assignTo: Joi.array()
+      .items(
+        Joi.object({
+          departmentId: commonSchemas.objectId.required(),
+          designationIds: Joi.array().items(commonSchemas.objectId).optional(),
+        })
+      )
+      .optional(),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   list: Joi.object({
     ...commonSchemas.pagination,
@@ -1558,25 +1619,35 @@ export const holidaySchemas = {
     isRecurring: Joi.boolean().optional(),
     type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').optional(),
     description: Joi.string().max(500).allow('').optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   bulkImport: Joi.object({
-    holidays: Joi.array().items(
-      Joi.object({
-        name: Joi.string().min(2).max(100).trim().required(),
-        date: commonSchemas.isoDate.required(),
-        year: Joi.number().integer().min(2020).max(2100).required(),
-        isRecurring: Joi.boolean().default(false).optional(),
-        type: Joi.string().valid('Public', 'Bank', 'Optional', 'Company').default('Public').optional(),
-        description: Joi.string().max(500).allow('').optional(),
-      })
-    ).min(1).max(50).required().messages({
-      'array.min': 'At least one holiday is required',
-      'array.max': 'Cannot import more than 50 holidays at once',
-      'any.required': 'Holidays array is required',
-    }),
+    holidays: Joi.array()
+      .items(
+        Joi.object({
+          name: Joi.string().min(2).max(100).trim().required(),
+          date: commonSchemas.isoDate.required(),
+          year: Joi.number().integer().min(2020).max(2100).required(),
+          isRecurring: Joi.boolean().default(false).optional(),
+          type: Joi.string()
+            .valid('Public', 'Bank', 'Optional', 'Company')
+            .default('Public')
+            .optional(),
+          description: Joi.string().max(500).allow('').optional(),
+        })
+      )
+      .min(1)
+      .max(50)
+      .required()
+      .messages({
+        'array.min': 'At least one holiday is required',
+        'array.max': 'Cannot import more than 50 holidays at once',
+        'any.required': 'Holidays array is required',
+      }),
   }),
 
   list: Joi.object({
@@ -1698,9 +1769,11 @@ export const promotionSchemas = {
     }).optional(),
     reason: Joi.string().max(500).allow('').optional(),
     notes: Joi.string().max(1000).allow('').optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   approve: Joi.object({
     comments: Joi.string().max(500).allow('').optional(),
@@ -1790,9 +1863,13 @@ export const resignationSchemas = {
       const expectedLastWorkingDate = resignation.toJSDate();
       expectedLastWorkingDate.setDate(expectedLastWorkingDate.getDate() + noticePeriodDays);
 
-      const daysDiff = Math.ceil((lastWorkingDate - resignation.toJSDate()) / (1000 * 60 * 60 * 24));
+      const daysDiff = Math.ceil(
+        (lastWorkingDate - resignation.toJSDate()) / (1000 * 60 * 60 * 24)
+      );
       if (value.isNoticePeriodServed && daysDiff < noticePeriodDays) {
-        return helpers.message(`Last working date must be at least ${noticePeriodDays} days after resignation date when notice period is served`);
+        return helpers.message(
+          `Last working date must be at least ${noticePeriodDays} days after resignation date when notice period is served`
+        );
       }
     }
 
@@ -1810,9 +1887,11 @@ export const resignationSchemas = {
     notes: Joi.string().max(2000).allow('').optional(),
     isNoticePeriodServed: Joi.boolean().optional(),
     lastWorkingDate: commonSchemas.isoDate.optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   approve: Joi.object({
     comments: Joi.string().max(500).allow('').optional(),
@@ -1833,7 +1912,9 @@ export const resignationSchemas = {
     status: Joi.string().valid('pending', 'on_notice', 'rejected', 'resigned').optional(),
     dateFrom: commonSchemas.isoDate.optional(),
     dateTo: commonSchemas.isoDate.optional(),
-    sortBy: Joi.string().valid('resignationDate', 'createdAt', 'lastWorkingDate').default('resignationDate'),
+    sortBy: Joi.string()
+      .valid('resignationDate', 'createdAt', 'lastWorkingDate')
+      .default('resignationDate'),
     order: Joi.string().valid('asc', 'desc').default('desc'),
   }),
 };
@@ -1897,9 +1978,11 @@ export const terminationSchemas = {
     }).optional(),
     exitInterviewCompleted: Joi.boolean().optional(),
     exitInterviewNotes: Joi.string().max(2000).allow('').optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   approve: Joi.object({
     comments: Joi.string().max(500).allow('').optional(),
@@ -1916,7 +1999,9 @@ export const terminationSchemas = {
     isEligibleForRehire: Joi.boolean().optional(),
     dateFrom: commonSchemas.isoDate.optional(),
     dateTo: commonSchemas.isoDate.optional(),
-    sortBy: Joi.string().valid('terminationDate', 'createdAt', 'terminationType').default('terminationDate'),
+    sortBy: Joi.string()
+      .valid('terminationDate', 'createdAt', 'terminationType')
+      .default('terminationDate'),
     order: Joi.string().valid('asc', 'desc').default('desc'),
   }),
 };
@@ -1947,7 +2032,10 @@ export const trainingSchemas = {
     }),
     maxParticipants: Joi.number().integer().min(1).default(50).optional(),
     budget: Joi.number().min(0).optional(),
-    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').default('Draft').optional(),
+    status: Joi.string()
+      .valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled')
+      .default('Draft')
+      .optional(),
   }).custom((value, helpers) => {
     // Validate endDate is after startDate
     if (new Date(value.startDate) >= new Date(value.endDate)) {
@@ -1988,10 +2076,14 @@ export const trainingSchemas = {
     meetingLink: Joi.string().uri().allow('').optional(),
     maxParticipants: Joi.number().integer().min(1).optional(),
     budget: Joi.number().min(0).optional(),
-    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+    status: Joi.string()
+      .valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled')
+      .optional(),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   enroll: Joi.object({
     employeeIds: Joi.array().items(commonSchemas.objectId).min(1).max(100).required().messages({
@@ -2014,10 +2106,14 @@ export const trainingSchemas = {
     ...commonSchemas.pagination,
     trainingTypeId: commonSchemas.objectId.optional(),
     trainerId: commonSchemas.objectId.optional(),
-    status: Joi.string().valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled').optional(),
+    status: Joi.string()
+      .valid('Draft', 'Scheduled', 'In Progress', 'Completed', 'Cancelled')
+      .optional(),
     dateFrom: commonSchemas.isoDate.optional(),
     dateTo: commonSchemas.isoDate.optional(),
-    sortBy: Joi.string().valid('name', 'startDate', 'endDate', 'status', 'createdAt').default('startDate'),
+    sortBy: Joi.string()
+      .valid('name', 'startDate', 'endDate', 'status', 'createdAt')
+      .default('startDate'),
     order: Joi.string().valid('asc', 'desc').default('asc'),
   }),
 };
@@ -2046,9 +2142,11 @@ export const trainingTypeSchemas = {
     description: Joi.string().max(1000).allow('').optional(),
     duration: Joi.number().min(0).optional(),
     isActive: Joi.boolean().optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   list: Joi.object({
     ...commonSchemas.pagination,
@@ -2093,9 +2191,11 @@ export const trainerSchemas = {
     isExternal: Joi.boolean().optional(),
     organization: Joi.string().max(200).allow('').optional(),
     isActive: Joi.boolean().optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    }),
 
   list: Joi.object({
     ...commonSchemas.pagination,
@@ -2133,12 +2233,15 @@ export const overtimeSchemas = {
     }),
     project: Joi.string().max(200).allow('').optional(),
     taskDescription: Joi.string().max(1000).allow('').optional(),
-    attachments: Joi.array().items(
-      Joi.object({
-        type: Joi.string().valid('document', 'image', 'link').required(),
-        url: Joi.string().uri().required(),
-      })
-    ).max(10).optional(),
+    attachments: Joi.array()
+      .items(
+        Joi.object({
+          type: Joi.string().valid('document', 'image', 'link').required(),
+          url: Joi.string().uri().required(),
+        })
+      )
+      .max(10)
+      .optional(),
   }).custom((value, helpers) => {
     // Validate end time is after start time
     if (new Date(value.endTime) <= new Date(value.startTime)) {
@@ -2153,7 +2256,8 @@ export const overtimeSchemas = {
 
     if (Math.abs(durationHours - value.requestedHours) > 0.5) {
       return helpers.error('any.invalid', {
-        message: 'Requested hours must match the duration between start and end time (within 30 minutes)',
+        message:
+          'Requested hours must match the duration between start and end time (within 30 minutes)',
       });
     }
 
@@ -2180,36 +2284,43 @@ export const overtimeSchemas = {
     reason: Joi.string().min(10).max(500).trim().optional(),
     project: Joi.string().max(200).allow('').optional(),
     taskDescription: Joi.string().max(1000).allow('').optional(),
-    attachments: Joi.array().items(
-      Joi.object({
-        type: Joi.string().valid('document', 'image', 'link').required(),
-        url: Joi.string().uri().required(),
-      })
-    ).max(10).optional(),
-  }).min(1).messages({
-    'object.min': 'At least one field must be provided for update',
-  }).custom((value, helpers) => {
-    // Validate end time is after start time if both are provided
-    if (value.startTime && value.endTime) {
-      if (new Date(value.endTime) <= new Date(value.startTime)) {
-        return helpers.error('any.invalid', {
-          message: 'End time must be after start time',
-        });
+    attachments: Joi.array()
+      .items(
+        Joi.object({
+          type: Joi.string().valid('document', 'image', 'link').required(),
+          url: Joi.string().uri().required(),
+        })
+      )
+      .max(10)
+      .optional(),
+  })
+    .min(1)
+    .messages({
+      'object.min': 'At least one field must be provided for update',
+    })
+    .custom((value, helpers) => {
+      // Validate end time is after start time if both are provided
+      if (value.startTime && value.endTime) {
+        if (new Date(value.endTime) <= new Date(value.startTime)) {
+          return helpers.error('any.invalid', {
+            message: 'End time must be after start time',
+          });
+        }
+
+        // Calculate duration and validate against requested hours if provided
+        const durationMs = new Date(value.endTime) - new Date(value.startTime);
+        const durationHours = durationMs / (1000 * 60 * 60);
+
+        if (value.requestedHours && Math.abs(durationHours - value.requestedHours) > 0.5) {
+          return helpers.error('any.invalid', {
+            message:
+              'Requested hours must match the duration between start and end time (within 30 minutes)',
+          });
+        }
       }
 
-      // Calculate duration and validate against requested hours if provided
-      const durationMs = new Date(value.endTime) - new Date(value.startTime);
-      const durationHours = durationMs / (1000 * 60 * 60);
-
-      if (value.requestedHours && Math.abs(durationHours - value.requestedHours) > 0.5) {
-        return helpers.error('any.invalid', {
-          message: 'Requested hours must match the duration between start and end time (within 30 minutes)',
-        });
-      }
-    }
-
-    return value;
-  }),
+      return value;
+    }),
 
   approveReject: Joi.object({
     comments: Joi.string().max(500).allow('').optional().messages({
@@ -2246,7 +2357,9 @@ export const overtimeSchemas = {
     employee: Joi.string().optional(),
     startDate: commonSchemas.isoDate.optional(),
     endDate: commonSchemas.isoDate.optional(),
-    sortBy: Joi.string().valid('date', 'createdAt', 'employeeName', 'status', 'requestedHours').default('date'),
+    sortBy: Joi.string()
+      .valid('date', 'createdAt', 'employeeName', 'status', 'requestedHours')
+      .default('date'),
     order: Joi.string().valid('asc', 'desc').default('desc'),
   }).custom((value, helpers) => {
     // Validate date range

@@ -258,9 +258,9 @@ const ProjectDetails = () => {
     console.log('[ProjectDetails] loadProjectTasks called with projectId:', project?._id);
     if (!project?._id) return;
     try {
-      // If employee role, use dedicated employee project tasks API
-      if (isEmployee && profile && '_id' in profile && profile._id) {
-        console.log('[ProjectDetails] Loading tasks for employee from dedicated API:', {
+      // If regular employee (not team lead or project manager), use dedicated employee project tasks API
+      if (isEmployee && !isProjectManagerOrLead && profile && '_id' in profile && profile._id) {
+        console.log('[ProjectDetails] Loading tasks for regular employee from dedicated API:', {
           _id: profile._id,
           employeeId: profile.employeeId,
           name: `${profile.firstName} ${profile.lastName}`,
@@ -268,7 +268,14 @@ const ProjectDetails = () => {
         });
         await getEmployeeProjectTasksAPI(project._id);
       } else {
-        // Admin/HR: load all project tasks
+        // Admin/HR/TeamLead/ProjectManager: load all project tasks
+        console.log('[ProjectDetails] Loading all project tasks for:', {
+          isAdmin,
+          isHR,
+          isEmployee,
+          isProjectManagerOrLead,
+          projectId: project._id,
+        });
         await getTasksByProjectAPI(project._id);
       }
       // Tasks will be available via tasksFromHook, sync via useEffect
@@ -276,7 +283,7 @@ const ProjectDetails = () => {
       console.error('[ProjectDetails] Error loading tasks:', error);
       message.error('Failed to load tasks');
     }
-  }, [project?._id, getTasksByProjectAPI, getEmployeeProjectTasksAPI, isEmployee, profile]);
+  }, [project?._id, getTasksByProjectAPI, getEmployeeProjectTasksAPI, isEmployee, isProjectManagerOrLead, isAdmin, isHR, profile]);
 
   // Sync tasks from hook to local state
   useEffect(() => {

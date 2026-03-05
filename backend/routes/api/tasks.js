@@ -20,9 +20,14 @@ import {
   updateTaskStatus,
   updateTaskStatusBoard,
 } from '../../controllers/rest/task.controller.js';
-import { attachRequestId, authenticate, requireEmployeeActive, requireRole } from '../../middleware/auth.js';
-import { sanitizeQuery, sanitizeBody, sanitizeParams } from '../../middleware/inputSanitization.js';  // ✅ SECURITY FIX
-import { searchLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
+import {
+  attachRequestId,
+  authenticate,
+  requireEmployeeActive,
+  requireRole,
+} from '../../middleware/auth.js';
+import { sanitizeBody, sanitizeParams, sanitizeQuery } from '../../middleware/inputSanitization.js'; // ✅ SECURITY FIX
+import { searchLimiter } from '../../middleware/rateLimiting.js'; // ✅ SECURITY FIX - Phase 2: Rate limiting
 import { taskSchemas, validateBody, validateQuery } from '../../middleware/validate.js';
 
 const router = express.Router();
@@ -73,14 +78,22 @@ router.get('/stats', authenticate, requireRole('admin', 'hr', 'superadmin'), get
  */
 
 // List all tasks with pagination and filtering
-router.get('/', searchLimiter, authenticate, sanitizeQuery, validateQuery(taskSchemas.list), getTasks);  // ✅ SECURITY FIX - Phase 2: Rate limiting added
+router.get(
+  '/',
+  searchLimiter,
+  authenticate,
+  sanitizeQuery,
+  validateQuery(taskSchemas.list),
+  getTasks
+); // ✅ SECURITY FIX - Phase 2: Rate limiting added
 
 // Create new task
+// Allows: Admin, HR, and employees who are team leads/managers on the project
 router.post(
   '/',
   authenticate,
-  sanitizeBody,  // ✅ SECURITY FIX: Remove MongoDB operators
-  requireRole('admin', 'hr', 'superadmin'),
+  requireEmployeeActive,
+  sanitizeBody, // ✅ SECURITY FIX: Remove MongoDB operators
   validateBody(taskSchemas.create),
   createTask
 );
@@ -90,21 +103,23 @@ router.post(
  */
 
 // Get single task by ID
-router.get('/:id', authenticate, sanitizeParams, getTaskById);  // ✅ SECURITY FIX
+router.get('/:id', authenticate, sanitizeParams, getTaskById); // ✅ SECURITY FIX
 
 // Update task
+// Allows: Admin, HR, and employees who are team leads/managers on the project
 router.put(
   '/:id',
   authenticate,
-  sanitizeParams,  // ✅ SECURITY FIX: Validate ObjectId
-  sanitizeBody,    // ✅ SECURITY FIX: Remove MongoDB operators
-  requireRole('admin', 'hr', 'superadmin'),
+  requireEmployeeActive,
+  sanitizeParams, // ✅ SECURITY FIX: Validate ObjectId
+  sanitizeBody, // ✅ SECURITY FIX: Remove MongoDB operators
   validateBody(taskSchemas.update),
   updateTask
 );
 
 // Delete task (soft delete)
-router.delete('/:id', authenticate, requireRole('admin', 'superadmin'), deleteTask);
+// Allows: Admin, HR, and employees who are team leads/managers on the project
+router.delete('/:id', authenticate, requireEmployeeActive, deleteTask);
 
 // Update task status
 router.patch(
