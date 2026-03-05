@@ -48,7 +48,6 @@ const SuperAdminDashboard = () => {
         borderRadius: 10,
         borderRadiusWhenStacked: "all" as const,
         horizontal: false,
-        borderRadius: 4,
         colors: {
           backgroundBarColors: ["#f3f4f5"],
           backgroundBarOpacity: 0.5,
@@ -129,7 +128,6 @@ const SuperAdminDashboard = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: "all" as const,
         horizontal: false,
-        borderRadius: 4,
       },
     },
     series: [
@@ -705,8 +703,8 @@ const SuperAdminDashboard = () => {
                           <div
                             key={plan.name}
                             className={`d-flex align-items-center justify-content-between ${index < dashboardData.planDistribution.length - 1
-                                ? "mb-2"
-                                : "mb-0"
+                              ? "mb-2"
+                              : "mb-0"
                               }`}
                           >
                             <p className="f-13 mb-0">
@@ -757,8 +755,8 @@ const SuperAdminDashboard = () => {
                         <div
                           key={transaction.id}
                           className={`d-sm-flex justify-content-between flex-wrap ${index < dashboardData.recentTransactions.length - 1
-                              ? "mb-3"
-                              : "mb-1"
+                            ? "mb-3"
+                            : "mb-1"
                             }`}
                         >
                           <div className="d-flex align-items-center mb-2">
@@ -854,8 +852,8 @@ const SuperAdminDashboard = () => {
                         <div
                           key={company.id}
                           className={`d-sm-flex justify-content-between flex-wrap ${index < dashboardData.recentlyRegistered.length - 1
-                              ? "mb-3"
-                              : "mb-1"
+                            ? "mb-3"
+                            : "mb-1"
                             }`}
                         >
                           <div className="d-flex align-items-center mb-2">
@@ -899,8 +897,8 @@ const SuperAdminDashboard = () => {
                             </p>
                             <h6
                               className={`fs-13 fw-normal ${company.domain === "Not configured"
-                                  ? "text-muted"
-                                  : "text-info"
+                                ? "text-muted"
+                                : "text-info"
                                 }`}
                               title={`Domain: ${company.domain}`}
                             >
@@ -977,8 +975,8 @@ const SuperAdminDashboard = () => {
                             <div
                               key={company.id}
                               className={`d-sm-flex justify-content-between flex-wrap ${index < dashboardData.expiredPlans.length - 1
-                                  ? "mb-3"
-                                  : "mb-1"
+                                ? "mb-3"
+                                : "mb-1"
                                 }`}
                             >
                               <div className="d-flex align-items-center mb-2">

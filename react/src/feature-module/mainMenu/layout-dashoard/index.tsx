@@ -18,7 +18,7 @@ import {
   setDataLayout,
   setDataTheme,
   setDataWidth,
-  setRtl,
+  setRtl
 } from '../../../core/data/redux/themeSettingSlice';
 
 const LayoutDemo = () => {
@@ -64,7 +64,6 @@ const LayoutDemo = () => {
         borderRadius: 5,
         horizontal: true,
         barHeight: '35%',
-        borderRadius: 4,
       },
     },
     dataLabels: {
@@ -114,7 +113,6 @@ const LayoutDemo = () => {
         borderRadius: 5,
         borderRadiusWhenStacked: 'all',
         horizontal: false,
-        borderRadius: 4,
       },
     },
     series: [
@@ -1560,9 +1558,8 @@ const LayoutDemo = () => {
                 </div>
                 <div className="card-body">
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[0] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[0] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
@@ -1578,9 +1575,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[1] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[1] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
@@ -1596,9 +1592,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[2] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[2] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
@@ -1614,9 +1609,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[3] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[3] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
@@ -1632,9 +1626,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[4] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[4] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
@@ -1650,9 +1643,8 @@ const LayoutDemo = () => {
                     </div>
                   </div>
                   <div
-                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${
-                      isTodo[5] ? 'todo-strike' : ''
-                    }`}
+                    className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${isTodo[5] ? 'todo-strike' : ''
+                      }`}
                   >
                     <i className="ti ti-grid-dots me-2" />
                     <div className="form-check">
