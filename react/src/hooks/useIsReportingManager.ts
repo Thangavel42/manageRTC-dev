@@ -77,9 +77,10 @@ export const useIsReportingManager = (): ReportingManagerStatus => {
         });
 
         // Step 2: Fetch all employees and check if any report to the current user
+        // Note: Backend validation caps limit at 100
         const response = await get('/api/employees', {
           params: {
-            limit: 1000, // Get all employees
+            limit: 100, // Maximum allowed by backend validation
             status: 'Active' // Only active employees
           }
         });
