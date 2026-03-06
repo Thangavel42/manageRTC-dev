@@ -2531,9 +2531,9 @@ const ProjectDetails = () => {
                             {project.name || 'Untitled Project'}
                           </Link>
                         </h6>
-                        <p>
+                        <p className="mb-0">
                           Project ID :{' '}
-                          <span className="text-primary"> {project.projectId || 'N/A'}</span>
+                          <span className="text-primary">{project.projectId || 'N/A'}</span>
                         </p>
                       </div>
                     </div>
@@ -2567,7 +2567,7 @@ const ProjectDetails = () => {
                       </p>
                     </div>
                     <div className="col-sm-9">
-                      <div className="d-flex align-items-center mb-3">
+                      <div className="d-flex align-items-center flex-wrap mb-3">
                         {(() => {
                           console.log('[ProjectDetails] Rendering Team Members:', {
                             exists: !!project.teamMembers,
@@ -2583,7 +2583,7 @@ const ProjectDetails = () => {
                           project.teamMembers.map((member: any, index: number) => (
                             <div
                               key={member.employeeId || index}
-                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2"
+                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2 mb-2"
                             >
                               <Link
                                 to="#"
@@ -2594,7 +2594,7 @@ const ProjectDetails = () => {
                                   alt="Img"
                                 />
                               </Link>
-                              <h6 className="fs-12">
+                              <h6 className="fs-12 mb-0">
                                 <Link to="#">
                                   {member.employeeId} - {member.firstName} {member.lastName}
                                 </Link>
@@ -2638,14 +2638,14 @@ const ProjectDetails = () => {
                       </p>
                     </div>
                     <div className="col-sm-9">
-                      <div className="d-flex align-items-center mb-3">
+                      <div className="d-flex align-items-center flex-wrap mb-3">
                         {project.teamLeader &&
                           Array.isArray(project.teamLeader) &&
                           project.teamLeader.length > 0 ? (
                           project.teamLeader.map((lead: any, index: number) => (
                             <div
                               key={lead.employeeId || index}
-                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2"
+                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2 mb-2"
                             >
                               <Link
                                 to="#"
@@ -2656,7 +2656,7 @@ const ProjectDetails = () => {
                                   alt="Img"
                                 />
                               </Link>
-                              <h6 className="fs-12">
+                              <h6 className="fs-12 mb-0">
                                 <Link to="#">
                                   {lead.employeeId} - {lead.firstName} {lead.lastName}
                                 </Link>
@@ -2700,14 +2700,14 @@ const ProjectDetails = () => {
                       </p>
                     </div>
                     <div className="col-sm-9">
-                      <div className="d-flex align-items-center mb-3">
+                      <div className="d-flex align-items-center flex-wrap mb-3">
                         {project.projectManager &&
                           Array.isArray(project.projectManager) &&
                           project.projectManager.length > 0 ? (
                           project.projectManager.map((manager: any, index: number) => (
                             <div
                               key={manager.employeeId || index}
-                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2"
+                              className="bg-gray-100 p-1 rounded d-flex align-items-center me-2 mb-2"
                             >
                               <Link
                                 to="#"
@@ -2718,7 +2718,7 @@ const ProjectDetails = () => {
                                   alt="Img"
                                 />
                               </Link>
-                              <h6 className="fs-12">
+                              <h6 className="fs-12 mb-0">
                                 <Link to="#">
                                   {manager.employeeId} - {manager.firstName} {manager.lastName}
                                 </Link>
