@@ -39,10 +39,11 @@ const LeaveCalendar = () => {
   // Fetch leaves on mount
   useEffect(() => {
     // Only admin/HR/superadmin can call the admin leaves endpoint; others fetch their own
+    // Note: Backend validation caps limit at 100
     if (role === 'hr' || role === 'admin' || role === 'superadmin') {
-      fetchLeaves({ limit: 1000 });
+      fetchLeaves({ limit: 100 });
     } else {
-      fetchMyLeaves({ limit: 1000 });
+      fetchMyLeaves({ limit: 100 });
     }
     fetchActiveLeaveTypes();
     // Fetch employees for avatar and role data

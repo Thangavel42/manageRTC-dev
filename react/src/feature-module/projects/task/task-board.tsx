@@ -107,6 +107,7 @@ const TaskBoard = () => {
   const [taskModalError, setTaskModalError] = useState<string | null>(null);
   const [taskFieldErrors, setTaskFieldErrors] = useState<Record<string, string>>({});
   const addTaskCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const [isConfirmingStatusChange, setIsConfirmingStatusChange] = useState(false);
 
   // Fallback statuses in case API fails or returns empty
   const defaultTaskStatuses = useMemo(
@@ -307,7 +308,7 @@ const TaskBoard = () => {
         return taskStatus === target;
       }).length;
     },
-    [tasks, normalizeKey]
+    [sortedTasks, normalizeKey]
   );
 
   const totalTasks = tasks.length;
@@ -379,16 +380,21 @@ const TaskBoard = () => {
     [updateTaskStatusAPI, selectedProject, loadprojecttasks]
   );
 
-  const handleConfirmStatusChange = () => {
+  const handleConfirmStatusChange = async () => {
     if (pendingStatusChange) {
-      updateTaskStatus(
-        pendingStatusChange.taskId,
-        pendingStatusChange.newStatus,
-        pendingStatusChange.progress
-      );
+      setIsConfirmingStatusChange(true);
+      try {
+        await updateTaskStatus(
+          pendingStatusChange.taskId,
+          pendingStatusChange.newStatus,
+          pendingStatusChange.progress
+        );
+      } finally {
+        setIsConfirmingStatusChange(false);
+        setShowStatusModal(false);
+        setPendingStatusChange(null);
+      }
     }
-    setShowStatusModal(false);
-    setPendingStatusChange(null);
   };
 
   const handleCancelStatusChange = () => {
@@ -944,15 +950,15 @@ const TaskBoard = () => {
       // Handle assignees - they can be objects (populated) or strings (IDs)
       const assigneeIds = Array.isArray(task.assignee)
         ? task.assignee
-          .map((a: any) => {
-            // If it's an object (populated), extract _id
-            if (typeof a === 'object' && a !== null) {
-              return (a._id || a.id || '').toString();
-            }
-            // If it's already a string ID
-            return a.toString();
-          })
-          .filter(Boolean) // Remove any empty values
+            .map((a: any) => {
+              // If it's an object (populated), extract _id
+              if (typeof a === 'object' && a !== null) {
+                return (a._id || a.id || '').toString();
+              }
+              // If it's already a string ID
+              return a.toString();
+            })
+            .filter(Boolean) // Remove any empty values
         : [];
 
       setEditTaskAssignees(assigneeIds);
@@ -1109,7 +1115,7 @@ const TaskBoard = () => {
     return () => {
       drake.destroy();
     };
-  }, [taskStatuses]);
+  }, [taskStatuses, containerRefs]);
 
   // Load projects on mount
   useEffect(() => {
@@ -1131,6 +1137,73 @@ const TaskBoard = () => {
     loadTaskStatuses();
   }, [loadTaskStatuses]);
 
+  // Skeleton Loader Components
+  const ProjectSelectSkeleton = () => (
+    <div className="mb-2">
+      <div
+        className="skeleton-text mb-2"
+        style={{ width: '120px', height: '14px', borderRadius: '4px' }}
+      />
+      <div
+        className="skeleton-text"
+        style={{ width: '100%', height: '38px', borderRadius: '6px' }}
+      />
+    </div>
+  );
+
+  const TaskBoardColumnSkeleton = () => (
+    <div className="p-3 rounded bg-transparent-secondary w-100 me-3" style={{ minWidth: '300px' }}>
+      <div className="bg-white p-2 rounded mb-2">
+        <div className="d-flex align-items-center justify-content-between">
+          <div className="d-flex align-items-center flex-fill">
+            <div
+              className="skeleton-text me-2"
+              style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+            />
+            <div className="skeleton-text me-2" style={{ width: '100px', height: '20px' }} />
+            <div
+              className="skeleton-text"
+              style={{ width: '30px', height: '24px', borderRadius: '12px' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Task Card Skeletons */}
+      {[1, 2, 3].map((idx) => (
+        <div key={idx} className="card mb-2" style={{ minHeight: '180px' }}>
+          <div className="card-body">
+            <div className="d-flex align-items-center justify-content-between mb-3">
+              <div
+                className="skeleton-text"
+                style={{ width: '80px', height: '22px', borderRadius: '4px' }}
+              />
+              <div
+                className="skeleton-text"
+                style={{ width: '20px', height: '20px', borderRadius: '4px' }}
+              />
+            </div>
+            <div className="mb-3">
+              <div className="skeleton-text mb-2" style={{ width: '90%', height: '18px' }} />
+              <div className="skeleton-text" style={{ width: '70%', height: '18px' }} />
+            </div>
+            <div className="d-flex align-items-center mb-2">
+              <div
+                className="skeleton-text flex-fill me-2"
+                style={{ height: '8px', borderRadius: '4px' }}
+              />
+              <div className="skeleton-text" style={{ width: '40px', height: '16px' }} />
+            </div>
+            <div className="skeleton-text mb-2" style={{ width: '60%', height: '14px' }} />
+            <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+              <div className="skeleton-text" style={{ width: '100px', height: '24px' }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
       {/* Page Wrapper */}
@@ -1143,7 +1216,7 @@ const TaskBoard = () => {
               <nav>
                 <ol className="breadcrumb mb-0">
                   <li className="breadcrumb-item">
-                    <Link to="index.html">
+                    <Link to="/dashboard">
                       <i className="ti ti-smart-home" />
                     </Link>
                   </li>
@@ -1204,7 +1277,7 @@ const TaskBoard = () => {
                   data-inert={true}
                   data-bs-target="#add_board"
                 >
-                  <i className="ti ti-circle-plus me-1" />
+                  <i className="ti ti-square-plus me-1" />
                   Add Board
                 </Link>
               )}
@@ -1220,12 +1293,7 @@ const TaskBoard = () => {
                 <div className="col-md-6">
                   <label className="form-label d-block mb-2">Select Project</label>
                   {loading ? (
-                    <div className="text-center py-2">
-                      <div className="spinner-border spinner-border-sm text-primary" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                      <span className="ms-2">Loading projects...</span>
-                    </div>
+                    <ProjectSelectSkeleton />
                   ) : (
                     <CommonSelect
                       className="select"
@@ -1244,11 +1312,11 @@ const TaskBoard = () => {
                                 prev.map((p) =>
                                   p._id === value || p.projectId === value
                                     ? {
-                                      ...p,
-                                      ...fullProject,
-                                      teamMembersdetail: fullProject.teamMembers,
-                                      teamLeaderdetail: fullProject.teamLeader,
-                                    }
+                                        ...p,
+                                        ...fullProject,
+                                        teamMembersdetail: fullProject.teamMembers,
+                                        teamLeaderdetail: fullProject.teamLeader,
+                                      }
                                     : p
                                 )
                               );
@@ -1265,16 +1333,19 @@ const TaskBoard = () => {
                 </div>
                 <div className="col-md-6">
                   <div className="alert alert-info mb-0">
-                    <strong>Selected Project:</strong>{' '}
+                    <strong>
+                      <i className="ti ti-info-circle me-1" />
+                      Selected Project:
+                    </strong>{' '}
                     {selectedProject !== 'Select'
                       ? (() => {
-                        const proj = projects.find(
-                          (p) => p.projectId === selectedProject || p._id === selectedProject
-                        );
-                        if (!proj) return selectedProject;
-                        const id = proj.projectId || proj._id;
-                        return `${proj.name} (${id})`;
-                      })()
+                          const proj = projects.find(
+                            (p) => p.projectId === selectedProject || p._id === selectedProject
+                          );
+                          if (!proj) return selectedProject;
+                          const id = proj.projectId || proj._id;
+                          return `${proj.name} (${id})`;
+                        })()
                       : 'No project selected'}
                   </div>
                 </div>
@@ -1286,93 +1357,57 @@ const TaskBoard = () => {
               <h4>
                 {selectedProject !== 'Select'
                   ? (() => {
-                    const proj = projects.find(
-                      (p) => p.projectId === selectedProject || p._id === selectedProject
-                    );
-                    if (!proj) return 'Select a Project to View Tasks';
-                    const id = proj.projectId || proj._id;
-                    return `${proj.name} (${id})`;
-                  })()
+                      const proj = projects.find(
+                        (p) => p.projectId === selectedProject || p._id === selectedProject
+                      );
+                      if (!proj) return 'Select a Project to View Tasks';
+                      const id = proj.projectId || proj._id;
+                      return `${proj.name} (${id})`;
+                    })()
                   : 'Select a Project to View Tasks'}
               </h4>
               <div className="d-flex align-items-center flex-wrap row-gap-3">
-                {/* <div className="avatar-list-stacked avatar-group-sm me-3">
-                                    <span className="avatar avatar-rounded">
-                                        <ImageWithBasePath
-                                            className="border border-white"
-                                            src="assets/img/profiles/avatar-19.jpg"
-                                            alt="img"
-                                        />
-                                    </span>
-                                    <span className="avatar avatar-rounded">
-                                        <ImageWithBasePath
-                                            className="border border-white"
-                                            src="assets/img/profiles/avatar-29.jpg"
-                                            alt="img"
-                                        />
-                                    </span>
-                                    <span className="avatar avatar-rounded">
-                                        <ImageWithBasePath
-                                            className="border border-white"
-                                            src="assets/img/profiles/avatar-16.jpg"
-                                            alt="img"
-                                        />
-                                    </span>
-                                    <span className="avatar avatar-rounded bg-primary fs-12">1+</span>
-                                </div> */}
                 <div className="d-flex align-items-center me-3">
                   <p className="mb-0 me-3 pe-3 border-end fs-14">
-                    Total Task : <span className="text-dark"> {totalTasks} </span>
+                    <i className="ti ti-list-check me-1 text-primary" />
+                    Total Task : <span className="text-dark fw-medium"> {totalTasks} </span>
                   </p>
                   <p className="mb-0 me-3 pe-3 border-end fs-14">
-                    Pending : <span className="text-dark"> {totalpendingCount} </span>
+                    <i className="ti ti-clock me-1 text-warning" />
+                    Pending : <span className="text-dark fw-medium"> {totalpendingCount} </span>
                   </p>
                   <p className="mb-0 fs-14">
-                    Completed : <span className="text-dark"> {totalcompletedCount} </span>
+                    <i className="ti ti-circle-check me-1 text-success" />
+                    Completed :{' '}
+                    <span className="text-dark fw-medium"> {totalcompletedCount} </span>
                   </p>
                 </div>
-                {/* <div className="input-icon-start position-relative">
-                                    <span className="input-icon-addon">
-                                        <i className="ti ti-search" />
-                                    </span>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        placeholder="Search Project"
-                                    />
-                                </div> */}
               </div>
             </div>
             <div className="card-body">
               <div className="row">
                 <div className="col-lg-12">
                   <div className="d-flex align-items-center justify-content-lg-end flex-wrap row-gap-3 mb-3">
-                    <div className="input-icon w-120 position-relative me-2">
+                    <div className="input-icon position-relative me-2" style={{ width: '140px' }}>
                       <span className="input-icon-addon">
-                        <i className="ti ti-calendar" />
+                        <i className="ti ti-calendar text-gray-7" />
                       </span>
                       <DatePicker
                         className="form-control datetimepicker"
-                        format={{
-                          format: 'DD-MM-YYYY',
-                          type: 'mask',
-                        }}
+                        format="DD-MM-YYYY"
                         getPopupContainer={getModalContainer}
                         placeholder="From Date"
                         value={dueDateFilterFrom}
                         onChange={(date) => setDueDateFilterFrom(date)}
                       />
                     </div>
-                    <div className="input-icon w-120 position-relative me-2">
+                    <div className="input-icon position-relative me-2" style={{ width: '140px' }}>
                       <span className="input-icon-addon">
-                        <i className="ti ti-calendar" />
+                        <i className="ti ti-calendar text-gray-7" />
                       </span>
                       <DatePicker
                         className="form-control datetimepicker"
-                        format={{
-                          format: 'DD-MM-YYYY',
-                          type: 'mask',
-                        }}
+                        format="DD-MM-YYYY"
                         getPopupContainer={getModalContainer}
                         placeholder="To Date"
                         value={dueDateFilterTo}
@@ -1385,6 +1420,7 @@ const TaskBoard = () => {
                         className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                         data-bs-toggle="dropdown"
                       >
+                        <i className="ti ti-flag me-1" />
                         Priority: {filterPriority}
                       </Link>
                       <ul className="dropdown-menu dropdown-menu-end p-3">
@@ -1427,7 +1463,10 @@ const TaskBoard = () => {
                       </ul>
                     </div>
                     <div className="d-flex align-items-center border rounded p-2">
-                      <span className="d-inline-flex me-2">Sort By : </span>
+                      <span className="d-inline-flex me-2">
+                        <i className="ti ti-arrows-sort me-1" />
+                        Sort By :{' '}
+                      </span>
                       <div className="dropdown">
                         <Link
                           to="#"
@@ -1465,9 +1504,18 @@ const TaskBoard = () => {
                 <div className="tab-pane fade show active" id="pills-home" role="tabpanel">
                   <div className="d-flex align-items-start overflow-auto project-status pb-4">
                     {/* Dynamic task status columns */}
-                    {taskStatuses.length === 0 ? (
+                    {loading || tasksLoading ? (
+                      <>
+                        <TaskBoardColumnSkeleton />
+                        <TaskBoardColumnSkeleton />
+                        <TaskBoardColumnSkeleton />
+                      </>
+                    ) : taskStatuses.length === 0 ? (
                       <div className="text-center p-4 w-100">
-                        <p className="text-muted">Loading task statuses...</p>
+                        <div className="mb-3">
+                          <i className="ti ti-clipboard-list text-muted" style={{ fontSize: '48px' }} />
+                        </div>
+                        <p className="text-muted">No task statuses available. Please add a board to get started.</p>
                       </div>
                     ) : (
                       taskStatuses.map((status, index) => {
@@ -1480,6 +1528,7 @@ const TaskBoard = () => {
                           <div
                             key={status._id || status.key}
                             className="p-3 rounded bg-transparent-secondary w-100 me-3"
+                            style={{ minWidth: '300px' }}
                           >
                             <div className="bg-white p-2 rounded mb-2">
                               <div className="d-flex align-items-center justify-content-between">
@@ -1492,7 +1541,7 @@ const TaskBoard = () => {
                                     />
                                   </span>
                                   <h5 className="me-2">{status.name}</h5>
-                                  <span className="badge bg-light rounded-pill">{count}</span>
+                                  <span className="badge bg-light text-dark rounded-pill">{count}</span>
                                 </div>
                                 {!isEmployee && (
                                   <div className="dropdown">
@@ -1559,7 +1608,7 @@ const TaskBoard = () => {
                                             <span
                                               className={`badge ${(t as any).priority === 'High' ? 'bg-danger' : (t as any).priority === 'Low' ? 'bg-success' : 'bg-warning'} badge-xs d-flex align-items-center justify-content-center`}
                                             >
-                                              <i className="fas fa-circle fs-6 me-1" />
+                                              <i className="ti ti-flag-filled fs-10 me-1" />
                                               {(t as any).priority || 'Medium'}
                                             </span>
                                           </div>
@@ -1605,6 +1654,7 @@ const TaskBoard = () => {
                                         </div>
                                         <div className="mb-2">
                                           <h6 className="d-flex align-items-center">
+                                            <i className="ti ti-file-text me-2 text-muted" />
                                             {(t as any).title || 'Untitled Task'}
                                           </h6>
                                         </div>
@@ -1643,24 +1693,26 @@ const TaskBoard = () => {
                                             %
                                           </span>
                                         </div>
-                                        <p className="fw-medium mb-0">
+                                        <p className="fw-medium mb-0 text-muted" style={{ fontSize: '13px' }}>
+                                          <i className="ti ti-calendar-event me-1" />
                                           Due on :{' '}
-                                          <span className="text-gray-9">
+                                          <span className="text-dark">
                                             {(t as any).dueDate
                                               ? new Date((t as any).dueDate).toLocaleDateString(
-                                                'en-GB',
-                                                {
-                                                  day: 'numeric',
-                                                  month: 'short',
-                                                  year: 'numeric',
-                                                }
-                                              )
+                                                  'en-GB',
+                                                  {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                  }
+                                                )
                                               : '-'}
                                           </span>
                                         </p>
                                         <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
                                           <div className="me-3">
                                             <span className="badge bg-light text-dark">
+                                              <i className="ti ti-users me-1" style={{ fontSize: '12px' }} />
                                               {Array.isArray((t as any).assignee)
                                                 ? (t as any).assignee.length
                                                 : 0}{' '}
@@ -1701,7 +1753,7 @@ const TaskBoard = () => {
 
       {/* Add Task */}
       <div className="modal fade" id="add_task">
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
               <h4 className="modal-title">Add New Task</h4>
@@ -1717,7 +1769,7 @@ const TaskBoard = () => {
               </button>
             </div>
             <form onSubmit={(e) => e.preventDefault()}>
-              <div className="modal-body">
+              <div className="modal-body" id="modal-datepicker">
                 {taskModalError && (
                   <div className="alert alert-danger" role="alert">
                     {taskModalError}
@@ -1850,16 +1902,11 @@ const TaskBoard = () => {
                   </div>
                   <div className="col-12">
                     <div className="mb-3">
-                      <label className="form-label">
-                        Due Date
-                      </label>
+                      <label className="form-label">Due Date</label>
                       <div className="input-icon-end position-relative">
                         <DatePicker
                           className="form-control datetimepicker"
-                          format={{
-                            format: 'DD-MM-YYYY',
-                            type: 'mask',
-                          }}
+                          format="DD-MM-YYYY"
                           getPopupContainer={() =>
                             document.getElementById('add_task') || document.body
                           }
@@ -1898,10 +1945,10 @@ const TaskBoard = () => {
                         value={
                           taskStatuses.find((status) => status.key === taskStatus)
                             ? {
-                              value: taskStatus,
-                              label: taskStatuses.find((status) => status.key === taskStatus)
-                                ?.name,
-                            }
+                                value: taskStatus,
+                                label: taskStatuses.find((status) => status.key === taskStatus)
+                                  ?.name,
+                              }
                             : taskStatuses.length > 0
                               ? { value: taskStatuses[0].key, label: taskStatuses[0].name }
                               : { value: '', label: 'Select Status' }
@@ -1941,7 +1988,10 @@ const TaskBoard = () => {
                       Saving...
                     </>
                   ) : (
-                    'Add New Task'
+                    <>
+                      <i className="ti ti-device-floppy me-1" />
+                      Add New Task
+                    </>
                   )}
                 </button>
               </div>
@@ -1950,9 +2000,10 @@ const TaskBoard = () => {
         </div>
       </div>
       {/* /Add Task */}
+
       {/* Edit Task */}
       <div className="modal fade" id="edit_task">
-        <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
               <h4 className="modal-title">Edit Task</h4>
@@ -1967,7 +2018,7 @@ const TaskBoard = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="modal-body" id="modal-datepicker">
               {editTaskModalError && (
                 <div className="alert alert-danger alert-dismissible fade show" role="alert">
                   {editTaskModalError}
@@ -1991,7 +2042,7 @@ const TaskBoard = () => {
                       placeholder="Enter task title"
                     />
                     {editTaskFieldErrors.taskTitle && (
-                      <div className="invalid-feedback">{editTaskFieldErrors.taskTitle}</div>
+                      <div className="invalid-feedback d-block">{editTaskFieldErrors.taskTitle}</div>
                     )}
                   </div>
                 </div>
@@ -2040,10 +2091,10 @@ const TaskBoard = () => {
                       value={
                         taskStatuses.find((status) => status.key === editTaskStatus)
                           ? {
-                            value: editTaskStatus,
-                            label: taskStatuses.find((status) => status.key === editTaskStatus)
-                              ?.name,
-                          }
+                              value: editTaskStatus,
+                              label: taskStatuses.find((status) => status.key === editTaskStatus)
+                                ?.name,
+                            }
                           : { value: '', label: '' }
                       }
                       onChange={(option: any) => {
@@ -2075,22 +2126,17 @@ const TaskBoard = () => {
                       placeholder="Enter task description"
                     />
                     {editTaskFieldErrors.taskDescription && (
-                      <div className="invalid-feedback">{editTaskFieldErrors.taskDescription}</div>
+                      <div className="invalid-feedback d-block">{editTaskFieldErrors.taskDescription}</div>
                     )}
                   </div>
                 </div>
                 <div className="col-12">
                   <div className="mb-3">
-                    <label className="form-label">
-                      Due Date
-                    </label>
+                    <label className="form-label">Due Date</label>
                     <div className="input-icon-end position-relative">
                       <DatePicker
                         className="form-control datetimepicker"
-                        format={{
-                          format: 'DD-MM-YYYY',
-                          type: 'mask',
-                        }}
+                        format="DD-MM-YYYY"
                         getPopupContainer={() =>
                           document.getElementById('edit_task') || document.body
                         }
@@ -2154,114 +2200,27 @@ const TaskBoard = () => {
                 onClick={handleSaveEditTask}
                 disabled={isSavingEditTask}
               >
-                {isSavingEditTask ? 'Saving...' : 'Save Changes'}
+                {isSavingEditTask ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-device-floppy me-1" />
+                    Save Changes
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       </div>
       {/* /Edit Task */}
-      {/* Todo Details */}
-      <div className="modal fade" id="view_todo">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-header bg-dark">
-              <h4 className="modal-title text-white">Respond to any pending messages</h4>
-              <span className="badge badge-danger d-inline-flex align-items-center">
-                <i className="ti ti-square me-1" />
-                Urgent
-              </span>
-              <span>
-                <i className="ti ti-star-filled text-warning" />
-              </span>
-              <Link to="#">
-                <i className="ti ti-trash text-white" />
-              </Link>
-              <button
-                type="button"
-                className="btn-close custom-btn-close bg-transparent fs-16 text-white position-static"
-                data-bs-dismiss="modal"
-                aria-label="Close"
-              >
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <h5 className="mb-2">Task Details</h5>
-              <div className="border rounded mb-3 p-2">
-                <div className="row row-gap-3">
-                  <div className="col-md-4">
-                    <div className="text-center">
-                      <span className="d-block mb-1">Created On</span>
-                      <p className="text-dark">22 July 2025</p>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="text-center">
-                      <span className="d-block mb-1">Due Date</span>
-                      <p className="text-dark">22 July 2025</p>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="text-center">
-                      <span className="d-block mb-1">Status</span>
-                      <span className="badge badge-soft-success d-inline-flex align-items-center">
-                        <i className="fas fa-circle fs-6 me-1" />
-                        Completed
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mb-3">
-                <h5 className="mb-2">Description</h5>
-                <p>
-                  Hiking is a long, vigorous walk, usually on trails or footpaths in the
-                  countryside. Walking for pleasure developed in Europe during the eighteenth
-                  century. Religious pilgrimages have existed much longer but they involve walking
-                  long distances for a spiritual purpose associated with specific religions and also
-                  we achieve inner peace while we hike at a local park.
-                </p>
-              </div>
-              <div className="mb-3">
-                <h5 className="mb-2">Tags</h5>
-                <div className="d-flex align-items-center">
-                  <span className="badge badge-danger me-2">Internal</span>
-                  <span className="badge badge-success me-2">Projects</span>
-                  <span className="badge badge-secondary">Reminder</span>
-                </div>
-              </div>
-              <div>
-                <h5 className="mb-2">Assignee</h5>
-                <div className="avatar-list-stacked avatar-group-sm">
-                  <span className="avatar avatar-rounded">
-                    <ImageWithBasePath
-                      className="border border-white"
-                      src="assets/img/profiles/avatar-23.jpg"
-                      alt="img"
-                    />
-                  </span>
-                  <span className="avatar avatar-rounded">
-                    <ImageWithBasePath
-                      className="border border-white"
-                      src="assets/img/profiles/avatar-24.jpg"
-                      alt="img"
-                    />
-                  </span>
-                  <span className="avatar avatar-rounded">
-                    <ImageWithBasePath
-                      className="border border-white"
-                      src="assets/img/profiles/avatar-25.jpg"
-                      alt="img"
-                    />
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* /Todo Details */}
 
       {/* Add Board */}
       <div className="modal fade" id="add_board" ref={addBoardModalRef}>
@@ -2282,12 +2241,15 @@ const TaskBoard = () => {
             <form onSubmit={handleAddBoardSubmit}>
               <div className="modal-body">
                 <div className="mb-3">
-                  <label className="form-label">Board Name</label>
+                  <label className="form-label">
+                    Board Name <span className="text-danger">*</span>
+                  </label>
                   <input
                     type="text"
                     className="form-control"
                     value={newBoardName}
                     onChange={(e) => setNewBoardName(e.target.value)}
+                    placeholder="Enter board name"
                   />
                 </div>
                 <label className="form-label">Board Color</label>
@@ -2340,11 +2302,30 @@ const TaskBoard = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                  disabled={savingBoard}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={savingBoard}>
-                  {savingBoard ? 'Saving...' : 'Add New Board'}
+                  {savingBoard ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ti ti-device-floppy me-1" />
+                      Add New Board
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -2372,12 +2353,15 @@ const TaskBoard = () => {
             <form onSubmit={handleEditBoardSubmit}>
               <div className="modal-body">
                 <div className="mb-3">
-                  <label className="form-label">Board Name</label>
+                  <label className="form-label">
+                    Board Name <span className="text-danger">*</span>
+                  </label>
                   <input
                     type="text"
                     className="form-control"
                     value={editBoardName}
                     onChange={(e) => setEditBoardName(e.target.value)}
+                    placeholder="Enter board name"
                   />
                 </div>
                 <label className="form-label">Board Color</label>
@@ -2430,11 +2414,30 @@ const TaskBoard = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                  disabled={savingBoard}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={savingBoard}>
-                  {savingBoard ? 'Saving...' : 'Update Board'}
+                  {savingBoard ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ti ti-device-floppy me-1" />
+                      Update Board
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -2458,6 +2461,7 @@ const TaskBoard = () => {
                   className="btn-close custom-btn-close"
                   onClick={handleCancelStatusChange}
                   aria-label="Close"
+                  disabled={isConfirmingStatusChange}
                 >
                   <i className="ti ti-x" />
                 </button>
@@ -2474,6 +2478,7 @@ const TaskBoard = () => {
                   type="button"
                   className="btn btn-light me-2"
                   onClick={handleCancelStatusChange}
+                  disabled={isConfirmingStatusChange}
                 >
                   Cancel
                 </button>
@@ -2481,8 +2486,20 @@ const TaskBoard = () => {
                   type="button"
                   className="btn btn-primary"
                   onClick={handleConfirmStatusChange}
+                  disabled={isConfirmingStatusChange}
                 >
-                  Confirm Change
+                  {isConfirmingStatusChange ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Confirming...
+                    </>
+                  ) : (
+                    'Confirm Change'
+                  )}
                 </button>
               </div>
             </div>
@@ -2519,16 +2536,18 @@ const TaskBoard = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${confirmBoardName &&
+                        className={`form-control form-control-sm ${
+                          confirmBoardName &&
                           confirmBoardName.trim().toLowerCase() !==
-                          deletingBoard.name.trim().toLowerCase()
-                          ? 'is-invalid'
-                          : ''
-                          } ${confirmBoardName.trim().toLowerCase() ===
                             deletingBoard.name.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmBoardName.trim().toLowerCase() ===
+                          deletingBoard.name.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                          }`}
+                        }`}
                         placeholder={`Type "${deletingBoard.name}" to confirm`}
                         value={confirmBoardName}
                         onChange={(e) => setConfirmBoardName(e.target.value)}
@@ -2536,7 +2555,7 @@ const TaskBoard = () => {
                       />
                       {confirmBoardName &&
                         confirmBoardName.trim().toLowerCase() !==
-                        deletingBoard.name.trim().toLowerCase() && (
+                          deletingBoard.name.trim().toLowerCase() && (
                           <div className="invalid-feedback">Name does not match</div>
                         )}
                     </div>
@@ -2563,10 +2582,21 @@ const TaskBoard = () => {
                       isDeletingBoard ||
                       !deletingBoard ||
                       confirmBoardName.trim().toLowerCase() !==
-                      deletingBoard.name.trim().toLowerCase()
+                        deletingBoard.name.trim().toLowerCase()
                     }
                   >
-                    {isDeletingBoard ? 'Deleting...' : 'Delete Board'}
+                    {isDeletingBoard ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Board'
+                    )}
                   </button>
                 </div>
               </div>
@@ -2611,16 +2641,18 @@ const TaskBoard = () => {
                       </label>
                       <input
                         type="text"
-                        className={`form-control form-control-sm ${confirmTaskName &&
+                        className={`form-control form-control-sm ${
+                          confirmTaskName &&
                           confirmTaskName.trim().toLowerCase() !==
-                          deletingTask.title.trim().toLowerCase()
-                          ? 'is-invalid'
-                          : ''
-                          } ${confirmTaskName.trim().toLowerCase() ===
                             deletingTask.title.trim().toLowerCase()
+                            ? 'is-invalid'
+                            : ''
+                        } ${
+                          confirmTaskName.trim().toLowerCase() ===
+                          deletingTask.title.trim().toLowerCase()
                             ? 'is-valid'
                             : ''
-                          }`}
+                        }`}
                         placeholder={`Type "${deletingTask.title}" to confirm`}
                         value={confirmTaskName}
                         onChange={(e) => setConfirmTaskName(e.target.value)}
@@ -2628,7 +2660,7 @@ const TaskBoard = () => {
                       />
                       {confirmTaskName &&
                         confirmTaskName.trim().toLowerCase() !==
-                        deletingTask.title.trim().toLowerCase() && (
+                          deletingTask.title.trim().toLowerCase() && (
                           <div className="invalid-feedback">Name does not match</div>
                         )}
                     </div>
@@ -2655,10 +2687,21 @@ const TaskBoard = () => {
                       isDeletingTask ||
                       !deletingTask ||
                       confirmTaskName.trim().toLowerCase() !==
-                      deletingTask.title.trim().toLowerCase()
+                        deletingTask.title.trim().toLowerCase()
                     }
                   >
-                    {isDeletingTask ? 'Deleting...' : 'Delete Task'}
+                    {isDeletingTask ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Task'
+                    )}
                   </button>
                 </div>
               </div>

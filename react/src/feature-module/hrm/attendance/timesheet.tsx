@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import CommonSelect from "../../../core/common/commonSelect";
 import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
@@ -22,6 +23,61 @@ interface FormData {
   billable: boolean;
   billRate?: string;
 }
+
+// Skeleton Loader Components
+const StatCardSkeleton = () => (
+  <div className="card">
+    <div className="card-body">
+      <div className="skeleton-text skeleton-stat-label mb-2"></div>
+      <div className="skeleton-text skeleton-stat-value"></div>
+    </div>
+  </div>
+);
+
+const TableRowSkeleton = ({ showEmployee }: { showEmployee: boolean }) => (
+  <tr>
+    {showEmployee && (
+      <td>
+        <div className="d-flex align-items-center">
+          <div className="skeleton-avatar me-2"></div>
+          <div>
+            <div className="skeleton-text skeleton-employee-name mb-1"></div>
+            <div className="skeleton-text skeleton-emp-id"></div>
+          </div>
+        </div>
+      </td>
+    )}
+    <td><div className="skeleton-text skeleton-date"></div></td>
+    <td><div className="skeleton-text skeleton-project"></div></td>
+    <td><div className="skeleton-text skeleton-description"></div></td>
+    <td><div className="skeleton-text skeleton-hours"></div></td>
+    <td><div className="skeleton-badge"></div></td>
+    <td><div className="skeleton-actions"></div></td>
+  </tr>
+);
+
+const TableSkeleton = ({ showEmployee }: { showEmployee: boolean }) => (
+  <div className="table-responsive">
+    <table className="table datanew">
+      <thead>
+        <tr>
+          {showEmployee && <th>Employee</th>}
+          <th>Date</th>
+          <th>Project</th>
+          <th>Description</th>
+          <th>Hours</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <TableRowSkeleton key={i} showEmployee={showEmployee} />
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 
 const TimeSheet = () => {
   // Auth & Role detection
@@ -62,6 +118,7 @@ const TimeSheet = () => {
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>({});
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<TimeEntry | null>(null);
+  const [approverDetails, setApproverDetails] = useState<Employee | null>(null);
   const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
   const [taskOptions, setTaskOptions] = useState<{ value: string; label: string }[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -80,23 +137,45 @@ const TimeSheet = () => {
   const [approving, setApproving] = useState<string | null>(null);
   const [rejectEntryId, setRejectEntryId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Search state for filter dropdowns
+  const [projectSearchQuery, setProjectSearchQuery] = useState<string>('');
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState<string>('');
+
+  // Date filter mode: 'preset' | 'specific' | 'range'
+  const [dateFilterMode, setDateFilterMode] = useState<'preset' | 'specific' | 'range'>('preset');
+  const [specificDate, setSpecificDate] = useState<string>('');
+  const [rangeStartDate, setRangeStartDate] = useState<string>('');
+  const [rangeEndDate, setRangeEndDate] = useState<string>('');
 
   // Track if initial data load is complete
   const initialLoadDone = useRef(false);
 
-  // Load PM/TL projects via getMyProjects() which adds userRole field
+  // Load projects based on user role
+  // Admin/HR: fetchProjects() to get ALL projects
+  // Others: getMyProjects() to get only assigned projects (with userRole field)
   useEffect(() => {
-    const loadManagedProjects = async () => {
+    // Wait for profile to load to determine admin/HR status
+    if (!profile) return;
+
+    const loadProjects = async () => {
       try {
-        await getMyProjects();
-        // getMyProjects will populate `projects` state with userRole field
+        if (isAdmin || isHR) {
+          // Admin/HR should see ALL projects in the filter dropdown
+          await fetchProjects({ limit: 100 });
+        } else {
+          // Non-admin users: load only their assigned projects
+          await getMyProjects();
+        }
       } catch (error) {
-        console.error('Failed to load managed projects:', error);
+        console.error('Failed to load projects:', error);
       }
     };
-    loadManagedProjects();
-  }, [getMyProjects]);
+    loadProjects();
+  }, [profile, isAdmin, isHR, fetchProjects, getMyProjects]);
 
   // Populate myManagedProjects from projects state after getMyProjects() returns
   useEffect(() => {
@@ -134,17 +213,20 @@ const TimeSheet = () => {
       const filters: any = { page: 1, limit: 50 };
 
       if (isAdmin || isHR) {
+        // Admin/HR: Fetch all timesheet entries and all employees
         await fetchTimeEntries(filters);
         await fetchStats();
         await fetchEmployees({ status: 'Active' } as any);
         (window as any).loaded_admin = true;
-      } else if (isProjectLevelManager) {
+      } else if (myManagedProjects.length > 0) {
+        // Project Manager/Team Leader: Fetch managed project entries and active employees list
         await fetchManagedTimeEntries(filters);
         await fetchStats();
         await fetchActiveEmployeesList();
         (window as any).loaded_manager = true;
       } else {
-        // Regular employee - use clerkUserId (not employeeId which is "EMP-XXXX" format)
+        // Regular employee (team member): Fetch only their own entries
+        // No employee list is fetched, so employee filter won't be shown
         // Time entries are stored with userId = clerkUserId, not employeeId
         const userId = clerkUserId || (profile as any)?._id || employeeId;
         if (userId) {
@@ -159,7 +241,7 @@ const TimeSheet = () => {
 
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, projects, isAdmin, isHR, isProjectLevelManager]);
+  }, [profile, projects, isAdmin, isHR, myManagedProjects]);
 
   // Load tasks when project changes in form
   useEffect(() => {
@@ -235,36 +317,50 @@ const TimeSheet = () => {
   }, [profile, projects, isAdmin, isHR]);
 
   // Filter timesheet entries based on user role
+  // IMPORTANT: Draft entries are PRIVATE - only visible to their creator
   const filteredTimeEntries = useMemo(() => {
-    // Admin and HR can see all entries
-    if (isAdmin || isHR) {
-      return timeEntries;
-    }
-
     // Use clerkUserId (not employeeId) since entries store userId as clerkUserId
     const currentUserId = clerkUserId || (profile as any)?._id || (profile as any)?.userId || (profile as any)?.employeeId;
+
+    // Helper: Check if entry is user's own entry
+    const isOwnEntry = (entry: TimeEntry) =>
+      entry.userId === currentUserId || entry.createdBy === currentUserId;
+
+    // Helper: Filter out other users' draft entries (drafts are private)
+    const filterDrafts = (entries: TimeEntry[]) =>
+      entries.filter(entry => entry.status !== 'Draft' || isOwnEntry(entry));
+
+    // Admin and HR can see all entries (except other users' drafts)
+    if (isAdmin || isHR) {
+      return filterDrafts(timeEntries);
+    }
 
     // PM/TL: use myManagedProjects (already computed from getMyProjects userRole field)
     if (myManagedProjects.length > 0) {
       const managedProjectIds = myManagedProjects.map(p => p._id);
-      return timeEntries.filter(entry => {
+      const managedEntries = timeEntries.filter(entry => {
         // Show entries that belong to managed projects
-        if (managedProjectIds.includes(entry.projectId)) {
+        // NOTE: entry.projectId might be ObjectId or string, convert to string for comparison
+        const entryProjectId = entry.projectId?.toString() || entry.projectId;
+        if (managedProjectIds.includes(entryProjectId)) {
           return true;
         }
         // Also show own entries from other projects
-        if (entry.userId === currentUserId || entry.createdBy === currentUserId) {
+        if (isOwnEntry(entry)) {
           return true;
         }
         return false;
       });
+      // Filter out other users' drafts
+      return filterDrafts(managedEntries);
     }
 
-    // Regular team member - show only own entries
-    return timeEntries.filter(entry =>
-      entry.userId === currentUserId || entry.createdBy === currentUserId
-    );
-  }, [timeEntries, profile, myManagedProjects, isAdmin, isHR]);
+    // Regular team member (employee with no PM/TL role):
+    // - Only see their own timesheet entries
+    // - No access to other employees' data
+    // - Employee filter won't be shown (employees list not fetched)
+    return timeEntries.filter(entry => isOwnEntry(entry));
+  }, [timeEntries, profile, myManagedProjects, isAdmin, isHR, clerkUserId]);
 
   // Helper: Re-fetch entries with current filters (used after submit/approve/reject)
   const refetchEntries = useCallback(async () => {
@@ -274,7 +370,8 @@ const TimeSheet = () => {
 
     if (isAdmin || isHR) {
       await fetchTimeEntries(filters);
-    } else if (isProjectLevelManager) {
+    } else if (myManagedProjects.length > 0) {
+      // Project Manager / Team Leader: use managed endpoint only if they have managed projects
       await fetchManagedTimeEntries(filters);
     } else {
       // Regular employee - use clerkUserId (not employeeId which is "EMP-XXXX" format)
@@ -285,14 +382,38 @@ const TimeSheet = () => {
       }
     }
     await fetchStats();
-  }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, isProjectLevelManager,
+  }, [dateRange, selectedProject, selectedEmployee, isAdmin, isHR, myManagedProjects,
     fetchTimeEntries, fetchManagedTimeEntries, getTimeEntriesByUser, fetchStats]);
 
-  // Apply status filter to entries
+  // Apply status filter and additional client-side filters to entries
   const displayedEntries = useMemo(() => {
-    if (statusFilter === 'all') return filteredTimeEntries;
-    return filteredTimeEntries.filter(e => e.status === statusFilter);
-  }, [filteredTimeEntries, statusFilter]);
+    let entries = filteredTimeEntries;
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      entries = entries.filter(e => e.status === statusFilter);
+    }
+
+    // Apply employee filter (client-side to ensure consistency)
+    // Match by userDetails.employeeId (like "EMP-5785")
+    if (selectedEmployee) {
+      entries = entries.filter(e => {
+        const entryEmployeeId = e.userDetails?.employeeId;
+        return entryEmployeeId === selectedEmployee;
+      });
+    }
+
+    // Apply project filter (client-side to ensure consistency)
+    // NOTE: projectId might be ObjectId or string, handle both cases
+    if (selectedProject) {
+      entries = entries.filter(e => {
+        const entryProjectId = e.projectId?.toString() || e.projectId;
+        return entryProjectId === selectedProject;
+      });
+    }
+
+    return entries;
+  }, [filteredTimeEntries, statusFilter, selectedEmployee, selectedProject]);
 
   // Fetch data when filters change (after initial load is complete)
   useEffect(() => {
@@ -301,8 +422,7 @@ const TimeSheet = () => {
 
     // Refetch when any filter changes
     refetchEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, selectedProject, selectedEmployee]);
+  }, [dateRange, selectedProject, selectedEmployee, refetchEntries]);
 
   /**
    * Approval Hierarchy Decision Logic:
@@ -325,7 +445,8 @@ const TimeSheet = () => {
    */
   const canApproveEntry = useCallback((entry: TimeEntry): boolean => {
     // Only PM/TL can approve (NOT Admin/HR per user requirement)
-    if (!isProjectLevelManager) return false;
+    // Must have at least one managed project to approve entries
+    if (myManagedProjects.length === 0) return false;
 
     // Entry must be in "Submitted" status
     if (entry.status !== 'Submitted') return false;
@@ -359,13 +480,13 @@ const TimeSheet = () => {
 
     // TIER 3: Team Member - Cannot approve anyone (returns false)
     return false;
-  }, [isProjectLevelManager, myManagedProjects, employeeId, clerkUserId, profile]);
+  }, [myManagedProjects, employeeId, clerkUserId, profile]);
 
   // Build table columns
   const columns = useMemo(() => {
     const allColumns = [
-      // Employee column - only show for admins, HR, team leads, and project managers
-      ...(!isRegularTeamMember ? [{
+      // Employee column - always shown for all users
+      {
         title: "Employee",
         dataIndex: "employeeName",
         render: (text: string, record: TimeEntry) => (
@@ -407,7 +528,7 @@ const TimeSheet = () => {
           </div>
         ),
         sorter: (a: TimeEntry, b: TimeEntry) => (a.userDetails?.firstName || '').localeCompare(b.userDetails?.firstName || ''),
-      }] : []),
+      },
       {
         title: "Date",
         dataIndex: "date",
@@ -489,7 +610,7 @@ const TimeSheet = () => {
               <Link
                 to="#"
                 className="me-2"
-                onClick={() => setViewingEntry(record)}
+                onClick={() => handleViewEntry(record)}
                 data-bs-toggle="modal"
                 data-inert={true}
                 data-bs-target="#view_timesheet"
@@ -562,10 +683,12 @@ const TimeSheet = () => {
     return allColumns;
   }, [isRegularTeamMember, canApproveEntry, approving, submitting, employeeId, clerkUserId, profile, role]);
 
-  // Build project options for dropdowns
+  // Build project options for dropdowns (sorted A-Z)
   const projectOptions = useMemo(() => {
     if (!projects) return [];
-    return projects.map(p => ({ value: p._id, label: p.name }));
+    return projects
+      .map(p => ({ value: p._id, label: p.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [projects]);
 
   // Handle form input change
@@ -583,14 +706,33 @@ const TimeSheet = () => {
     }
   };
 
-  // Handle project filter change
+  // Handle project filter change - just set state, useEffect will handle refetch
   const handleProjectFilter = (value: string) => {
     setSelectedProject(value);
-    if (value) {
-      fetchTimeEntries({ page: 1, limit: 50, projectId: value });
-    } else {
-      fetchTimeEntries({ page: 1, limit: 50 });
+    setProjectSearchQuery('');
+
+    // If selecting a specific project, check if current employee is in it
+    if (value && selectedEmployee) {
+      const project = projects.find(p => p._id === value);
+      if (project && !isEmployeeInProject(selectedEmployee, project)) {
+        // Clear employee filter if they're not in the new project
+        setSelectedEmployee('');
+      }
     }
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedProject('');
+    setSelectedEmployee('');
+    setDateRange({});
+    setProjectSearchQuery('');
+    setEmployeeSearchQuery('');
+    setDateFilterMode('preset');
+    setSpecificDate('');
+    setRangeStartDate('');
+    setRangeEndDate('');
+    message.success('All filters cleared');
   };
 
   // Reset form
@@ -619,6 +761,24 @@ const TimeSheet = () => {
       billable: entry.billable,
       billRate: entry.billRate?.toString() || ""
     });
+  };
+
+  // Handle View Entry - Fetch approver details when viewing an entry
+  const handleViewEntry = async (entry: TimeEntry) => {
+    setViewingEntry(entry);
+
+    // Fetch employees if not already loaded
+    if (employees.length === 0) {
+      await fetchEmployees({ status: 'Active' } as any);
+    }
+
+    // Find approver by clerkUserId
+    if (entry.approvedBy) {
+      const approver = employees.find(emp => emp.clerkUserId === entry.approvedBy);
+      setApproverDetails(approver || null);
+    } else {
+      setApproverDetails(null);
+    }
   };
 
   // Handle form submission (create or update)
@@ -692,16 +852,21 @@ const TimeSheet = () => {
   // Handle delete confirmation
   const handleDelete = async () => {
     if (deleteEntryId) {
-      const success = await deleteTimeEntry(deleteEntryId);
-      if (success) {
-        setDeleteEntryId(null);
-        // Close modal
-        const modalElement = document.getElementById('delete_modal');
-        const bootstrapModal = (window as any).bootstrap;
-        if (bootstrapModal && modalElement) {
-          const modal = bootstrapModal.Modal.getInstance(modalElement);
-          if (modal) modal.hide();
+      setDeleting(true);
+      try {
+        const success = await deleteTimeEntry(deleteEntryId);
+        if (success) {
+          setDeleteEntryId(null);
+          // Close modal
+          const modalElement = document.getElementById('delete_modal');
+          const bootstrapModal = (window as any).bootstrap;
+          if (bootstrapModal && modalElement) {
+            const modal = bootstrapModal.Modal.getInstance(modalElement);
+            if (modal) modal.hide();
+          }
         }
+      } finally {
+        setDeleting(false);
       }
     }
   };
@@ -757,6 +922,7 @@ const TimeSheet = () => {
       message.error('Please provide a rejection reason');
       return;
     }
+    setRejecting(true);
     try {
       const entry = displayedEntries.find(e => e._id === rejectEntryId);
       if (!entry) return;
@@ -776,24 +942,58 @@ const TimeSheet = () => {
       }
     } catch (error) {
       console.error('Reject failed:', error);
+    } finally {
+      setRejecting(false);
     }
   };
 
   // Handle employee filter change
   const handleEmployeeFilter = (employeeId: string) => {
     setSelectedEmployee(employeeId);
+    setEmployeeSearchQuery('');
+
+    // If selecting a specific employee, check if current project includes them
+    if (employeeId && selectedProject) {
+      const project = projects.find(p => p._id === selectedProject);
+      if (project && !isEmployeeInProject(employeeId, project)) {
+        // Clear project filter if the employee isn't in that project
+        setSelectedProject('');
+      }
+    }
   };
 
-  // Calculate total hours for display (use filtered entries)
-  const totalHours = stats?.totalHours ?? filteredTimeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
-  const billableHours = stats?.billableHours ?? filteredTimeEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  // Base filtered entries (with employee/project filters but without status filter)
+  // Used for calculating counts that reflect the current employee/project selection
+  const baseFilteredEntries = useMemo(() => {
+    let entries = filteredTimeEntries;
 
-  // Status counts from API or local calculation
-  const totalEntriesCount = stats?.totalEntries ?? filteredTimeEntries.length;
-  const draftCount = stats?.draftEntries ?? filteredTimeEntries.filter(e => e.status === 'Draft').length;
-  const submittedCount = stats?.submittedEntries ?? filteredTimeEntries.filter(e => e.status === 'Submitted').length;
-  const approvedCount = stats?.approvedEntries ?? filteredTimeEntries.filter(e => e.status === 'Approved').length;
-  const rejectedCount = stats?.rejectedEntries ?? filteredTimeEntries.filter(e => e.status === 'Rejected').length;
+    // Apply employee filter
+    if (selectedEmployee) {
+      entries = entries.filter(e => e.userDetails?.employeeId === selectedEmployee);
+    }
+
+    // Apply project filter
+    // NOTE: projectId might be ObjectId or string, handle both cases
+    if (selectedProject) {
+      entries = entries.filter(e => {
+        const entryProjectId = e.projectId?.toString() || e.projectId;
+        return entryProjectId === selectedProject;
+      });
+    }
+
+    return entries;
+  }, [filteredTimeEntries, selectedEmployee, selectedProject]);
+
+  // Calculate total hours for display (use base filtered entries)
+  const totalHours = baseFilteredEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+  const billableHours = baseFilteredEntries.filter(e => e.billable).reduce((sum, entry) => sum + (entry.duration || 0), 0);
+
+  // Status counts - reflect current employee/project filters
+  const totalEntriesCount = baseFilteredEntries.length;
+  const draftCount = baseFilteredEntries.filter(e => e.status === 'Draft').length;
+  const submittedCount = baseFilteredEntries.filter(e => e.status === 'Submitted').length;
+  const approvedCount = baseFilteredEntries.filter(e => e.status === 'Approved').length;
+  const rejectedCount = baseFilteredEntries.filter(e => e.status === 'Rejected').length;
 
   // Build status tabs configuration
   const statusTabs = [
@@ -804,14 +1004,113 @@ const TimeSheet = () => {
     { key: 'Rejected', label: 'Rejected', count: rejectedCount },
   ];
 
-  // Employee options for filter dropdown
+  // Employee options for filter dropdown (sorted A-Z)
+  // Use employeeId (like "EMP-5785") as value since it matches userDetails.employeeId in time entries
   const employeeOptions = useMemo(() => {
     if (!employees || employees.length === 0) return [];
-    return employees.map((emp: Employee) => ({
-      value: emp._id,
-      label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
-    }));
+    return employees
+      .map((emp: Employee) => ({
+        value: emp.employeeId || emp._id,
+        label: `${emp.firstName} ${emp.lastName} (${emp.employeeId || 'N/A'})`
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [employees]);
+
+  // Helper: Get all employee IDs assigned to a project (PM, TL, Members)
+  const getProjectAssignees = useCallback((project: any): string[] => {
+    const assignees: string[] = [];
+
+    // Helper to extract _id from either string or object
+    const extractIds = (arr: any[] | undefined): string[] => {
+      if (!arr || !Array.isArray(arr)) return [];
+      return arr.map(item => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && item._id) return item._id;
+        return null;
+      }).filter(Boolean) as string[];
+    };
+
+    // projectManager - may be strings or objects
+    assignees.push(...extractIds(project.projectManager));
+    // teamLeader - usually populated objects from backend
+    assignees.push(...extractIds(project.teamLeader));
+    // teamMembers - may be strings or objects
+    assignees.push(...extractIds(project.teamMembers));
+
+    return assignees;
+  }, []);
+
+  // Helper: Check if an employee is assigned to a project
+  const isEmployeeInProject = useCallback((employeeId: string, project: any): boolean => {
+    // employeeId here is the EMP-XXXX format or _id
+    // Project stores _id references, so we need to match via employees array
+    const assigneeIds = getProjectAssignees(project);
+
+    // Find the employee document that matches this employeeId
+    const employee = employees?.find(emp =>
+      emp.employeeId === employeeId || emp._id === employeeId
+    );
+
+    if (!employee) return false;
+
+    // Check if employee._id is in the project's assignees
+    return assigneeIds.includes(employee._id);
+  }, [employees, getProjectAssignees]);
+
+  // Filtered project options based on selected employee and search query
+  const filteredProjectOptions = useMemo(() => {
+    let filtered = projectOptions;
+
+    // If an employee is selected, show only projects they're assigned to
+    if (selectedEmployee && projects.length > 0) {
+      const employeeProjects = projects.filter(project =>
+        isEmployeeInProject(selectedEmployee, project)
+      );
+      const projectIds = employeeProjects.map(p => p._id);
+      filtered = projectOptions.filter(opt => projectIds.includes(opt.value));
+    }
+
+    // Apply search filter
+    if (projectSearchQuery.trim()) {
+      const query = projectSearchQuery.toLowerCase().trim();
+      filtered = filtered.filter(opt =>
+        opt.label.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [projectOptions, selectedEmployee, projects, projectSearchQuery, isEmployeeInProject]);
+
+  // Filtered employee options based on selected project and search query
+  const filteredEmployeeOptions = useMemo(() => {
+    let filtered = employeeOptions;
+
+    // If a project is selected, show only employees assigned to that project
+    if (selectedProject && projects.length > 0) {
+      const project = projects.find(p => p._id === selectedProject);
+      if (project) {
+        const assigneeIds = getProjectAssignees(project);
+
+        // Filter employees whose _id is in the assignees list
+        filtered = employeeOptions.filter(opt => {
+          const employee = employees?.find(emp =>
+            emp.employeeId === opt.value || emp._id === opt.value
+          );
+          return employee && assigneeIds.includes(employee._id);
+        });
+      }
+    }
+
+    // Apply search filter
+    if (employeeSearchQuery.trim()) {
+      const query = employeeSearchQuery.toLowerCase().trim();
+      filtered = filtered.filter(opt =>
+        opt.label.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [employeeOptions, selectedProject, projects, employees, employeeSearchQuery, getProjectAssignees]);
 
   const getModalContainer = () => {
     const modalElement = document.getElementById("modal-datepicker");
@@ -820,6 +1119,89 @@ const TimeSheet = () => {
 
   return (
     <>
+      {/* Skeleton Loader Styles */}
+      <style>{`
+        /* Skeleton Loader Styles */
+        .skeleton-text {
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          border-radius: 4px;
+          height: 16px;
+        }
+
+        .skeleton-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-badge {
+          width: 80px;
+          height: 24px;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-actions {
+          width: 100px;
+          height: 20px;
+          border-radius: 4px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-stat-label {
+          width: 100px;
+          height: 14px;
+        }
+
+        .skeleton-stat-value {
+          width: 70px;
+          height: 28px;
+        }
+
+        .skeleton-employee-name {
+          width: 120px;
+          height: 14px;
+        }
+
+        .skeleton-emp-id {
+          width: 80px;
+          height: 12px;
+        }
+
+        .skeleton-date {
+          width: 90px;
+          height: 14px;
+        }
+
+        .skeleton-project {
+          width: 140px;
+          height: 14px;
+        }
+
+        .skeleton-description {
+          width: 200px;
+          height: 14px;
+        }
+
+        .skeleton-hours {
+          width: 50px;
+          height: 14px;
+        }
+
+        @keyframes skeleton-loading {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
       {/* Page Wrapper */}
       <div className="page-wrapper">
         <div className="content">
@@ -848,20 +1230,21 @@ const TimeSheet = () => {
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
                   >
-                    <i className="ti ti-file-export me-1" />
+                    <i className="ti ti-file-export me-2" />
                     Export
                   </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-2">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-pdf me-1" />
+                      <Link to="#" className="dropdown-item rounded-1 d-flex align-items-center">
+                        <i className="ti ti-file-type-pdf me-2 text-danger" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-xls me-1" />
+                      <Link to="#" className="dropdown-item rounded-1 d-flex align-items-center">
+                        <i className="ti ti-file-type-xls me-2 text-success" />
                         Export as Excel
                       </Link>
                     </li>
@@ -897,10 +1280,10 @@ const TimeSheet = () => {
                     data-bs-toggle="modal"
                     data-inert={true}
                     data-bs-target="#add_timesheet"
-                    className="btn btn-primary d-flex align-items-center"
+                    className="btn btn-primary d-inline-flex align-items-center"
                     onClick={() => resetForm()}
                   >
-                    <i className="ti ti-circle-plus me-2" />
+                    <i className="ti ti-plus me-2" />
                     Add Today's Work
                   </Link>
                 </div>
@@ -914,42 +1297,55 @@ const TimeSheet = () => {
 
           {/* Stats Cards */}
           <div className="row g-3 mb-3">
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Total Hours</h6>
-                  <h4 className="mb-0">{totalHours.toFixed(1)}h</h4>
+            {loading && !initialLoadDone.current ? (
+              <>
+                {/* Skeleton Loaders for Stats Cards */}
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="col-md-3">
+                    <StatCardSkeleton />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Total Hours</h6>
+                      <h4 className="mb-0">{totalHours.toFixed(1)}h</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Billable Hours</h6>
-                  <h4 className="mb-0">{billableHours.toFixed(1)}h</h4>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Billable Hours</h6>
+                      <h4 className="mb-0">{billableHours.toFixed(1)}h</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Entries</h6>
-                  <h4 className="mb-0">{filteredTimeEntries.length}</h4>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Entries</h6>
+                      <h4 className="mb-0">{filteredTimeEntries.length}</h4>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="card">
-                <div className="card-body">
-                  <h6 className="mb-1">Date Range</h6>
-                  <p className="mb-0 text-truncate" style={{ fontSize: '13px' }}>
-                    {dateRange.startDate && dateRange.endDate
-                      ? `${new Date(dateRange.startDate).toLocaleDateString('en-GB')} - ${new Date(dateRange.endDate).toLocaleDateString('en-GB')}`
-                      : 'All Time'}
-                  </p>
+                <div className="col-md-3">
+                  <div className="card">
+                    <div className="card-body">
+                      <h6 className="mb-1">Date Range</h6>
+                      <p className="mb-0 text-truncate" style={{ fontSize: '13px' }}>
+                        {dateRange.startDate && dateRange.endDate
+                          ? `${new Date(dateRange.startDate).toLocaleDateString('en-GB')} - ${new Date(dateRange.endDate).toLocaleDateString('en-GB')}`
+                          : 'All Time'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
 
           {/* Performance Indicator list */}
@@ -957,73 +1353,145 @@ const TimeSheet = () => {
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Timesheet Entries</h5>
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                {/* Project Filter Dropdown with Search */}
                 <div className="dropdown me-3">
                   <Link
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    onClick={() => setProjectSearchQuery('')}
                   >
                     {selectedProject
                       ? projectOptions.find(p => p.value === selectedProject)?.label || 'Select Project'
-                      : 'Select Project'
+                      : 'All Projects'
                     }
                   </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3" style={{ minWidth: '280px', maxHeight: '350px' }}>
+                    {/* Search Input */}
+                    <li className="mb-2">
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="Search projects..."
+                        value={projectSearchQuery}
+                        onChange={(e) => setProjectSearchQuery(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </li>
+                    <li><hr className="dropdown-divider my-2" /></li>
+                    {/* All Projects Option */}
                     <li>
                       <Link
                         to="#"
-                        className="dropdown-item rounded-1"
-                        onClick={() => handleProjectFilter('')}
+                        className={`dropdown-item rounded-1 ${!selectedProject ? 'active' : ''}`}
+                        onClick={() => {
+                          handleProjectFilter('');
+                          setProjectSearchQuery('');
+                        }}
                       >
                         All Projects
+                        {selectedEmployee && ` (${filteredProjectOptions.length} available)`}
                       </Link>
                     </li>
-                    {projectOptions.map(project => (
-                      <li key={project.value}>
-                        <Link
-                          to="#"
-                          className="dropdown-item rounded-1"
-                          onClick={() => handleProjectFilter(project.value)}
-                        >
-                          {project.label}
-                        </Link>
-                      </li>
-                    ))}
+                    {/* Filtered Project List */}
+                    <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                      {filteredProjectOptions.length > 0 ? (
+                        filteredProjectOptions.map(project => (
+                          <li key={project.value}>
+                            <Link
+                              to="#"
+                              className={`dropdown-item rounded-1 ${selectedProject === project.value ? 'active' : ''}`}
+                              onClick={() => {
+                                handleProjectFilter(project.value);
+                                setProjectSearchQuery('');
+                              }}
+                            >
+                              {project.label}
+                            </Link>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-muted text-center py-2 px-3">
+                          <small>No projects found</small>
+                        </li>
+                      )}
+                    </div>
                   </ul>
                 </div>
-                {(isAdmin || isHR || isProjectLevelManager) && employeeOptions.length > 0 && (
+                {/*
+                  Employee Filter Dropdown with Search
+                  Visible only for users who can view multiple employees' timesheet entries:
+                  - Admin/HR: Can view all employees in the company
+                  - Project Managers (PM): Can view all team members in their projects
+                  - Team Leaders (TL): Can view team members in their projects
+
+                  Regular employees (team members only) do NOT see this filter as they only see their own entries.
+                */}
+                {(isAdmin || isHR || myManagedProjects.length > 0) && employeeOptions.length > 0 && (
                   <div className="dropdown me-3">
                     <Link
                       to="#"
                       className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                       data-bs-toggle="dropdown"
+                      aria-expanded="false"
+                      onClick={() => setEmployeeSearchQuery('')}
                     >
                       {selectedEmployee
                         ? employeeOptions.find(e => e.value === selectedEmployee)?.label || 'Select Employee'
                         : 'All Employees'
                       }
                     </Link>
-                    <ul className="dropdown-menu dropdown-menu-end p-3" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    <ul className="dropdown-menu dropdown-menu-end p-3" style={{ minWidth: '300px', maxHeight: '350px' }}>
+                      {/* Search Input */}
+                      <li className="mb-2">
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="Search employees..."
+                          value={employeeSearchQuery}
+                          onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </li>
+                      <li><hr className="dropdown-divider my-2" /></li>
+                      {/* All Employees Option */}
                       <li>
                         <Link
                           to="#"
-                          className="dropdown-item rounded-1"
-                          onClick={() => handleEmployeeFilter('')}
+                          className={`dropdown-item rounded-1 ${!selectedEmployee ? 'active' : ''}`}
+                          onClick={() => {
+                            handleEmployeeFilter('');
+                            setEmployeeSearchQuery('');
+                          }}
                         >
                           All Employees
+                          {selectedProject && ` (${filteredEmployeeOptions.length} in project)`}
                         </Link>
                       </li>
-                      {employeeOptions.map(employee => (
-                        <li key={employee.value}>
-                          <Link
-                            to="#"
-                            className="dropdown-item rounded-1"
-                            onClick={() => handleEmployeeFilter(employee.value)}
-                          >
-                            {employee.label}
-                          </Link>
-                        </li>
-                      ))}
+                      {/* Filtered Employee List */}
+                      <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                        {filteredEmployeeOptions.length > 0 ? (
+                          filteredEmployeeOptions.map(employee => (
+                            <li key={employee.value}>
+                              <Link
+                                to="#"
+                                className={`dropdown-item rounded-1 ${selectedEmployee === employee.value ? 'active' : ''}`}
+                                onClick={() => {
+                                  handleEmployeeFilter(employee.value);
+                                  setEmployeeSearchQuery('');
+                                }}
+                              >
+                                {employee.label}
+                              </Link>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-muted text-center py-2 px-3">
+                            <small>No employees found</small>
+                          </li>
+                        )}
+                      </div>
                     </ul>
                   </div>
                 )}
@@ -1032,52 +1500,50 @@ const TimeSheet = () => {
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    aria-expanded="false"
                   >
-                    <i className="ti ti-filter me-1" />
-                    Filter by Date
+                    <i className="ti ti-filter me-2" />
+                    {dateRange.startDate
+                      ? dateRange.startDate === dateRange.endDate
+                        ? dayjs(dateRange.startDate).format('MMM D, YYYY')
+                        : `${dayjs(dateRange.startDate).format('MMM D')} - ${dayjs(dateRange.endDate).format('MMM D, YYYY')}`
+                      : 'Filter by Date'
+                    }
                   </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3" style={{ minWidth: '280px' }}>
+                    {/* Preset Options */}
+                    <li className="dropdown-header text-muted small">Quick Filters</li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => setDateRange({})}>
+                      <Link to="#" className={`dropdown-item rounded-1 ${!dateRange.startDate ? 'active' : ''}`} onClick={() => {
+                        setDateRange({});
+                        setDateFilterMode('preset');
+                        setSpecificDate('');
+                        setRangeStartDate('');
+                        setRangeEndDate('');
+                      }}>
                         All Time
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => setDateRange({
-                        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                        endDate: new Date().toISOString().split('T')[0]
-                      })}>
-                        Last 7 Days
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => setDateRange({
-                        startDate: new Date().toISOString().split('T')[0],
-                        endDate: new Date().toISOString().split('T')[0]
-                      })}>
+                      <Link to="#" className="dropdown-item rounded-1" onClick={() => {
+                        setDateRange({
+                          startDate: new Date().toISOString().split('T')[0],
+                          endDate: new Date().toISOString().split('T')[0]
+                        });
+                        setDateFilterMode('preset');
+                      }}>
                         Today
                       </Link>
                     </li>
                     <li>
                       <Link to="#" className="dropdown-item rounded-1" onClick={() => {
-                        const now = new Date();
                         setDateRange({
-                          startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
-                          endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString().split('T')[0]
+                          startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                          endDate: new Date().toISOString().split('T')[0]
                         });
+                        setDateFilterMode('preset');
                       }}>
-                        This Month
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1" onClick={() => {
-                        const now = new Date();
-                        setDateRange({
-                          startDate: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0],
-                          endDate: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString().split('T')[0]
-                        });
-                      }}>
-                        Last Month
+                        Last 7 Days
                       </Link>
                     </li>
                     <li>
@@ -1091,31 +1557,150 @@ const TimeSheet = () => {
                           startDate: startOfWeek.toISOString().split('T')[0],
                           endDate: endOfWeek.toISOString().split('T')[0]
                         });
+                        setDateFilterMode('preset');
                       }}>
                         This Week
                       </Link>
                     </li>
+                    <li>
+                      <Link to="#" className="dropdown-item rounded-1" onClick={() => {
+                        const now = new Date();
+                        setDateRange({
+                          startDate: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+                          endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString().split('T')[0]
+                        });
+                        setDateFilterMode('preset');
+                      }}>
+                        This Month
+                      </Link>
+                    </li>
+                    <li>
+                      <Link to="#" className="dropdown-item rounded-1" onClick={() => {
+                        const now = new Date();
+                        setDateRange({
+                          startDate: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0],
+                          endDate: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString().split('T')[0]
+                        });
+                        setDateFilterMode('preset');
+                      }}>
+                        Last Month
+                      </Link>
+                    </li>
+
+                    <li><hr className="dropdown-divider my-2" /></li>
+
+                    {/* Specific Date Option */}
+                    <li className="dropdown-header text-muted small">Specific Date</li>
+                    <li className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                      <DatePicker
+                        className="w-100"
+                        placeholder="Select date"
+                        value={specificDate ? dayjs(specificDate) : null}
+                        onChange={(date) => {
+                          if (date) {
+                            const dateStr = date.format('YYYY-MM-DD');
+                            setSpecificDate(dateStr);
+                            setDateRange({ startDate: dateStr, endDate: dateStr });
+                            setDateFilterMode('specific');
+                            setRangeStartDate('');
+                            setRangeEndDate('');
+                          } else {
+                            // Handle clear
+                            setSpecificDate('');
+                            setDateRange({});
+                            setDateFilterMode('preset');
+                          }
+                        }}
+                        format="MMM D, YYYY"
+                        allowClear
+                      />
+                    </li>
+
+                    <li><hr className="dropdown-divider my-2" /></li>
+
+                    {/* Date Range Option */}
+                    <li className="dropdown-header text-muted small">Date Range</li>
+                    <li className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="d-flex flex-column gap-2">
+                        <DatePicker
+                          className="w-100"
+                          placeholder="Start date"
+                          value={rangeStartDate ? dayjs(rangeStartDate) : null}
+                          onChange={(date) => {
+                            if (date) {
+                              const dateStr = date.format('YYYY-MM-DD');
+                              setRangeStartDate(dateStr);
+                              setSpecificDate('');
+                              setDateFilterMode('range');
+                              if (rangeEndDate && dateStr <= rangeEndDate) {
+                                setDateRange({ startDate: dateStr, endDate: rangeEndDate });
+                              } else if (rangeEndDate && dateStr > rangeEndDate) {
+                                // If start > end, reset end date
+                                setRangeEndDate('');
+                                setDateRange({});
+                              }
+                            } else {
+                              // Handle clear
+                              setRangeStartDate('');
+                              setDateRange({});
+                            }
+                          }}
+                          format="MMM D, YYYY"
+                          allowClear
+                        />
+                        <DatePicker
+                          className="w-100"
+                          placeholder="End date"
+                          value={rangeEndDate ? dayjs(rangeEndDate) : null}
+                          onChange={(date) => {
+                            if (date) {
+                              const dateStr = date.format('YYYY-MM-DD');
+                              setRangeEndDate(dateStr);
+                              setSpecificDate('');
+                              setDateFilterMode('range');
+                              if (rangeStartDate && dateStr >= rangeStartDate) {
+                                setDateRange({ startDate: rangeStartDate, endDate: dateStr });
+                              } else if (!rangeStartDate) {
+                                // If no start date, set both to end date
+                                setRangeStartDate(dateStr);
+                                setDateRange({ startDate: dateStr, endDate: dateStr });
+                              }
+                            } else {
+                              // Handle clear
+                              setRangeEndDate('');
+                              if (rangeStartDate) {
+                                setDateRange({});
+                              }
+                            }
+                          }}
+                          format="MMM D, YYYY"
+                          allowClear
+                          disabledDate={(current) => {
+                            if (!rangeStartDate) return false;
+                            return current && current < dayjs(rangeStartDate).startOf('day');
+                          }}
+                        />
+                      </div>
+                    </li>
                   </ul>
                 </div>
+                {/* Clear All Filters Button */}
+                {(selectedProject || selectedEmployee || dateRange.startDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger d-inline-flex align-items-center"
+                    onClick={clearAllFilters}
+                    title="Clear all filters"
+                  >
+                    <i className="ti ti-filter-x me-2" />
+                    Clear Filters
+                  </button>
+                )}
               </div>
             </div>
             <div className="card-body p-0">
-              {/* Info banner for PM/TL - Shows their approval tier */}
-              {isProjectLevelManager && myManagedProjects.length > 0 && (
-                <div className="alert alert-success border-0 rounded-0 m-0 mb-3" role="alert">
-                  <div className="d-flex align-items-center">
-                    <i className="ti ti-shield-check fs-20 me-2"></i>
-                    <span>
-                      {isProjectManager && isTeamLeader
-                        ? `You manage ${myManagedProjects.length} project(s) as Project Manager and/or Team Leader. You can approve/reject submitted timesheets according to your role in each project.`
-                        : isProjectManager
-                          ? `You manage ${myManagedProjects.length} project(s) as Project Manager (Tier 1). You can approve/reject all submitted timesheets including your own.`
-                          : `You manage ${myManagedProjects.length} project(s) as Team Leader (Tier 2). You can approve/reject team members' timesheets, but your own entries require Project Manager approval.`}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {isProjectLevelManager && submittedCount > 0 && statusFilter !== 'Submitted' && (
+              {/* Actionable alert for PM/TL with pending approvals */}
+              {myManagedProjects.length > 0 && submittedCount > 0 && statusFilter !== 'Submitted' && (
                 <div
                   className="alert alert-warning border-0 rounded-0 m-0 mb-3"
                   role="alert"
@@ -1127,17 +1712,6 @@ const TimeSheet = () => {
                     <span>
                       <strong>{submittedCount} timesheet entr{submittedCount > 1 ? 'ies' : 'y'} pending your approval.</strong>
                       <span className="ms-2 text-muted">Click here or select the "Submitted" tab to review.</span>
-                    </span>
-                  </div>
-                </div>
-              )}
-              {/* Info banner for regular team members (Tier 3) */}
-              {!isAdmin && !isHR && !isProjectLevelManager && (
-                <div className="alert alert-info border-0 rounded-0 m-0 mb-3" role="alert">
-                  <div className="d-flex align-items-center">
-                    <i className="ti ti-info-circle fs-20 me-2"></i>
-                    <span>
-                      You are viewing only your own timesheet entries. Your submitted entries require Team Lead or Project Manager approval.
                     </span>
                   </div>
                 </div>
@@ -1164,10 +1738,7 @@ const TimeSheet = () => {
               </div>
 
               {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status"></div>
-                  <p className="mt-2">Loading timesheets...</p>
-                </div>
+                <TableSkeleton showEmployee={!isRegularTeamMember} />
               ) : error ? (
                 <div className="text-center py-5">
                   <p className="text-danger">{error}</p>
@@ -1196,7 +1767,7 @@ const TimeSheet = () => {
       {/* /Page Wrapper */}
 
       {/* Add Timesheet */}
-      <div className="modal fade" id="add_timesheet">
+      <div className="modal fade" id="add_timesheet" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -1218,38 +1789,43 @@ const TimeSheet = () => {
                       <label className="form-label">
                         Project <span className="text-danger">*</span>
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.projectId}
-                        onChange={(e) => handleInputChange('projectId', e.target.value)}
-                        required
-                      >
-                        <option value="">Select Project</option>
-                        {projectOptions.map(project => (
-                          <option key={project.value} value={project.value}>{project.label}</option>
-                        ))}
-                      </select>
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: "Select Project" },
+                          ...projectOptions
+                        ]}
+                        value={projectOptions.find(p => p.value === formData.projectId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('projectId', selected?.value || '');
+                        }}
+                        placeholder="Select Project"
+                        isSearchable={true}
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">
+                      <label className="form-label d-flex align-items-center">
                         Task <span className="text-danger">*</span>
+                        {loadingTasks && (
+                          <span className="spinner-border spinner-border-sm ms-2 text-primary" role="status" aria-hidden="true"></span>
+                        )}
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.taskId || ''}
-                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: !formData.projectId ? "Select a project first" : loadingTasks ? "Loading tasks..." : "Select Task" },
+                          ...taskOptions
+                        ]}
+                        value={taskOptions.find(t => t.value === formData.taskId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('taskId', selected?.value || '');
+                        }}
+                        placeholder="Select Task"
+                        isSearchable={true}
                         disabled={!formData.projectId || loadingTasks}
-                        required
-                      >
-                        <option value="">Select Task</option>
-                        {!formData.projectId && <option disabled>Select a project first</option>}
-                        {loadingTasks && <option disabled>Loading tasks...</option>}
-                        {taskOptions.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                      />
                       {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
                         <small className="text-warning">No tasks assigned to you in this project.</small>
                       )}
@@ -1343,6 +1919,7 @@ const TimeSheet = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
@@ -1351,7 +1928,14 @@ const TimeSheet = () => {
                   className="btn btn-primary"
                   disabled={loading}
                 >
-                  {loading ? 'Adding...' : 'Add Time Entry'}
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Time Entry'
+                  )}
                 </button>
               </div>
             </form>
@@ -1361,7 +1945,7 @@ const TimeSheet = () => {
       {/* /Add Timesheet */}
 
       {/* Edit Timesheet */}
-      <div className="modal fade" id="edit_timesheet">
+      <div className="modal fade" id="edit_timesheet" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -1383,38 +1967,43 @@ const TimeSheet = () => {
                       <label className="form-label">
                         Project <span className="text-danger">*</span>
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.projectId}
-                        onChange={(e) => handleInputChange('projectId', e.target.value)}
-                        required
-                      >
-                        <option value="">Select Project</option>
-                        {projectOptions.map(project => (
-                          <option key={project.value} value={project.value}>{project.label}</option>
-                        ))}
-                      </select>
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: "Select Project" },
+                          ...projectOptions
+                        ]}
+                        value={projectOptions.find(p => p.value === formData.projectId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('projectId', selected?.value || '');
+                        }}
+                        placeholder="Select Project"
+                        isSearchable={true}
+                      />
                     </div>
                   </div>
                   <div className="col-md-12">
                     <div className="mb-3">
-                      <label className="form-label">
+                      <label className="form-label d-flex align-items-center">
                         Task <span className="text-danger">*</span>
+                        {loadingTasks && (
+                          <span className="spinner-border spinner-border-sm ms-2 text-primary" role="status" aria-hidden="true"></span>
+                        )}
                       </label>
-                      <select
-                        className="form-control"
-                        value={formData.taskId || ''}
-                        onChange={(e) => handleInputChange('taskId', e.target.value)}
+                      <CommonSelect
+                        className="select"
+                        options={[
+                          { value: "", label: !formData.projectId ? "Select a project first" : loadingTasks ? "Loading tasks..." : "Select Task" },
+                          ...taskOptions
+                        ]}
+                        value={taskOptions.find(t => t.value === formData.taskId) || null}
+                        onChange={(selected: any) => {
+                          handleInputChange('taskId', selected?.value || '');
+                        }}
+                        placeholder="Select Task"
+                        isSearchable={true}
                         disabled={!formData.projectId || loadingTasks}
-                        required
-                      >
-                        <option value="">Select Task</option>
-                        {!formData.projectId && <option disabled>Select a project first</option>}
-                        {loadingTasks && <option disabled>Loading tasks...</option>}
-                        {taskOptions.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                      />
                       {formData.projectId && taskOptions.length === 0 && !loadingTasks && (
                         <small className="text-warning">No tasks assigned to you in this project.</small>
                       )}
@@ -1508,6 +2097,7 @@ const TimeSheet = () => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
@@ -1516,7 +2106,14 @@ const TimeSheet = () => {
                   className="btn btn-primary"
                   disabled={loading}
                 >
-                  {loading ? 'Updating...' : 'Save Changes'}
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Updating...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
                 </button>
               </div>
             </form>
@@ -1526,7 +2123,7 @@ const TimeSheet = () => {
       {/* /Edit Timesheet */}
 
       {/* Delete Confirmation Modal */}
-      <div className="modal fade" id="delete_modal">
+      <div className="modal fade" id="delete_modal" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
@@ -1548,6 +2145,7 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-light"
                 data-bs-dismiss="modal"
+                disabled={deleting}
               >
                 Cancel
               </button>
@@ -1555,9 +2153,16 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-danger"
                 onClick={handleDelete}
-                data-bs-dismiss="modal"
+                disabled={deleting}
               >
-                Delete
+                {deleting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
               </button>
             </div>
           </div>
@@ -1565,7 +2170,7 @@ const TimeSheet = () => {
       </div>
 
       {/* Reject Timesheet Modal */}
-      <div className="modal fade" id="reject_modal">
+      <div className="modal fade" id="reject_modal" data-bs-backdrop="static" data-bs-keyboard="false">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
@@ -1606,6 +2211,7 @@ const TimeSheet = () => {
                   setRejectEntryId(null);
                   setRejectReason('');
                 }}
+                disabled={rejecting}
               >
                 Cancel
               </button>
@@ -1613,9 +2219,16 @@ const TimeSheet = () => {
                 type="button"
                 className="btn btn-danger"
                 onClick={handleRejectConfirm}
-                disabled={!rejectReason.trim()}
+                disabled={!rejectReason.trim() || rejecting}
               >
-                Reject Timesheet
+                {rejecting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Rejecting...
+                  </>
+                ) : (
+                  'Reject Timesheet'
+                )}
               </button>
             </div>
           </div>
@@ -1623,7 +2236,7 @@ const TimeSheet = () => {
       </div>
 
       {/* View Timesheet Details Modal */}
-      <div className="modal fade" id="view_timesheet">
+      <div className="modal fade" id="view_timesheet" data-bs-backdrop="true" data-bs-keyboard="true">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-header">
@@ -1850,7 +2463,12 @@ const TimeSheet = () => {
                                 <label className="form-label text-muted fs-12 mb-1">
                                   {viewingEntry.status === 'Approved' ? 'Approved By' : 'Rejected By'}
                                 </label>
-                                <p className="mb-0 fw-medium">{viewingEntry.approvedBy}</p>
+                                <p className="mb-0 fw-medium">
+                                  {approverDetails
+                                    ? `${approverDetails.employeeId} - ${approverDetails.firstName} ${approverDetails.lastName}`
+                                    : viewingEntry.approvedBy
+                                  }
+                                </p>
                               </div>
                             )}
                             {viewingEntry.approvedDate && (

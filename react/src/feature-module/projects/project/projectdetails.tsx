@@ -2127,21 +2127,159 @@ const ProjectDetails = () => {
     return [...baseOption, ...teamOptions];
   }, [project?.teamMembers, project?.teamLeader, project?.projectManager]);
 
-  if (loading) {
-    return (
+  // Skeleton Loader Components
+  const ProjectDetailsSkeleton = () => (
+    <>
+      <style>{`
+        /* Skeleton Loader Styles */
+        .skeleton-text {
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          border-radius: 4px;
+          height: 16px;
+        }
+
+        .skeleton-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-title {
+          width: 200px;
+          height: 24px;
+        }
+
+        .skeleton-subtitle {
+          width: 150px;
+          height: 18px;
+        }
+
+        .skeleton-label {
+          width: 80px;
+          height: 14px;
+        }
+
+        .skeleton-value {
+          width: 120px;
+          height: 16px;
+        }
+
+        .skeleton-badge {
+          width: 80px;
+          height: 24px;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-button {
+          width: 100px;
+          height: 38px;
+          border-radius: 4px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-description {
+          width: 100%;
+          height: 14px;
+          margin-bottom: 8px;
+        }
+
+        .skeleton-list-item {
+          width: 100%;
+          height: 60px;
+          border-radius: 4px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s ease-in-out infinite;
+          margin-bottom: 12px;
+        }
+
+        @keyframes skeleton-loading {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+      `}</style>
       <div className="page-wrapper">
         <div className="content">
-          <div
-            className="d-flex justify-content-center align-items-center"
-            style={{ minHeight: '400px' }}
-          >
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+          <div className="row align-items-center mb-4">
+            <div className="d-md-flex d-sm-block justify-content-between align-items-center flex-wrap">
+              <div className="skeleton-text skeleton-button mb-3"></div>
+              <div className="skeleton-text skeleton-button"></div>
+            </div>
+          </div>
+          <div className="row">
+            {/* Left Sidebar Skeleton */}
+            <div className="col-xxl-3 col-xl-4">
+              <div className="card">
+                <div className="card-body">
+                  <div className="skeleton-text skeleton-title mb-3"></div>
+                  <div className="mb-3">
+                    <div className="skeleton-text skeleton-label mb-2"></div>
+                    <div className="skeleton-text skeleton-value"></div>
+                  </div>
+                  <div className="mb-3">
+                    <div className="skeleton-text skeleton-label mb-2"></div>
+                    <div className="skeleton-text skeleton-value"></div>
+                  </div>
+                  <div className="mb-3">
+                    <div className="skeleton-text skeleton-label mb-2"></div>
+                    <div className="skeleton-badge"></div>
+                  </div>
+                  <div className="mb-3">
+                    <div className="skeleton-text skeleton-label mb-2"></div>
+                    <div className="skeleton-text skeleton-description"></div>
+                    <div className="skeleton-text skeleton-description"></div>
+                    <div className="skeleton-text skeleton-description" style={{ width: '70%' }}></div>
+                  </div>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-body">
+                  <div className="skeleton-text skeleton-subtitle mb-3"></div>
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="d-flex align-items-center mb-3">
+                      <div className="skeleton-avatar me-2"></div>
+                      <div className="flex-grow-1">
+                        <div className="skeleton-text skeleton-value mb-1"></div>
+                        <div className="skeleton-text skeleton-label"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Main Content Skeleton */}
+            <div className="col-xxl-9 col-xl-8">
+              <div className="card">
+                <div className="card-body">
+                  <div className="skeleton-text skeleton-title mb-3"></div>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="skeleton-list-item"></div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    );
+    </>
+  );
+
+  if (loading) {
+    return <ProjectDetailsSkeleton />;
   }
 
   if (error) {
@@ -3481,7 +3619,18 @@ const ProjectDetails = () => {
                 onClick={handleSaveTeamMembers}
                 disabled={isSavingMembers || selectedMembers.length === 0}
               >
-                {isSavingMembers ? 'Saving...' : 'Save'}
+                {isSavingMembers ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
             </div>
           </div>
@@ -3541,7 +3690,18 @@ const ProjectDetails = () => {
                 onClick={handleSaveTeamLeads}
                 disabled={isSavingLeads || selectedLeads.length === 0}
               >
-                {isSavingLeads ? 'Saving...' : 'Save'}
+                {isSavingLeads ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
             </div>
           </div>
@@ -3603,7 +3763,18 @@ const ProjectDetails = () => {
                 onClick={handleSaveProjectManagers}
                 disabled={isSavingManagers || selectedManagers.length === 0}
               >
-                {isSavingManagers ? 'Saving...' : 'Save'}
+                {isSavingManagers ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
             </div>
           </div>
@@ -3883,7 +4054,18 @@ const ProjectDetails = () => {
                       deletingNote.title.trim().toLowerCase()
                     }
                   >
-                    {isDeletingNote ? 'Deleting...' : 'Delete Note'}
+                    {isDeletingNote ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Note'
+                    )}
                   </button>
                 </div>
               </div>
@@ -4730,7 +4912,18 @@ const ProjectDetails = () => {
                           onClick={handleEditProjectSave}
                           disabled={isSavingProject}
                         >
-                          {isSavingProject ? 'Saving...' : 'Save'}
+                          {isSavingProject ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-2"
+                                role="status"
+                                aria-hidden="true"
+                              ></span>
+                              Saving...
+                            </>
+                          ) : (
+                            'Save'
+                          )}
                         </button>
                       </div>
                     </div>
@@ -4875,7 +5068,18 @@ const ProjectDetails = () => {
                           onClick={handleEditProjectMembersSave}
                           disabled={isSavingProject}
                         >
-                          {isSavingProject ? 'Saving...' : 'Save'}
+                          {isSavingProject ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-2"
+                                role="status"
+                                aria-hidden="true"
+                              ></span>
+                              Saving...
+                            </>
+                          ) : (
+                            'Save'
+                          )}
                         </button>
                       </div>
                     </div>
@@ -5119,7 +5323,18 @@ const ProjectDetails = () => {
                 onClick={handleSaveEditTask}
                 disabled={isSavingEditTask}
               >
-                {isSavingEditTask ? 'Saving...' : 'Save Changes'}
+                {isSavingEditTask ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
               </button>
             </div>
           </div>
@@ -5205,7 +5420,18 @@ const ProjectDetails = () => {
                       deletingTask.title.trim().toLowerCase()
                     }
                   >
-                    {isDeletingTask ? 'Deleting...' : 'Delete Task'}
+                    {isDeletingTask ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Task'
+                    )}
                   </button>
                 </div>
               </div>

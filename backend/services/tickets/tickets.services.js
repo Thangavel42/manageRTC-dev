@@ -1,5 +1,5 @@
-import { getTenantCollections, getsuperadminCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
+import { getsuperadminCollections, getTenantCollections } from "../../config/db.js";
 
 const parseDate = (d) => {
   if (!d) return null;
@@ -868,7 +868,7 @@ export const deleteTicketCategory = async (tenantDbName, categoryId) => {
 /**
  * Get tickets for a user based on their role
  */
-export const getTicketsByUser = async (tenantDbName, userRole, userId, options = {}) => {
+export const getTicketsByUser = async (tenantDbName, userRole, userId, userEmail, options = {}) => {
   try {
     const collections = getTenantCollections(tenantDbName);
     const {
@@ -886,14 +886,66 @@ export const getTicketsByUser = async (tenantDbName, userRole, userId, options =
     // Build base filter
     let filter = {};
 
-    // Get employee MongoDB _id for the current user
-    const employee = await collections.employees.findOne(
+    // Get employee MongoDB _id for the current user - Try multiple lookup strategies
+    let employee = await collections.employees.findOne(
       { clerkUserId: userId },
       { projection: { _id: 1 } }
     );
 
-    const userObjectId = employee?._id;
+    // Fallback to email lookup if clerkUserId not found
+    if (!employee && userEmail) {
+      console.warn(`⚠️ Employee not found by clerkUserId: ${userId}, trying email: ${userEmail}`);
+      employee = await collections.employees.findOne(
+        { email: userEmail },
+        { projection: { _id: 1 } }
+      );
+
+      // Update clerkUserId if found by email
+      if (employee) {
+        console.log(`✅ Found employee by email, updating clerkUserId field`);
+        await collections.employees.updateOne(
+          { _id: employee._id },
+          { $set: { clerkUserId: userId } }
+        );
+      }
+    }
+
+    // For admin/superadmin users without employee records, auto-create one
     const isAdmin = ['superadmin', 'admin', 'hr'].includes(userRole);
+    if (!employee && isAdmin && userEmail) {
+      console.log('🔧 Admin/Superadmin user without employee record. Creating placeholder employee...');
+
+      // Get user info from Clerk (we need to fetch it - this is a service function without socket access)
+      // For now, we'll create a minimal record
+      const employeeId = `ADM-${Date.now().toString().slice(-6)}`;
+
+      const placeholderEmployee = {
+        employeeId: employeeId,
+        clerkUserId: userId,
+        firstName: 'Admin',
+        lastName: 'User',
+        email: userEmail,
+        role: userRole,
+        account: {
+          role: userRole,
+          userName: userEmail,
+        },
+        employmentType: 'Full-time',
+        employmentStatus: 'Active',
+        status: 'Active',
+        joiningDate: new Date(),
+        isActive: true,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const result = await collections.employees.insertOne(placeholderEmployee);
+      employee = { _id: result.insertedId, ...placeholderEmployee };
+      console.log('✅ Created placeholder employee for admin user:', employeeId);
+    }
+
+    const userObjectId = employee?._id;
 
     // Tab-based filtering
     if (tab) {
@@ -1023,18 +1075,68 @@ export const getTicketsByUser = async (tenantDbName, userRole, userId, options =
 /**
  * Get ticket counts by tab for a user
  */
-export const getTicketTabCounts = async (tenantDbName, userRole, userId) => {
+export const getTicketTabCounts = async (tenantDbName, userRole, userId, userEmail) => {
   try {
     const collections = getTenantCollections(tenantDbName);
 
-    // Get employee MongoDB _id
-    const employee = await collections.employees.findOne(
+    // Get employee MongoDB _id - Try multiple lookup strategies
+    let employee = await collections.employees.findOne(
       { clerkUserId: userId },
       { projection: { _id: 1 } }
     );
 
-    const userObjectId = employee?._id;
+    // Fallback to email lookup if clerkUserId not found
+    if (!employee && userEmail) {
+      console.warn(`⚠️ Employee not found by clerkUserId: ${userId}, trying email: ${userEmail}`);
+      employee = await collections.employees.findOne(
+        { email: userEmail },
+        { projection: { _id: 1 } }
+      );
+
+      // Update clerkUserId if found by email
+      if (employee) {
+        console.log(`✅ Found employee by email, updating clerkUserId field`);
+        await collections.employees.updateOne(
+          { _id: employee._id },
+          { $set: { clerkUserId: userId } }
+        );
+      }
+    }
+
+    // For admin/superadmin users without employee records, auto-create one
     const isAdmin = ['superadmin', 'admin', 'hr'].includes(userRole);
+    if (!employee && isAdmin && userEmail) {
+      console.log('🔧 Admin/Superadmin user without employee record. Creating placeholder employee...');
+
+      const employeeId = `ADM-${Date.now().toString().slice(-6)}`;
+
+      const placeholderEmployee = {
+        employeeId: employeeId,
+        clerkUserId: userId,
+        firstName: 'Admin',
+        lastName: 'User',
+        email: userEmail,
+        role: userRole,
+        account: {
+          role: userRole,
+          userName: userEmail,
+        },
+        employmentType: 'Full-time',
+        employmentStatus: 'Active',
+        status: 'Active',
+        joiningDate: new Date(),
+        isActive: true,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const result = await collections.employees.insertOne(placeholderEmployee);
+      employee = { _id: result.insertedId, ...placeholderEmployee };
+      console.log('✅ Created placeholder employee for admin user:', employeeId);
+    }
+
+    const userObjectId = employee?._id;
 
     const counts = {};
 

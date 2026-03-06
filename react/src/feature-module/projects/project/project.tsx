@@ -111,6 +111,11 @@ const ProjectGrid = () => {
   // View state - 'list' or 'grid'
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
+  // Loading states for buttons
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -225,12 +230,26 @@ const ProjectGrid = () => {
     loadProjects();
   }, [loadProjects]);
 
-  const handleExportPDF = useCallback(() => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = useCallback(async () => {
+    setExportingPDF(true);
+    try {
+      // Simulate export delay
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      toast.info('PDF export feature coming soon');
+    } finally {
+      setExportingPDF(false);
+    }
   }, []);
 
-  const handleExportExcel = useCallback(() => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = useCallback(async () => {
+    setExportingExcel(true);
+    try {
+      // Simulate export delay
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      toast.info('Excel export feature coming soon');
+    } finally {
+      setExportingExcel(false);
+    }
   }, []);
 
   // Image upload function
@@ -966,20 +985,297 @@ const ProjectGrid = () => {
       : []),
   ];
 
-  if (loading) {
-    return (
-      <div className="page-wrapper">
-        <div className="content">
-          <div
-            className="d-flex justify-content-center align-items-center"
-            style={{ height: '400px' }}
-          >
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+  // Skeleton Loader Components
+  const StatCardSkeleton = () => (
+    <div className="card flex-fill">
+      <div className="card-body">
+        <div className="d-flex align-items-center justify-content-between">
+          <div className="d-flex align-items-center">
+            <div className="flex-shrink-0 me-2">
+              <div className="skeleton-icon"></div>
+            </div>
+            <div>
+              <div className="skeleton-text skeleton-stat-label mb-2"></div>
+              <div className="skeleton-text skeleton-stat-value"></div>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+
+  const TableRowSkeleton = () => (
+    <tr>
+      <td>
+        <div className="d-flex align-items-center">
+          <div className="skeleton-avatar me-2"></div>
+          <div>
+            <div className="skeleton-text skeleton-project-name mb-1"></div>
+            <div className="skeleton-text skeleton-client-name"></div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div className="skeleton-badge"></div>
+      </td>
+      <td>
+        <div className="skeleton-badge"></div>
+      </td>
+      <td>
+        <div className="skeleton-text skeleton-date"></div>
+      </td>
+      <td>
+        <div className="skeleton-text skeleton-date"></div>
+      </td>
+      <td>
+        <div className="skeleton-text skeleton-progress"></div>
+      </td>
+      <td>
+        <div className="skeleton-badge"></div>
+      </td>
+      {!isEmployee && (
+        <td>
+          <div className="skeleton-actions"></div>
+        </td>
+      )}
+    </tr>
+  );
+
+  const TableSkeleton = () => (
+    <div className="card">
+      <div className="card-body p-0">
+        <div className="table-responsive">
+          <table className="table datanew">
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Start Date</th>
+                <th>Due Date</th>
+                <th>Progress</th>
+                <th>Team</th>
+                {!isEmployee && <th></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <TableRowSkeleton key={i} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const GridCardSkeleton = () => (
+    <div className="col-xxl-3 col-lg-4 col-md-6">
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <div className="d-flex align-items-center gap-2">
+              <div className="skeleton-text skeleton-project-title mb-0"></div>
+            </div>
+          </div>
+          <div className="mb-3 pb-3 border-bottom">
+            <div className="skeleton-text skeleton-description mb-2"></div>
+            <div className="skeleton-text skeleton-description mb-2"></div>
+            <div className="skeleton-text skeleton-description-short"></div>
+          </div>
+          <div className="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom">
+            <div className="d-flex align-items-center">
+              <div className="skeleton-avatar-sm me-2"></div>
+              <div>
+                <div className="skeleton-text skeleton-client-name mb-1"></div>
+                <div className="skeleton-text skeleton-label"></div>
+              </div>
+            </div>
+            <div>
+              <div className="skeleton-text skeleton-label mb-1"></div>
+              <div className="skeleton-text skeleton-date"></div>
+            </div>
+          </div>
+          <div className="d-flex align-items-center justify-content-between">
+            <div className="d-flex align-items-center">
+              <div className="skeleton-avatar-sm me-2"></div>
+              <div className="skeleton-text skeleton-progress"></div>
+            </div>
+            <div className="skeleton-badge"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const GridSkeleton = () => (
+    <div className="row">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <GridCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <>
+        <style>{`
+          /* Skeleton Loader Styles */
+          .skeleton-text {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+            border-radius: 4px;
+            height: 16px;
+          }
+
+          .skeleton-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+          }
+
+          .skeleton-avatar-sm {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+          }
+
+          .skeleton-badge {
+            width: 80px;
+            height: 24px;
+            border-radius: 12px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+          }
+
+          .skeleton-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+          }
+
+          .skeleton-actions {
+            width: 60px;
+            height: 20px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+          }
+
+          .skeleton-stat-label {
+            width: 110px;
+            height: 14px;
+          }
+
+          .skeleton-stat-value {
+            width: 70px;
+            height: 30px;
+          }
+
+          .skeleton-project-name {
+            width: 140px;
+            height: 14px;
+          }
+
+          .skeleton-client-name {
+            width: 100px;
+            height: 12px;
+          }
+
+          .skeleton-date {
+            width: 90px;
+            height: 14px;
+          }
+
+          .skeleton-progress {
+            width: 50px;
+            height: 14px;
+          }
+
+          .skeleton-project-title {
+            width: 150px;
+            height: 18px;
+          }
+
+          .skeleton-description {
+            width: 100%;
+            height: 14px;
+          }
+
+          .skeleton-description-short {
+            width: 70%;
+            height: 14px;
+          }
+
+          .skeleton-label {
+            width: 60px;
+            height: 12px;
+          }
+
+          @keyframes skeleton-loading {
+            0% {
+              background-position: 200% 0;
+            }
+            100% {
+              background-position: -200% 0;
+            }
+          }
+        `}</style>
+
+        <div className="page-wrapper">
+          <div className="content">
+            <div className="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+              <div className="my-auto mb-2">
+                <h2 className="mb-1">Projects</h2>
+                <nav>
+                  <ol className="breadcrumb mb-0">
+                    <li className="breadcrumb-item">
+                      <Link to={all_routes.adminDashboard}>
+                        <i className="ti ti-smart-home" />
+                      </Link>
+                    </li>
+                    <li className="breadcrumb-item">Employee</li>
+                    <li className="breadcrumb-item active" aria-current="page">
+                      Projects {viewMode === 'grid' ? 'Grid' : 'List'}
+                    </li>
+                  </ol>
+                </nav>
+              </div>
+            </div>
+
+            {/* Stats Cards Skeleton */}
+            <div className="row">
+              <div className="col-xl-3 col-md-6 d-flex">
+                <StatCardSkeleton />
+              </div>
+              <div className="col-xl-3 col-md-6 d-flex">
+                <StatCardSkeleton />
+              </div>
+              <div className="col-xl-3 col-md-6 d-flex">
+                <StatCardSkeleton />
+              </div>
+              <div className="col-xl-3 col-md-6 d-flex">
+                <StatCardSkeleton />
+              </div>
+            </div>
+
+            {/* Projects List Skeleton */}
+            {viewMode === 'list' ? <TableSkeleton /> : <GridSkeleton />}
+          </div>
+        </div>
+      </>
     );
   }
 
@@ -993,7 +1289,7 @@ const ProjectGrid = () => {
             <button
               type="button"
               className="btn btn-sm btn-outline-danger ms-2"
-              onClick={loadProjects}
+              onClick={() => loadProjects()}
             >
               Retry
             </button>
@@ -1057,15 +1353,49 @@ const ProjectGrid = () => {
                     </button>
                     <ul className="dropdown-menu dropdown-menu-end p-3">
                       <li>
-                        <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
-                          <i className="ti ti-file-type-pdf me-1" />
-                          Export as PDF
+                        <button
+                          className="dropdown-item rounded-1"
+                          onClick={handleExportPDF}
+                          disabled={exportingPDF}
+                        >
+                          {exportingPDF ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-2"
+                                role="status"
+                                aria-hidden="true"
+                              ></span>
+                              Exporting...
+                            </>
+                          ) : (
+                            <>
+                              <i className="ti ti-file-type-pdf me-1" />
+                              Export as PDF
+                            </>
+                          )}
                         </button>
                       </li>
                       <li>
-                        <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
-                          <i className="ti ti-file-type-xls me-1" />
-                          Export as Excel
+                        <button
+                          className="dropdown-item rounded-1"
+                          onClick={handleExportExcel}
+                          disabled={exportingExcel}
+                        >
+                          {exportingExcel ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-2"
+                                role="status"
+                                aria-hidden="true"
+                              ></span>
+                              Exporting...
+                            </>
+                          ) : (
+                            <>
+                              <i className="ti ti-file-type-xls me-1" />
+                              Export as Excel
+                            </>
+                          )}
                         </button>
                       </li>
                     </ul>
@@ -1524,10 +1854,21 @@ const ProjectGrid = () => {
       {showAddModal && (
         <div
           className="modal fade show d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
           role="dialog"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddModal(false);
+              setCurrentStep(1);
+              setFormData(initialFormData);
+              setFormError(null);
+              setFieldErrors({});
+              setLogo(null);
+              removeLogo();
+            }
+          }}
         >
-          <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-dialog modal-dialog-centered" style={{ zIndex: 1051 }}>
             <div className="modal-content">
               <div className="modal-header header-border align-items-center justify-content-between">
                 <h5 className="modal-title">Add Project</h5>
@@ -1543,6 +1884,7 @@ const ProjectGrid = () => {
                     setLogo(null);
                     removeLogo();
                   }}
+                  aria-label="Close"
                 >
                   <i className="ti ti-x" />
                 </button>
@@ -1666,6 +2008,8 @@ const ProjectGrid = () => {
                                   clearFieldError('client');
                                   handleEditFieldBlur('client', option?.label || '');
                                 }}
+                                placeholder="Select Client"
+                                isSearchable={true}
                               />
                             </div>
                             {fieldErrors.client && (
@@ -2079,10 +2423,18 @@ const ProjectGrid = () => {
       {showEditModal && editingProject && (
         <div
           className="modal fade show d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
           role="dialog"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditModal(false);
+              setCurrentStep(1);
+              setFieldErrors({});
+              setFormError(null);
+            }
+          }}
         >
-          <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
+          <div className="modal-dialog modal-dialog-centered modal-lg" role="document" style={{ zIndex: 1051 }}>
             <div className="modal-content">
               <div className="modal-header header-border align-items-center justify-content-between">
                 <h5 className="modal-title">Edit Project</h5>
@@ -2095,6 +2447,7 @@ const ProjectGrid = () => {
                     setFieldErrors({});
                     setFormError(null);
                   }}
+                  aria-label="Close"
                 >
                   <i className="ti ti-x" />
                 </button>
@@ -2192,6 +2545,8 @@ const ProjectGrid = () => {
                                   clearFieldError('client');
                                   handleEditFieldBlur('client', option?.label || '');
                                 }}
+                                placeholder="Select Client"
+                                isSearchable={true}
                               />
                             </div>
                             {fieldErrors.client && (
@@ -2248,39 +2603,6 @@ const ProjectGrid = () => {
                                 {fieldErrors.priority && (
                                   <div className="invalid-feedback d-block">
                                     {fieldErrors.priority}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-12">
-                          <div className="row">
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">
-                                  Project Value <span className="text-danger">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  name="projectValue"
-                                  className={`form-control ${fieldErrors.projectValue ? 'is-invalid' : ''}`}
-                                  value={formData.projectValue}
-                                  onChange={(e) => {
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      projectValue: e.target.value,
-                                    }));
-                                    clearFieldError('projectValue');
-                                  }}
-                                  onBlur={(e) =>
-                                    handleEditFieldBlur('projectValue', e.target.value)
-                                  }
-                                  placeholder="Enter project value"
-                                />
-                                {fieldErrors.projectValue && (
-                                  <div className="invalid-feedback d-block">
-                                    {fieldErrors.projectValue}
                                   </div>
                                 )}
                               </div>
@@ -2378,6 +2700,38 @@ const ProjectGrid = () => {
                         <div className="col-md-12">
                           <div className="mb-3">
                             <label className="form-label">
+                              Project Value <span className="text-danger">*</span>
+                            </label>
+                            <div className="input-group">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                name="projectValue"
+                                className={`form-control ${fieldErrors.projectValue ? 'is-invalid' : ''}`}
+                                value={formData.projectValue}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                    setFormData((prev) => ({ ...prev, projectValue: value }));
+                                    clearFieldError('projectValue');
+                                  }
+                                }}
+                                onBlur={(e) => handleEditFieldBlur('projectValue', e.target.value)}
+                                placeholder="0"
+                                min="0"
+                                step="0.01"
+                              />
+                            </div>
+                            {fieldErrors.projectValue && (
+                              <div className="invalid-feedback d-block">
+                                {fieldErrors.projectValue}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-0">
+                            <label className="form-label">
                               Description <span className="text-danger">*</span>
                             </label>
                             <textarea
@@ -2430,7 +2784,7 @@ const ProjectGrid = () => {
                             Saving...
                           </>
                         ) : (
-                          'Save'
+                          'Save Changes'
                         )}
                       </button>
                     </div>
@@ -2612,10 +2966,17 @@ const ProjectGrid = () => {
       {showDeleteModal && deletingProject && (
         <div
           className="modal fade show d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
           role="dialog"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteModal(false);
+              setDeletingProject(null);
+              setConfirmProjectName('');
+            }
+          }}
         >
-          <div className="modal-dialog modal-dialog-centered modal-sm" role="document">
+          <div className="modal-dialog modal-dialog-centered modal-sm" role="document" style={{ zIndex: 1051 }}>
             <div className="modal-content">
               <div className="modal-body">
                 <div className="text-center p-3">
@@ -2677,6 +3038,7 @@ const ProjectGrid = () => {
                         setDeletingProject(null);
                         setConfirmProjectName('');
                       }}
+                      disabled={isDeleting}
                     >
                       Cancel
                     </button>
@@ -2684,7 +3046,9 @@ const ProjectGrid = () => {
                       className="btn btn-danger"
                       onClick={async () => {
                         if (deletingProject) {
+                          setIsDeleting(true);
                           const success = await deleteProject(deletingProject._id);
+                          setIsDeleting(false);
                           if (success) {
                             // Close the modal
                             setTimeout(() => {
@@ -2699,12 +3063,24 @@ const ProjectGrid = () => {
                         }
                       }}
                       disabled={
+                        isDeleting ||
                         !deletingProject ||
                         confirmProjectName.trim().toLowerCase() !==
                           deletingProject.name.trim().toLowerCase()
                       }
                     >
-                      Delete Project
+                      {isDeleting ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-2"
+                            role="status"
+                            aria-hidden="true"
+                          ></span>
+                          Deleting...
+                        </>
+                      ) : (
+                        'Delete Project'
+                      )}
                     </button>
                   </div>
                 </div>

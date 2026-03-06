@@ -57,9 +57,28 @@ const getUserProjectScope = async (user, collections) => {
   const empId = employee._id;
   const empIdStr = empId.toString();
 
-  // Find all projects where this employee is PM or TL
-  // NOTE: projectManager and teamLeader are ARRAYS, so we use $in to check membership
-  const managedProjects = await collections.projects.find(
+  // Find all projects where this employee is PM, TL, or team member
+  // NOTE: projectManager, teamLeader, and teamMembers are ARRAYS, so we use $in to check membership
+  const assignedProjects = await collections.projects.find(
+    {
+      $and: [
+        { $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] },
+        {
+          $or: [
+            { projectManager: { $in: [empId, empIdStr] } },
+            { teamLeader: { $in: [empId, empIdStr] } },
+            { teamMembers: { $in: [empId, empIdStr] } }
+          ]
+        }
+      ]
+    },
+    { projection: { _id: 1 } }
+  ).toArray();
+
+  const projectIds = assignedProjects.map(p => p._id);
+
+  // Check if user has elevated role (PM or TL) in any project
+  const hasElevatedRole = await collections.projects.findOne(
     {
       $and: [
         { $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] },
@@ -72,13 +91,11 @@ const getUserProjectScope = async (user, collections) => {
       ]
     },
     { projection: { _id: 1 } }
-  ).toArray();
-
-  const projectIds = managedProjects.map(p => p._id);
+  );
 
   return {
     isAdmin: false,
-    isPMorTL: projectIds.length > 0,
+    isPMorTL: !!hasElevatedRole,
     projectIds,
     employeeMongoId: empId
   };
@@ -87,7 +104,7 @@ const getUserProjectScope = async (user, collections) => {
 /**
  * @desc    Get all time entries with pagination and filtering
  * @route   GET /api/timetracking
- * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leaders)
+ * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leaders, Team Members)
  */
 export const getTimeEntries = asyncHandler(async (req, res) => {
   const { page, limit, userId, projectId, taskId, status, billable, search, sortBy, order, startDate, endDate } = req.query;
@@ -97,12 +114,13 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
   // Determine access scope
   const scope = await getUserProjectScope(user, collections);
 
-  if (!scope.isAdmin && !scope.isPMorTL) {
+  // Check if user has any project access (as PM, TL, or team member)
+  if (!scope.isAdmin && scope.projectIds.length === 0) {
     return res.status(403).json({
       success: false,
       error: {
         code: 'FORBIDDEN',
-        message: 'Access denied. Use /timetracking/user/:userId to fetch your own entries.'
+        message: 'Access denied. You are not assigned to any projects. Use /timetracking/user/:userId to fetch your own entries.'
       }
     });
   }
@@ -121,8 +139,8 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
     filters.sortOrder = order || 'desc';
   }
 
-  if (!scope.isAdmin && scope.isPMorTL) {
-    // PM/TL: scope to their managed projects only
+  if (!scope.isAdmin) {
+    // Non-admin users (PM, TL, or team member): scope to their assigned projects only
     if (projectId) {
       // Validate the requested projectId is in their scope
       const isAuthorized = scope.projectIds.some(
@@ -139,7 +157,7 @@ export const getTimeEntries = asyncHandler(async (req, res) => {
       }
       filters.projectId = projectId;
     } else {
-      // No specific project requested — return entries for all managed projects
+      // No specific project requested — return entries for all assigned projects
       filters.projectIds = scope.projectIds.map(id => id.toString());
     }
   } else {
@@ -235,16 +253,74 @@ export const getTimeEntriesByUser = asyncHandler(async (req, res) => {
 /**
  * @desc    Get time entries by project
  * @route   GET /api/timetracking/project/:projectId
- * @access  Private (All authenticated users)
+ * @access  Private (All authenticated users - must be assigned to the project)
  */
 export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
   const { projectId } = req.params;
   const { status, userId, startDate, endDate } = req.query;
   const user = extractUser(req);
+  const collections = getTenantCollections(user.companyId);
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(projectId)) {
     throw buildValidationError('projectId', 'Invalid project ID format');
+  }
+
+  // Check if user is admin/HR/superadmin
+  const isAdmin = ['admin', 'hr', 'superadmin'].includes(user.role?.toLowerCase());
+
+  if (!isAdmin) {
+    // For non-admin users: verify they are assigned to this project
+    const employee = await collections.employees.findOne(
+      {
+        $or: [
+          { clerkUserId: user.userId },
+          { 'account.userId': user.userId }
+        ],
+        isDeleted: { $ne: true }
+      },
+      { projection: { _id: 1 } }
+    );
+
+    if (!employee) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Employee record not found. You do not have access to this project\'s time entries.'
+        }
+      });
+    }
+
+    const empId = employee._id;
+    const empIdStr = empId.toString();
+
+    // Check if user is assigned to this project (as teamMember, teamLeader, or projectManager)
+    const project = await collections.projects.findOne({
+      _id: new ObjectId(projectId),
+      $or: [
+        { isDeleted: false },
+        { isDeleted: { $exists: false } }
+      ],
+      $or: [
+        { teamMembers: empId },
+        { teamMembers: empIdStr },
+        { teamLeader: empId },
+        { teamLeader: empIdStr },
+        { projectManager: empId },
+        { projectManager: empIdStr }
+      ]
+    });
+
+    if (!project) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You are not assigned to this project. Only assigned team members can view time entries for a project.'
+        }
+      });
+    }
   }
 
   // Build filters
@@ -266,16 +342,94 @@ export const getTimeEntriesByProject = asyncHandler(async (req, res) => {
 /**
  * @desc    Get time entries by task
  * @route   GET /api/timetracking/task/:taskId
- * @access  Private (All authenticated users)
+ * @access  Private (All authenticated users - must be assigned to the task's project)
  */
 export const getTimeEntriesByTask = asyncHandler(async (req, res) => {
   const { taskId } = req.params;
   const { status } = req.query;
   const user = extractUser(req);
+  const collections = getTenantCollections(user.companyId);
 
   // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(taskId)) {
     throw buildValidationError('taskId', 'Invalid task ID format');
+  }
+
+  // Get the task to find its project
+  const task = await collections.tasks.findOne({
+    _id: new ObjectId(taskId),
+    isDeleted: { $ne: true }
+  });
+
+  if (!task) {
+    throw buildNotFoundError('Task', taskId);
+  }
+
+  if (!task.projectId) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_TASK',
+        message: 'Task is not associated with a project.'
+      }
+    });
+  }
+
+  // Check if user is admin/HR/superadmin
+  const isAdmin = ['admin', 'hr', 'superadmin'].includes(user.role?.toLowerCase());
+
+  if (!isAdmin) {
+    // For non-admin users: verify they are assigned to this task's project
+    const employee = await collections.employees.findOne(
+      {
+        $or: [
+          { clerkUserId: user.userId },
+          { 'account.userId': user.userId }
+        ],
+        isDeleted: { $ne: true }
+      },
+      { projection: { _id: 1 } }
+    );
+
+    if (!employee) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Employee record not found. You do not have access to this task\'s time entries.'
+        }
+      });
+    }
+
+    const empId = employee._id;
+    const empIdStr = empId.toString();
+
+    // Check if user is assigned to this task's project
+    const project = await collections.projects.findOne({
+      _id: task.projectId,
+      $or: [
+        { isDeleted: false },
+        { isDeleted: { $exists: false } }
+      ],
+      $or: [
+        { teamMembers: empId },
+        { teamMembers: empIdStr },
+        { teamLeader: empId },
+        { teamLeader: empIdStr },
+        { projectManager: empId },
+        { projectManager: empIdStr }
+      ]
+    });
+
+    if (!project) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You are not assigned to this task\'s project. Only assigned team members can view time entries for a task.'
+        }
+      });
+    }
   }
 
   // Build filters
@@ -709,9 +863,9 @@ export const rejectTimesheet = asyncHandler(async (req, res) => {
 /**
  * @desc    Get time tracking statistics
  * @route   GET /api/timetracking/stats
- * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leaders)
+ * @access  Private (Admin, HR, Superadmin, Project Managers, Team Leaders, Team Members)
  *
- * PM/TL stats are automatically scoped to their managed projects.
+ * Stats are automatically scoped to user's assigned projects.
  */
 export const getTimeTrackingStats = asyncHandler(async (req, res) => {
   const { userId, projectId, startDate, endDate } = req.query;
@@ -721,12 +875,13 @@ export const getTimeTrackingStats = asyncHandler(async (req, res) => {
   // Determine scope
   const scope = await getUserProjectScope(user, collections);
 
-  if (!scope.isAdmin && !scope.isPMorTL) {
+  // Check if user has any project access (as PM, TL, or team member)
+  if (!scope.isAdmin && scope.projectIds.length === 0) {
     return res.status(403).json({
       success: false,
       error: {
         code: 'FORBIDDEN',
-        message: 'Access denied.'
+        message: 'Access denied. You are not assigned to any projects.'
       }
     });
   }
@@ -737,7 +892,8 @@ export const getTimeTrackingStats = asyncHandler(async (req, res) => {
   if (startDate) filters.startDate = startDate;
   if (endDate) filters.endDate = endDate;
 
-  if (!scope.isAdmin && scope.isPMorTL) {
+  if (!scope.isAdmin) {
+    // Non-admin users (PM, TL, or team member): scope to their assigned projects only
     if (projectId) {
       const isAuthorized = scope.projectIds.some(pid => pid.toString() === projectId);
       if (!isAuthorized) {
