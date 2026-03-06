@@ -240,9 +240,8 @@ const ClientList = () => {
       dataIndex: 'status',
       render: (text: string, record: any) => (
         <span
-          className={`badge d-inline-flex align-items-center badge-xs ${
-            record.status === 'Active' ? 'badge-success' : 'badge-danger'
-          }`}
+          className={`badge d-inline-flex align-items-center badge-xs ${record.status === 'Active' ? 'badge-success' : 'badge-danger'
+            }`}
         >
           <i className="ti ti-point-filled me-1" />
           {record.status}
@@ -317,17 +316,15 @@ const ClientList = () => {
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
                   <button
                     onClick={() => setViewMode('list')}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === 'list' ? 'active bg-primary text-white' : ''
-                    } me-1`}
+                    className={`btn btn-icon btn-sm ${viewMode === 'list' ? 'active bg-primary text-white' : ''
+                      } me-1`}
                   >
                     <i className="ti ti-list-tree" />
                   </button>
                   <button
                     onClick={() => setViewMode('grid')}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === 'grid' ? 'active bg-primary text-white' : ''
-                    }`}
+                    className={`btn btn-icon btn-sm ${viewMode === 'grid' ? 'active bg-primary text-white' : ''
+                      }`}
                   >
                     <i className="ti ti-layout-grid" />
                   </button>
@@ -604,17 +601,16 @@ const ClientList = () => {
                     data-bs-toggle="dropdown"
                   >
                     {selectedSort
-                      ? `Sort: ${
-                          selectedSort === 'asc'
-                            ? 'A-Z'
-                            : selectedSort === 'desc'
-                              ? 'Z-A'
-                              : selectedSort === 'recent'
-                                ? 'Recent'
-                                : selectedSort === 'oldest'
-                                  ? 'Oldest'
-                                  : 'Company'
-                        }`
+                      ? `Sort: ${selectedSort === 'asc'
+                        ? 'A-Z'
+                        : selectedSort === 'desc'
+                          ? 'Z-A'
+                          : selectedSort === 'recent'
+                            ? 'Recent'
+                            : selectedSort === 'oldest'
+                              ? 'Oldest'
+                              : 'Company'
+                      }`
                       : 'Sort By'}
                   </Link>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
@@ -796,131 +792,153 @@ const ClientList = () => {
                       ) : (
                         filteredClients.map((client: Client) => (
                           <div key={client._id} className="col-xl-3 col-lg-4 col-md-6">
-                            <div className="card">
-                              <div className="card-body">
-                                <div className="d-flex justify-content-between align-items-start mb-2">
-                                  <div className="form-check form-check-md">
-                                    <input className="form-check-input" type="checkbox" />
-                                  </div>
-                                  <div>
-                                    <Link
-                                      to={`/clients-details/${client._id}`}
-                                      className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
-                                    >
-                                      <ImageWithBasePath
-                                        src={client.logo || 'assets/img/users/user-39.jpg'}
-                                        className="img-fluid h-auto w-auto"
-                                        alt="img"
-                                        isLink={
-                                          client.logo ? client.logo.startsWith('https://') : false
-                                        }
+                            <div
+                              className="card"
+                              style={{
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.03)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = '';
+                              }}
+                            >
+                              <Link
+                                to={`/clients-details/${client._id}`}
+                                className="text-decoration-none text-dark"
+                              >
+                                <div className="card-body">
+                                  <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <div className="form-check form-check-md" onClick={(e) => e.preventDefault()}>
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        onClick={(e) => e.stopPropagation()}
                                       />
-                                    </Link>
-                                  </div>
-                                  <div className="dropdown">
-                                    <button
-                                      className="btn btn-icon btn-sm rounded-circle"
-                                      type="button"
-                                      data-bs-toggle="dropdown"
-                                      aria-expanded="false"
-                                    >
-                                      <i className="ti ti-dots-vertical" />
-                                    </button>
-                                    <ul className="dropdown-menu dropdown-menu-end p-3">
-                                      <li>
-                                        <Link
-                                          className="dropdown-item rounded-1"
-                                          to="#"
-                                          data-bs-toggle="modal"
-                                          data-bs-target="#edit_client"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            handleEditClient(client);
-                                          }}
-                                        >
-                                          <i className="ti ti-edit me-1" />
-                                          Edit
-                                        </Link>
-                                      </li>
-                                      <li>
-                                        <Link
-                                          className="dropdown-item rounded-1"
-                                          to="#"
-                                          data-bs-toggle="modal"
-                                          data-bs-target="#delete_client"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            handleDeleteClient(client);
-                                          }}
-                                        >
-                                          <i className="ti ti-trash me-1" />
-                                          Delete
-                                        </Link>
-                                      </li>
-                                    </ul>
-                                  </div>
-                                </div>
-                                <div className="text-center mb-3">
-                                  <h6 className="mb-1">
-                                    <Link to={`/clients-details/${client._id}`}>{client.name}</Link>
-                                  </h6>
-                                  <span
-                                    className={`badge fs-10 fw-medium ${
-                                      client.status === 'Active'
-                                        ? 'bg-success-transparent text-success'
-                                        : 'bg-danger-transparent text-danger'
-                                    }`}
-                                  >
-                                    {client.status}
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="mb-2 text-truncate">Email: {client.email}</p>
-                                  {client.phone && (
-                                    <p className="mb-2 text-truncate">Phone: {client.phone}</p>
-                                  )}
-                                  {client.contractValue && (
-                                    <div className="d-flex align-items-center justify-content-between mb-2">
-                                      <span className="text-muted fs-12">Contract Value:</span>
-                                      <span className="text-success fw-medium">
-                                        ${client.contractValue.toLocaleString()}
-                                      </span>
                                     </div>
-                                  )}
-                                  {client.projects && (
-                                    <div className="d-flex align-items-center justify-content-between">
-                                      <span className="text-muted fs-12">Projects:</span>
-                                      <span className="text-primary fw-medium">
-                                        {client.projects}
-                                      </span>
+                                    <div>
+                                      <div className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle">
+                                        <ImageWithBasePath
+                                          src={client.logo || 'assets/img/users/user-39.jpg'}
+                                          className="img-fluid h-auto w-auto"
+                                          alt="img"
+                                          isLink={
+                                            client.logo ? client.logo.startsWith('https://') : false
+                                          }
+                                        />
+                                      </div>
                                     </div>
-                                  )}
-                                </div>
-                                <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                                  <div>
-                                    <p className="mb-1 fs-12">Company</p>
-                                    <h6 className="fw-normal text-truncate">{client.company}</h6>
-                                  </div>
-                                  <div className="icons-social d-flex align-items-center">
-                                    <Link
-                                      to={`mailto:${client.email}`}
-                                      className="avatar avatar-rounded avatar-sm bg-light me-2"
-                                      title="Send Email"
-                                    >
-                                      <i className="ti ti-message" />
-                                    </Link>
-                                    {client.phone && (
-                                      <Link
-                                        to={`tel:${client.phone}`}
-                                        className="avatar avatar-rounded avatar-sm bg-light"
-                                        title="Call Client"
+                                    <div className="dropdown" onClick={(e) => e.preventDefault()}>
+                                      <button
+                                        className="btn btn-icon btn-sm rounded-circle"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                        onClick={(e) => e.stopPropagation()}
                                       >
-                                        <i className="ti ti-phone" />
-                                      </Link>
+                                        <i className="ti ti-dots-vertical" />
+                                      </button>
+                                      <ul className="dropdown-menu dropdown-menu-end p-3">
+                                        <li>
+                                          <Link
+                                            className="dropdown-item rounded-1"
+                                            to="#"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#edit_client"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              handleEditClient(client);
+                                            }}
+                                          >
+                                            <i className="ti ti-edit me-1" />
+                                            Edit
+                                          </Link>
+                                        </li>
+                                        <li>
+                                          <Link
+                                            className="dropdown-item rounded-1"
+                                            to="#"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#delete_client"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              handleDeleteClient(client);
+                                            }}
+                                          >
+                                            <i className="ti ti-trash me-1" />
+                                            Delete
+                                          </Link>
+                                        </li>
+                                      </ul>
+                                    </div>
+                                  </div>
+                                  <div className="text-center mb-3">
+                                    <h6 className="mb-1">{client.name}</h6>
+                                    <span
+                                      className={`badge fs-10 fw-medium ${client.status === 'Active'
+                                          ? 'bg-success-transparent text-success'
+                                          : 'bg-danger-transparent text-danger'
+                                        }`}
+                                    >
+                                      {client.status}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <p className="mb-2 text-truncate">Email: {client.email}</p>
+                                    {client.phone && (
+                                      <p className="mb-2 text-truncate">Phone: {client.phone}</p>
+                                    )}
+                                    {client.contractValue && (
+                                      <div className="d-flex align-items-center justify-content-between mb-2">
+                                        <span className="text-muted fs-12">Contract Value:</span>
+                                        <span className="text-success fw-medium">
+                                          ${client.contractValue.toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {client.projects && (
+                                      <div className="d-flex align-items-center justify-content-between">
+                                        <span className="text-muted fs-12">Projects:</span>
+                                        <span className="text-primary fw-medium">
+                                          {client.projects}
+                                        </span>
+                                      </div>
                                     )}
                                   </div>
+                                  <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+                                    <div>
+                                      <p className="mb-1 fs-12">Company</p>
+                                      <h6 className="fw-normal text-truncate">{client.company}</h6>
+                                    </div>
+                                    <div className="icons-social d-flex align-items-center" onClick={(e) => e.preventDefault()}>
+                                      <Link
+                                        to={`mailto:${client.email}`}
+                                        className="avatar avatar-rounded avatar-sm bg-light me-2"
+                                        title="Send Email"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <i className="ti ti-message" />
+                                      </Link>
+                                      {client.phone && (
+                                        <Link
+                                          to={`tel:${client.phone}`}
+                                          className="avatar avatar-rounded avatar-sm bg-light"
+                                          title="Call Client"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <i className="ti ti-phone" />
+                                        </Link>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
+                              </Link>
                             </div>
                           </div>
                         ))
