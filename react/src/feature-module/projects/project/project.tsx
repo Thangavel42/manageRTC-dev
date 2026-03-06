@@ -954,34 +954,34 @@ const ProjectGrid = () => {
     },
     ...(!isEmployee
       ? [
-          {
-            title: '',
-            dataIndex: 'actions',
-            render: (text: any, record: any) => (
-              <div className="action-icon d-inline-flex">
-                <Link
-                  to="#"
-                  className="me-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleEdit(record);
-                  }}
-                >
-                  <i className="ti ti-edit" />
-                </Link>
-                <Link
-                  to="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDelete(record);
-                  }}
-                >
-                  <i className="ti ti-trash" />
-                </Link>
-              </div>
-            ),
-          },
-        ]
+        {
+          title: '',
+          dataIndex: 'actions',
+          render: (text: any, record: any) => (
+            <div className="action-icon d-inline-flex">
+              <Link
+                to="#"
+                className="me-2"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleEdit(record);
+                }}
+              >
+                <i className="ti ti-edit" />
+              </Link>
+              <Link
+                to="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDelete(record);
+                }}
+              >
+                <i className="ti ti-trash" />
+              </Link>
+            </div>
+          ),
+        },
+      ]
       : []),
   ];
 
@@ -1325,17 +1325,15 @@ const ProjectGrid = () => {
                 <div className="d-flex align-items-center border bg-white rounded p-1 me-2 icon-list">
                   <button
                     onClick={() => setViewMode('list')}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === 'list' ? 'active bg-primary text-white' : ''
-                    } me-1`}
+                    className={`btn btn-icon btn-sm ${viewMode === 'list' ? 'active bg-primary text-white' : ''
+                      } me-1`}
                   >
                     <i className="ti ti-list-tree" />
                   </button>
                   <button
                     onClick={() => setViewMode('grid')}
-                    className={`btn btn-icon btn-sm ${
-                      viewMode === 'grid' ? 'active bg-primary text-white' : ''
-                    }`}
+                    className={`btn btn-icon btn-sm ${viewMode === 'grid' ? 'active bg-primary text-white' : ''
+                      }`}
                   >
                     <i className="ti ti-layout-grid" />
                   </button>
@@ -1700,20 +1698,20 @@ const ProjectGrid = () => {
                   filters.priority !== 'all' ||
                   filters.client !== 'all' ||
                   filters.search) && (
-                  <div className="me-3">
-                    <Link
-                      to="#"
-                      className="btn btn-sm btn-outline-danger d-inline-flex align-items-center"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        clearFilters();
-                      }}
-                    >
-                      <i className="ti ti-x me-1" />
-                      Clear Filters
-                    </Link>
-                  </div>
-                )}
+                    <div className="me-3">
+                      <Link
+                        to="#"
+                        className="btn btn-sm btn-outline-danger d-inline-flex align-items-center"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          clearFilters();
+                        }}
+                      >
+                        <i className="ti ti-x me-1" />
+                        Clear Filters
+                      </Link>
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1749,97 +1747,119 @@ const ProjectGrid = () => {
               ) : (
                 getFilteredProjects().map((project) => (
                   <div key={project._id} className="col-xxl-3 col-lg-4 col-md-6">
-                    <div className="card">
-                      <div className="card-body">
-                        <div className="d-flex align-items-center justify-content-between mb-2">
-                          <div className="d-flex align-items-center gap-2">
-                            <h6>
-                              <Link
-                                to={all_routes.projectdetails.replace(':projectId', project._id)}
-                              >
-                                {project.name}
-                              </Link>
-                            </h6>
-                            <span className={getPriorityColor(project.priority)}>
-                              {project.priority}
-                            </span>
-                            <span className={getStatusColor(project.status)}>{project.status}</span>
-                          </div>
-                          {!isEmployee && (
-                            <div className="dropdown">
-                              <button
-                                className="btn btn-icon btn-sm"
-                                data-bs-toggle="dropdown"
-                                aria-expanded="false"
-                              >
-                                <i className="ti ti-dots-vertical" />
-                              </button>
-                              <ul className="dropdown-menu dropdown-menu-end p-3">
-                                <li>
-                                  <button
-                                    className="dropdown-item rounded-1"
-                                    onClick={() => handleEdit(project)}
-                                  >
-                                    <i className="ti ti-edit me-2" />
-                                    Edit
-                                  </button>
-                                </li>
-                                <li>
-                                  <button
-                                    className="dropdown-item rounded-1 text-danger"
-                                    onClick={() => handleDelete(project)}
-                                  >
-                                    <i className="ti ti-trash me-1" />
-                                    Delete
-                                  </button>
-                                </li>
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                        <div className="mb-3 pb-3 border-bottom">
-                          <p className="text-truncate line-clamp-3 mb-0">
-                            {project.description || 'No description provided.'}
-                          </p>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom">
-                          <div className="d-flex align-items-center file-name-icon">
-                            <div className="avatar avatar-sm avatar-rounded flex-shrink-0 bg-primary text-white">
-                              <span className="fs-12 fw-medium">
-                                {project.name && project.name.length > 0
-                                  ? project.name.charAt(0).toUpperCase()
-                                  : '?'}
+                    <div
+                      className="card project-card-hover"
+                      style={{
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.03)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '';
+                      }}
+                    >
+                      <Link
+                        to={all_routes.projectdetails.replace(':projectId', project._id)}
+                        className="text-decoration-none text-dark"
+                      >
+                        <div className="card-body">
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <div className="d-flex align-items-center gap-2">
+                              <h6 className="mb-0">{project.name}</h6>
+                              <span className={getPriorityColor(project.priority)}>
+                                {project.priority}
                               </span>
+                              <span className={getStatusColor(project.status)}>{project.status}</span>
                             </div>
-                            <div className="ms-2">
-                              <h6 className="fw-normal fs-12">{project.client || 'No Client'}</h6>
-                              <span className="fs-12 fw-normal text-muted">Client</span>
-                            </div>
+                            {!isEmployee && (
+                              <div className="dropdown" onClick={(e) => e.preventDefault()}>
+                                <button
+                                  className="btn btn-icon btn-sm"
+                                  data-bs-toggle="dropdown"
+                                  aria-expanded="false"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <i className="ti ti-dots-vertical" />
+                                </button>
+                                <ul className="dropdown-menu dropdown-menu-end p-3">
+                                  <li>
+                                    <button
+                                      className="dropdown-item rounded-1"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleEdit(project);
+                                      }}
+                                    >
+                                      <i className="ti ti-edit me-2" />
+                                      Edit
+                                    </button>
+                                  </li>
+                                  <li>
+                                    <button
+                                      className="dropdown-item rounded-1 text-danger"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDelete(project);
+                                      }}
+                                    >
+                                      <i className="ti ti-trash me-1" />
+                                      Delete
+                                    </button>
+                                  </li>
+                                </ul>
+                              </div>
+                            )}
                           </div>
-                          <div className="d-flex align-items-center">
-                            <div>
-                              <span className="fs-12 fw-normal text-muted">Deadline</span>
-                              <p className="mb-0 fs-12">{formatDate(project.dueDate)}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div className="d-flex align-items-center">
-                            <span className="avatar avatar-sm avatar-rounded bg-success-transparent flex-shrink-0 me-2">
-                              <i className="ti ti-checklist text-success fs-16" />
-                            </span>
-                            <p>
-                              <small>Progress: </small>
-                              <span className="text-dark">{project.progress}%</span>
+                          <div className="mb-3 pb-3 border-bottom">
+                            <p className="text-truncate line-clamp-3 mb-0">
+                              {project.description || 'No description provided.'}
                             </p>
                           </div>
-                          <span className="badge bg-pink-transparent">
-                            {(project.teamMembers?.length || 0) +
-                              (project.teamLeader?.length || 0) +
-                              (project.projectManager?.length || 0)}
-                          </span>
+                          <div className="d-flex align-items-center justify-content-between mb-3 pb-3 border-bottom">
+                            <div className="d-flex align-items-center file-name-icon">
+                              <div className="avatar avatar-sm avatar-rounded flex-shrink-0 bg-primary text-white">
+                                <span className="fs-12 fw-medium">
+                                  {project.name && project.name.length > 0
+                                    ? project.name.charAt(0).toUpperCase()
+                                    : '?'}
+                                </span>
+                              </div>
+                              <div className="ms-2">
+                                <h6 className="fw-normal fs-12">{project.client || 'No Client'}</h6>
+                                <span className="fs-12 fw-normal text-muted">Client</span>
+                              </div>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <div>
+                                <span className="fs-12 fw-normal text-muted">Deadline</span>
+                                <p className="mb-0 fs-12">{formatDate(project.dueDate)}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <span className="avatar avatar-sm avatar-rounded bg-success-transparent flex-shrink-0 me-2">
+                                <i className="ti ti-checklist text-success fs-16" />
+                              </span>
+                              <p className="mb-0">
+                                <small>Progress: </small>
+                                <span className="text-dark">{project.progress}%</span>
+                              </p>
+                            </div>
+                            <span className="badge bg-pink-transparent">
+                              {(project.teamMembers?.length || 0) +
+                                (project.teamLeader?.length || 0) +
+                                (project.projectManager?.length || 0)}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      </Link>
                     </div>
                   </div>
                 ))
@@ -3006,18 +3026,16 @@ const ProjectGrid = () => {
                     </label>
                     <input
                       type="text"
-                      className={`form-control form-control-sm ${
-                        confirmProjectName &&
+                      className={`form-control form-control-sm ${confirmProjectName &&
                         confirmProjectName.trim().toLowerCase() !==
-                          deletingProject.name.trim().toLowerCase()
-                          ? 'is-invalid'
-                          : ''
-                      } ${
-                        confirmProjectName.trim().toLowerCase() ===
                         deletingProject.name.trim().toLowerCase()
+                        ? 'is-invalid'
+                        : ''
+                        } ${confirmProjectName.trim().toLowerCase() ===
+                          deletingProject.name.trim().toLowerCase()
                           ? 'is-valid'
                           : ''
-                      }`}
+                        }`}
                       placeholder={`Type \"${deletingProject.name}\" to confirm`}
                       value={confirmProjectName}
                       onChange={(e) => setConfirmProjectName(e.target.value)}
@@ -3025,7 +3043,7 @@ const ProjectGrid = () => {
                     />
                     {confirmProjectName &&
                       confirmProjectName.trim().toLowerCase() !==
-                        deletingProject.name.trim().toLowerCase() && (
+                      deletingProject.name.trim().toLowerCase() && (
                         <div className="invalid-feedback">Name does not match</div>
                       )}
                   </div>
@@ -3066,7 +3084,7 @@ const ProjectGrid = () => {
                         isDeleting ||
                         !deletingProject ||
                         confirmProjectName.trim().toLowerCase() !==
-                          deletingProject.name.trim().toLowerCase()
+                        deletingProject.name.trim().toLowerCase()
                       }
                     >
                       {isDeleting ? (
