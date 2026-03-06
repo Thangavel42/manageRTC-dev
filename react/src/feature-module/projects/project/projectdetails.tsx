@@ -2685,226 +2685,229 @@ const ProjectDetails = () => {
                       aria-labelledby="headingTwo"
                       data-bs-parent="#accordionExample"
                     >
-                      <div
-                        className="accordion-body"
-                        style={{ minHeight: '210px', overflow: 'visible' }}
-                      >
-                        <div className="list-group list-group-flush">
-                          {tasksLoading ? (
-                            <div className="text-center py-5">
-                              <div className="spinner-border text-primary" role="status">
-                                <span className="visually-hidden">Loading tasks...</span>
+                      <div className="accordion-body" style={{ padding: 0 }}>
+                        <div
+                          style={{ maxHeight: '400px', overflowY: 'auto', overflowX: 'hidden', padding: '1.25rem' }}
+                        >
+                          <div className="list-group list-group-flush">
+                            {tasksLoading ? (
+                              <div className="text-center py-5">
+                                <div className="spinner-border text-primary" role="status">
+                                  <span className="visually-hidden">Loading tasks...</span>
+                                </div>
+                                <p className="text-muted mt-3">Loading tasks...</p>
                               </div>
-                              <p className="text-muted mt-3">Loading tasks...</p>
-                            </div>
-                          ) : tasks.length === 0 ? (
-                            <div className="text-center py-4">
-                              <i className="ti ti-clipboard-x fs-1 text-muted mb-3"></i>
-                              <h6 className="text-muted">No tasks found</h6>
-                              <p className="text-muted small">
-                                Tasks for this project will appear here
-                              </p>
-                            </div>
-                          ) : (
-                            tasks.slice(0, 5).map((task) => (
-                              <>
-                                <div
-                                  key={task._id}
-                                  className="list-group-item list-item-hover shadow-sm rounded mb-2 p-3"
-                                >
-                                  <div className="row align-items-center row-gap-3">
-                                    <div className="col-md-7">
-                                      <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
-                                        <span>
-                                          <i className="ti ti-grid-dots me-2" />
-                                        </span>
-                                        <div className="form-check form-check-md me-2">
-                                          <input
-                                            className="form-check-input"
-                                            type="checkbox"
-                                            checked={task.status === 'Completed'}
-                                            readOnly
-                                          />
-                                        </div>
-                                        <span className="me-2 d-flex align-items-center rating-select">
-                                          <i
-                                            className={`ti ti-star${task.priority === 'High' ? '-filled filled' : ''}`}
-                                          />
-                                        </span>
-                                        <div className="strike-info">
-                                          <h4 className="fs-14 text-truncate">
-                                            <Link
-                                              to={`${all_routes.tasksdetails.replace(':taskId', task._id)}`}
-                                            >
-                                              {task.title}
-                                            </Link>
-                                          </h4>
+                            ) : tasks.length === 0 ? (
+                              <div className="text-center py-4">
+                                <i className="ti ti-clipboard-x fs-1 text-muted mb-3"></i>
+                                <h6 className="text-muted">No tasks found</h6>
+                                <p className="text-muted small">
+                                  Tasks for this project will appear here
+                                </p>
+                              </div>
+                            ) : (
+                              tasks.map((task) => (
+                                <>
+                                  <div
+                                    key={task._id}
+                                    className="list-group-item list-item-hover shadow-sm rounded mb-2 p-3"
+                                  >
+                                    <div className="row align-items-center row-gap-3">
+                                      <div className="col-md-7">
+                                        <div className="todo-inbox-check d-flex align-items-center flex-wrap row-gap-3">
+                                          <span>
+                                            <i className="ti ti-grid-dots me-2" />
+                                          </span>
+                                          <div className="form-check form-check-md me-2">
+                                            <input
+                                              className="form-check-input"
+                                              type="checkbox"
+                                              checked={task.status === 'Completed'}
+                                              readOnly
+                                            />
+                                          </div>
+                                          <span className="me-2 d-flex align-items-center rating-select">
+                                            <i
+                                              className={`ti ti-star${task.priority === 'High' ? '-filled filled' : ''}`}
+                                            />
+                                          </span>
+                                          <div className="strike-info">
+                                            <h4 className="fs-14 text-truncate">
+                                              <Link
+                                                to={`${all_routes.tasksdetails.replace(':taskId', task._id)}`}
+                                              >
+                                                {task.title}
+                                              </Link>
+                                            </h4>
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                    <div className="col-md-5">
-                                      <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                                        <span className="badge bg-soft-pink d-inline-flex align-items-center me-3">
-                                          <i className="fas fa-circle fs-6 me-1" />
-                                          {task.status}
-                                        </span>
-                                        <div className="d-flex align-items-center">
-                                          <div className="avatar-list-stacked avatar-group-sm">
-                                            {task.assignee && task.assignee.length > 0 ? (
-                                              task.assignee
-                                                .slice(0, 3)
-                                                .map((assignee: any, idx: number) => {
-                                                  // Handle both populated objects and ID strings
-                                                  let member = null;
+                                      <div className="col-md-5">
+                                        <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
+                                          <span className="badge bg-soft-pink d-inline-flex align-items-center me-3">
+                                            <i className="fas fa-circle fs-6 me-1" />
+                                            {task.status}
+                                          </span>
+                                          <div className="d-flex align-items-center">
+                                            <div className="avatar-list-stacked avatar-group-sm">
+                                              {task.assignee && task.assignee.length > 0 ? (
+                                                task.assignee
+                                                  .slice(0, 3)
+                                                  .map((assignee: any, idx: number) => {
+                                                    // Handle both populated objects and ID strings
+                                                    let member = null;
 
-                                                  if (
-                                                    typeof assignee === 'object' &&
-                                                    assignee !== null
-                                                  ) {
-                                                    member = assignee;
-                                                  } else {
-                                                    const assigneeId = assignee.toString();
-                                                    const allMembers = [
-                                                      ...(project?.teamMembers || []),
-                                                      ...(project?.teamLeader || []),
-                                                    ];
-                                                    member = allMembers.find(
-                                                      (m: any) =>
-                                                        m._id?.toString() === assigneeId ||
-                                                        m.employeeId === assigneeId
-                                                    );
-                                                  }
+                                                    if (
+                                                      typeof assignee === 'object' &&
+                                                      assignee !== null
+                                                    ) {
+                                                      member = assignee;
+                                                    } else {
+                                                      const assigneeId = assignee.toString();
+                                                      const allMembers = [
+                                                        ...(project?.teamMembers || []),
+                                                        ...(project?.teamLeader || []),
+                                                      ];
+                                                      member = allMembers.find(
+                                                        (m: any) =>
+                                                          m._id?.toString() === assigneeId ||
+                                                          m.employeeId === assigneeId
+                                                      );
+                                                    }
 
-                                                  return member ? (
-                                                    <span
-                                                      key={idx}
-                                                      className="avatar avatar-sm avatar-rounded"
-                                                      title={`${member.firstName} ${member.lastName}${member.employeeId ? ` (${member.employeeId})` : ''}`}
-                                                    >
-                                                      {member.profileImage ? (
-                                                        <ImageWithBasePath
-                                                          className="border border-white"
-                                                          src={member.profileImage}
-                                                          alt={`${member.firstName} ${member.lastName}`}
-                                                        />
-                                                      ) : (
-                                                        <span
-                                                          className="avatar-title bg-purple border border-white fs-10"
-                                                          style={{
-                                                            width: '100%',
-                                                            height: '100%',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            borderRadius: '50%',
-                                                          }}
-                                                        >
-                                                          {(
-                                                            member.firstName?.charAt(0) ||
-                                                            member.lastName?.charAt(0) ||
-                                                            '?'
-                                                          ).toUpperCase()}
-                                                        </span>
-                                                      )}
-                                                    </span>
-                                                  ) : null;
-                                                })
-                                            ) : (
-                                              <span className="text-muted small">No assignees</span>
-                                            )}
-                                            {task.assignee && task.assignee.length > 3 && (
-                                              <span
-                                                className="avatar avatar-sm avatar-rounded"
-                                                title={`+${task.assignee.length - 3} more assignees`}
-                                              >
+                                                    return member ? (
+                                                      <span
+                                                        key={idx}
+                                                        className="avatar avatar-sm avatar-rounded"
+                                                        title={`${member.firstName} ${member.lastName}${member.employeeId ? ` (${member.employeeId})` : ''}`}
+                                                      >
+                                                        {member.profileImage ? (
+                                                          <ImageWithBasePath
+                                                            className="border border-white"
+                                                            src={member.profileImage}
+                                                            alt={`${member.firstName} ${member.lastName}`}
+                                                          />
+                                                        ) : (
+                                                          <span
+                                                            className="avatar-title bg-purple border border-white fs-10"
+                                                            style={{
+                                                              width: '100%',
+                                                              height: '100%',
+                                                              display: 'flex',
+                                                              alignItems: 'center',
+                                                              justifyContent: 'center',
+                                                              borderRadius: '50%',
+                                                            }}
+                                                          >
+                                                            {(
+                                                              member.firstName?.charAt(0) ||
+                                                              member.lastName?.charAt(0) ||
+                                                              '?'
+                                                            ).toUpperCase()}
+                                                          </span>
+                                                        )}
+                                                      </span>
+                                                    ) : null;
+                                                  })
+                                              ) : (
+                                                <span className="text-muted small">No assignees</span>
+                                              )}
+                                              {task.assignee && task.assignee.length > 3 && (
                                                 <span
-                                                  className="avatar-title bg-primary fs-10"
-                                                  style={{
-                                                    width: '100%',
-                                                    height: '100%',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    borderRadius: '50%',
-                                                  }}
+                                                  className="avatar avatar-sm avatar-rounded"
+                                                  title={`+${task.assignee.length - 3} more assignees`}
                                                 >
-                                                  +{task.assignee.length - 3}
+                                                  <span
+                                                    className="avatar-title bg-primary fs-10"
+                                                    style={{
+                                                      width: '100%',
+                                                      height: '100%',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center',
+                                                      borderRadius: '50%',
+                                                    }}
+                                                  >
+                                                    +{task.assignee.length - 3}
+                                                  </span>
                                                 </span>
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="dropdown ms-2">
-                                            <Link
-                                              to="#"
-                                              className="d-inline-flex align-items-center"
-                                              data-bs-toggle="dropdown"
-                                            >
-                                              <i className="ti ti-dots-vertical" />
-                                            </Link>
-                                            <ul className="dropdown-menu dropdown-menu-end p-2">
-                                              {canManageTeam && (
+                                              )}
+                                            </div>
+                                            <div className="dropdown ms-2">
+                                              <Link
+                                                to="#"
+                                                className="d-inline-flex align-items-center"
+                                                data-bs-toggle="dropdown"
+                                              >
+                                                <i className="ti ti-dots-vertical" />
+                                              </Link>
+                                              <ul className="dropdown-menu dropdown-menu-end p-2">
+                                                {canManageTeam && (
+                                                  <li>
+                                                    <Link
+                                                      to="#"
+                                                      className="dropdown-item rounded-1"
+                                                      data-bs-toggle="modal"
+                                                      data-inert={true}
+                                                      data-bs-target="#edit_task"
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        handleOpenEditTask(task);
+                                                      }}
+                                                    >
+                                                      <i className="ti ti-edit me-2" />
+                                                      Edit
+                                                    </Link>
+                                                  </li>
+                                                )}
+                                                {canManageTeam && (
+                                                  <li>
+                                                    <Link
+                                                      to="#"
+                                                      className="dropdown-item rounded-1"
+                                                      data-bs-toggle="modal"
+                                                      data-inert={true}
+                                                      data-bs-target="#delete_modal"
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        handleOpenDeleteTask(task);
+                                                      }}
+                                                    >
+                                                      <i className="ti ti-trash me-2" />
+                                                      Delete
+                                                    </Link>
+                                                  </li>
+                                                )}
                                                 <li>
                                                   <Link
                                                     to="#"
                                                     className="dropdown-item rounded-1"
                                                     data-bs-toggle="modal"
                                                     data-inert={true}
-                                                    data-bs-target="#edit_task"
+                                                    data-bs-target="#view_todo"
                                                     onClick={(e) => {
                                                       e.preventDefault();
-                                                      handleOpenEditTask(task);
+                                                      handleOpenViewTask(task);
                                                     }}
                                                   >
-                                                    <i className="ti ti-edit me-2" />
-                                                    Edit
+                                                    <i className="ti ti-eye me-2" />
+                                                    View
                                                   </Link>
                                                 </li>
-                                              )}
-                                              {canManageTeam && (
-                                                <li>
-                                                  <Link
-                                                    to="#"
-                                                    className="dropdown-item rounded-1"
-                                                    data-bs-toggle="modal"
-                                                    data-inert={true}
-                                                    data-bs-target="#delete_modal"
-                                                    onClick={(e) => {
-                                                      e.preventDefault();
-                                                      handleOpenDeleteTask(task);
-                                                    }}
-                                                  >
-                                                    <i className="ti ti-trash me-2" />
-                                                    Delete
-                                                  </Link>
-                                                </li>
-                                              )}
-                                              <li>
-                                                <Link
-                                                  to="#"
-                                                  className="dropdown-item rounded-1"
-                                                  data-bs-toggle="modal"
-                                                  data-inert={true}
-                                                  data-bs-target="#view_todo"
-                                                  onClick={(e) => {
-                                                    e.preventDefault();
-                                                    handleOpenViewTask(task);
-                                                  }}
-                                                >
-                                                  <i className="ti ti-eye me-2" />
-                                                  View
-                                                </Link>
-                                              </li>
-                                            </ul>
+                                              </ul>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              </>
-                            ))
-                          )}
-                          {canManageTeam && (
+                                </>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        {canManageTeam && (
+                          <div style={{ padding: '0 1.25rem 1.25rem' }}>
                             <button
                               className="btn bg-primary-transparent border-dashed border-primary w-100 text-start"
                               data-bs-toggle="modal"
@@ -2914,8 +2917,8 @@ const ProjectDetails = () => {
                               <i className="ti ti-plus me-2" />
                               New task
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
