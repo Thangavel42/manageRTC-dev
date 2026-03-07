@@ -53,7 +53,7 @@ export const useIsReportingManager = (): ReportingManagerStatus => {
         console.log('[useIsReportingManager] Checking status for:', { userId, employeeId });
 
         // Step 1: Fetch current user's employee record to get their MongoDB _id
-        const currentUserResponse = await get('/api/employees/me');
+        const currentUserResponse = await get('/employees/me');
 
         if (!currentUserResponse || !currentUserResponse.data) {
           console.log('[useIsReportingManager] Could not fetch current user employee record');
@@ -77,7 +77,6 @@ export const useIsReportingManager = (): ReportingManagerStatus => {
         });
 
         // Step 2: Fetch all employees and check if any report to the current user
-        // Note: Backend validation caps limit at 100
         const response = await get('/api/employees', {
           params: {
             limit: 100, // Maximum allowed by backend validation
@@ -85,8 +84,8 @@ export const useIsReportingManager = (): ReportingManagerStatus => {
           }
         });
 
-        if (response && response.data?.employees) {
-          const employees = response.data.employees;
+        if (response?.success && Array.isArray(response.data)) {
+          const employees = response.data;
 
           console.log('[useIsReportingManager] Total employees fetched:', employees.length);
 

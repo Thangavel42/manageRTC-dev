@@ -32,18 +32,18 @@ import {
     authenticate,
     requireCompany,
     requireEmployeeActive,
-    requireOwnEmployee,  // ✅ SECURITY FIX: Prevent IDOR
+    requireOwnEmployee, // ✅ SECURITY FIX: Prevent IDOR
     requireRole
 } from '../../middleware/auth.js';
-import { sanitizeQuery, sanitizeBody, sanitizeParams } from '../../middleware/inputSanitization.js';  // ✅ SECURITY FIX
+import { sanitizeBody, sanitizeQuery } from '../../middleware/inputSanitization.js'; // ✅ SECURITY FIX
 import { requirePageAccess } from '../../middleware/pageAccess.js';
-import { searchLimiter, uploadLimiter } from '../../middleware/rateLimiting.js';  // ✅ SECURITY FIX - Phase 2: Rate limiting
+import { searchLimiter, uploadLimiter } from '../../middleware/rateLimiting.js'; // ✅ SECURITY FIX - Phase 2: Rate limiting
 import {
     employeeSchemas,
     validateBody,
     validateQuery
 } from '../../middleware/validate.js';
-import { validateFile } from '../../middleware/validation/index.js';  // ✅ PHASE 3 SECURITY: File upload validation
+import { validateFile } from '../../middleware/validation/index.js'; // ✅ PHASE 3 SECURITY: File upload validation
 import emailChangeRoutes from './emailChange.routes.js';
 
 const router = express.Router();
@@ -137,6 +137,16 @@ router.get(
   authenticate,
   requireCompany,
   requireRole('admin', 'hr', 'superadmin'),
+  exportEmployees
+);
+
+// Export employees using JSON payload (format + employeeIds)
+router.post(
+  '/export',
+  authenticate,
+  requireCompany,
+  requireRole('admin', 'hr', 'superadmin'),
+  sanitizeBody,
   exportEmployees
 );
 

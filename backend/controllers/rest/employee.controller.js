@@ -15,6 +15,7 @@ import {
     buildNotFoundError,
     buildValidationError
 } from '../../middleware/errorHandler.js';
+import { Company } from '../../models/superadmin/package.schema.js';
 import { createAuditLog } from '../../services/audit/auditLog.service.js'; // ✅ SECURITY FIX - Phase 6: Audit logging
 import employeeStatusService from '../../services/employee/employeeStatus.service.js';
 import { checkEmployeeLifecycleStatus } from '../../services/hr/hrm.employee.js';
@@ -274,6 +275,509 @@ const resolveHrDepartmentId = async (collections, employeeId) => {
 
   const employeeByCode = await collections.employees.findOne({ employeeId, ...baseFilter });
   return employeeByCode?.departmentId || null;
+};
+
+const EMPLOYEE_EXPORT_SHEETS = {
+  basic: 'Basic Info',
+  personal: 'Personal Info',
+  bank: 'Bank Details',
+  education: 'Education',
+  family: 'Family',
+  emergency: 'Emergency',
+  about: 'About Employee'
+};
+
+const safeText = (value) => {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? '-' : trimmed;
+  }
+  if (Array.isArray(value)) {
+    const normalized = value.filter(Boolean).join(', ').trim();
+    return normalized || '-';
+  }
+  return String(value);
+};
+
+const formatExportDate = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
+const stringifyAddress = (address) => {
+  if (!address || typeof address !== 'object') return '-';
+  const parts = [address.street, address.city, address.state, address.country, address.postalCode]
+    .map((part) => (typeof part === 'string' ? part.trim() : part))
+    .filter(Boolean);
+  return parts.length ? parts.join(', ') : '-';
+};
+
+const parseEmployeeIds = (rawIds) => {
+  if (!rawIds) return [];
+
+  if (Array.isArray(rawIds)) {
+    return rawIds.map((id) => String(id).trim()).filter(Boolean);
+  }
+
+  if (typeof rawIds === 'string') {
+    return rawIds
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeExportRequest = (req) => {
+  const source = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+  const query = req.query || {};
+
+  const formatRaw = source.format || source.type || query.type || query.format || 'pdf';
+  const exportType = String(formatRaw).toLowerCase();
+
+  const employeeIds = parseEmployeeIds(source.employeeIds || source.ids || query.employeeIds || query.ids);
+  const filters = source.filters && typeof source.filters === 'object' ? source.filters : {};
+
+  const columnsRaw = source.columns || query.columns;
+  const selectedColumns =
+    typeof columnsRaw === 'string' && columnsRaw.trim() !== ''
+      ? columnsRaw
+          .split(',')
+          .map((col) => col.trim())
+          .filter((col) => DEFAULT_EXPORT_COLUMNS.includes(col))
+      : DEFAULT_EXPORT_COLUMNS;
+
+  return {
+    exportType,
+    employeeIds,
+    exportMode: source.exportMode || (employeeIds.length <= 1 ? 'single' : 'multiple'),
+    logoMode: String(source.logoMode || 'company').toLowerCase(),
+    department: source.department || filters.department || query.department,
+    status: source.status || filters.status || query.status,
+    fromDate: source.fromDate || filters.fromDate || query.fromDate,
+    toDate: source.toDate || filters.toDate || query.toDate,
+    sortBy: source.sortBy || filters.sortBy || query.sortBy,
+    order: source.order || filters.order || query.order,
+    exportColumns: selectedColumns.length > 0 ? selectedColumns : DEFAULT_EXPORT_COLUMNS,
+    isLegacyColumnExport:
+      req.method === 'GET' &&
+      employeeIds.length === 0 &&
+      typeof columnsRaw === 'string' &&
+      columnsRaw.trim() !== ''
+  };
+};
+
+const resolveCompanyBranding = async (companyId, logoMode) => {
+  const fallbackLogo = getSystemDefaultAvatarUrl();
+  const fallback = {
+    reportTitle: 'Employee Details Report',
+    companyName: 'ManageRTC',
+    companyAddress: '-',
+    logoUrl: fallbackLogo,
+    exportDate: new Date().toLocaleDateString('en-GB')
+  };
+
+  try {
+    if (!companyId || !ObjectId.isValid(companyId)) {
+      return fallback;
+    }
+
+    const company = await Company.findById(new ObjectId(companyId)).lean();
+    if (!company) {
+      return fallback;
+    }
+
+    const address =
+      company.structuredAddress?.fullAddress ||
+      [
+        company.structuredAddress?.street,
+        company.structuredAddress?.city,
+        company.structuredAddress?.state,
+        company.structuredAddress?.country,
+        company.structuredAddress?.postalCode
+      ]
+        .filter(Boolean)
+        .join(', ') ||
+      company.address ||
+      '-';
+
+    const companyLogo = company.logo || fallbackLogo;
+    const resolvedLogo = logoMode === 'default' ? fallbackLogo : companyLogo || fallbackLogo;
+
+    return {
+      reportTitle: 'Employee Details Report',
+      companyName: company.name || 'ManageRTC',
+      companyAddress: address,
+      logoUrl: resolvedLogo,
+      exportDate: new Date().toLocaleDateString('en-GB')
+    };
+  } catch (error) {
+    devError('[Employee Export] Failed to resolve company branding:', error?.message || error);
+    return fallback;
+  }
+};
+
+const fetchImageBuffer = async (logoUrl) => {
+  if (!logoUrl || typeof logoUrl !== 'string') {
+    return null;
+  }
+
+  try {
+    if (/^https?:\/\//i.test(logoUrl)) {
+      const response = await fetch(logoUrl);
+      if (!response.ok) {
+        return null;
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+  } catch (error) {
+    devError('[Employee Export] Failed to fetch logo image:', error?.message || error);
+  }
+
+  return null;
+};
+
+const normalizeEmployeeForExport = (employee) => {
+  const fullName =
+    employee.fullName || `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || '-';
+  const emergency = employee.emergencyContact || {};
+  const passport = employee.personal?.passport || {};
+  const educationEntries = Array.isArray(employee.education)
+    ? employee.education
+    : Array.isArray(employee.qualifications)
+      ? employee.qualifications
+      : [];
+  const familyEntries = Array.isArray(employee.familyInformation)
+    ? employee.familyInformation
+    : Array.isArray(employee.family)
+      ? employee.family
+      : [];
+
+  return {
+    employeeId: safeText(employee.employeeId),
+    fullName: safeText(fullName),
+    basic: {
+      employeeId: safeText(employee.employeeId),
+      fullName: safeText(fullName),
+      department: safeText(employee.department?.department || employee.department?.name),
+      designation: safeText(employee.designation?.designation || employee.designation?.name),
+      role: safeText(employee.account?.role || employee.role),
+      employmentType: safeText(employee.employmentType),
+      dateOfJoining: safeText(formatExportDate(employee.joiningDate || employee.dateOfJoining || employee.createdAt)),
+      status: safeText(normalizeStatus(employee.status || employee.employmentStatus || 'Active'))
+    },
+    personal: {
+      gender: safeText(employee.gender),
+      dateOfBirth: safeText(formatExportDate(employee.dateOfBirth)),
+      nationality: safeText(employee.personal?.nationality || employee.nationality),
+      passportDetails: safeText(
+        [passport.number, passport.country, passport.expiryDate ? `Exp: ${formatExportDate(passport.expiryDate)}` : '']
+          .filter(Boolean)
+          .join(' | ')
+      ),
+      address: safeText(stringifyAddress(employee.address))
+    },
+    bank: {
+      bankName: safeText(employee.bankDetails?.bankName),
+      accountNumber: safeText(employee.bankDetails?.accountNumber),
+      ifscCode: safeText(employee.bankDetails?.ifscCode),
+      branch: safeText(employee.bankDetails?.branch),
+      accountHolderName: safeText(employee.bankDetails?.accountHolderName)
+    },
+    education: educationEntries.length
+      ? educationEntries.map((entry) => ({
+          degree: safeText(entry.degree || entry.field),
+          institution: safeText(entry.institution || entry.school || entry.college),
+          yearOfPassing: safeText(entry.year || entry.endYear || formatExportDate(entry.endDate)),
+          percentageOrGrade: safeText(entry.percentage || entry.grade || entry.score)
+        }))
+      : [
+          {
+            degree: '-',
+            institution: '-',
+            yearOfPassing: '-',
+            percentageOrGrade: '-'
+          }
+        ],
+    family: familyEntries.length
+      ? familyEntries.map((entry) => ({
+          name: safeText(entry.name),
+          relationship: safeText(entry.relationship),
+          phone: safeText(entry.phone || entry.mobile),
+          occupation: safeText(entry.occupation)
+        }))
+      : [
+          {
+            name: '-',
+            relationship: '-',
+            phone: '-',
+            occupation: '-'
+          }
+        ],
+    emergency: {
+      contactName: safeText(emergency.name),
+      relationship: safeText(emergency.relationship),
+      phoneNumber: safeText(emergency.phone || emergency.phone1),
+      address: safeText(stringifyAddress(emergency.address || employee.address))
+    },
+    about: {
+      bio: safeText(employee.bio || employee.about || employee.notes),
+      skills: safeText(Array.isArray(employee.skills) ? employee.skills.join(', ') : employee.skills),
+      experienceSummary: safeText(
+        Array.isArray(employee.experience)
+          ? `${employee.experience.length} experience record(s)`
+          : employee.experienceSummary
+      )
+    }
+  };
+};
+
+const writePdfField = (doc, label, value) => {
+  if (!label) {
+    doc.font('Helvetica').fontSize(10).text(safeText(value));
+    return;
+  }
+  if (value === '' || value === null || value === undefined) {
+    doc.font('Helvetica-Bold').fontSize(10).text(label);
+    return;
+  }
+  doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true });
+  doc.font('Helvetica').fontSize(10).text(safeText(value));
+};
+
+const writePdfSectionTitle = (doc, title) => {
+  doc.moveDown(0.6);
+  doc.font('Helvetica-Bold').fontSize(12).text(title);
+  doc.moveDown(0.2);
+};
+
+const addEmployeeContentToPdf = (doc, employeeData) => {
+  writePdfSectionTitle(doc, 'Section 1 - Basic Information');
+  writePdfField(doc, 'Employee ID', employeeData.basic.employeeId);
+  writePdfField(doc, 'Full Name', employeeData.basic.fullName);
+  writePdfField(doc, 'Department', employeeData.basic.department);
+  writePdfField(doc, 'Designation', employeeData.basic.designation);
+  writePdfField(doc, 'Role', employeeData.basic.role);
+  writePdfField(doc, 'Employment Type', employeeData.basic.employmentType);
+  writePdfField(doc, 'Date of Joining', employeeData.basic.dateOfJoining);
+  writePdfField(doc, 'Status', employeeData.basic.status);
+
+  writePdfSectionTitle(doc, 'Section 2 - Personal Information');
+  writePdfField(doc, 'Gender', employeeData.personal.gender);
+  writePdfField(doc, 'Date of Birth', employeeData.personal.dateOfBirth);
+  writePdfField(doc, 'Nationality', employeeData.personal.nationality);
+  writePdfField(doc, 'Passport Details', employeeData.personal.passportDetails);
+  writePdfField(doc, 'Address', employeeData.personal.address);
+
+  writePdfSectionTitle(doc, 'Section 3 - Bank Details');
+  writePdfField(doc, 'Bank Name', employeeData.bank.bankName);
+  writePdfField(doc, 'Account Number', employeeData.bank.accountNumber);
+  writePdfField(doc, 'IFSC Code', employeeData.bank.ifscCode);
+  writePdfField(doc, 'Branch', employeeData.bank.branch);
+  writePdfField(doc, 'Account Holder Name', employeeData.bank.accountHolderName);
+
+  writePdfSectionTitle(doc, 'Section 4 - Education');
+  employeeData.education.forEach((entry, index) => {
+    writePdfField(doc, `Education ${index + 1}`, '');
+    writePdfField(doc, 'Degree', entry.degree);
+    writePdfField(doc, 'Institution', entry.institution);
+    writePdfField(doc, 'Year of Passing', entry.yearOfPassing);
+    writePdfField(doc, 'Percentage / Grade', entry.percentageOrGrade);
+    doc.moveDown(0.2);
+  });
+
+  writePdfSectionTitle(doc, 'Section 5 - Family Information');
+  employeeData.family.forEach((entry, index) => {
+    writePdfField(doc, `Family ${index + 1}`, '');
+    writePdfField(doc, 'Name', entry.name);
+    writePdfField(doc, 'Relationship', entry.relationship);
+    writePdfField(doc, 'Phone', entry.phone);
+    writePdfField(doc, 'Occupation', entry.occupation);
+    doc.moveDown(0.2);
+  });
+
+  writePdfSectionTitle(doc, 'Section 6 - Emergency Contact');
+  writePdfField(doc, 'Contact Name', employeeData.emergency.contactName);
+  writePdfField(doc, 'Relationship', employeeData.emergency.relationship);
+  writePdfField(doc, 'Phone Number', employeeData.emergency.phoneNumber);
+  writePdfField(doc, 'Address', employeeData.emergency.address);
+
+  writePdfSectionTitle(doc, 'Section 7 - About Employee');
+  writePdfField(doc, 'Bio', employeeData.about.bio);
+  writePdfField(doc, 'Skills', employeeData.about.skills);
+  writePdfField(doc, 'Experience Summary', employeeData.about.experienceSummary);
+};
+
+const generateDetailedPdf = async (res, employees, branding) => {
+  const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
+  const logoBuffer = await fetchImageBuffer(branding.logoUrl);
+
+  const drawHeader = () => {
+    const yTop = 36;
+    if (logoBuffer) {
+      doc.image(logoBuffer, 40, yTop, { fit: [60, 28] });
+    } else {
+      doc.rect(40, yTop, 60, 28).stroke('#D9D9D9');
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111111').text('ManageRTC', 44, yTop + 9);
+    }
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(16).text(branding.reportTitle, 120, yTop + 5);
+    doc.moveTo(40, yTop + 40).lineTo(555, yTop + 40).stroke('#E5E7EB');
+
+    doc.font('Helvetica').fontSize(10).fillColor('#444444');
+    doc.text(`Company Name: ${safeText(branding.companyName)}`, 40, yTop + 48);
+    doc.text(`Company Address: ${safeText(branding.companyAddress)}`, 40, yTop + 62);
+    doc.text(`Export Date: ${safeText(branding.exportDate)}`, 40, yTop + 76);
+    doc.moveTo(40, yTop + 92).lineTo(555, yTop + 92).stroke('#E5E7EB');
+
+    doc.y = yTop + 102;
+  };
+
+  doc.pipe(res);
+  // Keep header consistent when PDFKit auto-adds pages during content flow.
+  doc.on('pageAdded', drawHeader);
+
+  drawHeader();
+  employees.forEach((employee, index) => {
+    if (index > 0) {
+      doc.addPage();
+    }
+
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(`Employee ${index + 1}`);
+    doc.moveDown(0.4);
+    addEmployeeContentToPdf(doc, employee);
+  });
+
+  const pageRange = doc.bufferedPageRange();
+  const totalPages = pageRange.count;
+  for (let i = 0; i < totalPages; i += 1) {
+    doc.switchToPage(pageRange.start + i);
+    doc.font('Helvetica').fontSize(9).fillColor('#666666');
+    doc.text(`Page ${i + 1} / ${totalPages}`, 40, 806, { width: 180, align: 'left' });
+    doc.text('Generated by ManageRTC HRMS', 320, 806, { width: 230, align: 'right' });
+  }
+
+  doc.end();
+};
+
+const createSheetWithHeader = (workbook, sheetName, columns) => {
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.columns = columns;
+  sheet.getRow(1).font = { bold: true };
+  return sheet;
+};
+
+const generateDetailedExcel = async (res, employees) => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = createSheetWithHeader(workbook, 'Employee Details', [
+    { header: 'Employee ID', key: 'employeeId', width: 16 },
+    { header: 'Full Name', key: 'fullName', width: 24 },
+    { header: 'Department', key: 'department', width: 20 },
+    { header: 'Designation', key: 'designation', width: 20 },
+    { header: 'Role', key: 'role', width: 16 },
+    { header: 'Employment Type', key: 'employmentType', width: 18 },
+    { header: 'Date of Joining', key: 'dateOfJoining', width: 18 },
+    { header: 'Status', key: 'status', width: 14 },
+    { header: 'Gender', key: 'gender', width: 14 },
+    { header: 'Date of Birth', key: 'dateOfBirth', width: 16 },
+    { header: 'Nationality', key: 'nationality', width: 18 },
+    { header: 'Passport Details', key: 'passportDetails', width: 32 },
+    { header: 'Address', key: 'address', width: 38 },
+    { header: 'Bank Name', key: 'bankName', width: 20 },
+    { header: 'Account Number', key: 'accountNumber', width: 20 },
+    { header: 'IFSC Code', key: 'ifscCode', width: 16 },
+    { header: 'Branch', key: 'branch', width: 18 },
+    { header: 'Account Holder Name', key: 'accountHolderName', width: 24 },
+    { header: 'Education', key: 'educationSummary', width: 60 },
+    { header: 'Family Information', key: 'familySummary', width: 60 },
+    { header: 'Emergency Contact Name', key: 'emergencyContactName', width: 24 },
+    { header: 'Emergency Relationship', key: 'emergencyRelationship', width: 20 },
+    { header: 'Emergency Phone', key: 'emergencyPhone', width: 18 },
+    { header: 'Emergency Address', key: 'emergencyAddress', width: 36 },
+    { header: 'Bio', key: 'bio', width: 40 },
+    { header: 'Skills', key: 'skills', width: 32 },
+    { header: 'Experience Summary', key: 'experienceSummary', width: 30 }
+  ]);
+
+  const summarizeEducation = (educationList = []) => {
+    if (!Array.isArray(educationList) || educationList.length === 0) return '-';
+    return educationList
+      .map((edu) =>
+        [
+          safeText(edu.degree),
+          safeText(edu.institution),
+          `Year: ${safeText(edu.yearOfPassing)}`,
+          `Grade: ${safeText(edu.percentageOrGrade)}`
+        ].join(' | ')
+      )
+      .join(' ; ');
+  };
+
+  const summarizeFamily = (familyList = []) => {
+    if (!Array.isArray(familyList) || familyList.length === 0) return '-';
+    return familyList
+      .map((member) =>
+        [
+          safeText(member.name),
+          safeText(member.relationship),
+          safeText(member.phone),
+          safeText(member.occupation)
+        ].join(' | ')
+      )
+      .join(' ; ');
+  };
+
+  employees.forEach((employee) => {
+    sheet.addRow({
+      employeeId: safeText(employee.employeeId),
+      fullName: safeText(employee.fullName),
+      department: safeText(employee.basic?.department),
+      designation: safeText(employee.basic?.designation),
+      role: safeText(employee.basic?.role),
+      employmentType: safeText(employee.basic?.employmentType),
+      dateOfJoining: safeText(employee.basic?.dateOfJoining),
+      status: safeText(employee.basic?.status),
+      gender: safeText(employee.personal?.gender),
+      dateOfBirth: safeText(employee.personal?.dateOfBirth),
+      nationality: safeText(employee.personal?.nationality),
+      passportDetails: safeText(employee.personal?.passportDetails),
+      address: safeText(employee.personal?.address),
+      bankName: safeText(employee.bank?.bankName),
+      accountNumber: safeText(employee.bank?.accountNumber),
+      ifscCode: safeText(employee.bank?.ifscCode),
+      branch: safeText(employee.bank?.branch),
+      accountHolderName: safeText(employee.bank?.accountHolderName),
+      educationSummary: summarizeEducation(employee.education),
+      familySummary: summarizeFamily(employee.family),
+      emergencyContactName: safeText(employee.emergency?.contactName),
+      emergencyRelationship: safeText(employee.emergency?.relationship),
+      emergencyPhone: safeText(employee.emergency?.phoneNumber),
+      emergencyAddress: safeText(employee.emergency?.address),
+      bio: safeText(employee.about?.bio),
+      skills: safeText(employee.about?.skills),
+      experienceSummary: safeText(employee.about?.experienceSummary),
+    });
+  });
+
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', 'attachment; filename="employee-details.xlsx"');
+
+  await workbook.xlsx.write(res);
+  res.end();
 };
 
 /**
@@ -701,17 +1205,17 @@ export const getEmployees = asyncHandler(async (req, res) => {
 export const exportEmployees = asyncHandler(async (req, res) => {
   const user = extractUser(req);
   const {
-    type = 'pdf',
+    exportType,
+    employeeIds,
+    logoMode,
     department,
     status,
     fromDate,
     toDate,
     sortBy,
-    order,
-    columns
-  } = req.query || {};
+    order
+  } = normalizeExportRequest(req);
 
-  const exportType = String(type).toLowerCase();
   if (!['pdf', 'excel'].includes(exportType)) {
     return res.status(400).json({
       success: false,
@@ -733,13 +1237,17 @@ export const exportEmployees = asyncHandler(async (req, res) => {
   }
 
   const collections = getTenantCollections(user.companyId);
-  const filter = { isDeleted: { $ne: true } };
+  const filter = employeeIds.length > 0 ? {} : { isDeleted: { $ne: true } };
 
   if (status && status !== 'none') {
-    filter.status = status;
+    const normalizedStatus = String(status).trim();
+    filter.$or = [
+      { status: normalizedStatus },
+      { employmentStatus: normalizedStatus },
+    ];
   }
 
-  if (user.role === 'hr') {
+  if (user.role === 'hr' && employeeIds.length === 0) {
     const hrDepartmentId = await resolveHrDepartmentId(collections, user.employeeId);
     if (!hrDepartmentId) {
       return res.status(403).json({
@@ -766,14 +1274,22 @@ export const exportEmployees = asyncHandler(async (req, res) => {
   const sortDirection = normalizedOrder === 'desc' ? -1 : 1;
   const sortObj = { [sortField]: sortDirection };
 
-  const selectedColumns =
-    typeof columns === 'string' && columns.trim() !== ''
-      ? columns
-          .split(',')
-          .map((col) => col.trim())
-          .filter((col) => DEFAULT_EXPORT_COLUMNS.includes(col))
-      : DEFAULT_EXPORT_COLUMNS;
-  const exportColumns = selectedColumns.length > 0 ? selectedColumns : DEFAULT_EXPORT_COLUMNS;
+  if (employeeIds.length > 0) {
+    const mongoIds = employeeIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+    const employeeCodeIds = employeeIds.filter((id) => !ObjectId.isValid(id));
+
+    const clauses = [];
+    if (mongoIds.length > 0) {
+      clauses.push({ _id: { $in: mongoIds } });
+    }
+    if (employeeCodeIds.length > 0) {
+      clauses.push({ employeeId: { $in: employeeCodeIds } });
+    }
+
+    if (clauses.length > 0) {
+      filter.$or = clauses;
+    }
+  }
 
   const pipeline = [
     { $match: filter },
@@ -848,6 +1364,25 @@ export const exportEmployees = asyncHandler(async (req, res) => {
         role: 1,
         account: 1,
         status: 1,
+        employmentStatus: 1,
+        employmentType: 1,
+        joiningDate: 1,
+        dateOfJoining: 1,
+        dateOfBirth: 1,
+        gender: 1,
+        personal: 1,
+        address: 1,
+        bankDetails: 1,
+        education: 1,
+        qualifications: 1,
+        familyInformation: 1,
+        family: 1,
+        emergencyContact: 1,
+        bio: 1,
+        about: 1,
+        notes: 1,
+        skills: 1,
+        experience: 1,
         createdAt: 1
       }
     },
@@ -855,105 +1390,28 @@ export const exportEmployees = asyncHandler(async (req, res) => {
   ];
 
   const employees = await collections.employees.aggregate(pipeline).toArray();
-  const normalizedEmployees = employees.map((emp) => ({
-    ...emp,
-    status: normalizeStatus(emp.status)
-  }));
 
-  const columnDefinitions = {
-    employeeId: {
-      header: 'Employee ID',
-      width: 16,
-      getValue: (emp) => emp.employeeId || ''
-    },
-    name: {
-      header: 'Name',
-      width: 26,
-      getValue: (emp) => (emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`).trim()
-    },
-    email: {
-      header: 'Email',
-      width: 30,
-      getValue: (emp) => emp.email || emp.contactEmail || ''
-    },
-    phone: {
-      header: 'Phone',
-      width: 18,
-      getValue: (emp) => {
-        const phoneVal = emp.phone || emp.contactPhone;
-        if (Array.isArray(phoneVal)) {
-          return phoneVal.filter(Boolean).join(', ');
-        }
-        return phoneVal || '';
+  if (!employees.length) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'EXPORT_EMPTY_RESULT',
+        message: 'No employee data available for export with the selected criteria'
       }
-    },
-    department: {
-      header: 'Department',
-      width: 22,
-      getValue: (emp) => emp.department?.department || emp.department?.name || ''
-    },
-    role: {
-      header: 'Role',
-      width: 18,
-      getValue: (emp) => emp.account?.role || emp.role || ''
-    },
-    status: {
-      header: 'Status',
-      width: 14,
-      getValue: (emp) => normalizeStatus(emp.status)
-    }
-  };
-
-  if (exportType === 'excel') {
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Employees');
-
-    worksheet.columns = exportColumns.map((key) => ({
-      header: columnDefinitions[key].header,
-      key,
-      width: columnDefinitions[key].width
-    }));
-
-    normalizedEmployees.forEach((emp) => {
-      const row = {};
-      exportColumns.forEach((key) => {
-        row[key] = columnDefinitions[key].getValue(emp);
-      });
-      worksheet.addRow(row);
     });
-
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader('Content-Disposition', 'attachment; filename="employees.xlsx"');
-
-    await workbook.xlsx.write(res);
-    return res.end();
   }
 
-  // Default to PDF export
+  const exportEmployeesData = employees.map(normalizeEmployeeForExport);
+
+  if (exportType === 'excel') {
+    return generateDetailedExcel(res, exportEmployeesData);
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="employees.pdf"');
-
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
-  doc.pipe(res);
-
-  doc.fontSize(16).text('Employee List', { align: 'center' });
-  doc.moveDown();
-
-  normalizedEmployees.forEach((emp, index) => {
-    exportColumns.forEach((key) => {
-      const value = columnDefinitions[key].getValue(emp) || '-';
-      doc.fontSize(11).text(`${columnDefinitions[key].header}: ${value}`);
-    });
-
-    if (index < normalizedEmployees.length - 1) {
-      doc.moveDown();
-    }
-  });
-
-  doc.end();
+  res.setHeader('Content-Disposition', 'attachment; filename="employee-details.pdf"');
+  const branding = await resolveCompanyBranding(user.companyId, logoMode);
+  await generateDetailedPdf(res, exportEmployeesData, branding);
+  return undefined;
 });
 
 /**
@@ -963,15 +1421,23 @@ export const exportEmployees = asyncHandler(async (req, res) => {
  */
 export const getActiveEmployeesList = asyncHandler(async (req, res) => {
   const query = req.validatedQuery || req.query;
-  const { search } = query;
+  const { search, includeInactive, includeDeleted } = query;
   const user = extractUser(req);
 
   const collections = getTenantCollections(user.companyId);
 
-  const filter = {
-    isDeleted: { $ne: true },
-    status: 'Active',
-  };
+  const shouldIncludeInactive = String(includeInactive || '').toLowerCase() === 'true';
+  const shouldIncludeDeleted = String(includeDeleted || '').toLowerCase() === 'true';
+
+  const filter = {};
+
+  if (!shouldIncludeDeleted) {
+    filter.isDeleted = { $ne: true };
+  }
+
+  if (!shouldIncludeInactive) {
+    filter.status = 'Active';
+  }
 
   if (search && search.trim()) {
     filter.$or = [
@@ -979,6 +1445,10 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
       { lastName: { $regex: search, $options: 'i' } },
       { fullName: { $regex: search, $options: 'i' } },
       { employeeId: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { phone: { $regex: search, $options: 'i' } },
+      { 'contact.email': { $regex: search, $options: 'i' } },
+      { 'contact.phone': { $regex: search, $options: 'i' } },
     ];
   }
 
@@ -1016,6 +1486,8 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
         firstName: 1,
         lastName: 1,
         fullName: 1,
+        email: 1,
+        phone: 1,
         departmentId: 1,
         department: '$department.department',
         status: 1,
@@ -1031,12 +1503,20 @@ export const getActiveEmployeesList = asyncHandler(async (req, res) => {
   // ✅ SECURITY FIX: Apply reference DTO for dropdown data
   const sanitizedEmployees = employees.map(emp => ({
     ...employeeReferenceDTO(emp),
+    email: emp.email || '',
+    phone: emp.phone || '',
     departmentId: emp.departmentId || '',
     department: emp.department || '',
     status: emp.status || 'Active',
   }));
 
-  return sendSuccess(res, sanitizedEmployees, 'Active employees retrieved successfully');
+  return sendSuccess(
+    res,
+    sanitizedEmployees,
+    shouldIncludeInactive
+      ? 'Employees retrieved successfully'
+      : 'Active employees retrieved successfully'
+  );
 });
 
 /**
@@ -2604,7 +3084,10 @@ export const searchEmployees = asyncHandler(async (req, res) => {
         { firstName: { $regex: q, $options: 'i' } },
         { lastName: { $regex: q, $options: 'i' } },
         { fullName: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } },
+        { phone: { $regex: q, $options: 'i' } },
         { 'contact.email': { $regex: q, $options: 'i' } },
+        { 'contact.phone': { $regex: q, $options: 'i' } },
         { employeeId: { $regex: q, $options: 'i' } },
       ],
     })

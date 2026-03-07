@@ -21,6 +21,7 @@ import { Badge } from "antd";
 import AddEmployeeModal from "../../../core/modals/AddEmployeeModal";
 import { ChangeRequestsModal } from "../../../core/modals/ChangeRequestsModal";
 import EditEmployeeModal from "../../../core/modals/EditEmployeeModal";
+import EmployeeExportModal from "../../../core/modals/EmployeeExportModal";
 import { apiClient } from "../../../services/api";
 
 interface Department {
@@ -200,6 +201,8 @@ const EmployeeList = () => {
     newJoinersCount: 0,
   });
   const [exporting, setExporting] = useState(false);
+  const [isEmployeeExportModalOpen, setIsEmployeeExportModalOpen] = useState(false);
+  const [exportDefaultEmployeeId, setExportDefaultEmployeeId] = useState<string | undefined>(undefined);
 
   // Lifecycle status tracking for status dropdown control
   const [lifecycleStatus, setLifecycleStatus] = useState<{
@@ -767,6 +770,15 @@ const EmployeeList = () => {
             >
               <i className="ti ti-trash" />
             </button>
+
+            <button
+              type="button"
+              className="btn btn-icon btn-sm rounded-11 border-0 ms-2"
+              title="Export Employee"
+              onClick={() => openAdvancedExportModal(employee.employeeId || employee._id)}
+            >
+              <i className="ti ti-file-export text-primary" />
+            </button>
           </div>
         );
       },
@@ -854,6 +866,11 @@ const EmployeeList = () => {
 
   const handleExportPDF = useCallback(() => exportEmployees("pdf"), [exportEmployees]);
   const handleExportExcel = useCallback(() => exportEmployees("excel"), [exportEmployees]);
+
+  const openAdvancedExportModal = useCallback((employeeId?: string) => {
+    setExportDefaultEmployeeId(employeeId);
+    setIsEmployeeExportModalOpen(true);
+  }, []);
 
   const onSelectStatus = (status: string) => {
     if (!status) return;
@@ -1195,6 +1212,16 @@ const EmployeeList = () => {
                       >
                         <i className="ti ti-file-type-xls me-1" />
                         {exporting ? "Preparing..." : "Export as Excel"}
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        className="dropdown-item rounded-1"
+                        onClick={() => openAdvancedExportModal()}
+                      >
+                        <i className="ti ti-users me-1" />
+                        Export Employee Details
                       </button>
                     </li>
                   </ul>
@@ -1814,6 +1841,15 @@ const EmployeeList = () => {
           ? `${selectedEmployeeForRequests.firstName} ${selectedEmployeeForRequests.lastName}`
           : undefined
         }
+      />
+
+      <EmployeeExportModal
+        isOpen={isEmployeeExportModalOpen}
+        onClose={() => {
+          setIsEmployeeExportModalOpen(false);
+          setExportDefaultEmployeeId(undefined);
+        }}
+        defaultEmployeeId={exportDefaultEmployeeId}
       />
     </>
   );

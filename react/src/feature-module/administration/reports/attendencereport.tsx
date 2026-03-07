@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import Table from "../../../core/common/dataTable/index";
-import { all_routes } from "../../router/all_routes";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import PredefinedDateRanges from "../../../core/common/datePicker";
-import ReactApexChart from "react-apexcharts";
 import type { ApexOptions } from "apexcharts";
+import { useEffect, useState } from "react";
+import ReactApexChart from "react-apexcharts";
+import { Link } from "react-router-dom";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import Table from "../../../core/common/dataTable/index";
 import Footer from "../../../core/common/footer";
-import { useAttendanceREST, MonthlySummaryData } from "../../../hooks/useAttendanceREST";
+import ImageWithBasePath from "../../../core/common/imageWithBasePath";
+import EmployeeExportModal from "../../../core/modals/EmployeeExportModal";
+import { useAttendanceREST } from "../../../hooks/useAttendanceREST";
+import { all_routes } from "../../router/all_routes";
 
 const AttendanceReport = () => {
   const routes = all_routes;
@@ -18,6 +18,7 @@ const AttendanceReport = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('7'); // days
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // REST API Hook
   const {
@@ -347,30 +348,14 @@ const AttendanceReport = () => {
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
               <div className="mb-2">
-                <div className="dropdown">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    <i className="ti ti-file-export me-1" />
-                    Export
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
-                    </li>
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
+                <button
+                  type="button"
+                  className="btn btn-white d-inline-flex align-items-center"
+                  onClick={() => setIsExportModalOpen(true)}
+                >
+                  <i className="ti ti-file-export me-1" />
+                  Export
+                </button>
               </div>
               <div className="head-icons ms-2">
                 <CollapseHeader />
@@ -721,6 +706,10 @@ const AttendanceReport = () => {
           </div>
         </div>
         <Footer />
+        <EmployeeExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+        />
       </div>
       {/* /Page Wrapper */}
     </>
